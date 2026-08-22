@@ -23,7 +23,12 @@
 > holds, sealed-digest-required so an edited document is refused, and a launch-time frame now
 > requires the decision channel (`tool.decide`) rather than the still-undriven mid-session
 > `frame.set` (§ 6, F9's "both halves or neither" met by per-call enforcement).
-> Both marked at each point of change, on the same rule as the review's corrections.
+> **Amendment a6, 2026-08-22**, same integration: **`--cwd <dir>`, the operator-named working
+> directory** — the declaration that trades H7 and H11 for real work in a real tree. Both rows
+> move from imposed to attested-unavailable with the trade named, so `--hermetic strict` refuses
+> such a run and `--hermetic` reports it; the two cwd refusals (outside-scratch, memory
+> ancestors) apply only to the scratch case they were written for. `--add-dir` stays denied.
+> All marked at each point of change, on the same rule as the review's corrections.
 > **Audience:** whoever reviews this for acceptance, and whoever builds it afterwards.
 > **Sources studied:** `former organization/engineering-protocols` (public, read-only), and a private
 > agent runtime whose patterns are described here generically and whose names, records and
@@ -828,11 +833,11 @@ when its unobservability is a property of the mechanism rather than of the run.
 | H4 | no API key unless declared | `ANTHROPIC_API_KEY` is not in the allowlist unless the run declares `credentials: api_key` | record: credential source in the opening record | absent ⇒ `unk` | **gating** |
 | H5 | MCP surface is exactly what the launch gave | `--strict-mcp-config`, always | record: the MCP server **list** — length and names | list absent ⇒ `unk`, **never zero** | **gating** |
 | H6 | credentials are one file, copied | one file into the scratch home, nothing else, **re-copied immediately before every spawn** (amendment a1) | **not directly assertable in any record.** The evidence is the effect: H1a, H4, H5 | — | **advisory**, and § 8.3 says why an attestation is not evidence |
-| H7 | the working directory is ours | a directory metaharness created; `--add-dir` never passed | record: `cwd` in the opening record | absent ⇒ `unk` | **gating** |
+| H7 | the working directory is ours | a directory metaharness created; `--add-dir` never passed. **a6: under an operator-named `--cwd` this row is attested unavailable, never claimed** | record: `cwd` in the opening record | absent ⇒ `unk` | **gating** |
 | H8 | hooks and customizations are not skipped | an argv **denylist**: neither `--bare` nor **`--safe-mode`**, and neither `CLAUDE_CODE_SAFE_MODE` nor `CLAUDE_CODE_SIMPLE` in the child environment | launch: the argv and environment as values | n/a — launch assertion | **gating** |
 | H9 | the vendor version is the pinned one | `doctor` before the run | record: the harness version in the opening record | absent ⇒ `unk` | **gating** |
 | H10 | governing documents cannot move under the run | inputs are copied into the run directory, not referenced | record: the digest of the copied tree, in `session.started` | n/a | **gating** |
-| H11 | **no memory file outside the copied tree is discoverable** | the scratch root has no `CLAUDE.md` / `AGENTS.md` ancestor above it, or an explicit `--system-prompt` replaces discovery | launch: the ancestor walk from the scratch cwd, as a value | n/a — launch assertion | **gating** |
+| H11 | **no memory file outside the copied tree is discoverable** | the scratch root has no `CLAUDE.md` / `AGENTS.md` ancestor above it, or an explicit `--system-prompt` replaces discovery. **a6: under an operator-named `--cwd` the walk's findings go into the attested-unavailable reason instead of refusing — the operator declared the tree, memory files and all** | launch: the ancestor walk from the scratch cwd, as a value | n/a — launch assertion | **gating** |
 
 Three rows deserve their reasons in full.
 
@@ -1041,7 +1046,7 @@ metaharness run <claude|codex> [--hermetic|--hermetic strict] [-p <prompt>] [--f
                                [--decisions frame|ask] [--tool-surface native|owned]
                                [--credentials operator-login|api-key|none]
                                [--model <m>] [--max-turns <n>] [--plugin-dir <d>]…
-                               [--strict-version]
+                               [--cwd <dir>] [--strict-version]
                                [--audit] [--spec <expectations>] [--auditor <prefix>]
                                [-- <auditor pass-through args>…]
 metaharness capabilities <kind> [--render]     # declared tiers, pinned versions, operation rendering

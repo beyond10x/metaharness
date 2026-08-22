@@ -145,6 +145,17 @@ pub struct RunSpec {
     #[cfg_attr(feature = "clap", arg(long, value_name = "DIR"))]
     pub plugin_dir: Vec<PathBuf>,
 
+    /// An operator-named working directory for the child, instead of a scratch one.
+    ///
+    /// The declaration that trades two hermetic rows for real work (amendment a6): the child
+    /// runs **in this tree**, so H7 ("the working directory is ours") and H11 ("no memory file
+    /// outside the copied tree") stop being impositions and are attested unavailable, naming
+    /// this directory. `--hermetic strict` therefore refuses such a run, `--hermetic` reports
+    /// it honestly, and the embedder that wants a governed run over a real repository — the
+    /// driven case — accepts exactly that trade. `--add-dir` stays denied either way.
+    #[cfg_attr(feature = "clap", arg(long, value_name = "DIR"))]
+    pub cwd: Option<PathBuf>,
+
     /// Refuse before the run when the installed vendor version is outside the adapter's pin,
     /// instead of warning (design § 8.4 O1).
     #[cfg_attr(feature = "clap", arg(long))]
@@ -186,6 +197,7 @@ impl RunSpec {
             model: None,
             max_turns: None,
             plugin_dir: Vec::new(),
+            cwd: None,
             strict_version: false,
             audit: false,
             spec: None,

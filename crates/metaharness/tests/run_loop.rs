@@ -206,6 +206,7 @@ fn every_builder_method_sets_one_field_of_the_one_options_type() {
         .with_model("sonnet")
         .with_max_turns(30)
         .with_plugin_dir("plugins/one")
+        .with_cwd("/operator/repo")
         .with_strict_version(true)
         .with_audit(true)
         .with_spec_file("expectations.yaml")
@@ -224,6 +225,7 @@ fn every_builder_method_sets_one_field_of_the_one_options_type() {
         model: Some("sonnet".to_string()),
         max_turns: Some(30),
         plugin_dir: vec!["plugins/one".into()],
+        cwd: Some("/operator/repo".into()),
         strict_version: true,
         audit: true,
         spec: Some("expectations.yaml".into()),

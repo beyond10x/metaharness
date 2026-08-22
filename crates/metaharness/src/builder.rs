@@ -139,6 +139,17 @@ impl Metaharness {
         self
     }
 
+    /// An operator-named working directory for the child, instead of a scratch one.
+    ///
+    /// The driven case's declaration (amendment a6): the child works in a real tree, and H7 and
+    /// H11 are attested unavailable rather than claimed — so `--hermetic strict` refuses the run
+    /// and `--hermetic` reports the trade by name.
+    #[must_use]
+    pub fn with_cwd(mut self, directory: impl Into<PathBuf>) -> Self {
+        self.spec.cwd = Some(directory.into());
+        self
+    }
+
     /// Refuse before the run when the installed vendor version is outside the adapter's pin.
     #[must_use]
     pub fn with_strict_version(mut self, strict: bool) -> Self {
@@ -251,8 +262,7 @@ impl Metaharness {
         }
 
         let scratch = tempfile::TempDir::new()?;
-        let cwd = scratch.path().join("work");
-        std::fs::create_dir_all(&cwd)?;
+        let cwd = resolve_cwd(&spec, scratch.path())?;
         let transcript_path = scratch.path().join("transcript.jsonl");
 
         let context = metaharness_claude::LaunchContext {
@@ -435,6 +445,27 @@ pub fn start_refusals(capabilities: &Capabilities, spec: &RunSpec) -> Vec<(Strin
             )
         })
         .collect()
+}
+
+/// The child's working directory: the operator's, or a scratch one made here.
+///
+/// The operator's directory is used, never created: a typo that silently became an empty
+/// directory would be a run over nothing reporting success.
+fn resolve_cwd(spec: &RunSpec, scratch_root: &std::path::Path) -> Result<PathBuf, Refusal> {
+    match &spec.cwd {
+        Some(directory) if directory.is_dir() => Ok(directory.clone()),
+        Some(directory) => Err(Refusal::Io {
+            detail: format!(
+                "the operator-named working directory {} does not exist or is not a directory",
+                directory.display()
+            ),
+        }),
+        None => {
+            let work = scratch_root.join("work");
+            std::fs::create_dir_all(&work)?;
+            Ok(work)
+        }
+    }
 }
 
 /// The frame in force, from whichever of the two spellings this run used.

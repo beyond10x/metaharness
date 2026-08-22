@@ -6,6 +6,12 @@ was amended and the amendment is named here.
 ## [Unreleased]
 
 ### Added
+- **The operator-named working directory — `--cwd <dir>` (amendment a6).** The driven case's
+  declaration: the child runs in a real tree instead of a scratch one. H7 and H11 move from
+  imposed to attested-unavailable with the trade named — `--hermetic strict` refuses such a run,
+  `--hermetic` reports it — and the outside-scratch and memory-ancestor refusals apply only to
+  the scratch case they were written for. The directory is used, never created: a typo is a
+  refusal, not an empty run reporting success. `--add-dir` stays denied.
 - **The on-disk frame document — `metaharness.frame/1` (amendment a5).** The format § 9.3
   correction 3 left owed now exists: one JSON object, a `format` tag on the D2 rule, every § 5.1
   field, and a digest that is **required to describe the contents** — SHA-256 over the compact,

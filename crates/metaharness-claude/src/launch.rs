@@ -375,16 +375,21 @@ pub fn plan_launch(spec: &RunSpec, context: &LaunchContext) -> Result<LaunchPlan
     let Some(prompt) = &spec.prompt else {
         return Err(LaunchRefusal::NoPrompt);
     };
-    if !context.cwd.starts_with(&context.scratch_root) {
-        return Err(LaunchRefusal::CwdOutsideScratch {
-            cwd: context.cwd.clone(),
-            scratch_root: context.scratch_root.clone(),
-        });
-    }
-    if !context.memory_ancestors.is_empty() {
-        return Err(LaunchRefusal::MemoryAncestorsFound {
-            found: context.memory_ancestors.clone(),
-        });
+    // An operator-named cwd (amendment a6) is a declaration, not a defect: the two refusals
+    // below exist to keep a *scratch* cwd honest, and a run the operator pointed at a real tree
+    // instead loses rows H7 and H11 in the attestation rather than being refused here.
+    if spec.cwd.is_none() {
+        if !context.cwd.starts_with(&context.scratch_root) {
+            return Err(LaunchRefusal::CwdOutsideScratch {
+                cwd: context.cwd.clone(),
+                scratch_root: context.scratch_root.clone(),
+            });
+        }
+        if !context.memory_ancestors.is_empty() {
+            return Err(LaunchRefusal::MemoryAncestorsFound {
+                found: context.memory_ancestors.clone(),
+            });
+        }
     }
 
     let config_home = context.scratch_root.join(CONFIG_HOME);
@@ -691,20 +696,9 @@ fn attest(spec: &RunSpec, context: &LaunchContext, config_home: &Path) -> Hermet
         control_imposed(HermeticRow::H4, api_key_posture(spec.credentials)),
         control_imposed(HermeticRow::H5, "--strict-mcp-config"),
         control_imposed(
-            HermeticRow::H7,
-            format!(
-                "cwd {} is under the scratch root, and --add-dir is never passed",
-                context.cwd.display()
-            ),
-        ),
-        control_imposed(
             HermeticRow::H8,
             "neither --bare, --safe-mode nor --dangerously-skip-permissions is in the argv, and \
              neither CLAUDE_CODE_SAFE_MODE nor CLAUDE_CODE_SIMPLE is in the child environment",
-        ),
-        control_imposed(
-            HermeticRow::H11,
-            "the ancestor walk from the scratch cwd found no CLAUDE.md and no AGENTS.md",
         ),
     ];
     let mut unavailable = vec![control_unavailable(
@@ -715,6 +709,41 @@ fn attest(spec: &RunSpec, context: &LaunchContext, config_home: &Path) -> Hermet
             PINNED_VERSIONS.join(", ")
         ),
     )];
+
+    // H7 and H11 are impositions only over a scratch cwd. An operator-named directory
+    // (amendment a6) is real work in a real tree: the rows are attested unavailable with the
+    // declaration named, which is what makes `--hermetic strict` refuse such a run instead of
+    // this attestation quietly claiming a directory it never made.
+    if spec.cwd.is_some() {
+        unavailable.push(control_unavailable(
+            HermeticRow::H7,
+            format!(
+                "the run was pointed at the operator's directory {} (--cwd), which metaharness \
+                 did not create; --add-dir is still never passed",
+                context.cwd.display()
+            ),
+        ));
+        unavailable.push(control_unavailable(
+            HermeticRow::H11,
+            format!(
+                "the ancestor walk from the operator's directory found {} memory file(s), and \
+                 the operator declared the tree as the run's context by naming it",
+                context.memory_ancestors.len()
+            ),
+        ));
+    } else {
+        imposed.push(control_imposed(
+            HermeticRow::H7,
+            format!(
+                "cwd {} is under the scratch root, and --add-dir is never passed",
+                context.cwd.display()
+            ),
+        ));
+        imposed.push(control_imposed(
+            HermeticRow::H11,
+            "the ancestor walk from the scratch cwd found no CLAUDE.md and no AGENTS.md",
+        ));
+    }
 
     if spec.credentials == CredentialSource::OperatorLogin {
         imposed.push(control_imposed(
@@ -1141,6 +1170,56 @@ mod tests {
             plan_launch(&spec(), &context),
             Err(LaunchRefusal::CwdOutsideScratch { .. })
         ));
+    }
+
+    // ------------------------------------------------------------ the operator cwd (a6)
+
+    /// The declaration that trades two rows for real work: an operator-named cwd plans, and H7
+    /// and H11 move from imposed to unavailable with the trade named — which is what makes
+    /// `--hermetic strict` refuse such a run instead of the attestation quietly claiming a
+    /// directory metaharness never made.
+    #[test]
+    fn an_operator_named_cwd_plans_and_gives_up_h7_and_h11_by_name() {
+        let mut spec = spec();
+        spec.cwd = Some(PathBuf::from("/operator/repo"));
+        let mut context = context();
+        context.cwd = PathBuf::from("/operator/repo");
+        let plan = plan_launch(&spec, &context).expect("an operator cwd plans");
+
+        for row in [HermeticRow::H7, HermeticRow::H11] {
+            assert!(
+                !plan.attestation.claims(row),
+                "{} must not be claimed",
+                row.id()
+            );
+            let unavailable = plan
+                .attestation
+                .unavailable
+                .iter()
+                .find(|control| control.row == row)
+                .unwrap_or_else(|| panic!("{} must be attested unavailable", row.id()));
+            assert!(unavailable.why.contains("operator"), "{}", unavailable.why);
+        }
+        assert_eq!(plan.cwd, PathBuf::from("/operator/repo"));
+    }
+
+    /// A memory file above an operator-named cwd is the operator's declared context, not a
+    /// refusal: the tree is theirs, and the walk's findings go into H11's reason instead.
+    #[test]
+    fn memory_ancestors_above_an_operator_named_cwd_do_not_refuse_the_launch() {
+        let mut spec = spec();
+        spec.cwd = Some(PathBuf::from("/operator/repo"));
+        let mut context = context();
+        context.cwd = PathBuf::from("/operator/repo");
+        context.memory_ancestors = vec![PathBuf::from("/operator/repo/AGENTS.md")];
+        let plan = plan_launch(&spec, &context).expect("the declared tree plans");
+        let h11 = plan
+            .attestation
+            .unavailable
+            .iter()
+            .find(|control| control.row == HermeticRow::H11)
+            .expect("H11 unavailable");
+        assert!(h11.why.contains("1 memory file"), "{}", h11.why);
     }
 
     #[test]
