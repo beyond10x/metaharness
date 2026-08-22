@@ -29,13 +29,12 @@
 #   4. mechanically inspects the run directory, the event streams and the store, and prints a
 #      verdict table.
 #
-# ## Named limitation, deliberately not papered over
+# ## The trace-spec join, suspended and restored
 #
-# `protocol trace check` reads Claude stream-json; the driven transcripts are now
-# `metaharness.event/1` streams. The trace-spec join (§ 3.4/3.5 of the old eval) is therefore
-# **suspended** until a trace adapter for the event stream exists — tracked in the subject
-# repository as the follow-up of `story:metaharness-executor`. The event-stream assertions below
-# cover the census half; the expectation-document half waits for that adapter.
+# The driven transcripts are `metaharness.event/1` streams, which `protocol trace check` could
+# not read at migration time. The join (§ 3.4/3.5) was suspended until the subject
+# grew a reader for them; it did (`story:event-stream-trace-adapter`, 2026-08-22), and both
+# sections are back on — same command, same flags, the reader chosen from the file's first line.
 #
 # This eval talks to the Claude API: it costs money and needs network, which is why it is not —
 # and must never be — part of any default gate.
@@ -204,10 +203,40 @@ check "the driven surface denied the shell command outside it ($SURFACE_DENIES d
 R=1; [ "$ALLOWS" -ge 1 ] && [ "$STORE_DENIES" -ge 1 ] && R=0
 check "the policy discriminated rather than refusing everything ($ALLOWS allowed, $((STORE_DENIES + SURFACE_DENIES + OTHER_DENIES)) denied)" "$R"
 
-# 3.4 the trace-spec join — suspended, by name (see the header). The expectation documents live in
-# the subject repository at conformance/trace/; checking them against an event stream waits for the
-# event-stream trace adapter.
-note "trace-spec join suspended: metaharness.event/1 has no trace adapter yet (subject follow-up)"
+# 3.4 the transcripts, as documents — the join the subject's metaharness.event/1 reader restored
+# (its story:event-stream-trace-adapter): the same `protocol trace check`, the same flags, and the
+# reader is chosen from the file's own first line.
+trace_rows() { # trace_rows <label> <spec> <transcript>
+  local label="$1" spec="$2" transcript="$3" out exit_code rows=0
+  [ -f "$transcript" ] || { check "$label  transcript missing" 1; return; }
+  out="$(protocol trace check --spec "$spec" --transcript "$transcript" 2>&1)" && exit_code=0 || exit_code=$?
+  case "$exit_code" in
+    0|1|3) ;;
+    *) check "$label  protocol trace check ran (exit $exit_code)" 1 ;;
+  esac
+  printf '%s\n' "$out" > "$WORK/trace-$label.txt"
+  while IFS= read -r line; do
+    case "$line" in
+      "  ok (adv)"*|"  gap (adv)"*|"  unk (adv)"*) note "$label  ${line#  }"; rows=$((rows + 1)) ;;
+      "  ok "*) check "$label  ${line#  }" 0; rows=$((rows + 1)) ;;
+      "  gap "*|"  unk "*) check "$label  ${line#  }" 1; rows=$((rows + 1)) ;;
+    esac
+  done <<< "$out"
+  # A verdict table with no transcript rows in it goes green while checking nothing.
+  local r=1; [ "$rows" -gt 0 ] && r=0
+  check "$label  produced verdicts ($rows row(s))" "$r"
+}
+
+trace_rows honest "$SCRIPT_DIR/expectations.driven-step.trace.yaml" "$HONEST"
+trace_rows denial "$SCRIPT_DIR/expectations.denial-step.trace.yaml" "$DENIAL"
+
+# 3.5 the join the trace family exists for: a record the engine would accept, from a transcript.
+if [ -f "$HONEST" ]; then
+  protocol trace evidence --spec "$SCRIPT_DIR/expectations.driven-step.trace.yaml" \
+    --transcript "$HONEST" --out "$WORK/trace-conformance.yaml" >/dev/null 2>&1
+  R=1; [ -s "$WORK/trace-conformance.yaml" ] && R=0
+  check "protocol trace evidence minted a trace_conformance record" "$R"
+fi
 
 # ---- 4. F13, now a parity assertion per run --------------------------------------------------------
 # session.ended carries the vendor's permission_denials AND the seam's census in one record.
