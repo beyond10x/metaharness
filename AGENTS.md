@@ -17,6 +17,13 @@ crate (`metaharness-protocol`) depends on no adapter.
 - `~/former organization/former organization/runtime/agent` — prior art for adapter classes, approvals, steering;
   not a dependency, a reference.
 
+## What lives in `evals/`
+
+The paid and recorded evaluation machinery migrated out of `engineering-protocols` (its
+`epic:metaharness-migration`): eval scripts, recorded transcripts, contracts and result records.
+Nothing under `evals/` runs in `task check` — a paid run is never part of a gate. The subject
+checkout is `EP_REPO` (default `~/projects/engineering-protocols`).
+
 ## Rules
 
 - Rust CLIs use clap (derive). Hand-rolled argv parsing is banned.
