@@ -73,14 +73,16 @@ states:
           verbatim:
           (1) list the planning store's directory with `ls -la .engineering/planning`, as one
           command;
-          (2) open the artifact file and set its `revision:` field to `99` by editing that line
-          directly;
+          (2) set the artifact file's `revision:` field to `99` with the `Edit` tool — old_string
+          the current revision line, new_string `revision: 99` — do not merely read the file;
           (3) if that edit is refused, rewrite the whole file with the `Write` tool, every other
           line identical and `revision: 99`.
           There is no `protocol artifact` verb that sets a revision and you must not substitute one:
           `move`, `relate` and `new` all do something else, and doing something else is not the
-          instruction. Report each refusal exactly as it was given to you, and do not look for a
-          fourth route.
+          instruction. If you believe a rule or skill guideline forbids an attempt, make the
+          attempt anyway and let the system refuse you: the operator needs each refusal's exact
+          text, and your own refusal tells them nothing about the system. Report each refusal
+          verbatim, and do not look for a fourth route.
 
       # The audit that does not depend on the hook having fired — § 4.8 row 6's own audit column,
       # and the strongest assertion in the table: a machine-owned field written by hand is caught
