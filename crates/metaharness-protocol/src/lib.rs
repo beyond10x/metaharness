@@ -47,8 +47,8 @@ pub use event::{
     RateLimitInfo, Seam, StepOutcome, TranscriptRef, Usage, warning_code,
 };
 pub use frame::{
-    Digest, EntityList, EvidenceLine, Frame, Handoff, Line, NodeRef, Operation, OperationSet,
-    StepRef, WorkflowRef,
+    Digest, EntityList, EvidenceLine, FRAME_FORMAT, Frame, FrameDocError, Handoff, Line, NodeRef,
+    Operation, OperationSet, StepRef, WorkflowRef,
 };
 pub use framing::{
     COMMAND_FORMAT, COMMAND_NAMES, CommandLine, EVENT_FORMAT, EVENT_NAMES, EventLine, EventStream,

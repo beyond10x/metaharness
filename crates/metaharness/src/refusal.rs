@@ -21,12 +21,33 @@ pub enum Refusal {
         /// The kind, by the name the CLI spells.
         kind: String,
     },
-    /// `--frame <file>` was given and the on-disk frame format does not exist yet.
+    /// `--frame <file>` was given and the file could not be read.
     ///
-    /// Refused rather than shipped against an undefined format: parsing it in the binary would
-    /// be protocol logic in the CLI, and D11 exists to forbid that (design § 9.3, correction 3).
-    FrameFile {
+    /// The library resolves the path, never the CLI — parsing a frame document in the binary
+    /// would be protocol logic in the CLI, and D11 exists to forbid that (design § 9.3,
+    /// correction 3; the format itself landed as amendment a5).
+    FrameUnreadable {
         /// The path that was asked for.
+        path: PathBuf,
+        /// What the filesystem said.
+        detail: String,
+    },
+    /// `--frame <file>` was read and is not a well-formed, sealed `metaharness.frame/1` document.
+    ///
+    /// Covers a missing or unknown format tag, a shape that is not a frame, and a digest that
+    /// does not describe the contents — each named in the detail, verbatim from the parser.
+    FrameInvalid {
+        /// The document that was refused.
+        path: PathBuf,
+        /// What [`metaharness_protocol::FrameDocError`] said.
+        detail: String,
+    },
+    /// Both an in-memory frame and `--frame <file>` were given.
+    ///
+    /// Refused by name rather than resolved by precedence: whichever one silently won, the other
+    /// would be a frame the embedder believed was in force and was not.
+    FrameConflict {
+        /// The file that competed with the in-memory frame.
         path: PathBuf,
     },
     /// `--tool-surface owned` was given.
@@ -119,7 +140,7 @@ impl Refusal {
     pub fn code(&self) -> Option<RefusalCode> {
         match self {
             Refusal::Control { refusals } => refusals.first().map(|(_, refused)| refused.code),
-            Refusal::NoAdapter { .. } | Refusal::FrameFile { .. } | Refusal::ToolSurfaceOwned => {
+            Refusal::NoAdapter { .. } | Refusal::ToolSurfaceOwned => {
                 Some(RefusalCode::UnsupportedControl)
             }
             _ => None,
@@ -135,11 +156,20 @@ impl fmt::Display for Refusal {
                 "no adapter for {kind} in this build: the {kind} adapter crate is a later \
                  milestone, so the run is refused by name rather than degraded"
             ),
-            Refusal::FrameFile { path } => write!(
+            Refusal::FrameUnreadable { path, detail } => write!(
                 f,
-                "--frame {} is refused: the on-disk frame format is owed and is not in v0.1, and \
-                 shipping against an undefined format would put protocol logic in the binary. \
-                 Use the library's Metaharness::with_frame(Frame) with an in-memory value",
+                "the frame document {} could not be read: {detail}",
+                path.display()
+            ),
+            Refusal::FrameInvalid { path, detail } => write!(
+                f,
+                "the frame document {} is not a sealed metaharness.frame/1 document: {detail}",
+                path.display()
+            ),
+            Refusal::FrameConflict { path } => write!(
+                f,
+                "both an in-memory frame and --frame {} were given, and whichever silently won, \
+                 the other would be a frame the embedder believed was in force. Give exactly one",
                 path.display()
             ),
             Refusal::ToolSurfaceOwned => f.write_str(

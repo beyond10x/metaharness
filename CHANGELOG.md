@@ -6,6 +6,18 @@ was amended and the amendment is named here.
 ## [Unreleased]
 
 ### Added
+- **The on-disk frame document — `metaharness.frame/1` (amendment a5).** The format § 9.3
+  correction 3 left owed now exists: one JSON object, a `format` tag on the D2 rule, every § 5.1
+  field, and a digest that is **required to describe the contents** — SHA-256 over the compact,
+  key-sorted serialization without `digest`/`format`, reproducible without linking this
+  workspace. `--frame <file>` and `.with_frame_file(path)` resolve it in the library at start
+  (D11 intact: the binary carries only a path), and every failure is a free pre-spawn refusal by
+  name: `FrameUnreadable`, `FrameInvalid` (untagged, misshapen or digest-broken, parser text
+  verbatim), and `FrameConflict` when an in-memory frame and a document compete. A launch-time
+  frame now requires `tool.decide` rather than the undriven mid-session `frame.set`, and the
+  Claude adapter's `FrameFormatUnowned` refusal is gone rather than left as a variant nothing
+  produces.
+
 - `metaharness-protocol`: the wire — 19 events, 7 commands, versioned JSONL framing with the tag
   on every line, sequence numbers assigned in one place, the workflow `Frame` and the one
   function that renders it for the model, the 12 hermetic rows, adapter capabilities, and the

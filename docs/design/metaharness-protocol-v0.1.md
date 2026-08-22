@@ -18,6 +18,11 @@
 > (**H4** and **H10**) that a live opening record found and no free tier could have; and one new
 > question (**Q17**). Marked at each point of change, on the same rule as the review's
 > corrections.
+> **Amendment a5, 2026-08-22**, for the embedder integration: **the on-disk frame format the
+> review left owed now exists** — `metaharness.frame/1`, § 5.5 — resolved by the library so D11
+> holds, sealed-digest-required so an edited document is refused, and a launch-time frame now
+> requires the decision channel (`tool.decide`) rather than the still-undriven mid-session
+> `frame.set` (§ 6, F9's "both halves or neither" met by per-call enforcement).
 > Both marked at each point of change, on the same rule as the review's corrections.
 > **Audience:** whoever reviews this for acceptance, and whoever builds it afterwards.
 > **Sources studied:** `former organization/engineering-protocols` (public, read-only), and a private
@@ -538,6 +543,38 @@ out (relaunch per step; an owned tool surface) with what each costs.
 `command.result` states which boundary it will apply at. A frame that could take effect mid-turn
 would mean a tool call adjudicated against a frame the model was never shown.
 
+### 5.5 The on-disk frame document — `metaharness.frame/1` (amendment a5)
+
+> **Amendment a5, 2026-08-22.** § 9.3 correction 3 left this format owed; the embedder
+> integration is what finally needs it — a driver in another repository, which cannot link this
+> workspace, hands a frame across a process boundary as a file.
+
+One JSON object per file:
+
+- a `format` field carrying `"metaharness.frame/1"` — the D2 per-line rule applied to a file: a
+  copied or truncated document is still self-describing, and an unknown tag is refused rather
+  than guessed at;
+- every § 5.1 field, `digest` included, spelled exactly as the wire spells them.
+
+**The digest is required to describe the contents.** It is SHA-256, hex, over the compact JSON
+serialization of the frame object with the `digest` and `format` fields absent and object keys
+sorted lexicographically at every level (which is `serde_json`'s default map order — an external
+producer needs no library of ours, only that rule). A document whose digest is absent, stale or
+wrong is **refused, never resealed**: an unsealed frame cited by digest downstream would pin
+nothing, and a resealing consumer would repair exactly the mutation the digest exists to catch.
+
+**Resolution is the library's job, on both faces.** The CLI's `--frame <file>` and the builder's
+`.with_frame_file(path)` set the same spec field; `start` reads, parses and digest-verifies the
+document before any I/O toward a spawn, so every failure is a free refusal by name — unreadable,
+untagged, misshapen, digest-broken — and giving a document *and* an in-memory frame at once is
+refused rather than resolved by precedence. D11 is intact: the binary still carries only a path.
+
+What the document deliberately does **not** do: reach the model as text. A launch-time frame is
+the enforcement half — per-call decisions from its admitted set — and the prompt stays the
+embedder's, who renders § 5.1's instruction text into it if the step wants the model told. The
+run therefore requires the decision channel (`tool.decide`), not the mid-session `frame.set`
+command, which remains undriven and refused (§ 7.3).
+
 ---
 
 ## 6. Commands
@@ -562,7 +599,10 @@ makes it false — which is exactly the silent weakening § 7.1 forbids, and `co
 values (`ok`, `refused`) cannot express it anyway (review finding **F9**). So a run whose adapter
 cannot deliver call-level enforcement is refused at start when its configuration will need
 `frame.set`; it is never allowed to run with an advisory frame. An embedder that genuinely wants
-advisory-only text says so with `message.inject`, which claims nothing.
+advisory-only text says so with `message.inject`, which claims nothing. **Amendment a5: a
+*launch-time* frame (`--frame <file>`, § 5.5) requires `tool.decide`, not this command** — its
+enforcement is per-call from the moment the session starts, and `frame.set` stays what it always
+was: the mid-session change, still undriven and still refused by the Claude adapter (§ 7.3).
 
 **`allow` grants, and that is a departure worth naming.** § 2.2 records a plugin convention of
 denying and never granting, on the reasoning that an `allow` claims authority the layer does not
@@ -1041,6 +1081,10 @@ introduced.
    binary, which this rule exists to forbid — in a serialization format § 5 does not define. **The
    on-disk frame format is therefore owed and is not in v0.1**: `--frame <file>` is refused until
    it is specified, rather than shipped against an undefined format.
+   **Amendment a5, 2026-08-22: the format is now specified (§ 5.5) and the flag resolves.** The
+   division this correction drew is unchanged — the library reads and parses, the binary carries
+   a path — and what was refused for being undefined is now refused only for being unreadable,
+   untagged, misshapen or digest-broken.
 
 ### 9.4 `--audit`: one invocation that runs and judges
 

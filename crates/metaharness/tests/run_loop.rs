@@ -93,13 +93,55 @@ fn a_codex_run_is_refused_by_name_because_there_is_no_codex_adapter() {
 }
 
 #[test]
-fn a_frame_document_is_refused_because_the_on_disk_format_is_owed() {
+fn a_missing_frame_document_is_refused_naming_the_path() {
     let refusal = Metaharness::new(Kind::Claude)
-        .with_frame_file("frames/implement.yaml")
+        .with_frame_file("frames/absent.frame.json")
         .start(Input::FromSpec)
-        .expect_err("--frame is refused in v0.1");
-    assert!(matches!(refusal, Refusal::FrameFile { .. }));
-    assert!(refusal.to_string().contains("on-disk frame format"));
+        .expect_err("an unreadable frame document is refused");
+    assert!(matches!(refusal, Refusal::FrameUnreadable { .. }));
+    assert!(refusal.to_string().contains("frames/absent.frame.json"));
+}
+
+/// The file boundary must not weaken the digest rule: a document edited after sealing is the
+/// on-disk spelling of a frame mutated after the model saw it.
+#[test]
+fn a_frame_document_whose_digest_lies_is_refused_before_anything_runs() {
+    let directory = tempfile::tempdir().expect("a scratch directory");
+    let path = directory.path().join("edited.frame.json");
+    let document = frame_admitting(OperationSet::of([Operation::FileRead]))
+        .seal()
+        .to_document()
+        .replace("the specification is approved", "something else entirely");
+    std::fs::write(&path, document).expect("written");
+
+    let refusal = Metaharness::new(Kind::Claude)
+        .with_frame_file(&path)
+        .start(Input::FromSpec)
+        .expect_err("a digest that lies is refused");
+    assert!(matches!(refusal, Refusal::FrameInvalid { .. }));
+    assert!(refusal.to_string().contains("digest"), "{refusal}");
+}
+
+/// One frame in force, from exactly one place: both spellings at once is a refusal, not a
+/// precedence rule the loser never learns about.
+#[test]
+fn an_in_memory_frame_and_a_frame_document_together_are_refused_by_name() {
+    let directory = tempfile::tempdir().expect("a scratch directory");
+    let path = directory.path().join("other.frame.json");
+    std::fs::write(
+        &path,
+        frame_admitting(OperationSet::of([Operation::FileRead]))
+            .seal()
+            .to_document(),
+    )
+    .expect("written");
+
+    let refusal = Metaharness::new(Kind::Claude)
+        .with_frame(frame_admitting(OperationSet::of([Operation::Shell])))
+        .with_frame_file(&path)
+        .start(Input::FromSpec)
+        .expect_err("two frames are refused");
+    assert!(matches!(refusal, Refusal::FrameConflict { .. }));
 }
 
 #[test]
@@ -246,6 +288,40 @@ fn a_frame_mode_run_decides_from_the_frame_and_is_still_fully_audited() {
     assert!(matches!(decisions[1].0, Decision::Deny { .. }));
 
     // The census counts both modes, so a frame-mode run is not a run nobody audited.
+    assert_eq!(run.census().allowed, 1);
+    assert_eq!(run.census().denied, 1);
+    assert_eq!(run.census().by_decider.get("frame"), Some(&2));
+}
+
+/// The document is the same frame by construction, so it must be the same run: same decisions,
+/// same deciders, same census. A file that behaved differently from the value it spells would
+/// make the CLI face weaker than the library face.
+#[test]
+fn a_frame_document_drives_frame_mode_exactly_like_the_in_memory_frame() {
+    let directory = tempfile::tempdir().expect("a scratch directory");
+    let path = directory.path().join("implement.frame.json");
+    std::fs::write(
+        &path,
+        frame_admitting(OperationSet::of([Operation::FileRead]))
+            .seal()
+            .to_document(),
+    )
+    .expect("written");
+
+    let started = start(
+        Metaharness::new(Kind::Claude)
+            .with_decisions(DecisionMode::Frame)
+            .with_frame_file(&path),
+        vec![
+            ScriptStep::line(INIT),
+            ScriptStep::line(call("t1", "Read")),
+            ScriptStep::line(call("t2", "Bash")),
+            ScriptStep::line(END),
+        ],
+    );
+    let mut run = started.run;
+    run.drain().expect("the run drains");
+
     assert_eq!(run.census().allowed, 1);
     assert_eq!(run.census().denied, 1);
     assert_eq!(run.census().by_decider.get("frame"), Some(&2));

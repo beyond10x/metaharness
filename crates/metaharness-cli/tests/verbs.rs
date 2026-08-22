@@ -23,18 +23,15 @@ fn code_of(argv: &[&str]) -> i32 {
 
 /// The one `run` refusal that is still free to assert: a spec fault is caught before the spawn,
 /// so a caller with a bad spec never pays to find out.
+///
+/// The frame path is a **directory**, which no filesystem reads as a file — since the on-disk
+/// frame format landed (amendment a5), `--frame` on a *valid* document proceeds to a spawn, so a
+/// refusal this file relies on must be unreadable by construction, not by hoping a file is
+/// absent.
 #[test]
 fn a_run_with_a_bad_spec_exits_two_before_anything_is_spawned() {
     assert_eq!(
-        code_of(&[
-            "metaharness",
-            "run",
-            "claude",
-            "--frame",
-            "f.yaml",
-            "-p",
-            "x"
-        ]),
+        code_of(&["metaharness", "run", "claude", "--frame", ".", "-p", "x"]),
         2
     );
 }
@@ -43,7 +40,9 @@ fn a_run_with_a_bad_spec_exits_two_before_anything_is_spawned() {
 ///
 /// A prompt is what turns `run` into a session, so an argv that carries `-p` and is not refused
 /// on the way in is an argv that spends money. This test reads the file it lives in and refuses
-/// to let one back.
+/// to let one back. Since the on-disk frame format landed (amendment a5), `--frame` alone no
+/// longer guarantees a refusal — a valid document proceeds to the spawn — so a `--frame` argv is
+/// only free when its path is a directory, and the interlock requires exactly that spelling.
 #[test]
 fn no_run_in_this_file_can_reach_a_spawn() {
     let source = include_str!("verbs.rs");
@@ -55,7 +54,7 @@ fn no_run_in_this_file_can_reach_a_spawn() {
             && line.contains(r#""-p""#);
         if is_argv {
             assert!(
-                line.contains(r#""--frame""#) || line.contains(r#""codex""#),
+                line.contains(r#""--frame", ".""#) || line.contains(r#""codex""#),
                 "this argv would spawn the vendor and bill for it: {line}"
             );
         }
@@ -67,12 +66,30 @@ fn a_codex_run_exits_two_by_name_because_there_is_no_codex_adapter() {
     assert_eq!(code_of(&["metaharness", "run", "codex", "-p", "hello"]), 2);
 }
 
+/// The two free frame refusals: a path nothing can read, and a document that is not a sealed
+/// frame. Both are raised at resolution, before any spawn, so neither costs a session.
 #[test]
-fn a_frame_document_exits_two_because_the_on_disk_format_is_owed() {
+fn an_unreadable_frame_document_exits_two() {
     assert_eq!(
-        code_of(&["metaharness", "run", "claude", "--frame", "f.yaml"]),
+        code_of(&["metaharness", "run", "claude", "--frame", "."]),
         2
     );
+}
+
+#[test]
+fn a_malformed_frame_document_exits_two_before_anything_is_spawned() {
+    let directory = tempfile::tempdir().expect("a scratch directory");
+    let path = directory.path().join("not-a-frame.json");
+    std::fs::write(&path, "{\"format\":\"metaharness.frame/1\",\"workflow\":3}").expect("written");
+    let argv = [
+        "metaharness".to_string(),
+        "run".to_string(),
+        "claude".to_string(),
+        "--frame".to_string(),
+        path.display().to_string(),
+    ];
+    let argv: Vec<&str> = argv.iter().map(String::as_str).collect();
+    assert_eq!(code_of(&argv), 2);
 }
 
 #[test]

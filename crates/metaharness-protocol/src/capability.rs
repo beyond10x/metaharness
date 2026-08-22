@@ -157,8 +157,10 @@ pub fn required_commands(spec: &RunSpec) -> Vec<&'static str> {
     }
     if spec.frame.is_some() {
         // Both halves or neither: a frame whose text reaches the model while nothing enforces it
-        // tells the model "strictly only these operations" and makes it false (finding F9).
-        needed.push("frame.set");
+        // tells the model "strictly only these operations" and makes it false (finding F9). A
+        // launch-time frame document is enforced per call through the decision channel — the
+        // mid-session `frame.set` command is a different, undriven thing no spec field asks for.
+        needed.push("tool.decide");
     }
     if spec.tool_surface == ToolSurface::Owned {
         needed.push("tool.decide");

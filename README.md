@@ -61,6 +61,12 @@ and neither was reachable without a real session: the hermetic floor read the wr
 whether the documents moved"* — which made `--hermetic strict` unpassable. Both are fixed, both
 are regression-tested, and both are recorded as amendment a4 in the design.
 
+**The frame crosses the process boundary (amendment a5).** `metaharness run claude --hermetic
+--frame step.frame.json -p "…"` now takes the workflow frame as a sealed `metaharness.frame/1`
+document: digest-verified on load, refused by name when unreadable, untagged, misshapen or
+edited after sealing, and enforced per call from the first turn. This is the seam an external
+driver integrates through — it writes the frame as a file and never links this workspace.
+
 **What is still not built:** `metaharness project` (gated on Q9 — `trace-ir/1` has no reader) and
 `metaharness audit` over a transcript metaharness did not itself launch. Both refuse with exit 2
 naming what they wait for. There is no Codex adapter. The live runs cost money and are behind

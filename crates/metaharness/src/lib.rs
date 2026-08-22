@@ -27,7 +27,7 @@
 //! | spec → launch plan → transcript → events → audit | **built**, and exercised end to end through [`ScriptedRunner`] |
 //! | driving the real vendor binary | **built.** [`Metaharness::start`] spawns it through [`SpawnRunner`], and the `PreToolUse` hook it installs answers over a real channel |
 //! | `Kind::Codex` | **no adapter.** Refused by name at start |
-//! | `--frame <file>` | **refused.** The on-disk frame format is owed and is not in v0.1; [`Metaharness::with_frame`] takes an in-memory value instead |
+//! | `--frame <file>` | **built** (amendment a5): a sealed `metaharness.frame/1` document, resolved by the library at start, refused by name when unreadable, untagged, misshapen or digest-broken |
 //! | `--tool-surface owned` | **refused.** Strategy C means metaharness implements the tools itself, and per-step re-listing is unverified vendor behaviour |
 //!
 //! # Three properties that are easy to break by accident

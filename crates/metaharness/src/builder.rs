@@ -9,9 +9,9 @@
 //!
 //! One value is deliberately **not** a spec field: [`Metaharness::with_frame`] takes an
 //! in-memory [`Frame`]. `RunSpec.frame` stays a `PathBuf` because resolving a path is the
-//! library's job and parsing a frame document in the binary would be protocol logic in the CLI —
-//! and the on-disk format is owed and not in v0.1, so that path is refused rather than shipped
-//! against something undefined (design § 9.3, correction 3).
+//! library's job and parsing a frame document in the binary would be protocol logic in the CLI
+//! (design § 9.3, correction 3). Since amendment a5 the path resolves to a sealed
+//! `metaharness.frame/1` document; giving both spellings at once is refused by name.
 
 use std::collections::BTreeMap;
 use std::path::PathBuf;
@@ -77,19 +77,20 @@ impl Metaharness {
 
     /// The frame in force, as an in-memory value.
     ///
-    /// Not a spec field: the spec's `frame` is a path and the on-disk format does not exist in
-    /// v0.1. A frame given here is sealed on the way in, so the digest an event cites always
-    /// describes the contents that were actually in force.
+    /// Not a spec field: the spec's `frame` is a path, resolved at start. A frame given here is
+    /// sealed on the way in, so the digest an event cites always describes the contents that
+    /// were actually in force.
     #[must_use]
     pub fn with_frame(mut self, frame: Frame) -> Self {
         self.frame = Some(frame.seal());
         self
     }
 
-    /// A frame **document**, which [`Metaharness::start`] refuses.
+    /// A frame **document**: a sealed `metaharness.frame/1` file, resolved at start.
     ///
-    /// Present so the builder and the CLI have the same field set, and so the refusal is the
-    /// same one on both faces rather than a flag the library silently lacks.
+    /// The same field the CLI's `--frame` sets, so both faces resolve — and refuse — the same
+    /// way. Unreadable, unsealed or malformed documents are refusals by name, and giving this
+    /// together with [`Metaharness::with_frame`] is refused rather than resolved by precedence.
     #[must_use]
     pub fn with_frame_file(mut self, path: impl Into<PathBuf>) -> Self {
         self.spec.frame = Some(path.into());
@@ -210,8 +211,9 @@ impl Metaharness {
     ///
     /// # Errors
     ///
-    /// Every refusal in [`Refusal`] that a start can raise: an unknown kind, `--frame`, an owned
-    /// tool surface, a control the adapter cannot honour, and whatever the adapter said when it
+    /// Every refusal in [`Refusal`] that a start can raise: an unknown kind, a frame document
+    /// that is unreadable, unsealed or in conflict with an in-memory frame, an owned tool
+    /// surface, a control the adapter cannot honour, and whatever the adapter said when it
     /// planned the launch.
     pub fn start_with(
         self,
@@ -240,6 +242,7 @@ impl Metaharness {
         let frame = self.frame.clone();
         let spec = self.applied(input);
         check_spec(&spec)?;
+        let frame = resolve_frame(frame, &spec)?;
 
         let capabilities = metaharness_claude::capabilities();
         let refusals = start_refusals(&capabilities, &spec);
@@ -434,19 +437,42 @@ pub fn start_refusals(capabilities: &Capabilities, spec: &RunSpec) -> Vec<(Strin
         .collect()
 }
 
+/// The frame in force, from whichever of the two spellings this run used.
+///
+/// Resolving the path is the library's job (D11): the CLI carries it, this reads it. Done before
+/// any I/O toward a spawn, so a bad document is a free refusal, never a paid one.
+fn resolve_frame(in_memory: Option<Frame>, spec: &RunSpec) -> Result<Option<Frame>, Refusal> {
+    let Some(path) = &spec.frame else {
+        return Ok(in_memory);
+    };
+    if in_memory.is_some() {
+        return Err(Refusal::FrameConflict { path: path.clone() });
+    }
+    let text = std::fs::read_to_string(path).map_err(|error| Refusal::FrameUnreadable {
+        path: path.clone(),
+        detail: error.to_string(),
+    })?;
+    let frame = Frame::parse_document(&text).map_err(|error| Refusal::FrameInvalid {
+        path: path.clone(),
+        detail: error.to_string(),
+    })?;
+    Ok(Some(frame))
+}
+
 /// Everything a spec can be refused for, in one place, so both faces refuse identically.
+///
+/// `spec.frame` is deliberately not here: since amendment a5 a frame document is resolved, not
+/// refused, and its failures ([`Refusal::FrameUnreadable`], [`Refusal::FrameInvalid`]) can only
+/// be raised by the resolution itself.
 ///
 /// # Errors
 ///
-/// [`Refusal::NoAdapter`], [`Refusal::FrameFile`] or [`Refusal::ToolSurfaceOwned`].
+/// [`Refusal::NoAdapter`] or [`Refusal::ToolSurfaceOwned`].
 pub fn check_spec(spec: &RunSpec) -> Result<(), Refusal> {
     if spec.kind == Kind::Codex {
         return Err(Refusal::NoAdapter {
             kind: Kind::Codex.as_str().to_string(),
         });
-    }
-    if let Some(path) = &spec.frame {
-        return Err(Refusal::FrameFile { path: path.clone() });
     }
     if spec.tool_surface == ToolSurface::Owned {
         return Err(Refusal::ToolSurfaceOwned);

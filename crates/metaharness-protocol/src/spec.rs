@@ -108,12 +108,13 @@ pub struct RunSpec {
     #[cfg_attr(feature = "clap", arg(short = 'p', long))]
     pub prompt: Option<String>,
 
-    /// A frame document.
+    /// A frame document: a sealed `metaharness.frame/1` file.
     ///
     /// A path and not a [`crate::Frame`], because resolving it is the library's job and parsing
-    /// it in the binary would be protocol logic in the CLI — which D11 exists to forbid. **The
-    /// on-disk frame format is owed and is not in v0.1**, so this flag is refused rather than
-    /// shipped against an undefined format (design § 9.3, correction 3).
+    /// it in the binary would be protocol logic in the CLI — which D11 exists to forbid (design
+    /// § 9.3, correction 3). The format landed as amendment a5: the library reads the file at
+    /// start and refuses by name a document that is unreadable, untagged, misshapen or whose
+    /// digest does not describe its contents.
     #[cfg_attr(feature = "clap", arg(long, value_name = "FILE"))]
     pub frame: Option<PathBuf>,
 

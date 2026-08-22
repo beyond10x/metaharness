@@ -539,11 +539,13 @@ fn a_run_declares_the_commands_it_will_need_before_it_starts() {
         ["halt", "interrupt", "tool.decide"]
     );
 
+    // A launch-time frame document needs the decision channel, not the mid-session `frame.set`
+    // command: the text reaches the model at launch and per-call decisions make it true (F9).
     let mut framed = RunSpec::new(Kind::Claude);
     framed.frame = Some("frame.json".into());
     framed.tool_surface = ToolSurface::Owned;
     assert_eq!(
         required_commands(&framed),
-        ["frame.set", "halt", "interrupt", "tool.decide"]
+        ["halt", "interrupt", "tool.decide"]
     );
 }

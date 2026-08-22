@@ -229,13 +229,6 @@ pub enum LaunchRefusal {
     /// The run has no prompt. `-p` needs one, and a headless session with nothing to do is a
     /// paid call for no observation.
     NoPrompt,
-    /// The run names a frame document. **The on-disk frame format is owed and is not in v0.1**,
-    /// so it is refused rather than shipped against an undefined format (design § 9.3,
-    /// correction 3).
-    FrameFormatUnowned {
-        /// The path that was named.
-        path: PathBuf,
-    },
     /// The working directory is not under the scratch root, so H7's *"a directory metaharness
     /// created"* cannot be claimed for it.
     CwdOutsideScratch {
@@ -289,7 +282,6 @@ impl LaunchRefusal {
     pub fn code(&self) -> Option<RefusalCode> {
         match self {
             LaunchRefusal::Shadowed { .. } => Some(RefusalCode::Shadowed),
-            LaunchRefusal::FrameFormatUnowned { .. } => Some(RefusalCode::UnsupportedControl),
             _ => None,
         }
     }
@@ -306,12 +298,6 @@ impl fmt::Display for LaunchRefusal {
             LaunchRefusal::NoPrompt => f.write_str(
                 "the run carries no prompt, and a headless session with nothing to do is a paid \
                  call for no observation",
-            ),
-            LaunchRefusal::FrameFormatUnowned { path } => write!(
-                f,
-                "the run names the frame document {}, and the on-disk frame format is owed and \
-                 is not in v0.1 (design § 9.3)",
-                path.display()
             ),
             LaunchRefusal::CwdOutsideScratch { cwd, scratch_root } => write!(
                 f,
@@ -383,9 +369,9 @@ pub fn plan_launch(spec: &RunSpec, context: &LaunchContext) -> Result<LaunchPlan
             asked_for: spec.kind,
         });
     }
-    if let Some(path) = &spec.frame {
-        return Err(LaunchRefusal::FrameFormatUnowned { path: path.clone() });
-    }
+    // `spec.frame` is deliberately not checked here: since amendment a5 the library resolves the
+    // document to an in-memory frame before any launch is planned, so by the time this function
+    // runs the path has already been read, parsed and digest-verified — or refused by name.
     let Some(prompt) = &spec.prompt else {
         return Err(LaunchRefusal::NoPrompt);
     };
@@ -1135,12 +1121,16 @@ mod tests {
         );
     }
 
+    /// The document was resolved — read, parsed, digest-verified — above this seam, so a spec
+    /// that still names it plans exactly the launch a spec without it plans.
     #[test]
-    fn a_frame_document_is_refused_because_its_format_is_owed_and_not_shipped() {
-        let mut spec = spec();
-        spec.frame = Some(PathBuf::from("/scratch/run-1/frame.json"));
-        let refusal = plan_launch(&spec, &context()).expect_err("the frame flag is refused");
-        assert_eq!(refusal.code(), Some(RefusalCode::UnsupportedControl));
+    fn a_spec_naming_a_frame_document_plans_the_same_launch_as_one_without() {
+        let mut framed = spec();
+        framed.frame = Some(PathBuf::from("/scratch/run-1/frame.json"));
+        let with_frame = plan_launch(&framed, &context()).expect("plans");
+        let without = plan_launch(&spec(), &context()).expect("plans");
+        assert_eq!(with_frame.args, without.args);
+        assert_eq!(with_frame.env, without.env);
     }
 
     #[test]
@@ -1172,9 +1162,6 @@ mod tests {
                 asked_for: Kind::Codex,
             },
             LaunchRefusal::NoPrompt,
-            LaunchRefusal::FrameFormatUnowned {
-                path: PathBuf::from("/f"),
-            },
             LaunchRefusal::CwdOutsideScratch {
                 cwd: PathBuf::from("/a"),
                 scratch_root: PathBuf::from("/b"),

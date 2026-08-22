@@ -421,7 +421,136 @@ impl Frame {
     pub fn digest_intact(&self) -> bool {
         self.digest == self.computed_digest()
     }
+
+    /// The frame as its on-disk document: one JSON object tagged `metaharness.frame/1`.
+    ///
+    /// Written exactly as the value holds it, digest included — deliberately not resealed on the
+    /// way out, because a producer that mutated a sealed frame should be refused by every
+    /// consumer rather than silently repaired by this function. Seal before writing.
+    ///
+    /// # Panics
+    ///
+    /// If the frame does not serialize, which cannot happen for these types and would be a
+    /// defect in this crate rather than in a caller's input.
+    #[must_use]
+    pub fn to_document(&self) -> String {
+        let mut value = serde_json::to_value(self).expect("a Frame serializes");
+        if let Some(object) = value.as_object_mut() {
+            object.insert(
+                "format".to_string(),
+                serde_json::Value::String(FRAME_FORMAT.to_string()),
+            );
+        }
+        let mut text =
+            serde_json::to_string_pretty(&value).expect("a serde_json::Value serializes");
+        text.push('\n');
+        text
+    }
+
+    /// A frame read back from its on-disk document, digest verified.
+    ///
+    /// The format tag is checked first (the D2 rule: a document is self-describing or it is
+    /// refused), then the shape, then the digest — a document whose digest does not describe its
+    /// contents is refused, because an unsealed or edited frame cited by digest downstream would
+    /// pin nothing.
+    ///
+    /// # Errors
+    ///
+    /// [`FrameDocError`], one variant per way the document fails, each naming what was found.
+    pub fn parse_document(text: &str) -> Result<Self, FrameDocError> {
+        let mut value: serde_json::Value =
+            serde_json::from_str(text).map_err(|error| FrameDocError::NotJson {
+                detail: error.to_string(),
+            })?;
+        let Some(object) = value.as_object_mut() else {
+            return Err(FrameDocError::NotJson {
+                detail: "the document is JSON but not an object".to_string(),
+            });
+        };
+        match object.remove("format") {
+            Some(serde_json::Value::String(tag)) if tag == FRAME_FORMAT => {}
+            Some(tag) => {
+                return Err(FrameDocError::UnknownFormat {
+                    tag: Some(tag.as_str().unwrap_or("<not a string>").to_string()),
+                });
+            }
+            None => return Err(FrameDocError::UnknownFormat { tag: None }),
+        }
+        let frame: Frame =
+            serde_json::from_value(value).map_err(|error| FrameDocError::Invalid {
+                detail: error.to_string(),
+            })?;
+        if !frame.digest_intact() {
+            return Err(FrameDocError::DigestMismatch {
+                stated: frame.digest.clone(),
+                computed: frame.computed_digest(),
+            });
+        }
+        Ok(frame)
+    }
 }
+
+/// The format tag the on-disk frame document carries.
+///
+/// On the document itself rather than on a file extension or a handshake, on the same rule as
+/// the wire's per-line tags (design D2): a copied or truncated file is still self-describing.
+pub const FRAME_FORMAT: &str = "metaharness.frame/1";
+
+/// Every way an on-disk frame document fails to become a [`Frame`].
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum FrameDocError {
+    /// The file is not a JSON object.
+    NotJson {
+        /// What the parser said.
+        detail: String,
+    },
+    /// The `format` field is missing or names a format this build does not know.
+    UnknownFormat {
+        /// The tag that was read, or `None` when the field was missing.
+        tag: Option<String>,
+    },
+    /// The object does not have a frame's shape.
+    Invalid {
+        /// What deserialization said.
+        detail: String,
+    },
+    /// The stated digest does not describe the contents.
+    ///
+    /// Refused rather than resealed: a frame whose digest lies was either never sealed or was
+    /// edited after sealing, and both mean the document cannot be cited by digest.
+    DigestMismatch {
+        /// The digest the document states.
+        stated: Digest,
+        /// The digest its contents imply.
+        computed: Digest,
+    },
+}
+
+impl fmt::Display for FrameDocError {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            FrameDocError::NotJson { detail } => {
+                write!(f, "not a JSON object: {detail}")
+            }
+            FrameDocError::UnknownFormat { tag: Some(tag) } => {
+                write!(f, "unknown format tag {tag:?}, expected {FRAME_FORMAT:?}")
+            }
+            FrameDocError::UnknownFormat { tag: None } => {
+                write!(f, "no format tag, expected {FRAME_FORMAT:?}")
+            }
+            FrameDocError::Invalid { detail } => {
+                write!(f, "not a frame: {detail}")
+            }
+            FrameDocError::DigestMismatch { stated, computed } => write!(
+                f,
+                "the stated digest {stated} does not describe the contents (computed {computed}); \
+                 the frame was never sealed or was edited after sealing"
+            ),
+        }
+    }
+}
+
+impl std::error::Error for FrameDocError {}
 
 /// One requirement line, with the document that asked for it.
 fn render_line(line: &Line) -> String {
@@ -600,5 +729,74 @@ mod tests {
             sealed.render_instruction().contains(sealed.digest.as_str()),
             "the rendered frame names its digest"
         );
+    }
+
+    // ------------------------------------------------------------ the on-disk document
+
+    #[test]
+    fn a_sealed_frame_round_trips_through_its_document() {
+        let sealed = frame().seal();
+        let text = sealed.to_document();
+        assert!(text.contains(FRAME_FORMAT), "the document names its format");
+        let back = Frame::parse_document(&text).expect("a sealed document parses");
+        assert_eq!(back, sealed);
+    }
+
+    /// Written as the value holds it, refused on the way back in: an unsealed frame must not
+    /// survive the file boundary, or the digest downstream events cite pins nothing.
+    #[test]
+    fn an_unsealed_frame_writes_a_document_every_consumer_refuses() {
+        let error = Frame::parse_document(&frame().to_document())
+            .expect_err("an unsealed document is refused");
+        assert!(matches!(error, FrameDocError::DigestMismatch { .. }));
+        assert!(error.to_string().contains("never sealed"), "{error}");
+    }
+
+    #[test]
+    fn a_document_edited_after_sealing_is_refused_naming_both_digests() {
+        let sealed = frame().seal();
+        let edited = sealed
+            .to_document()
+            .replace("the suite is red", "the suite is whatever");
+        let error = Frame::parse_document(&edited).expect_err("an edited document is refused");
+        let FrameDocError::DigestMismatch { stated, computed } = &error else {
+            panic!("expected DigestMismatch, got {error:?}");
+        };
+        assert_eq!(stated, &sealed.digest);
+        assert_ne!(stated, computed);
+    }
+
+    /// The D2 rule applied to a file: a document that does not say what it is, or says it is
+    /// something this build does not know, is refused rather than guessed at.
+    #[test]
+    fn a_document_without_the_format_tag_is_refused() {
+        let mut value = serde_json::to_value(frame().seal()).expect("serializes");
+        let untagged = serde_json::to_string(&value).expect("serializes");
+        assert!(matches!(
+            Frame::parse_document(&untagged),
+            Err(FrameDocError::UnknownFormat { tag: None })
+        ));
+
+        value
+            .as_object_mut()
+            .expect("an object")
+            .insert("format".into(), "metaharness.frame/2".into());
+        let future = serde_json::to_string(&value).expect("serializes");
+        assert!(matches!(
+            Frame::parse_document(&future),
+            Err(FrameDocError::UnknownFormat { tag: Some(tag) }) if tag == "metaharness.frame/2"
+        ));
+    }
+
+    #[test]
+    fn a_document_that_is_not_a_frame_is_refused_as_such() {
+        assert!(matches!(
+            Frame::parse_document("not json at all"),
+            Err(FrameDocError::NotJson { .. })
+        ));
+        assert!(matches!(
+            Frame::parse_document(&format!(r#"{{"format":"{FRAME_FORMAT}","workflow":3}}"#)),
+            Err(FrameDocError::Invalid { .. })
+        ));
     }
 }
