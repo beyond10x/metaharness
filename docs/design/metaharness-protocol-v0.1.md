@@ -1,0 +1,1213 @@
+# metaharness — a unified interface to agent harnesses — Design v0.1
+
+> **Repository:** `metaharness/metaharness`
+> **Status:** **proposed.** Nothing here is built. The placeholder types in
+> `crates/metaharness-protocol` are aligned to the names this document decides and carry no
+> behaviour.
+> **Review:** one adversarial review, 2026-08-22 — 4 blocker, 12 major, 2 minor, **all folded in**.
+> The verdicts and what each one changed are § 13. Corrections are marked at the point of change,
+> so the first draft's claims stay visible.
+> **Audience:** whoever reviews this for acceptance, and whoever builds it afterwards.
+> **Sources studied:** `former organization/engineering-protocols` (public, read-only), and a private
+> agent runtime whose patterns are described here generically and whose names, records and
+> postures are not reproduced.
+> **Verification date:** 2026-08-22, against `claude` **2.1.239** and `codex-cli` **0.145.0**.
+
+---
+
+## 1. What this is
+
+An outward-facing protocol around an agent harness. A run **emits events** and **accepts
+commands**. Everything that points inward — how a vendor binary is launched, how its records are
+read, how a decision reaches it — lives in that vendor's adapter crate and is named nowhere else.
+
+Three promises, and each one is a section below because each one is a claim that can be false:
+
+| promise | what makes it real | § |
+|---|---|---|
+| one interface to many harnesses | one event vocabulary, one command vocabulary, one workflow frame; adapters render, never re-decide | 4, 5, 6 |
+| completely hermetic runs | a testable list of imposed controls, each asserted from the run's own record | 8 |
+| in control at every step of which tools the harness can call | a per-call decision seam, delivered at a named tier per adapter, and refused by name where the tier does not exist | 7 |
+
+### 1.1 Two faces, one protocol
+
+* **Binary.** `metaharness run <claude|codex> --hermetic …` — protocol events as JSON lines on
+  stdout, commands as JSON lines on stdin.
+* **Library.** `Metaharness::new(Kind::Codex).with_…().start(prompt)` — the same events and the
+  same commands, as Rust values.
+
+The two faces are the same protocol because they are the same **type**. § 9.3 states the
+anti-drift rule mechanically: the CLI holds no protocol logic and its flag set is a `derive`
+on the builder's own options struct, so a flag the library does not have cannot be added and an
+option the CLI cannot express cannot be introduced.
+
+### 1.2 What v0.1 is not
+
+metaharness does **not own the model loop**. In v0.1 every adapter is a *harness adapter*: the
+vendor keeps its loop, its sessions, its tools, its authentication and its credential custody, and
+metaharness drives its documented outside surface. § 11 names the future adapter class and the
+rule that keeps the two apart.
+
+---
+
+## 2. What the sources proved
+
+Every row of this section is a fact read out of a file or a command, cited. Nothing here is
+inferred from an adjacent fact.
+
+### 2.1 The hermetic contract, as lived practice
+
+`integrations/claude-code/eval/run.sh` and `eval/run-driven.sh` are a hermetic contract that has
+been run rather than written down. What they impose, and why each line exists:
+
+| control | how | the failure it exists for, in the script's own words |
+|---|---|---|
+| scratch config home | `CLAUDE_CONFIG_DIR=$WORK/claude-home` | *"observed before this existed: 5 foreign plugins and the user's output style, visible in the init event"* |
+| credentials, and only credentials | one `cp` of `~/.claude/.credentials.json` into that home | *"auth is the one thing the run must share with the operator, and the only thing it does"* |
+| environment key unset | `unset ANTHROPIC_API_KEY` unless `EVAL_USE_API_KEY=1` | an exported key *"takes precedence over the claude.ai login and may point at an account with no credits"* |
+| MCP exclusion | `--strict-mcp-config`, always | *"account-level MCP servers arrive with the login, over the network, and no directory the runner controls excludes them — observed in governed run W4-1/1, three servers in a scratch home with no `mcpServers` key"* |
+| scratch project, copied not referenced | the document tree is `cp -R`'d per run | *"a checkout that changes mid-run cannot change what this run was judged against"* |
+| never `/tmp` | `$TMPDIR`, defaulting to `~/.cache/claude-tmp` | the machine's tmpfs drops writes under pressure |
+| the record, not the configuration | `protocol trace check` over the transcript | a scratch directory is a control; the opening record is the evidence |
+
+The last row is the doctrine, and `crates/trace-domain/src/spec.rs` states it where the bound is
+defined: an MCP-server count is `unk` when the harness records no list, *"because absence of
+evidence is not hermeticity, and a bound that read a missing field as zero would report its
+blindest case as its best one."*
+
+`crates/protocol-cli/src/drive.rs` asserts three properties over the constructed argv rather than
+leaving them as notes, *"because every one of the failures would be silent"*: it never contains
+`--bare` (which skips hooks and would delete the enforcement arm), it always carries `--settings`,
+and it always carries `--strict-mcp-config`.
+
+### 2.2 The control seam that is proven
+
+`integrations/claude-code/hooks/` is a `PreToolUse` hook pair. Four properties were proven there
+and all four are load-bearing here:
+
+1. **Deny with a reason, not a wall.** `aep_deny` emits
+   `hookSpecificOutput.permissionDecision = "deny"` with a `permissionDecisionReason`, and the
+   comment states why the JSON form is used rather than exit 2: *"both deny deterministically, and
+   only this one carries a reason the model is told, which is the difference between a wall and an
+   instruction."*
+2. **That plugin's hooks deny and never grant — by its own choice, not because the harness
+   forbids it.** `aep_allow` emits no `permissionDecision` at all, and the comment gives the
+   reason: *"saying `allow` here would claim an authority the layer does not have and would
+   override a stricter rule elsewhere."* **The harness does honour a hook `allow`** — 2.1.239
+   carries the log lines `Hook approved tool use for ${name}, bypassing permission prompt` and
+   `Hook approved tool use for ${name}, but canUseTool is required`. So this is a convention worth
+   copying deliberately, not a property of the mechanism, and § 6 states plainly where metaharness
+   departs from it (review finding **F8**).
+3. **Fail closed.** With neither `jq` nor `python3` present the hooks deny: *"a guard that silently
+   stops guarding is the defect this repository writes registers about."*
+4. **1:1 denial parity, measured.** `docs/plan/gap-register.md` and
+   `docs/plan/harness-wave-4-governed-dogfood.md` record the answer to F13 on Claude Code 2.1.238:
+   **11 hook denies, 11 `permission_denials` entries**, each carrying the tool's name, across four
+   sessions of a governed run. The row is nonetheless kept **advisory** in the specification,
+   because it asserts a model behaviour (that something forbidden was attempted at all) on top of
+   an undocumented harness detail; the gating evidence stays in the hook-decision log and in
+   `protocol artifact validate`.
+
+And two limits, stated by the same code:
+
+* **A hook is a separate process and cannot mutate the embedder's state.** `hooks/lib.sh`:
+  a hook *"cannot call `Engine::authorize`, which takes `&mut Execution` — an in-memory value
+  inside the driver's process, whose mutation is the point."* So it writes
+  `hook-decisions.jsonl` and the driver folds each line in **after the step's process exits**.
+  *"Decisions land a moment late and they land in the real trail."* § 10.1 is the removal of that
+  lateness, and it is the single largest concrete gain from adopting metaharness.
+* **A whole-run denial count cannot distinguish enforcement from inactivity.** `run-driven.sh`:
+  `permission.denied` is a whole-run count and *"`0` cannot distinguish enforcement holding from
+  nothing being attempted, so a run in which nothing forbidden was tried audits nothing."* Getting
+  the deliberate-denial case right took two attempts: the first asked for a hand-edited `status:`
+  and the model legally used `protocol artifact move` instead, so the guard was never exercised.
+
+### 2.3 The embedder metaharness must serve
+
+`crates/aep-driver/src/run.rs` and `src/executor.rs` are a deterministic engine that launches one
+model session per workflow step with a tool set derived from that step's state. Four of its shapes
+are constraints on this design:
+
+| shape | where | what it constrains here |
+|---|---|---|
+| `StepContext` — state, index, attempt, tool config, run directory, requirements, unmet outgoing requirements, preceding step | `executor.rs` | the workflow frame's field set (§ 5) must be a superset of this, or the driver loses information by adopting metaharness |
+| per-state tool set, changing at every transition | `run.rs`, `tool.rs` | the frame is **per step**, not per session |
+| `tool_config` is a pure function, deliberately not a trait | `tool.rs` | *"Making this point a trait method would let a second harness quietly re-decide that `repository.write` admits a shell."* metaharness adapters **render** an operation set; they never re-decide it |
+| `StepOutcome::NoVerdict` — nothing was observed | `executor.rs` | a crashed harness is not a failing run. metaharness must make "nobody found out" a first-class outcome (§ 9.4) |
+
+### 2.4 The IR this protocol projects into, and does not rival
+
+`crates/trace-domain/src/ir.rs` defines `trace-ir/1`: ten event families, every field an `Option`
+down to the leaves, an `Opaque` family that preserves what the reader did not understand, and
+indices assigned centrally so a verdict cites one thing. `crates/trace-domain/src/spec.rs` defines
+`trace-spec/1`: **51 expectation kinds**, three verdicts (`ok` / `gap` / `unk`), a `Severity`
+that makes an advisory expectation *evaluated and reported but not gating*, and a stated bar for
+admitting a kind — *"can a transcript decide it, and can the report say what it saw."*
+
+**Decision D1 — metaharness invents no second IR.** The event stream is the transport; `trace-ir/1`
+is the judged form; the projection between them is a total function, declared in a table (§ 4.4)
+and exercised by a verb (`metaharness project`, § 9.2). The reason is the one `trace-spec` gives
+for its own reuse of `infra-spec`'s shape: a second vocabulary for the same claims is a second
+thing that goes stale, and an author who has met one would meet a new idea in the other for no
+gain.
+
+### 2.5 Codex, as verified by the same repository
+
+`integrations/codex/README.md` is a table of claims each labelled *verified* (run against
+codex-cli 0.145.0), *vendor doc*, or *unverified*. The rows that matter here:
+
+* Codex has a `PreToolUse` hook, **stable and enabled by default** (`codex features list`).
+* Its hook **output** wire is Claude Code's shape:
+  `hookSpecificOutput.{hookEventName, permissionDecision, permissionDecisionReason, updatedInput}`.
+  A `deny` must carry a non-empty reason; `permissionDecision: "ask"` is refused for `PreToolUse`.
+* Its hook **input** carries `tool_name` and an **unconstrained** `tool_input`.
+* Codex writes files through `apply_patch` and runs shells through the exec family. There is no
+  native `Write`, `Edit` or `NotebookEdit`. **This is the fact that stops the hooks porting**: every
+  rule in the Claude hooks is a rule about `tool_input.file_path`, `old_string`, `new_string` or
+  `command`, and `apply_patch`'s input is a patch envelope with none of those keys. A naive port
+  *"would therefore look at every store write, find no `file_path`, and pass it through — a guard
+  that has silently stopped guarding."*
+* The transcript worth adapting is the session rollout JSONL under `$CODEX_HOME/sessions/`, not
+  `codex exec --json` stdout, which carries no timestamps, no durations and no cost. The rollout
+  format has **no documented stability guarantee** and drift is already observable across one
+  install's history, which is why an adapter must version-gate on the recorded CLI version and
+  treat an unknown shape as opaque.
+* A scratch `CODEX_HOME` isolates a run the way `CLAUDE_CONFIG_DIR` does; Codex's own `.system`
+  skills still appear.
+
+### 2.6 The private prior art, described generically
+
+Five patterns, taken as patterns:
+
+1. **Two adapter classes, and no silent fallback.** A *harness adapter* drives a documented
+   agent-product surface while that product keeps its loop, sessions, tools, approvals and
+   credential custody. A *direct-provider adapter* calls a model API while the embedder owns the
+   loop. Neither class silently falls back to the other; a run declares the class and the capability
+   subset it requires, and an adapter that does not satisfy them refuses before it starts rather
+   than degrading during.
+2. **An approval is a blocking call, and the effect cannot precede it.** The dispatcher thread is
+   suspended on the decision path itself with exactly two powers — publish one event, await exactly
+   one correlated decision or cancellation. The holder cannot read the stream, resume the run,
+   dispatch another call, or decide on its own behalf. Blocking is the mechanism, not a workaround.
+3. **The approval identity is the digest of the exact request.** A different operation, input, call
+   or run is a different identity, so a decision cannot be replayed against a different input, and a
+   request mutated after the person saw it is a named refusal rather than a silent approval.
+4. **Ordering: the tool response is written before any control is applied.** Cancelling first would
+   clear the active call and leave the child waiting on a correlation that no longer exists.
+5. **Adapter conformance is a tested claim, not a paragraph.** Portable lifecycle vectors — one
+   stimulus and its complete observable expectation, including the typed refusal — are run against
+   every adapter class, with no model and no credential.
+
+And one honest cost carried over verbatim in shape: **the run clock is not suspended while a
+decision is pending.** A decision that outlasts the remaining budget is still honoured and the call
+still executes; the run then dies at the next read. § 7.6.
+
+### 2.7 What was verified for this design
+
+Read on 2026-08-22 from `claude` 2.1.239 (`~/.local/share/claude/versions/2.1.239`) and
+`codex-cli` 0.145.0 (`/usr/bin/codex`). Method is stated per row because the strength differs.
+
+**Where a row reports a count, the count is matching *lines* of `strings -n 6 <binary>`**, stated
+once here rather than left to the reader to guess. A count of occurrences is a different and
+larger number, and mixing the two silently is how a figure becomes unreproducible (review finding
+**F17**).
+
+| # | claim | how known |
+|---|---|---|
+| V1 | `--input-format stream-json` carries a **bidirectional control protocol**: `control_request` / `control_response` / `control_cancel_request` | binary strings: **104 / 83 / 42 matching lines** |
+| V2 | one control-request subtype is **`can_use_tool`**, carrying `tool_name`, `input`, `permission_suggestions`, `blocked_path`, and awaited by the harness | binary strings, including the client-side dispatcher `if (e.request.subtype === "can_use_tool") { … await this.canUseTool(e.request.tool_name, e.request.input, {…}) }` and the error `Ignoring can_use_tool control_response for request_id=` |
+| V3 | other subtypes present: `interrupt`, `set_permission_mode`, `set_model`, `hook_callback`, `mcp_message`, `initialize` | binary strings |
+| V4 | **`can_use_tool` is shadowed and the vendor says so**: *"canUseTool will not be invoked: permissionMode 'bypassPermissions' auto-approves every tool call … To gate every tool call, use a PreToolUse hook instead"* and *"Bare allowedTools entries auto-approve the whole tool before the callback is consulted … Allow rules from settings files can also shadow the callback but are not visible here"* | binary strings, verbatim |
+| V5 | `canUseTool` and `--permission-prompt-tool` are **mutually exclusive**: *"canUseTool callback cannot be used with permissionPromptToolName. Please use one or the other."* | binary string, verbatim |
+| V6 | `--permission-prompt-tool` **exists** on 2.1.239, takes an **MCP tool name**, and is a *"tool_name+input wire"*; a non-MCP tool is refused | binary strings, including its own refusal messages. **It is absent from `claude --help`** — verified by enumerating all 63 documented options |
+| V7 | **an SDK hook-*callback* timeout fails closed**: *"PreToolUse hook did not respond before its timeout (host client may be unreachable). **The tool call was not executed**; other configured hooks may not have completed."* | binary string, verbatim. **It is the SDK/`hook_callback` control-request path, not the on-disk `type: command` hook** — its own wording ("host client may be unreachable") and its adjacent telemetry (`tengu_sdk_hook_callback_timeout`) say so. The command hook's timeout behaviour is **not** established by this row (review finding **F7**; see Q10) |
+| V7b | a `PreToolUse` hook may declare itself **non-blocking**: `async` — *"If true, hook runs in background without blocking"* — and `asyncRewake`, which *"Implies async"* | binary strings, from the hook schema. A hook that is `async` **cannot** be a control seam, which is why § 8.4 O7 asserts the emitted hook definition as a value |
+| V8 | a hook **matcher may be empty, and empty matches all tools**: *"The matcher is a string: a tool name (\"Bash\"), pipe-separated list (\"Edit\|Write\"), or empty to match all."* | binary string, verbatim (the CLI's own hook documentation) |
+| V9 | `permissionDecision` accepts `"allow"`, `"deny"`, `"ask"`; a further value **`defer` exists and is print-mode only** — *"returned permissionDecision=defer in interactive mode; ignoring (defer is print-mode only)"* — with a parked/auto-resumed deferred-tool mechanism (`hook_deferred_tool`, `[print.ts] Auto-resuming deferred tool:`) | binary strings. **Semantics undriven here**; see Q3 |
+| V10 | `--include-hook-events` exists: *"Include all hook lifecycle events in the output stream"*, and the stream carries `{type:"system", subtype:"hook_response", hook_id, hook_name, hook_event, output, stdout, stderr, exit_code, outcome: "success"\|"error"\|"cancelled", uuid, session_id}` | `claude --help`, plus the record's own schema in binary strings. **It carries no tool-call id**, so it is a hook-lifecycle log and *not* a per-call decision audit — which is why § 4.1's `tool.decided` exists (review finding **F17**) |
+| V11 | `--tools <tools…>` exists: *"Specify the list of available tools from the built-in set. Use \"\" to disable all tools, \"default\" to use all tools"* | `claude --help` |
+| V12 | `--setting-sources <user,project,local>` exists and disabling a source is observable in the CLI's own messages | `claude --help`, plus *"userSettings source is disabled (--setting-sources)"* |
+| V13 | `notifications/tools/list_changed` is present in the Claude Code binary (20 occurrences) | binary strings. **Whether the client re-lists a server's tools mid-session, and whether the model's offered set changes as a result, is unverified.** See Q1 |
+| V14 | Codex app-server exposes **`turn/steer`** and **`thread/inject`** beside `turn/start`, `turn/interrupt`, `thread/start`, `thread/resume`, `thread/fork`, `thread/compact`, `thread/rollback` | binary strings, from the method table |
+| V15 | Codex app-server issues **blocking server→client requests**: `item/commandExecution/requestApproval`, `item/fileChange/requestApproval`, `item/permissions/requestApproval`, `item/tool/requestUserInput`, `item/tool/call`, `mcpServer/elicitation/request` | binary strings, from the request table |
+| V16 | Codex `DynamicToolSpec { namespace, description, inputSchema, deferLoading }` is registered at `thread/start` and requires `initialize.params.capabilities.experimentalApi = true` | binary strings for the type; the `experimentalApi` requirement is the private prior art's recorded finding against 0.145.0 |
+| V17 | Codex carries process-level sandbox knobs on its surface: `sandboxPolicy`, `permissionProfile`, `networkAccess`, `workspaceWrite`, `writableRoots`, `excludeTmpdirEnvVar`, `excludeSlashTmp` | binary strings. **Claude Code's CLI has no equivalent**, verified by the same option enumeration as V6 |
+| V18 | Codex emits `hook/started` and `hook/completed` turn notifications | binary strings |
+
+A string in a binary is weaker than a driven call. Every row above is labelled with its method, and
+§ 12 lists what would upgrade the weak ones.
+
+---
+
+## 3. Framing and versioning
+
+**Decision D2 — one JSON object per line, in both directions, each carrying its own format tag.**
+
+```
+{"format":"metaharness.event/1","seq":7,"run":"…","at":"…","event":"tool.requested", …}
+{"format":"metaharness.command/1","id":"c-3","command":"tool.decide", …}
+```
+
+* `seq` is a monotone per-run counter assigned in one place, for the reason `trace-ir` assigns
+  indices centrally: a verdict cites one thing, and a producer that numbered its own events would
+  be a second place that decides what is cited.
+* `at` is the timestamp **the vendor recorded**, passed through, or absent. metaharness derives
+  durations by subtracting two recorded times and yields nothing where either is missing. It never
+  measures. This is `trace-ir`'s invariant and it is what lets a run's numbers be committed and
+  diffed.
+* The format tag is on **every line**, not on a handshake, so a truncated capture is still
+  self-describing.
+* Unknown **fields** on a known event are ignored in silence; an unknown **event or command name**
+  is a named refusal. That asymmetry is `trace-spec`'s adapter rule applied to our own wire, and it
+  is right for the same reason: our wire is an authored schema, so a misspelling here is a mistake
+  the author wants to be told about.
+
+**Decision D3 — the version is in the tag and the tag is checked.** `metaharness.event/1` and
+`metaharness.command/1`. A consumer that reads a tag it does not know refuses the line and says so;
+it does not guess. A field added to an existing event is additive and does not move the number; a
+field removed, retyped or given new meaning does.
+
+---
+
+## 4. Events
+
+### 4.1 The vocabulary
+
+`metaharness.event/1`. Eighteen events in five groups. The right-hand column is § 4.4's projection.
+
+**Session lifecycle**
+
+| event | payload | why it exists | → `trace-ir/1` |
+|---|---|---|---|
+| `session.started` | **every field of `trace-ir/1`'s `SessionStart`** — resolved model, permission mode, credential source, harness version, **output style**, cwd, offered tools, **slash commands**, skills, agents, plugins, MCP servers (list, not count) — plus adapter id and class, the raw-transcript reference (§ 8.4 O8) and the `hermetic` attestation block (§ 8.3) | the opening record is where a class of defect is visible before a turn is spent, and it is the only place that can distinguish *offered* from *called*. The field set is the IR's rather than a shorter one of our own, because a field metaharness omits is an expectation kind that becomes undecidable (review finding **F11**) | `session_start` |
+| `session.ended` | **every field of `trace-ir/1`'s `RunOutcome`** — `is_error`, subtype, stop reason, terminal reason, API error status, `num_turns`, **`duration_ms`, `duration_api_ms`, `ttft_ms`, `time_to_request_ms`**, `total_cost_usd`, `permission_denials`, **`subagents_spawned`**, `usage`, `model_usage` — plus metaharness's own decision census | the terminal record is the source of every resource fact. Same reason as above: omitting the four duration fields and `subagents_spawned` would silently kill `duration.total`, `duration.api`, `ttft`, `time_to_request` and `subagent.spawned` (**F11**) | `run_outcome` |
+
+**Boundaries**
+
+| event | payload | why it exists | → `trace-ir/1` |
+|---|---|---|---|
+| `step.entered` | `StepRef { workflow, state, index, attempt }`, `frame_digest` | the *embedder's* unit of work. The driver's per-state tool set changes here, and a run that cannot name the step cannot attribute a denial to one | — (control plane) |
+| `step.left` | `StepRef`, outcome | closes the bracket | — |
+| `turn.started` | `turn`, `frame_digest` in force | the *vendor's* unit of work. Distinct from a step because one step may hold several turns and, on the relaunch strategy, one turn is one session | — |
+| `turn.ended` | `turn`, stop reason | | — |
+
+A step and a turn are two different things and conflating them is how a per-step guarantee quietly
+becomes a per-session one.
+
+**Content**
+
+| event | payload | why | → |
+|---|---|---|---|
+| `text` | text, request id | what the model said to the operator | `assistant_text` |
+| `thinking` | text | kept separate from `text` because an assertion about what the model *said* must not match its reasoning | `assistant_thinking` |
+| `thinking.estimate` | estimate, delta | the harness's live estimate, never the billed figure — one is a mid-stream guess, the other is an invoice | `thinking_estimate` |
+| `injection` | text, origin | text the *harness* put in the conversation (a loaded skill body, an injected frame). Recorded, and deliberately given no expectation kind: a matcher over injected text is a wording assertion in a structural costume | `synthetic_injection` |
+
+**Tool calls, in three events rather than two**
+
+| event | payload | why | → |
+|---|---|---|---|
+| `tool.requested` | `call_id`, name, input, `decision_required: bool`, `deadline_ms`, `seam` | emitted **before** the decision and before any effect. When `decision_required` is true the run is blocked here | `tool_call` |
+| `tool.decided` | `call_id`, `decision` (`allow` / `deny{reason}` / `replace{input}`), `decided_by` (`embedder` / `frame` / `deadline` / `adapter`), `seam`, `latency_ms` | **the denial record.** It is a first-class event and not a log file, which is the correction of the one gap § 2.2 names | — (control plane) |
+| `tool.result` | `call_id`, `is_error`, content, per-tool fields, byte counts | | `tool_result` |
+
+Three events rather than two because a denial has no result and a decision is not a result. A
+protocol that folded the decision into the result could not express *"this was refused and nothing
+ran"* without inventing a fake result, which is fabricating an observation.
+
+**Accounting, diagnostics and the escape hatch**
+
+| event | payload | why | → |
+|---|---|---|---|
+| `usage` | per-request or per-turn tokens, cache reads and creations, per-model split | costs are read from what the vendor reported, never computed | folded into `run_outcome.usage` / `requests` |
+| `rate_limit` | status, window, utilization, overage flag | a billing guard: *this run must not have been paid for out of overage* is a fact about money nothing else carries | `rate_limit` |
+| `command.result` | `id`, `ok` or `refused { code, reason }` | § 5.4 | — |
+| `warning` | code, message | metaharness has something to say. Distinct from `opaque`, which means *the vendor said something we could not read* | — |
+| `opaque` | vendor `type`, vendor `subtype`, digest of the raw record, source line | **required.** An adapter that cannot map a vendor record emits this and never drops it | `opaque` |
+
+**Decision D4 — `opaque` is mandatory and unconditional.** The failure it prevents is the one
+`trace-ir` names: *a checker reporting "the tool was never called" when what happened is that it
+stopped being able to see tool calls.* An adapter that recognised a record's envelope and read
+nothing out of it emits `opaque` too, because an event that produced nothing has vanished whatever
+the intention was.
+
+### 4.2 Decision modes
+
+**Decision D5 — the embedder chooses, per run and overridable per operation, between two modes.**
+
+| mode | who decides a call | cost | when |
+|---|---|---|---|
+| `frame` | the adapter, from the frame's allowed set. `tool.requested` is emitted with `decision_required: false`, followed immediately by `tool.decided { decided_by: "frame" }` | no round trip | the common case: the frame already says yes or no |
+| `ask` | the embedder. `decision_required: true`, and the run blocks | one round trip per call | argument-level judgement, or an embedder whose state must move at decision time (§ 10.1) |
+
+Two modes rather than one because a round trip per call costs latency, and an embedder that answers
+"yes" to everything the frame already admits has bought nothing. A per-operation override exists so
+`shell` can be `ask` while `read` is `frame`.
+
+Both modes emit `tool.decided`. The census in `session.ended` counts both. A run in `frame` mode is
+still fully audited; it is not less controlled, it is controlled by a policy stated in advance
+rather than by a callback.
+
+### 4.3 What is deliberately not an event
+
+* **No `approval.required` / `approval.resolved` pair.** A blocking tool decision *is* the approval.
+  Two vocabularies for one blocking question is two places for a race, and the prior art's own
+  race table is a table about exactly one of them.
+* **No `error` event.** A vendor error is `session.ended` with a reason, or a `tool.result` with
+  `is_error`, or a `warning`. An error channel beside the outcome channel is a second place a run
+  can end.
+* **No aggregate `metrics` event.** `trace-ir`'s census is derived from the events; a computed
+  summary on the wire is a second copy of the numbers that can disagree with the first.
+
+### 4.4 The projection into `trace-ir/1`
+
+**Decision D6 — projection is a total function, `Vec<Event> -> TraceIr`, and it is tested against
+the existing reader.**
+
+* Every event maps to exactly one `trace-ir` family or to none. The events mapping to none are the
+  control-plane ones — `step.*`, `turn.*`, `tool.decided`, `command.result`, `warning` — and they
+  are listed exhaustively in the table above so "none" is a decision rather than an omission.
+* **`tool.decided` maps to nothing, and contributes to nothing.** `run_outcome.permission_denials`
+  is passed through from `session.ended` — which is the vendor's own terminal record — and
+  metaharness never adds to it. An earlier draft said the projection "contributes to" that count;
+  that both contradicted the bullet above and made metaharness compute an aggregate from its own
+  events, which § 4.3 forbids and which would guarantee a disagreement in the cross-check below
+  every time a frame-mode deny was one the vendor did not count (review finding **F10**). The
+  per-call denial audit lives in the metaharness stream. Widening `trace-spec` to a per-call denial
+  kind is a proposal to make **there**.
+
+**Decision D6a — the adapter retains the raw vendor transcript, and the projection is exempt from
+three fields.** Three of the IR's fields are properties of a *file*, not of an event stream:
+`transcript_digest` is the digest of the **raw transcript bytes**, `source_line` is a 1-based line
+of that file, and `adapter` names the reader. An event stream alone cannot fill any of them — and
+one transcript line can produce several IR events, so a `Vec<Event>` cannot reconstruct the
+mapping either (review finding **F4**). Two consequences, both taken:
+
+1. **§ 8.4 O8 requires the adapter to retain the raw vendor bytes and their digest.** This is not
+   only for the projection: § 9.4's auditor contract runs over that transcript, and without it
+   there is nothing for `protocol trace check` to read.
+2. **`adapter` is exempt and is expected to differ**, because the whole point of the cross-check is
+   that two different readers agreed.
+
+**The cross-check, stated so it can pass.** For a recorded Claude Code session, the IR metaharness
+projects and the IR `trace-spec`'s `claude-code/stream-json` adapter reads from the same bytes must
+agree on **every event family, every index, every `source_line`, and `transcript_digest`** —
+`adapter` excepted. Disagreement is a defect in the metaharness adapter. It is a C2 conformance
+vector (§ 8.5) and costs nothing to run.
+
+**Q9 gates the document form.** `trace-ir/1` is today a **`Serialize`-only** Rust type: none of the
+eighteen derives in `crates/trace-domain/src/ir.rs` carries `Deserialize`, its identity fields are
+`&'static str`, and `schemas/generated/` publishes `trace-spec.schema.json` and no trace-ir schema
+(review finding **F1**). So in v0.1 the projection produces an **in-process Rust value**, not a
+document any third party can read back. `metaharness project --to trace-ir` writes JSON for a human
+and for diffing, and says so; a machine-readable trace-ir document is Q9's prerequisite, named in
+§ 12.
+
+---
+
+## 5. The workflow frame
+
+**Owner requirement, binding.** *On every turn the embedder presents the workflow state — prior
+evidence, current node, next step(s), required handoff per node — and for that step strictly only a
+certain set of tool calls is allowed. The frame is a typed protocol structure the embedder composes
+and the adapter injects per turn (not just per session), and the per-step tool set is part of it.*
+
+### 5.1 The type
+
+```rust
+pub struct Frame {
+    pub workflow: WorkflowRef,          // id and pinned version
+    pub node: NodeRef,                  // the state the run is in
+    pub step: StepRef,                  // which step of that node, which attempt
+    pub prior: Vec<EvidenceLine>,       // what has already been established, one line each
+    pub obligations: Vec<Line>,         // what must hold while here
+    pub reaching: Vec<Line>,            // what does not hold yet on a way out, prefixed with where it goes
+    pub next: Vec<NodeRef>,             // the nodes reachable from here
+    pub handoff: Handoff,               // what this step must produce before it may end
+    pub operations: OperationSet,       // strictly the operations admitted here
+    pub entities: Option<EntityList>,   // the enumerated set a routing step chooses from (§ 10.4)
+    pub digest: Digest,                 // sha256 over the canonical form of everything above
+}
+```
+
+Field-by-field, the source of each obligation:
+
+* `prior`, `obligations`, `reaching`, `next` are the driver's `StepContext` (§ 2.3), and
+  `reaching` is there because of a recorded failure: a run in which *"the model was never told that
+  `implement` wanted a red suite and an approved specification, so it wrote neither, and the guard
+  refused work that had already been paid for."*
+* `obligations` are carried **verbatim, one line per requirement, each naming the document that
+  asked** — never summarised. A driver that summarised here would be the only place the summary
+  existed.
+* `handoff` states what the step owes: a named artifact, a structured answer against a schema, or
+  nothing. A step that owes nothing says so; a step whose handoff is unstated is a step nobody can
+  fail.
+* `digest` exists so an event can cite the exact frame in force without repeating it, and so a
+  frame mutated after the model saw it is detectable rather than silent. This is the prior art's
+  digest-pinning pattern (§ 2.6 item 3) applied to the frame rather than to a single approval.
+
+### 5.2 Operations, not tool names
+
+**Decision D7 — the frame names harness-neutral operations; the adapter renders them into vendor
+tool names, and never re-decides which operations an admission implies.**
+
+This is `aep-driver`'s adapter point 2, kept: *"Making this point a trait method would let a second
+harness quietly re-decide that `repository.write` admits a shell, and the protocol would have no way
+to notice."* The v0.1 operation vocabulary is deliberately small and closed:
+
+`file.read`, `file.write`, `file.edit`, `dir.list`, `search`, `shell`, `web.read`, `skill.load`,
+`subagent.spawn`, `task.todo`, `mcp.call{server,tool}`.
+
+The rendering is the adapter's whole per-harness contribution here, and it is a value the adapter
+must expose (`metaharness capabilities <kind> --render`) so an embedder can assert on it without a
+run. Claude Code renders `file.edit` to `Edit`; Codex renders it to `apply_patch`; both render
+`shell` to their own shell tool. `subagent.spawn` defaults to **not admitted** on every adapter,
+because a subagent's tool set is derived by nothing in these decisions and would be a route around
+the per-step admission — the position `protocol-cli` already takes on `Task`.
+
+### 5.3 Injection: per turn, and what that costs per adapter
+
+The frame reaches the model in two independent ways, and both are used:
+
+1. **As instruction text**, injected at the start of the step or turn — rendered from the typed
+   frame by a function that lives in `metaharness-protocol` and is shared by every adapter, so two
+   harnesses cannot describe the same frame differently.
+2. **As enforcement**, through the control seam (§ 7). The text tells the model what the step is;
+   the seam is what makes it true.
+
+**Decision D8 — the offered set is fixed at launch to the union over the workflow's steps; the
+admitted set is per call.** The reason is a limit, stated plainly: on Claude Code the offered tool
+list is a launch flag and cannot change within a session (V11 changes what may be offered, not when).
+Narrowing per step therefore happens at the decision seam, not at the offer. The honest cost is that
+the model **sees tools it may not use in this step and will attempt them**, and each attempt costs a
+turn and a denial. That is survivable because a denial carries a reason the model is told — which is
+the difference between a wall and an instruction — but it is not free, and § 7.5 lists the two ways
+out (relaunch per step; an owned tool surface) with what each costs.
+
+### 5.4 Setting a frame is a command with a result
+
+`frame.set` takes effect at the **next** turn or step boundary, never inside a running turn, and its
+`command.result` states which boundary it will apply at. A frame that could take effect mid-turn
+would mean a tool call adjudicated against a frame the model was never shown.
+
+---
+
+## 6. Commands
+
+`metaharness.command/1`. Every command carries an `id` and produces exactly one `command.result`
+event. **Decision D9 — a command that can be silently ignored is a control surface that cannot be
+tested**, so silence is not a legal outcome; refusal is.
+
+| command | payload | tier it needs | refusal when unavailable |
+|---|---|---|---|
+| `tool.decide` | `call_id`, `allow` / `deny{reason}` / `replace{input}` | call-level | `UNSUPPORTED_CONTROL` at run start, not at the call |
+| `frame.set` | `Frame` | turn-level (text) **and** call-level (enforcement) — both, or neither | `UNSUPPORTED_CONTROL` **at run start**, like every other row |
+| `message.inject` | text | turn-level | `UNSUPPORTED_CONTROL` |
+| `steer` | text | mid-turn | `UNSUPPORTED_CONTROL` — and on Claude Code headless this is **always** the answer (§ 7.4) |
+| `permission.set` | posture | run-level | `UNSUPPORTED_CONTROL` |
+| `interrupt` | reason | kill | every adapter must deliver this |
+| `halt` | reason | kill | every adapter must deliver this |
+
+**`frame.set` is not partially deliverable, and an earlier draft said it was.** A frame whose text
+reaches the model while nothing enforces it tells the model *"strictly only these operations"* and
+makes it false — which is exactly the silent weakening § 7.1 forbids, and `command.result`'s two
+values (`ok`, `refused`) cannot express it anyway (review finding **F9**). So a run whose adapter
+cannot deliver call-level enforcement is refused at start when its configuration will need
+`frame.set`; it is never allowed to run with an advisory frame. An embedder that genuinely wants
+advisory-only text says so with `message.inject`, which claims nothing.
+
+**`allow` grants, and that is a departure worth naming.** § 2.2 records a plugin convention of
+denying and never granting, on the reasoning that an `allow` claims authority the layer does not
+have. metaharness's `allow` **does** claim it: the harness honours a hook `allow` and bypasses the
+remaining permission pipeline. The authority is taken deliberately, because metaharness is not one
+guard among several — it is the embedder's decision point, and a seam that can only ever say no
+cannot express a workflow's *"in this step, this is exactly what is permitted"* (review finding
+**F8**). The consequence is stated so nobody discovers it: an `allow` from metaharness overrides a
+stricter rule elsewhere in the vendor's settings, so a run that also relies on such a rule must use
+`deny`-only policy and say so.
+
+`deny` **must** carry a non-empty reason. Both vendors' hook wires require it, and the reason is the
+only part the model can act on.
+
+`replace` exists because both vendors' hook wires carry `updatedInput` and refusing to expose it
+would push embedders into deny-and-re-prompt, which costs a turn to express something the wire
+already supports. A `replace` that the adapter cannot deliver is refused by name; it never silently
+becomes an `allow`.
+
+### 6.1 Refusal codes
+
+| code | means |
+|---|---|
+| `UNSUPPORTED_CONTROL` | this adapter cannot honour this command **at all**. Emitted at run start for every command the run's configuration will need, so a run that will fail on control fails before it spends money |
+| `UNKNOWN_CALL` | the `call_id` does not correlate to an open request |
+| `TOO_LATE` | the window closed — the decision deadline expired, or the turn ended |
+| `MALFORMED` | the command did not parse, or a required field is missing |
+| `SHADOWED` | the command would be accepted by the vendor and silently overridden by another layer (§ 7.3 row `can_use_tool`). Refused rather than delivered, because a control that appears to work and does not is worse than one that is absent |
+
+---
+
+## 7. The control seam
+
+### 7.1 Four tiers, named
+
+**Owner requirement, binding.** *The control-seam section must state, per adapter, which tier is
+delivered — registration-level, call-level (blocking), turn-level (injection), or kill-only —
+refusing to pretend parity.*
+
+| tier | what it means | what it cannot do |
+|---|---|---|
+| **registration** | the set of tools the model is offered is decided before the session starts | cannot see an argument; cannot change within a session |
+| **call (blocking)** | every call is presented for a decision **before it executes**, and the harness waits | costs a round trip; only as universal as the seam's coverage |
+| **turn (injection)** | text can be added to the conversation between turns | cannot stop a call; only advises |
+| **kill** | a running turn can be stopped | loses the turn; cannot be selective |
+
+A control the adapter cannot honour is **refused by name**. It is never silently weakened into a
+lower tier, and the refusal happens at run start.
+
+### 7.2 The race: can an effect land before a deny?
+
+This is the question the whole seam exists to answer, so it is answered case by case rather than in
+general.
+
+| case | can the effect precede the decision? | why |
+|---|---|---|
+| Claude Code, `PreToolUse` hook, `type: command`, **not** `async` | **No.** The harness runs the hook and waits for its exit before dispatching the tool | measured, not inferred: 11 hook denies produced 11 `permission_denials` and the forbidden write did not land (§ 2.2). **A hook that declares `async` does not block** (V7b), so the blocking property is a property of *this* hook definition and is asserted as one (§ 8.4 O7) — review finding **F6** |
+| …with matcher `""` (all tools) | **No** for any call the hook sees, and matcher `""` is documented to see all | V8 is the vendor's own hook documentation. **The measured runs used narrow matchers, not `""`** — see § 7.3 and Q11 |
+| …on hook **timeout** | **Unknown for a `type: command` hook.** metaharness closes it from its own side regardless (§ 7.7 rule 2) | V7's string is the SDK hook-*callback* path, not the command hook (**F7**). Q10 |
+| …on hook **crash or non-JSON output** | **To verify (Q4).** metaharness closes it from its own side regardless: § 7.7 | the vendor's behaviour on a malformed hook response is not stated in any string read |
+| …when metaharness's own decision is slow | **No**, by construction: the injected hook's deadline is strictly less than the configured hook timeout, and on its own deadline the hook emits `deny` | § 7.7 |
+| Claude Code, `can_use_tool` | **No when it fires** — the harness awaits the `control_response`. **But it does not always fire** | V2, V4 |
+| Claude Code, `--allowedTools` only | Not a race: a tool that was never offered cannot run. But arguments are invisible | `--allowedTools` governs which tools are offered; only the hook sees what one of them is allowed to *say* |
+| Codex, `item/*/requestApproval` | **No** for command execution, file change and permissions: these are blocking server→client requests | V15 |
+| Codex, `item/tool/call` dynamic tools | **No, and there is no race to have**: metaharness executes the tool itself, so the model never reaches an implementation | V16 |
+| Codex, `PreToolUse` hook over `apply_patch` | **No** for the *call*, but the rule cannot read the *arguments*: the patch envelope carries no `file_path`, `old_string` or `new_string` | § 2.5 |
+| a **second call in the same assistant message**, while the first is blocked | **No for that call's own effect**, because each call gets its own hook and each hook blocks its own call. **But the calls are not serialised with each other**: a parallel call B may execute while A's decision is pending, so an embedder that wants A-before-B must deny B and say so | `isConcurrencySafe` occurs 58× in the 2.1.239 binary; the CLI's own instruction text tells the model to batch tool-use blocks for parallelism. § 7.7 rule 5 |
+| any post-hoc denial record | **Yes — the effect already landed.** A record written after the call is an audit, not a control | stated so nobody mistakes the two |
+
+### 7.3 Claude Code — the realization matrix
+
+Pinned to **2.1.239**.
+
+| mechanism | tier | status | what it delivers |
+|---|---|---|---|
+| `--allowedTools` / `--tools` at launch | registration | **proven** (in daily use in `engineering-protocols`) | the offered set, fixed for the session. `--tools ""` disables the entire built-in set (V11) |
+| **`PreToolUse` hook, matcher `""`, calling back into metaharness** | **call (blocking)** | **mechanism and 1:1 parity: measured — under narrow matchers.** The wire, the deny-with-reason and the 11-for-11 `permission_denials` were observed with matchers `Edit\|Write\|NotebookEdit` and `Bash` (`integrations/claude-code/hooks/hooks.json`), never with `""`. **Matcher `""` itself is a vendor doc string (V8) and undriven**, and it changes the regime: a child process per `Read`, `Glob`, `Grep`, `WebFetch`, `TodoWrite` and every MCP call, with the latency and timeout budget that implies. **Timeout behaviour is Q10, not V7** | **the default seam**, and the one row in this table whose status was overstated in the first draft (review findings **F13**, **F7**) |
+| `can_use_tool` control request over `--input-format stream-json` | call (blocking) | **verified present** (V1, V2); **shadowed** by bare `--allowedTools` entries, by settings allow rules and by `bypassPermissions` (V4, the vendor's own strings); **mutually exclusive** with `--permission-prompt-tool` (V5) | offered only under a posture where nothing shadows it; otherwise `SHADOWED` (§ 6.1). Its advantage over the hook is that it needs no child process and no on-disk plugin |
+| `--permission-prompt-tool <mcp tool>` | call (blocking) | **exists** on 2.1.239 and is **absent from `--help`** (V6); undriven here | not used in v0.1. An undocumented flag is not a foundation, and it excludes `can_use_tool` |
+| `--input-format stream-json` multi-turn + hook `additionalContext` | turn (injection) | flags verified; the composition is **undriven here** | how a frame reaches a running session without relaunch |
+| `set_permission_mode` control request | run-level | verified present (V3) | posture change mid-run |
+| `interrupt` control request | kill | verified present (V3) | stop the turn |
+| **mid-turn steer** | — | **does not exist headless.** A running turn can only be killed | `steer` is refused by name on this adapter |
+| metaharness-owned MCP server as the whole tool surface (`--tools ""` + `--mcp-config` + `--strict-mcp-config`) | registration, per step | flags verified (V11); **the composition is undriven** and per-step re-listing is **unverified** (V13) | § 7.5, opt-in |
+
+### 7.4 Codex — the realization matrix
+
+Pinned to **0.145.0**.
+
+| mechanism | tier | status | what it delivers |
+|---|---|---|---|
+| launch-level allowlist / profile | registration | verified | the coarse surface |
+| `dynamicTools` at `thread/start` under `experimentalApi` | registration, **per thread** | verified type and requirement (V16) | metaharness-defined tools, whose list is the step's operations. **Per thread, not per turn** — a per-step change means a new thread |
+| `item/tool/call` (server→client) | call (blocking), for dynamic tools | verified (V15) | metaharness executes the tool; the model cannot reach the implementation or its credentials |
+| `item/commandExecution/requestApproval`, `item/fileChange/requestApproval`, `item/permissions/requestApproval` | **call (blocking)**, for exec, patch and permissions | verified (V15) | this is where Codex's effects are, so this covers most of what matters — but it is **not** every tool |
+| `PreToolUse` hook | call (blocking) for the *call*; **not** for the arguments | hook is verified stable and speaks the same wire (§ 2.5); the argument gap is verified and named | admits or refuses by tool name and by whatever the envelope carries. **`apply_patch`'s input has no `file_path`, `old_string` or `new_string`**, so a Claude-style content rule does not port and must not be claimed to |
+| `thread/inject` | turn (injection) | method verified present (V14); undriven | frame text between turns |
+| `turn/steer` | mid-turn | method verified present (V14); **undriven** | claimed, not proven. Declared as `unverified` in the adapter's capability set, which means an embedder that requires it gets a refusal, not a silent no-op |
+| `turn/interrupt` | kill | verified (V14) | |
+| `sandboxPolicy` / `networkAccess` / `writableRoots` / `excludeSlashTmp` | process-level confinement | verified present (V17) | **Codex can constrain the process; Claude Code's CLI cannot.** This asymmetry is real and is not levelled down |
+
+### 7.5 The three ways to make "strictly only these operations" true, and what each costs
+
+| strategy | how the narrowing happens | cost | v0.1 |
+|---|---|---|---|
+| **A — narrow at the decision seam** | offered set is the union over steps; the hook denies anything outside the current frame | the model sees and attempts tools it may not use; each attempt is a turn and a denial | **the default.** It works on both adapters today with no unverified behaviour |
+| **B — relaunch per step** | one session per step, offered set exactly the step's operations | loses conversation continuity and prompt cache; this is what `engineering-protocols`' driver does today, and it is why a step's input is *"a function of persisted state"* | supported, and the only strategy that makes the *offered* set per-step on Claude Code today |
+| **C — own the tool surface** | `--tools ""` plus a metaharness MCP server whose tool list **is** the step's operations; on Codex, `dynamicTools` | metaharness must implement read, write, edit, shell. That is owning half the harness, and it changes what "the vendor keeps its loop" means | **opt-in, behind `--tool-surface owned`, and not the v0.1 default.** Per-step re-listing on Claude Code depends on unverified `list_changed` behaviour (Q1) |
+
+Strategy C's payoff is stated because it is large: under it the race window of § 7.2 does not exist
+at all, since metaharness runs the tool. Its cost is stated because it is also large.
+
+### 7.6 What blocking does not stop
+
+**The run clock keeps elapsing while a decision is pending.** metaharness does not suspend the
+vendor's timeouts, its rate-limit windows or its own run deadline during a block. A decision that
+outlasts the remaining budget is still honoured and the call still executes; the run then fails at
+the next read. This is stated rather than fixed because fixing it would mean reaching into a
+vendor's clock, and a control that claims to pause something it cannot pause is worse than one that
+does not claim it. `tool.requested` carries `deadline_ms` so an embedder knows the budget it is
+spending.
+
+### 7.7 Ordering and deadline invariants
+
+Five rules, each with the failure it prevents:
+
+1. **The decision is written before any control is applied.** If an embedder answers `deny` and
+   then `interrupt`, the deny is delivered to the vendor first. Cancelling first clears the active
+   call and leaves the child waiting on a correlation that no longer exists.
+2. **metaharness's own deadline is strictly less than the vendor's hook or callback timeout**, and
+   on expiry metaharness itself emits `deny` with `decided_by: "deadline"`. This converts a
+   vendor-owned ambiguity into a metaharness-owned refusal. On Claude Code the vendor's own
+   behaviour is also fail-closed (V7), so the two agree; the rule exists so the guarantee does not
+   depend on that agreement.
+3. **A decision correlates to one request and cannot be replayed.** `tool.decide` is refused
+   `UNKNOWN_CALL` for an unopened call and `TOO_LATE` for a closed one. The correlation key is the
+   `call_id` **plus** the digest of the request as presented, so a decision cannot be applied to a
+   different input under the same id.
+4. **`interrupt` is a legal answer to a pending decision.** An embedder that does not want to decide
+   must be able to stop, rather than being forced to allow or to deny in order to unblock.
+5. **Several decisions may be pending at once, and they may be answered out of order.** One
+   assistant message can carry several tool-use blocks and the harness runs concurrency-safe tools
+   in parallel — `isConcurrencySafe` occurs 58 times in the Claude Code 2.1.239 binary, and the
+   CLI's own instruction text tells the model to *"send a single message with multiple tool use
+   content blocks"* to get parallelism. So the protocol carries **no single-pending-decision
+   assumption**: every pending `tool.requested` is tracked by `call_id`, an answer to one does not
+   release another, and an embedder that serialises its own policy does so in its own code. This
+   is the one place where the studied prior art's guarantee does **not** carry over — there a
+   second approval while one is pending was unreachable because the dispatcher was single-threaded
+   and blocked; here it is reachable, and a design that assumed otherwise would deadlock or, worse,
+   release the wrong call.
+
+   **And the deadline follows from it.** Each pending call carries its own vendor timeout and its
+   own metaharness deadline, and § 7.6 says the clock never stops — so a single-threaded embedder
+   deciding call A burns call B's budget, and the adapter would emit `decided_by: "deadline"`
+   denies the embedder never chose (review finding **F15**). Two rules close it: **`next_event`
+   delivers every currently-pending `tool.requested` before the embedder is obliged to answer any
+   of them**, and **`deadline_ms` is armed at delivery, not at the vendor's request**, so an
+   embedder that answers in the order it was handed cannot be timed out by its own queue. What
+   remains is a real budget, and it is the embedder's to spend.
+
+### 7.8 Coverage is asserted, not assumed
+
+At `session.started` the adapter compares the **offered** tool list from the vendor's own opening
+record against the set its seam covers. A tool that is offered and not covered is a
+launch-time refusal naming the tool. This closes by construction the failure class
+`engineering-protocols` hit once and fixed by hand: a matcher that *looked* exhaustive while a
+second file-writing tool walked past it.
+
+**Coverage is not the only thing that can be nominal.** A hook that matches every tool and does not
+block is a guard that has already stopped guarding, so the same launch-time assertion covers the
+hook *definition* as a value: `type: command`, and neither `async` nor `asyncRewake` set (V7b,
+review finding **F6**). § 8.4 O7 is where that assertion lives, beside the argv one, for the same
+reason both exist: the failure would otherwise be silent.
+
+---
+
+## 8. The hermetic contract
+
+### 8.1 The list
+
+Twelve rows. Each is imposed; each is asserted **either** from the vendor's own record **or** from
+a value metaharness asserts before spawning — and the two are not the same strength, so the table
+says which.
+
+**Gating is per row, not global.** An earlier draft said any `unk` fails `--hermetic strict`, while
+two rows (H2, H6) declared themselves unobservable *unconditionally* — so every strict run would
+have exited `3` forever (review finding **F3**). `trace-spec` already has the right shape for this
+and it is borrowed here: a row is **gating** or **advisory**, an advisory row is evaluated,
+reported and printed like any other, and it does not move the exit code. A row is advisory only
+when its unobservability is a property of the mechanism rather than of the run.
+
+| # | control | imposed by | asserted how | unknown means | gating? |
+|---|---|---|---|---|---|
+| H1a | config home is scratch — **plugins** | `CLAUDE_CONFIG_DIR` / `CODEX_HOME` to a fresh directory | record: loaded plugins are **exactly** the declared set | no plugin list ⇒ `unk` | **gating** |
+| H1b | …and **output style** | same | record: output style is the default | no output style ⇒ `unk`. Split from H1a because they fail independently and one unknown must not mask the other (**F11**) | **gating** |
+| H2 | settings sources excluded | `--setting-sources` with user/project/local omitted (V12) | launch: the flag is in the argv. The *absence of allow rules that would shadow the seam* is **not separately observable in any record** | — | **advisory.** The mechanism, not the run, is what cannot be observed; § 7.3 already refuses `can_use_tool` rather than trusting this row |
+| H3 | the environment is constructed, not inherited | an explicit allowlist; everything else dropped — including `ANTHROPIC_BASE_URL`, `ANTHROPIC_MODEL`, `HTTP(S)_PROXY`, `CLAUDE_CODE_*`, `DISABLE_*`, `SSH_AUTH_SOCK`, `GIT_*`, and `PATH` reduced to a stated set | **launch:** the constructed child environment, as a value, before spawning (§ 8.4 O7) | n/a — launch assertion | **gating** |
+| H4 | no API key unless declared | `ANTHROPIC_API_KEY` is not in the allowlist unless the run declares `credentials: api_key` | record: credential source in the opening record | absent ⇒ `unk` | **gating** |
+| H5 | MCP surface is exactly what the launch gave | `--strict-mcp-config`, always | record: the MCP server **list** — length and names | list absent ⇒ `unk`, **never zero** | **gating** |
+| H6 | credentials are one file, copied | one file into the scratch home, nothing else | **not directly assertable in any record.** The evidence is the effect: H1a, H4, H5 | — | **advisory**, and § 8.3 says why an attestation is not evidence |
+| H7 | the working directory is ours | a directory metaharness created; `--add-dir` never passed | record: `cwd` in the opening record | absent ⇒ `unk` | **gating** |
+| H8 | hooks and customizations are not skipped | an argv **denylist**: neither `--bare` nor **`--safe-mode`**, and neither `CLAUDE_CODE_SAFE_MODE` nor `CLAUDE_CODE_SIMPLE` in the child environment | launch: the argv and environment as values | n/a — launch assertion | **gating** |
+| H9 | the vendor version is the pinned one | `doctor` before the run | record: the harness version in the opening record | absent ⇒ `unk` | **gating** |
+| H10 | governing documents cannot move under the run | inputs are copied into the run directory, not referenced | record: the digest of the copied tree, in `session.started` | n/a | **gating** |
+| H11 | **no memory file outside the copied tree is discoverable** | the scratch root has no `CLAUDE.md` / `AGENTS.md` ancestor above it, or an explicit `--system-prompt` replaces discovery | launch: the ancestor walk from the scratch cwd, as a value | n/a — launch assertion | **gating** |
+
+Three rows deserve their reasons in full.
+
+**H8 gained a second name, and the first draft's one-name assertion was a spelling check rather
+than a guard** (review finding **F5**). `--safe-mode` disables *"CLAUDE.md, skills, plugins,
+**hooks**, MCP servers, custom commands and agents, output styles …"* — the same deletion of the
+control seam that `--bare` performs — and it sets `CLAUDE_CODE_SAFE_MODE=1`, so the environment
+half of the denylist is not decorative.
+
+**H11 did not exist and should have** (review finding **F14**). `CLAUDE.md` auto-discovery is on in
+every run that is not `--bare`, and H8 forbids `--bare` — so a `CLAUDE.md` in any ancestor of the
+scratch working directory enters the context of a run this design calls hermetic. H10 pins the
+*copied* documents and was silent about the uncopied ones. A second ambient input is named by the
+same source and is **not** closed here: `--exclude-dynamic-system-prompt-sections` describes moving
+*"cwd, env info, memory paths, **git status**"* out of the system prompt, which means git status is
+in it. metaharness reports git status as an ambient input in the attestation and does not claim to
+have removed it.
+
+**H3 previously claimed an assertion it did not have** (review finding **F12**): its evidence cell
+read "credential source is `none`", which answers H4 and says nothing about a proxy variable, a
+model override or an ssh agent socket reaching the child. It is now a launch assertion, with the
+same honest `n/a` H8 always carried.
+
+Two more rows deserve their reasons in full, because both were bought with a real failure:
+
+* **H5** is not a count of names but a list, because a server the session cannot authenticate to
+  still exists, is still named, and is still a reach outside the sandbox. Such a server exposes no
+  tool, so a tool inventory is identical with and without it, and one re-authentication between two
+  runs turns it into a reachable network surface with nothing standing in the way.
+* **H8** exists because `--bare` reads like a hermeticity flag and is the opposite: it *"skips
+  hooks"* — which on this design is the control seam — and it also switches authentication to
+  API-key-only, which silently breaks H4.
+
+### 8.2 What hermetic does not mean
+
+Named because a reader will otherwise assume it.
+
+* **Not deterministic.** The model is not deterministic. What is fixed is the *inputs*: the same
+  frame, the same offered set, the same copied documents, the same pinned vendor version.
+* **Not network-isolated on Claude Code.** Its CLI carries no sandbox knob (V17's counterpart).
+  Codex does. metaharness reports the difference in `session.started.hermetic` and does not level
+  it down by omitting the field on the harness that has it.
+* **Not a claim about the model's training, routing or provider.**
+
+### 8.3 The attestation is not the evidence
+
+`session.started` carries a `hermetic` block listing every control metaharness imposed and every
+one it could not. **That block is metaharness's own claim about its own actions, and it is not
+independent evidence.** The independent evidence is the vendor's opening record: the plugin list,
+the MCP list, the credential source, the cwd, the version. The block exists so a reader can see the
+intent beside the outcome and notice when they disagree — which is exactly the case H6 cannot cover
+any other way.
+
+---
+
+### 8.4 Adapter obligations
+
+Eight, and an adapter that cannot meet one says so in its descriptor rather than meeting it
+approximately.
+
+| # | obligation | why |
+|---|---|---|
+| O1 | **Pin the vendor version.** The adapter declares the versions it was written against, and every `session.started` carries the version actually observed. A version outside the pin is a `warning`; under `--strict-version` it is a refusal before the run | the vendor formats are not stable public schemas. `trace-ir` versions its adapters for exactly this reason: *a verdict that changed because the reader changed is visible as such rather than as a change in the agent's behaviour* |
+| O2 | **Total projection.** Every vendor record becomes exactly one metaharness event, or an `opaque` carrying its declared type, subtype and digest. Nothing is dropped, and a record whose envelope was recognised but whose body was not is `opaque` too | D4 |
+| O3 | **Unknown fields tolerated, unknown records preserved.** An unrecognised *field* on a recognised record is ignored in silence; an unrecognised *record* is `opaque` | a reader that refused a transcript for carrying a new key is a reader that stops working on the next patch release, and it fails in the worst available way |
+| O4 | **Declare the capability set honestly.** The adapter publishes which tiers it delivers (§ 7.1), which commands it can honour, and which it refuses. A tier it has not driven is declared `unverified`, and an embedder that *requires* an unverified tier gets a refusal rather than a silent no-op | § 7.3's `turn/steer` row is the live case |
+| O5 | **No cross-class fallback, and no mid-run degradation.** A harness adapter never becomes a direct API call. An adapter that cannot honour a declared requirement refuses at start | § 11 |
+| O6 | **Publish the operation rendering as a value.** `capabilities <kind> --render` prints the neutral-operation → vendor-tool table without running anything | § 5.2. A rendering that only exists inside a run cannot be asserted on before one |
+| O7 | **Assert the argv, the environment and the hook definition before spawning.** The constructed command line, the constructed child environment, the ancestor walk for memory files (H11) and the emitted hook definition — `type: command`, neither `async` nor `asyncRewake` — are all values the adapter's tests read | `engineering-protocols` does exactly this for three flags *"because every one of the failures would be silent"*. The hook-definition clause is review finding **F6**: a hook that matches everything and does not block is a guard that has already stopped guarding |
+| O8 | **Retain the raw vendor transcript and its digest.** The adapter keeps the bytes it read and the digest of them, and `session.started` references both | three things depend on it and none of them works without it: `transcript_digest` and `source_line` in the projection (D6a), the § 4.4 cross-check, and § 9.4's auditor, which reads a **transcript** (review findings **F1**, **F2**, **F4**) |
+
+### 8.5 Conformance, and what it costs
+
+**Decision D13 — four tiers, three of which need no model, no network and no credential.**
+
+| tier | what it runs | cost | what it proves |
+|---|---|---|---|
+| **C1 — launch vectors** | the argv and the child environment the adapter would construct for a given `RunSpec`, compared to a recorded expectation | free | H3, H5, H8, and the whole launch half of § 8.1 |
+| **C2 — replay vectors** | recorded vendor transcripts in, expected metaharness event stream out, byte-exact JSONL | free | O2, O3, and the transcript→event mapping |
+| **C3 — control vectors** | a scripted fake vendor process speaking the vendor's own wire — for Claude Code, `stream-json` plus `control_request`; for Codex, the app-server JSON-RPC — driven through allow, deny, `replace`, deadline expiry, cancel-instead-of-decide, a decision for an unknown call, and a decision that arrives after the window closed. Each step carries **one stimulus and its complete observable expectation, including the typed refusal** | free | § 7.7's four invariants, and § 6.1's refusal codes |
+| **C4 — one live run** | a real session against the real binary, with a **deliberate denial** in it | costs money and network; **never part of the default gate** | the rows nothing else can reach: the vendor really does wait for the hook, the deny really does stop the effect, the record really does say what the record-asserted rows (H1a, H1b, H4, H5, H7, H9, H10) read |
+
+C3 is the tier that carries the safety argument, and it is free. The pattern is the prior art's
+portable lifecycle vectors (§ 2.6 item 5), and the reason to copy it is that it makes the adapter's
+promises a **tested claim** rather than a paragraph in this document.
+
+The **projection cross-check** (§ 4.4) is a C2 vector: for a recorded Claude Code session, the IR
+metaharness projects and the IR `trace-spec`'s own adapter reads must agree. That is how "losslessly
+projectable" stops being an adjective.
+
+C4 must contain a denial that the model cannot legally route around. `engineering-protocols` learned
+this the expensive way: its first deliberate-denial case asked for a hand-edited status field, the
+model correctly used the CLI verb instead, and the guard was never exercised — a green run that
+audited nothing.
+
+---
+
+## 9. The two faces
+
+### 9.1 Library
+
+```rust
+let mut run = Metaharness::new(Kind::Codex)
+    .with_hermetic(Hermetic::Strict)
+    .with_credentials(Credentials::OperatorLogin)
+    .with_model("sonnet")
+    .with_decisions(DecisionMode::Ask)
+    .with_tool_surface(ToolSurface::Native)
+    .with_frame(frame)
+    .with_max_turns(30)
+    .start(Input::Prompt(prompt))?;
+
+while let Some(event) = run.next_event()? {
+    if let Event::ToolRequested { call_id, name, input, decision_required: true, .. } = &event {
+        run.send(Command::ToolDecide { call_id: call_id.clone(), decision: policy(name, input) })?;
+    }
+}
+```
+
+**The builder is a face on one value, not a second configuration surface.** Every `with_…` sets
+one field of a `RunSpec`; `start` consumes it. That is what makes § 9.3 possible: the fluent form
+and the CLI's flags are two spellings of the same struct, and neither can grow a knob the other
+cannot express. Where a caller has a whole `RunSpec` already — the driven case, § 10.1 —
+`Metaharness::from_spec(spec)` skips the builder entirely.
+
+**Decision D10 — the v0.1 library surface is synchronous and blocking.** The embedder it exists to
+serve is synchronous; the studied approval mechanism is a blocking call on a worker thread, and the
+prior art states plainly that *blocking is the established mechanism on this loop, not a
+workaround*. An async surface would be a second concurrency model for the same seam, and the seam is
+the thing that must not have two shapes.
+
+**Synchronous does not mean one decision at a time**, and the loop above only works because of
+§ 7.7 rule 5's two guarantees: `next_event` hands over every currently-pending `tool.requested`
+before an answer to any of them is due, and each one's `deadline_ms` is armed at delivery. Without
+those, a single-threaded `policy(…)` deciding call A would burn call B's budget and the adapter
+would emit denies the embedder never chose (review finding **F15**). An embedder whose policy is
+slow enough to matter drains the batch first and answers second; the type makes that the natural
+shape rather than a thing to remember.
+
+### 9.2 CLI
+
+```
+metaharness run <claude|codex> [--hermetic|--hermetic strict] [-p <prompt>] [--frame <file>]
+                               [--decisions frame|ask] [--tool-surface native|owned]
+                               [--credentials operator-login|api-key|none]
+                               [--model <m>] [--max-turns <n>] [--plugin-dir <d>]…
+                               [--strict-version]
+                               [--audit] [--spec <expectations>] [--auditor <prefix>]
+                               [-- <auditor pass-through args>…]
+metaharness capabilities <kind> [--render]     # declared tiers, pinned versions, operation rendering
+metaharness conformance <kind>                 # the free vectors (§ 8.5) — no model, no credential
+metaharness project --events <f> --to trace-ir # the projection, as a verb (see D6a on its form)
+metaharness audit --transcript <f> [--events <f>] [--spec <s>] [--auditor <p>]  # judge offline
+metaharness doctor <kind>                      # installed vendor version vs the adapter's pin
+```
+
+`clap` derive throughout. `capabilities` exists so an embedder can refuse early rather than
+discovering mid-run that a tier is absent; `doctor` exists because H9 needs an answer before money
+is spent.
+
+### 9.3 The anti-drift rule
+
+**Decision D11 — there is one options type, and the `run` verb is a `derive` on it.**
+
+`RunSpec` lives in `metaharness-protocol` and carries `#[derive(clap::Args)]` behind a feature.
+`metaharness-cli` parses into `RunSpec` and passes it to `Metaharness::from_spec` unchanged. A flag
+the library cannot express cannot be added, and an option the CLI cannot express cannot be
+introduced.
+
+**Three corrections the review forced, because the first statement of this rule was decorative**
+(review finding **F16**):
+
+1. **The test is scoped to `run`.** `project` and `audit` carry `--events`, `--transcript` and
+   `--to`, which are not `RunSpec` fields and never will be. A test that claimed to cover "the CLI"
+   could not have meant those verbs, so it is stated as what it is: the `run` subcommand's
+   long-flag set equals the derived set, exactly.
+2. **The document's own two surfaces already disagreed, and the flags are now added.** § 9.1 sets
+   `credentials` and O1 names `--strict-version`; neither appeared in § 9.2. Both do now. That the
+   drift appeared *within one document* is the argument for the mechanical test rather than against
+   it.
+3. **`RunSpec.frame` is a `PathBuf`, not a `Frame`.** The builder's `.with_frame(frame)` takes a
+   value and sets an in-memory override; the *spec* field is a path, and resolving it is the
+   library's job. Otherwise the CLI would have to parse a frame document — protocol logic in the
+   binary, which this rule exists to forbid — in a serialization format § 5 does not define. **The
+   on-disk frame format is therefore owed and is not in v0.1**: `--frame <file>` is refused until
+   it is specified, rather than shipped against an undefined format.
+
+### 9.4 `--audit`: one invocation that runs and judges
+
+**Owner requirement, binding.** *`metaharness run <kind> -p "…" --audit` does what
+`engineering-protocols`' eval process does today: hermetic launch → transcript → expectation check →
+`ok`/`gap`/`unk` report with distinct exit codes.*
+
+**Decision D12 — `--audit` has a built-in floor and a pluggable ceiling. metaharness embeds no
+expectation language.**
+
+| layer | who owns it | always runs? |
+|---|---|---|
+| **the hermetic verdict** — the twelve rows of § 8.1, each `ok` / `gap` / `unk`, with the two advisory rows reported and not gating, plus the decision census (allowed, denied, by seam) | metaharness, built in, no spec file | yes, whenever `--audit` is given |
+| **the expectation check** — arbitrary claims about what the run did | an external auditor over `trace-ir/1` | only when `--spec` is given |
+
+The reasons, in order of weight:
+
+1. **A rival specification language is the same mistake as a rival IR, one layer up.** D1 refuses
+   the second IR; embedding a checker would reintroduce it as a second vocabulary for the same
+   claims. `trace-spec/1` already carries 51 kinds, three verdicts, a severity model and a stated
+   bar for admitting a kind. Re-implementing that is a second definition that goes stale.
+2. **The judge should be replaceable and the projection should not be.** metaharness's job is to
+   make a run *judgeable*. `trace-ir/1` is the contract; who reads it is the embedder's choice.
+3. **But the hermetic rows cannot be delegated**, because they are claims about metaharness's own
+   imposition and must fail even where no auditor is installed. A hermeticity that only holds when
+   somebody remembered to pass a spec file is not a promise.
+
+**The auditor contract, rewritten to fit the one auditor it names** (review finding **F2**). The
+first draft invoked `<auditor> --spec <spec> --ir <path>` and it would not have run: the existing
+auditor is a **two-word subcommand** that takes **`--transcript`**, not `--ir`, and it carries
+options this design has no way to pass — `eval/run.sh` already passes `--advisory
+billed-to-the-session`. Three corrections:
+
+1. **`--auditor` is an argv prefix, and extra arguments pass through.**
+   `--auditor 'protocol trace check' -- --advisory billed-to-the-session`. A single-word program
+   name is a degenerate prefix; a subcommand is not a special case.
+2. **The subject is the raw vendor transcript, not a trace-ir document.** metaharness has the bytes
+   because § 8.4 O8 requires it to keep them, and the existing auditor reads exactly that. The
+   trace-ir document form is Q9's, not v0.1's (D6a). The full invocation is
+   `<prefix…> --spec <spec> --transcript <path> [pass-through…]`.
+3. **Exit `1` from this auditor is ambiguous and must not be trusted alone.** Everything
+   `protocol trace check` rejects about *itself* — an unreadable specification, an unknown
+   `--advisory` id — also leaves as `1`
+   (`crates/protocol-cli/src/trace.rs`: *"Everything this module rejects itself … leaves through the
+   binary's top-level error handler as `1`"*). So metaharness applies the guard `run.sh` already
+   applies: **an audit that produced no verdict rows is a setup failure, not a contradiction**, and
+   is reported as exit `2`. A verdict table with no rows in it would otherwise go green — or red —
+   while checking nothing.
+
+For `engineering-protocols` the auditor is `protocol trace check`. Nothing in metaharness names it.
+
+**No discovery.** The auditor is named explicitly (`--auditor`, or the field in `RunSpec`). A
+`--spec` with no auditor is a **refusal**, not a skip: a specification nobody checked reads exactly
+like a specification that passed.
+
+**Exit codes of `metaharness run --audit`:**
+
+| code | meaning |
+|---|---|
+| `0` | the session ran and every gating verdict is `ok` |
+| `1` | a gating verdict is `gap` — a hermetic row failed, or the auditor exited `1` |
+| `2` | metaharness itself could not do its job: the adapter refused, the vendor binary is off its pin, the auditor is missing or not invokable, the spec is unreadable, **or the auditor produced no verdict rows** — a table with nothing in it is a setup failure, never a verdict |
+| `3` | **nobody found out** — a gating hermetic row is `unk`, or the auditor exited `3`, or the harness died without producing a record |
+
+**Without `--audit`, `metaharness run` exits `0` when the session ran to a terminal record, `2`
+when metaharness could not do its job, and `3` when the harness died without producing one. It
+never exits `1`, because without an audit there is no verdict to contradict.** Stated because two
+exit-code tables for one verb is how a caller comes to treat `0` as "it was fine".
+
+`3` is not a softer `1`. It is `aep-driver`'s `NoVerdict`, and it exists for the same reason: a
+crashed suite is not a failing suite, and submitting a failing verdict for something that never ran
+fabricates an observation. A caller that wants a run nobody could judge to be red says so in CI, as
+`engineering-protocols`' own eval already does.
+
+**The census is always printed.** A report that hides "0 denials" reads as clean when it may mean
+nothing was ever attempted — § 2.2's ambiguity, in a report rather than in a counter.
+
+---
+
+## 10. Adopting it in `engineering-protocols`
+
+### 10.1 The driver, through the library — and the gap it closes
+
+Today `CliExecutors::run_llm` builds a `claude` argv and spawns it (`crates/protocol-cli/src/drive.rs`).
+The swap is: build a `Frame` from `StepContext`, build a `RunSpec`, `start`, and answer
+`tool.requested` events.
+
+The concrete gain, and it is not ergonomic. `hooks/lib.sh` states the current limitation exactly:
+a hook *"cannot call `Engine::authorize`, which takes `&mut Execution` — an in-memory value inside
+the driver's process"*, so it writes `hook-decisions.jsonl` and the driver folds each line in
+**after the step's process exits**. The signature is
+`fn authorize(&self, execution: &mut Execution, request: &ActionRequest) -> Decision`
+(`crates/aep-engine/src/engine.rs:167`), and the `&mut` is the point: the call mutates the
+execution. With `DecisionMode::Ask` the decision callback runs **inside the driver's process**, so
+`Engine::authorize` is called at decision time, its events land in the real execution, and the
+audit trail stops being a side channel that arrives late.
+
+Second gain: the per-state surface rules that today live in a shell script — *this state does not
+admit `command.execute`*, *one simple invocation, no pipes* — become embedder code with the
+engine's types in scope, and the plugin's hooks stop being a second, weaker copy of the driver's
+policy.
+
+What does **not** change, deliberately: `tool_config` stays a pure function in `aep-driver`. Frames
+carry operations; metaharness renders them. The protocol still decides what a capability admits.
+
+### 10.2 The eval, through the binary
+
+`eval/run.sh`'s sections 1 and 2 — the scratch home, the credential copy, the `unset`, the flags —
+become `metaharness run claude --hermetic strict`. Section 3.4's `protocol trace check` invocation
+becomes `--audit --spec eval/expectations.trace.yaml --auditor protocol` (§ 9.4), and the trace
+expectations file is **unchanged**, because the IR it is checked against is unchanged.
+
+`run-driven.sh`'s hook-decision log stops existing as a file: the denials are `tool.decided` events
+in the run's event stream, and the "allow decisions ≥ 1 and deny decisions ≥ 1" assertion — *"a
+guard that denied everything is as broken as one that denied nothing"* — reads the census instead
+of a JSONL file.
+
+What the eval keeps and must keep: the **deliberate-denial case**. A run in which nothing forbidden
+was attempted audits nothing, and it took two attempts to write one that the model could not legally
+route around.
+
+### 10.3 What a driven eval over the real `workflows/` and `drivers/` requires of this interface
+
+The eval must source `workflows/development/default.yaml`, `workflows/incidents/standard.yaml`,
+`workflows/migrations/forward-only.yaml`, `workflows/releases/progressive.yaml` and the step maps
+in `drivers/development/` — not bespoke fixtures — so that every run improves both the bridge and
+the workflow documents. Five requirements follow, and each is a constraint this design has already
+taken:
+
+| requirement | where it is met |
+|---|---|
+| the frame must be constructible from a workflow state plus a step-map step, losing nothing | § 5.1's field set is a superset of `StepContext` |
+| the workflow document is the source; no fixture format | the frame is data the embedder composes; metaharness parses no workflow file |
+| the tool set must change per step without the embedder re-implementing a naming table | § 5.2: neutral operations, adapter rendering, exposed as a value |
+| the workflow is pinned for the life of the run | H10: inputs copied, digest recorded |
+| a run must be judgeable without a paid call for everything except the model's own behaviour | § 8.5's free tiers; the paid tier is one live run |
+
+**The bespoke map, and the real reason it exists.** `run-driven.sh` drives
+`--map eval/driven.steps.yaml`, a map written for the eval. Its own header states why, and the
+reason is cost rather than convenience: the shipped `drivers/development/default.yaml` is *"seven
+states, four model sessions and three `cargo` invocations"* and would *"cost several dollars an
+attempt and would spend most of that proving things `task check` already proves."* That objection
+is correct and this design does not wave it away.
+
+What metaharness changes is **which parts of the real map need a model at all**. Frame
+construction from each state, the operation rendering, the per-step admitted set, the denial
+policy and the projection are all exercisable at tiers C1–C3 (§ 8.5) — **free, no model, no
+credential** — against the *real* `workflows/` and `drivers/` documents, driven by a scripted fake
+vendor. Only the model's own behaviour needs C4. So the split is: the real documents are sourced
+at every tier, and the bespoke short map survives only as the *paid* tier's script, if a short
+paid tier is still wanted. That is the concrete requirement this interface places on itself — a
+fixture can only fail in ways somebody wrote into it, and the cost argument stops being a reason
+to use one.
+
+**Two purposes, and how a red run is attributed to one of them.** A run over real documents is
+evidence about the bridge *and* about the document, and a report that cannot say which is a report
+that gets both ignored. The attribution rule is the one the sources already use:
+
+| what went red | attributed to | because |
+|---|---|---|
+| a hermetic row (§ 8.1), a refusal code, an `opaque` event, a projection disagreement | **the bridge** | these are claims about metaharness's own imposition and reading; the workflow document has no way to affect them |
+| a `tool.decided { deny }` for an operation the state genuinely needs, or a state whose obligations cannot be met with the operations it admits | **the workflow document** | the guard did its job and the document asked for something it did not grant. `drivers/development/default.yaml` already carries one instance of exactly this, below |
+| the model failed to satisfy an obligation it was given, with the operations it needed | **neither** — it is a result about the model | and it is the only one of the three that may legitimately vary between runs |
+
+A sixth, which is a **finding rather than a requirement**: `drivers/development/default.yaml` states
+that no development profile grants `command.execute`, so a driven `llm` step holds no shell — and
+the planning skill's entire surface is `protocol artifact …`, every verb of which is a shell
+command. `engineering-protocols` resolved that with a capability grant plus a hook constraint. Under
+metaharness the same resolution is expressible without a second mechanism: the frame admits `shell`
+and the embedder's `ask` policy holds it to one program and two verbs, in Rust, with the reason fed
+back to the model. That is a real simplification and it should be reported to that repository rather
+than assumed here.
+
+### 10.4 The worked example: routing
+
+**The pattern.** A user request arrives; it is *classified*; the classification is *mapped onto a
+list of available entities*; the run then does the one thing that entity admits. It is general —
+which workflow governs this task, which artifact kind this request becomes, which runbook this alert
+matches, which handler this intent routes to — and `engineering-protocols` already contains an
+instance of it: the planning skill's *"Discover, do not memorise"* rule, where the entity list comes
+from `protocol artifact kinds` and `protocol artifact lifecycle <kind>` **at use time**, because
+*"a prose copy of a validated document is a copy that goes stale."*
+
+Three steps, three frames.
+
+**Step 1 — `enumerate`.** `operations: {shell}` held to the enumeration command; `handoff: none`.
+metaharness records the entity list in the frame it builds for step 2. The list is *data in the
+frame*, not something the model remembers, because an entity list the model recalled is an entity
+list the model can hallucinate having read. The model is still permitted to run the enumeration
+itself — the check is on the *choice*, not on the reading.
+
+**Step 2 — `classify`.** `operations: {}` — no tools at all. `entities: [the enumerated set]`.
+`handoff: StructuredAnswer { schema }` naming exactly one member. A step whose only job is a
+judgement holds no tool, so nothing it does can have an effect, and the whole step is decidable from
+its handoff.
+
+**Step 3 — `route`.** `operations:` exactly what the chosen entity admits — **a function of step 2's
+answer**, which is why the frame is per step and could not be per session.
+
+Four claims, each mechanically checkable, and this is the point of the example:
+
+| claim | how it is checked |
+|---|---|
+| the classification names a member of the enumerated set | a non-member is a `tool.decided { deny }` whose reason lists the legal set — the planning skill's guardrail 4 (*"a refusal is the answer, not an obstacle"*) as a mechanism rather than as instruction text |
+| the routed step's surface differs from the classify step's | two `step.entered` events with different `operations`, and `env.tool_available` / `tool.absent` in the trace specification |
+| nothing outside the routed set was called | `tool.absent` over the projected IR |
+| the refusal path was actually exercised | the run includes a request that classifies to an excluded entity. **Without it the denial census is `0` and audits nothing** |
+
+The last row is the F13 lesson applied to a new workflow, and it is the row people will want to drop.
+
+---
+
+## 11. Out of scope, named
+
+| out of scope | why, and where it goes |
+|---|---|
+| **owning the model loop** | a *direct-provider adapter* is a **different adapter class**: the embedder holds the conversation, calls a model API, and publishes tools through a port so that an in-process call and an over-the-wire callback are indistinguishable to the loop. It is a future `Kind`, and the rule that comes with it is the prior art's: **neither class silently falls back to the other.** A run declares the class and the tiers it requires; an adapter that cannot satisfy them refuses at start |
+| network isolation on Claude Code | no vendor mechanism exists at the CLI (§ 8.2). Codex's knobs are reported, not emulated |
+| judging a run | `trace-spec/1` and whatever else an embedder points `--auditor` at (§ 9.4) |
+| a workflow engine | metaharness consumes a `Frame`; it does not decide what the next node is |
+| credential minting, rotation or custody | the harness keeps its own. metaharness copies at most what the operator already has and says which file |
+| multi-agent orchestration | `subagent.spawn` is not admitted by default (§ 5.2) and fan-out is the embedder's |
+| a second transcript IR | D1 |
+| a second expectation language | D12 |
+
+---
+
+## 12. Open questions and the to-verify register
+
+Each row names the command that closes it, because a row whose closing command is not written down
+is a row nobody intends to close.
+
+| id | question | closing command | if the answer is no |
+|---|---|---|---|
+| Q1 | Does Claude Code's MCP client act on `notifications/tools/list_changed` mid-session, and does the model's offered set change? (V13: the string is present) | one session with a metaharness MCP server that changes its tool list between turns, reading the offered set from the stream | strategy C (§ 7.5) is per-session only; per-step narrowing stays with strategy A or B |
+| Q2 | Does `can_use_tool` fire for **every** call when no bare `--allowedTools` entry, no settings allow rule and no bypass posture is present? (V4 says what shadows it; not that nothing else does) | one session in `ask` posture with a deliberately forbidden call, comparing the control requests to the tool calls | the hook stays the only universal seam, which is already the default |
+| Q3 | What are `permissionDecision: "defer"`'s print-mode semantics, and does a deferred call resume through a control request? (V9) | one hook returning `defer` under `-p`, with `--include-hook-events` | nothing is lost; `defer` is simply not used |
+| Q4 | What does Claude Code do when a `PreToolUse` hook exits non-zero with non-JSON output? (Timeout is answered by V7; malformed output is not) | one hook printing garbage, one exiting 1 | § 7.7 rule 2 already fails closed from our side; the answer only tells us whether the vendor agrees |
+| Q5 | Does the Codex `PreToolUse` hook's `tool_input` for `apply_patch` carry any path-bearing field? (§ 2.5 says none of Claude's keys) | one recorded `apply_patch` hook invocation | Codex's hook tier stays tool-name-level and the design already says so |
+| Q6 | Does `turn/steer` deliver a mid-turn steer on 0.145.0, and what does the model see? (V14: method present) | one app-server session, steer during a long turn | `steer` is refused by name on Codex too, and the matrix says kill-only |
+| Q7 | Does a Codex thread accept a `dynamicTools` change without a new thread? (V16: registered at `thread/start`) | `thread/start`, then attempt a re-registration | per-step tool sets on Codex mean a new thread per step, which is strategy B |
+| Q8 | Is the Codex rollout JSONL adaptable to the same IR with no loss? (§ 2.5: no stability guarantee, drift observed) | project a corpus of rollout files and diff the census against `codex exec --json` | the Codex adapter's projection is partial and says which families it cannot fill |
+| Q9 | **Can a `trace-ir/1` document be read back by anything?** It is `Serialize`-only, its identity fields are `&'static str`, and no schema is published | a change **in `engineering-protocols`**: `Deserialize` on `trace-domain`'s IR types plus a generated `trace-ir.schema.json` | D6a stands as written — the projection is an in-process value and the auditor reads the raw transcript. Nothing in v0.1 depends on the document form |
+| Q10 | **What does Claude Code do when a `type: command` `PreToolUse` hook exceeds its timeout?** V7's fail-closed string is the SDK hook-*callback* path | one `claude -p` run with an on-disk hook that sleeps past its declared timeout, reading the transcript for whether the tool ran | § 7.7 rule 2 already fails closed from metaharness's side; the answer only says whether the vendor agrees |
+| Q11 | **Does matcher `""` behave as documented, and what does a child process per tool call cost?** The measured parity runs used two narrow matchers | one `claude -p` run with matcher `""` and a decision callback, counting hook invocations against tool calls and recording added latency | the seam enumerates the offered set instead, and § 7.8's coverage assertion becomes the guard that the enumeration is complete |
+| Q12 | **Is a hook `allow` honoured for a tool a settings allow-rule would have denied, and in which direction does the conflict resolve?** § 6 takes the grant authority; the resolution order is stated by two log strings and undriven | one run with a hook `allow` against a `deny` rule in `--settings` | metaharness's policy becomes `deny`-only and § 6's grant claim is withdrawn by name |
+
+---
+
+## 13. Adversarial review
+
+One adversarial review, 2026-08-22, briefed to break the control seam's race windows, the hermetic
+list, the IR projectability claim, the two-faces drift risk and the adapter-refusal honesty.
+**18 findings: 4 blocker, 12 major, 2 minor. All 18 are folded into the text above.**
+
+No finding was resolved by argument. Where the review was right the document changed; where a fix
+was impossible in v0.1 the claim was withdrawn and a to-verify row took its place. Every correction
+carries its finding number at the point of change, so a reader can see what the first draft
+asserted.
+
+### 13.1 Verdicts
+
+| # | finding | verdict | where |
+|---|---|---|---|
+| F1 | `trace-ir/1` is `Serialize`-only with no published schema, so a written trace-ir document has no reader | **NEEDS-CHANGE applied.** The projection is an in-process value in v0.1; the document form is gated on **Q9** | D6a, § 12 Q9 |
+| F2 | the auditor contract does not fit `protocol trace check` (`--transcript` not `--ir`; two-word subcommand; no pass-through; exit `1` ambiguous) | **NEEDS-CHANGE applied.** `--auditor` is an argv prefix with pass-through; the subject is the raw transcript; an audit with no verdict rows is exit `2` | § 9.4 |
+| F3 | `--hermetic strict` could never pass — H2 and H6 were unconditionally `unk` | **NEEDS-CHANGE applied.** Per-row gating, borrowed from `trace-spec`'s severity model; H2 and H6 are advisory | § 8.1 |
+| F4 | the § 4.4 cross-check cannot pass: `transcript_digest` and `source_line` are unfillable from an event stream | **NEEDS-CHANGE applied.** New obligation **O8** — the adapter retains the raw bytes and their digest; `adapter` is a named exemption | D6a, O8 |
+| F5 | `--safe-mode` disables hooks exactly as `--bare` does, and H8 named only `--bare` | **CONFIRMED, applied.** H8 is a denylist over argv *and* environment | § 8.1 H8 |
+| F6 | a hook may declare `async` and then does not block; nothing asserted metaharness's hook is not | **CONFIRMED, applied.** New row **V7b**; O7 asserts the hook definition as a value | V7b, § 7.8, O7 |
+| F7 | V7's fail-closed string is the SDK hook-*callback* path, presented as the command-hook contract | **CONFIRMED, applied.** V7 relabelled; the command hook's timeout is **Q10** | V7, § 7.2, § 7.3 |
+| F8 | "a hook can deny and never grant" is one plugin's convention, not a harness property — and § 6 ships `allow` | **CONFIRMED, applied.** § 2.2 corrected; § 6 states the grant and its consequence; **Q12** added | § 2.2, § 6 |
+| F9 | `frame.set`'s "partial" outcome is unrepresentable and is the weakening § 7.1 forbids | **CONFIRMED, applied.** `frame.set` is refused at run start when enforcement is absent | § 6 |
+| F10 | D6 contradicted itself on `tool.decided`, and the fix made `permission_denials` a computed number | **CONFIRMED, applied.** The "contributes to" clause is deleted; the count is passed through | § 4.4 |
+| F11 | the event payloads could not fill six `trace-spec` kinds, and H1's output-style half was unassertable | **CONFIRMED, applied.** Both lifecycle payloads take the IR's full field sets; H1 split into H1a/H1b | § 4.1, § 8.1 |
+| F12 | H3 claimed an assertion it did not have (credential source answers H4, not H3) | **CONFIRMED, applied.** H3 is a launch assertion over the constructed environment | § 8.1 H3 |
+| F13 | matcher `""` has never been run; "proven parity" was measured with two narrow matchers | **CONFIRMED, applied.** The status cell is split; matcher `""` is **Q11** | § 7.3, § 12 Q11 |
+| F14 | `CLAUDE.md` / `AGENTS.md` auto-discovery is an ambient input the list missed entirely | **CONFIRMED, applied.** New row **H11**; git status named as a second input and explicitly not closed | § 8.1 H11 |
+| F15 | D10's synchronous surface collides with § 7.7 rule 5 and manufactures deadline denies | **CONFIRMED, applied.** `next_event` delivers the whole pending batch; `deadline_ms` is armed at delivery | § 7.7 rule 5, D10 |
+| F16 | the anti-drift test was decorative; the document's own two surfaces already disagreed | **CONFIRMED, applied.** Test scoped to `run`; `--credentials` and `--strict-version` added; `RunSpec.frame` is a path and the on-disk frame format is owed, not shipped | § 9.2, § 9.3 |
+| F17 | V1's counts reproduce under no method; V10 misnamed the field it read | **CONFIRMED, applied.** One counting method stated once; V1 corrected to 104/83/42 matching lines; V10 corrected and marked *not* a decision audit | § 2.7 |
+| F18 | "four groups" over five, "Four rules" over five, § 13.1 referenced and absent | **CONFIRMED, applied.** | § 4.1, § 7.7, here |
+
+**Nothing was found INFEASIBLE.** Four findings were resolved by *withdrawing a claim* rather than
+by meeting it — F1 (the trace-ir document form), F13 (matcher `""` as proven), F16 (`--frame` as
+shipped), F7 (command-hook timeout as verified) — and each left a named to-verify row behind, which
+is the outcome this document prefers to a claim it cannot support.
+
+The review also checked the private prior art for leaks and found none: no product name, internal
+identifier, ADR reference or credentials posture appears in § 2.6 or anywhere else.
+
+---
+
+## Appendix A — every claim's method
+
+| method | rows |
+|---|---|
+| read from a file in `engineering-protocols` at the path cited | § 2.1–2.4, § 10 |
+| labelled *verified* in `engineering-protocols`' own Codex table, against codex-cli 0.145.0 | § 2.5 |
+| pattern from a private runtime, described generically, no names or records reproduced | § 2.6 |
+| `claude --help` / `codex --version` on 2.1.239 / 0.145.0, 2026-08-22 | V6, V10, V11, V12, V17 (absence side), H8's `--safe-mode` and H11's `--bare` clauses |
+| strings in the shipped vendor binary, quoted verbatim where the string is the evidence. **Where a count is given it is matching lines of `strings -n 6`** | V1–V5, V7, V7b, V8, V9, V13–V18 |
+| **not verified**, and labelled as such in place | Q1–Q12 |
+| **a claim the first draft made and the review removed**, each with a Q row in its place | the trace-ir document form (Q9), the command-hook timeout (Q10), matcher `""` as proven (Q11), the hook `allow` conflict order (Q12), and `--frame`'s on-disk format (§ 9.3) |
