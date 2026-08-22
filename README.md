@@ -14,8 +14,8 @@ metaharness
 
 - **As a binary:** `metaharness run claude --hermetic -p "…"` — events on stdout, steering on
   stdin. Swap `claude` for `codex` and the protocol does not change.
-- **As a library:** `Metaharness::new(Kind::Claude).hermetic().allow_tools([…]).run(prompt)` —
-  the same run, embedded.
+- **As a library:** `Metaharness::new(Kind::Claude).with_hermetic(Strict).with_decisions(Ask)
+  .start(prompt)` — the same run, embedded, answering `tool.requested` events as they arrive.
 
 ## The three promises
 
@@ -40,4 +40,16 @@ Two working systems, each of which built half of this and proved it:
 
 ## Status
 
-Pre-v1. The protocol is being designed in `docs/design/`; nothing here is stable.
+Pre-v1, and the design in `docs/design/` is what is binding — where this code and that document
+disagree, the document is amended rather than the disagreement left in the code.
+
+**M1 is built:** the event and command vocabulary, the workflow frame, the Claude Code adapter's
+launch construction and transcript reading, the run loop with per-call decisions, and `--audit`'s
+built-in hermetic floor. `metaharness capabilities claude`, `metaharness capabilities claude
+--render` and `metaharness conformance claude` work today — the last one runs 14 conformance
+vectors with no model, no network and no credential.
+
+**M1 does not drive the real `claude` binary.** The spawn is behind a trait, the whole path is
+exercised through a scripted process, and `metaharness run` refuses with exit 2 naming what is
+missing rather than pretending. `project`, `audit` and `doctor` refuse the same way, each naming
+what it is waiting for.

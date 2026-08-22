@@ -1,0 +1,5 @@
+{"format":"metaharness.event/1","seq":1,"run":"c2","event":"opaque","vendor_type":"quantum_entanglement_event","vendor_subtype":null,"digest":"695fc789d8ad9d9a41c17c757915c593473d564b97701b62abf43f65dd3aaac8","source_line":1}
+{"format":"metaharness.event/1","seq":2,"run":"c2","event":"opaque","vendor_type":"system","vendor_subtype":"a_subtype_from_a_later_release","digest":"58e65e6e6dd8a3ee16704a64550f2fc6c760c59781582d8963bbff2f77f65b5c","source_line":2}
+{"format":"metaharness.event/1","seq":3,"run":"c2","event":"opaque","vendor_type":"assistant","vendor_subtype":null,"digest":"695a7e2deedb157be9af8d8ee3f930e8ef2aa5b8c602365ba867dd7a56292c0d","source_line":3}
+{"format":"metaharness.event/1","seq":4,"run":"c2","at":"2026-08-22T11:00:00.000Z","event":"opaque","vendor_type":"assistant","vendor_subtype":"hologram","digest":"b91408765f037dabc9aacbc7d0994ec8d717a48dc5b6e098587d8491320df3cb","source_line":5}
+{"format":"metaharness.event/1","seq":5,"run":"c2","event":"opaque","vendor_type":null,"vendor_subtype":null,"digest":"99b891c214c68106a3457c24c65d9bab78a1349b969491fd6958a07f3727f12a","source_line":6}

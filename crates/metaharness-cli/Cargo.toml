@@ -7,13 +7,20 @@ license.workspace = true
 repository.workspace = true
 rust-version.workspace = true
 
+[lib]
+name = "metaharness_cli"
+path = "src/lib.rs"
+
 [[bin]]
 name = "metaharness"
 path = "src/main.rs"
 
 [dependencies]
-clap = { version = "4", features = ["derive"] }
-metaharness = { path = "../metaharness" }
+clap = { workspace = true }
+# The `clap` feature carries `RunSpec`'s own `derive(Args)` through, so the `run` verb's flags
+# are the library's option struct and cannot drift from it (design D11).
+metaharness = { path = "../metaharness", features = ["clap"] }
+serde_json = { workspace = true }
 
 [lints]
 workspace = true

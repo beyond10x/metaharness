@@ -1,0 +1,28 @@
+{
+  "args": [
+    "-p",
+    "state the workflow you are in",
+    "--output-format",
+    "stream-json",
+    "--verbose",
+    "--strict-mcp-config",
+    "--setting-sources",
+    "",
+    "--settings",
+    "/scratch/run-1/claude-settings.json",
+    "--model",
+    "a-model",
+    "--max-turns",
+    "8"
+  ],
+  "env": {
+    "CLAUDE_CONFIG_DIR": "/scratch/run-1/claude-home",
+    "HOME": "/operator",
+    "LANG": "C.UTF-8",
+    "PATH": "/operator/.local/bin:/usr/local/bin:/usr/bin:/bin",
+    "TERM": "dumb",
+    "TMPDIR": "/scratch/run-1/tmp",
+    "USER": "operator"
+  },
+  "program": "claude"
+}

@@ -4,94 +4,62 @@
 //! same stream describes a Claude Code session and a Codex session, which is the whole point —
 //! an embedder written against this crate cannot accidentally depend on which harness is inside.
 //!
-//! The protocol is being designed in `docs/design/metaharness-protocol-v0.1.md`; the types here
-//! are the placeholder that keeps the workspace honest until the design is accepted.
+//! Everything here is decided by `docs/design/metaharness-protocol-v0.1.md`. Where this crate
+//! and that document could disagree, the document wins and the disagreement is a defect here;
+//! where the document was found wrong, the correction is recorded in its own register (a `Q`
+//! row) and cited at the point of change in this code.
+//!
+//! # The shape of a line
+//!
+//! ```text
+//! {"format":"metaharness.event/1","seq":7,"run":"r-1","at":"…","event":"tool.requested",…}
+//! {"format":"metaharness.command/1","id":"c-3","command":"tool.decide",…}
+//! ```
+//!
+//! # Three rules that are easy to break by accident
+//!
+//! * **`seq` is assigned in one place** — [`EventStream`] — because a producer that numbered its
+//!   own events would be a second place that decides what a verdict cites (design D2).
+//! * **`at` is the vendor's recorded timestamp, passed through or absent.** Nothing in this
+//!   crate reads a clock, so a run's numbers can be committed and diffed (design D2).
+//! * **An absent payload field serializes as `null` and is never skipped.** Absence is the `unk`
+//!   verdict, and a field that vanished from the line cannot be told apart from a field nobody
+//!   asked for (design § 8.1: absence of evidence is not hermeticity).
 
-use serde::{Deserialize, Serialize};
+mod capability;
+mod command;
+mod conformance;
+mod event;
+mod frame;
+mod framing;
+mod hermetic;
+mod projection;
+mod seam;
+mod spec;
 
-/// The format tag every event line carries.
-///
-/// On every line rather than on a handshake, so a truncated capture is still self-describing
-/// (design § 3, D2). The version moves when a field is removed, retyped or given new meaning;
-/// an added field is additive and does not move it (D3).
-pub const EVENT_FORMAT: &str = "metaharness.event/1";
-
-/// The format tag every command line carries. Versioned on the same rule as [`EVENT_FORMAT`].
-pub const COMMAND_FORMAT: &str = "metaharness.command/1";
-
-/// Something a run tells the outside world.
-///
-/// Placeholder until the protocol design is accepted; the design owns the real vocabulary. The
-/// two variants here carry the wire names § 4.1 decides, so the crate cannot contradict the
-/// document while it is unbuilt.
-#[derive(Debug, Clone, Serialize, Deserialize)]
-#[serde(tag = "event")]
-pub enum Event {
-    /// The run started, and this is what it knows about itself.
-    #[serde(rename = "session.started")]
-    Started {
-        /// The adapter kind driving this run, e.g. `claude` or `codex`.
-        kind: String,
-    },
-    /// The run ended.
-    #[serde(rename = "session.ended")]
-    Ended {
-        /// Process exit code of the underlying harness, when there was one.
-        exit_code: Option<i32>,
-    },
-}
-
-/// Something the outside world tells a run.
-///
-/// Placeholder until the protocol design is accepted.
-#[derive(Debug, Clone, Serialize, Deserialize)]
-#[serde(tag = "command", rename_all = "snake_case")]
-pub enum Command {
-    /// Stop the run as soon as the harness allows.
-    ///
-    /// Every adapter must deliver this one (design § 6): a control surface with no way out is
-    /// not a control surface.
-    Halt {
-        /// Why, for the run report.
-        reason: String,
-    },
-}
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-
-    #[test]
-    fn the_wire_round_trips_as_json_lines() {
-        let event = Event::Started {
-            kind: "claude".into(),
-        };
-        let line = serde_json::to_string(&event).expect("serializes");
-        let back: Event = serde_json::from_str(&line).expect("parses");
-        assert!(matches!(back, Event::Started { kind } if kind == "claude"));
-    }
-
-    /// The tag is the wire name the design decided, not the variant's Rust spelling. Asserted
-    /// because a rename that only lands in a document is a rename that has not landed.
-    #[test]
-    fn events_carry_the_wire_names_the_design_decided() {
-        let started = serde_json::to_string(&Event::Started {
-            kind: "codex".into(),
-        })
-        .expect("serializes");
-        assert!(
-            started.contains(r#""event":"session.started""#),
-            "{started}"
-        );
-
-        let ended =
-            serde_json::to_string(&Event::Ended { exit_code: Some(0) }).expect("serializes");
-        assert!(ended.contains(r#""event":"session.ended""#), "{ended}");
-
-        let halt = serde_json::to_string(&Command::Halt {
-            reason: "the operator asked".into(),
-        })
-        .expect("serializes");
-        assert!(halt.contains(r#""command":"halt""#), "{halt}");
-    }
-}
+pub use capability::{
+    AdapterClass, AdapterId, Capabilities, CommandSupport, Tier, TierStatus, required_commands,
+};
+pub use command::{Command, CommandOutcome, Decision, RefusalCode, Refused};
+pub use conformance::{ConformanceTier, VectorOutcome};
+pub use event::{
+    DecidedBy, DecisionCensus, Emission, Event, McpServerRef, PermissionDenial, PluginRef,
+    RateLimitInfo, Seam, StepOutcome, TranscriptRef, Usage, warning_code,
+};
+pub use frame::{
+    Digest, EntityList, EvidenceLine, Frame, Handoff, Line, NodeRef, Operation, OperationSet,
+    StepRef, WorkflowRef,
+};
+pub use framing::{
+    COMMAND_FORMAT, COMMAND_NAMES, CommandLine, EVENT_FORMAT, EVENT_NAMES, EventLine, EventStream,
+    FramingError, RunId, parse_command_line, parse_event_line,
+};
+pub use hermetic::{
+    Assertion, HermeticAttestation, HermeticMode, HermeticRow, ImposedControl, RowVerdict,
+    Severity, UnavailableControl, Verdict,
+};
+pub use projection::{
+    CONTROL_PLANE_EVENTS, IrFamily, ProjectionReport, ir_family, project, required_ir_fields,
+};
+pub use seam::{HarnessSeam, SeamFactory};
+pub use spec::{CredentialSource, DecisionMode, Kind, RunSpec, ToolSurface};

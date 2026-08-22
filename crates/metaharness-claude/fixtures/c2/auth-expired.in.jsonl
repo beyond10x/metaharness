@@ -1,0 +1,2 @@
+{"type":"system","subtype":"init","cwd":"/scratch/run-1/work","session_id":"s-2001","tools":["Read"],"mcp_servers":[],"model":"a-model","permissionMode":"default","slash_commands":[],"apiKeySource":"none","claude_code_version":"2.1.239","output_style":"default","agents":[],"skills":[],"plugins":[],"uuid":"u-2001"}
+{"type":"result","subtype":"error_during_execution","is_error":true,"result":"Your session has expired. Please run /login to sign in again.","num_turns":1,"duration_ms":900,"session_id":"s-2001","uuid":"u-2002"}

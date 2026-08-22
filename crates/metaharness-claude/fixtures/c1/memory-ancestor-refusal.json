@@ -1,0 +1,6 @@
+{
+  "refusal": {
+    "code": null,
+    "display": "H11: the ancestor walk found /scratch/CLAUDE.md, and memory-file discovery is on in every run that is not --bare"
+  }
+}

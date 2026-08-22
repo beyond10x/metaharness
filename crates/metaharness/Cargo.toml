@@ -7,10 +7,16 @@ license.workspace = true
 repository.workspace = true
 rust-version.workspace = true
 
+[features]
+# The CLI's `run` verb is a `derive` on `RunSpec` and turns this on; a library embedder that
+# only reads events does not link an argument parser to do it (design D11).
+clap = ["metaharness-protocol/clap"]
+
 [dependencies]
 metaharness-protocol = { path = "../metaharness-protocol" }
 metaharness-claude = { path = "../metaharness-claude" }
-metaharness-codex = { path = "../metaharness-codex" }
+serde_json = { workspace = true }
+tempfile = { workspace = true }
 
 [lints]
 workspace = true

@@ -1,0 +1,6 @@
+{"type":"quantum_entanglement_event","payload":{"spooky":true},"uuid":"u-1001"}
+{"type":"system","subtype":"a_subtype_from_a_later_release","detail":"nothing here is readable","uuid":"u-1002"}
+{"type":"assistant","session_id":"s-1001","uuid":"u-1003"}
+
+{"type":"assistant","timestamp":"2026-08-22T11:00:00.000Z","session_id":"s-1001","uuid":"u-1004","message":{"role":"assistant","content":[{"type":"hologram","payload":[1,2,3]}]}}
+this line is not json at all

@@ -1,0 +1,6 @@
+{
+  "refusal": {
+    "code": "SHADOWED",
+    "display": "the run needs a call-level seam and the argv would carry the bare --allowedTools mcp__metaharness, which auto-approves the whole tool before the seam is consulted (V4)"
+  }
+}

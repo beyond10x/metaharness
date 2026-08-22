@@ -7,6 +7,13 @@
 > **Review:** one adversarial review, 2026-08-22 — 4 blocker, 12 major, 2 minor, **all folded in**.
 > The verdicts and what each one changed are § 13. Corrections are marked at the point of change,
 > so the first draft's claims stay visible.
+> **Amendment a1, 2026-08-22**, during the M1 build: the credential row H6 gained a token
+> lifetime, a nineteenth event (`auth.expired`) exists, and **Q13** carries what is still unknown.
+> **Amendment a2, 2026-08-22**, from building the Claude adapter: three verified rows the design
+> needed and did not have (V19–V21) and one new question (**Q14**).
+> **Amendment a3, 2026-08-22**, from building the run loop: a **fourth decision value**,
+> `abstain`, and four choices the document did not decide (§ 6, § 8.5, § 9.4).
+> Both marked at each point of change, on the same rule as the review's corrections.
 > **Audience:** whoever reviews this for acceptance, and whoever builds it afterwards.
 > **Sources studied:** `former organization/engineering-protocols` (public, read-only), and a private
 > agent runtime whose patterns are described here generically and whose names, records and
@@ -233,6 +240,9 @@ larger number, and mixing the two silently is how a figure becomes unreproducibl
 | V16 | Codex `DynamicToolSpec { namespace, description, inputSchema, deferLoading }` is registered at `thread/start` and requires `initialize.params.capabilities.experimentalApi = true` | binary strings for the type; the `experimentalApi` requirement is the private prior art's recorded finding against 0.145.0 |
 | V17 | Codex carries process-level sandbox knobs on its surface: `sandboxPolicy`, `permissionProfile`, `networkAccess`, `workspaceWrite`, `writableRoots`, `excludeTmpdirEnvVar`, `excludeSlashTmp` | binary strings. **Claude Code's CLI has no equivalent**, verified by the same option enumeration as V6 |
 | V18 | Codex emits `hook/started` and `hook/completed` turn notifications | binary strings |
+| V19 | **`--output-format stream-json` under `--print` requires `--verbose`.** Without it the CLI exits before the session starts: *"Error: When using --print, --output-format=stream-json requires --verbose"* | binary strings, **including the guard itself**: `if(c.outputFormat==="stream-json"&&!c.verbose){process.stderr.write(…)}`. Found by building the adapter: § 9.2's argv would not have run (amendment a2) |
+| V20 | **`--setting-sources ""` is the vendor's own defined no-sources case**, not an accident of parsing: the parser returns the empty list for the empty string | binary strings: `function R8u(e){if(e==="")return[];…}`, and its caller is the flag's own handler — `function Sn0(e){try{let t=R8u(e);…}catch(t){…"Invalid --setting-sources flag"…}}`. This upgrades H2/V12 from *the flag exists* to *the empty value is defined* (amendment a2) |
+| V21 | **2.1.239 offers no directory-listing tool.** `Glob` and `Grep` are present; `LS` is not | matching lines of `strings -n 3` (a shorter run than V1's `-n 6`, because `LS` is two characters — the shorter run is stated here rather than left to the reader): `LS` **0**, `Glob` 20, `Grep` 16, `Read` 35, `Write` 24, `Edit` 21. So the neutral operation `dir.list` renders to `Glob` (amendment a2) |
 
 A string in a binary is weaker than a driven call. Every row above is labelled with its method, and
 § 12 lists what would upgrade the weak ones.
@@ -273,7 +283,9 @@ field removed, retyped or given new meaning does.
 
 ### 4.1 The vocabulary
 
-`metaharness.event/1`. Eighteen events in five groups. The right-hand column is § 4.4's projection.
+`metaharness.event/1`. Eighteen events in five groups — **nineteen since amendment a1**, whose row
+is stated below the five groups rather than folded into them, so the first draft's count stays
+visible. The right-hand column is § 4.4's projection.
 
 **Session lifecycle**
 
@@ -331,6 +343,22 @@ stopped being able to see tool calls.* An adapter that recognised a record's env
 nothing out of it emits `opaque` too, because an event that produced nothing has vanished whatever
 the intention was.
 
+**Amendment a1 — a nineteenth event: `auth.expired`.** Added from a live observation rather than
+from a review. A governed run on 2026-08-22 died an hour in with the vendor reporting *"Failed to
+authenticate: OAuth session expired and could not be refreshed"*. The credential such a run is
+launched with is a **copy** (§ 8.1 H6), and a copy cannot refresh itself.
+
+| event | payload | why it exists | → `trace-ir/1` |
+|---|---|---|---|
+| `auth.expired` | `credential_source`, the vendor's own words passed through, `source_line` | the run's credential aged out mid-flight. Distinct from `session.ended` carrying an error, because *the token expired* and *the model failed* ask the operator for two different things, and an embedder forced to match on vendor prose to tell them apart is reading a string the vendor is free to change | — (control plane) |
+
+**It is not the `error` channel § 4.3 refuses.** It does not end the run, it is not a second
+terminal record, and the run still ends with `session.ended`. What it buys is a deterministic
+refresh-and-retry: the one condition where re-running the identical spec is the correct response.
+Its detection is the weak half — it reads the vendor's own error text, which no row of § 2.7
+verifies — so it is emitted beside the record it was read from and never as the only evidence a
+run's outcome rests on. **Q13.**
+
 ### 4.2 Decision modes
 
 **Decision D5 — the embedder chooses, per run and overridable per operation, between two modes.**
@@ -355,7 +383,8 @@ rather than by a callback.
   race table is a table about exactly one of them.
 * **No `error` event.** A vendor error is `session.ended` with a reason, or a `tool.result` with
   `is_error`, or a `warning`. An error channel beside the outcome channel is a second place a run
-  can end.
+  can end. Amendment a1's `auth.expired` is **not** that channel and the test is mechanical: it
+  ends no run, and every run that emits it still ends with `session.ended`.
 * **No aggregate `metrics` event.** `trace-ir`'s census is derived from the events; a computed
   summary on the wire is a second copy of the numbers that can disagree with the first.
 
@@ -365,8 +394,9 @@ rather than by a callback.
 the existing reader.**
 
 * Every event maps to exactly one `trace-ir` family or to none. The events mapping to none are the
-  control-plane ones — `step.*`, `turn.*`, `tool.decided`, `command.result`, `warning` — and they
-  are listed exhaustively in the table above so "none" is a decision rather than an omission.
+  control-plane ones — `step.*`, `turn.*`, `tool.decided`, `command.result`, `warning`, and
+  `auth.expired` (amendment a1) — and they are listed exhaustively in the table above so "none" is
+  a decision rather than an omission.
 * **`tool.decided` maps to nothing, and contributes to nothing.** `run_outcome.permission_denials`
   is passed through from `session.ended` — which is the vendor's own terminal record — and
   metaharness never adds to it. An earlier draft said the projection "contributes to" that count;
@@ -461,7 +491,10 @@ to notice."* The v0.1 operation vocabulary is deliberately small and closed:
 The rendering is the adapter's whole per-harness contribution here, and it is a value the adapter
 must expose (`metaharness capabilities <kind> --render`) so an embedder can assert on it without a
 run. Claude Code renders `file.edit` to `Edit`; Codex renders it to `apply_patch`; both render
-`shell` to their own shell tool. `subagent.spawn` defaults to **not admitted** on every adapter,
+`shell` to their own shell tool. **`dir.list` has no directory-listing tool to render to on Claude
+Code 2.1.239** — there is no `LS` — so it renders to `Glob` (V21, amendment a2), and `mcp.call`
+renders to nothing publishable because its vendor name is parameterised by server and tool rather
+than absent. `subagent.spawn` defaults to **not admitted** on every adapter,
 because a subagent's tool set is derived by nothing in these decisions and would be a route around
 the per-step admission — the position `protocol-cli` already takes on `Task`.
 
@@ -529,6 +562,21 @@ stricter rule elsewhere in the vendor's settings, so a run that also relies on s
 `deny` **must** carry a non-empty reason. Both vendors' hook wires require it, and the reason is the
 only part the model can act on.
 
+**Amendment a3 — there is a fourth decision value, `abstain`, and its absence was a hole in the
+default.** The three values above are `allow`, `deny` and `replace`, and `allow` *grants*: the
+paragraph above says so, and the consequence is that it overrides a stricter rule elsewhere in the
+vendor's settings. Building the run loop turned that into a concrete default: `--decisions frame`
+with **no frame in force** — which is what `metaharness run claude -p "…"` is — had no value
+meaning *metaharness adjudicated nothing here*. Answering `allow` because there was nothing to
+narrow with would have shipped a default invocation that switches the vendor's own permission
+pipeline off; denying every call would have shipped one that does nothing and bills for it.
+
+`abstain` is neither. It renders as the shape § 2.2 already records as proven — the reference hook
+passes a call through by exiting 0 and emitting **no `permissionDecision` at all**, *"because
+saying `allow` here would claim an authority the layer does not have"* — and the census counts it
+in its own column, because *we let it through* and *we claimed nothing* are different facts about
+who was in control.
+
 `replace` exists because both vendors' hook wires carry `updatedInput` and refusing to expose it
 would push embedders into deny-and-re-prompt, which costs a turn to express something the wire
 already supports. A `replace` that the adapter cannot deliver is refused by name; it never silently
@@ -543,6 +591,15 @@ becomes an `allow`.
 | `TOO_LATE` | the window closed — the decision deadline expired, or the turn ended |
 | `MALFORMED` | the command did not parse, or a required field is missing |
 | `SHADOWED` | the command would be accepted by the vendor and silently overridden by another layer (§ 7.3 row `can_use_tool`). Refused rather than delivered, because a control that appears to work and does not is worse than one that is absent |
+
+**These five are *command* refusal codes, and a launch refusal is not one of them** (amendment a2).
+H11's ancestor walk finding a `CLAUDE.md` above the scratch root, and H8's denylist finding
+`--safe-mode`, both refuse the run before it starts and neither is a command. They carry their own
+name and no code, because inventing one would put a wrong word on a right refusal. `SHADOWED` is
+the one code that is also reachable at launch, and on the v0.1 `RunSpec` surface it is reachable
+**only** under `--tool-surface owned` — no other field can put a bare `--allowedTools` entry in the
+argv. The adapter's guard is nonetheless written over the constructed argv rather than over that
+flag, so it stays correct when a field that can is added.
 
 ---
 
@@ -711,11 +768,11 @@ when its unobservability is a property of the mechanism rather than of the run.
 |---|---|---|---|---|---|
 | H1a | config home is scratch — **plugins** | `CLAUDE_CONFIG_DIR` / `CODEX_HOME` to a fresh directory | record: loaded plugins are **exactly** the declared set | no plugin list ⇒ `unk` | **gating** |
 | H1b | …and **output style** | same | record: output style is the default | no output style ⇒ `unk`. Split from H1a because they fail independently and one unknown must not mask the other (**F11**) | **gating** |
-| H2 | settings sources excluded | `--setting-sources` with user/project/local omitted (V12) | launch: the flag is in the argv. The *absence of allow rules that would shadow the seam* is **not separately observable in any record** | — | **advisory.** The mechanism, not the run, is what cannot be observed; § 7.3 already refuses `can_use_tool` rather than trusting this row |
+| H2 | settings sources excluded | `--setting-sources` with user/project/local omitted — the empty value, which V20 shows is the vendor's own defined no-sources case | launch: the flag is in the argv. The *absence of allow rules that would shadow the seam* is **not separately observable in any record** | — | **advisory.** The mechanism, not the run, is what cannot be observed; § 7.3 already refuses `can_use_tool` rather than trusting this row |
 | H3 | the environment is constructed, not inherited | an explicit allowlist; everything else dropped — including `ANTHROPIC_BASE_URL`, `ANTHROPIC_MODEL`, `HTTP(S)_PROXY`, `CLAUDE_CODE_*`, `DISABLE_*`, `SSH_AUTH_SOCK`, `GIT_*`, and `PATH` reduced to a stated set | **launch:** the constructed child environment, as a value, before spawning (§ 8.4 O7) | n/a — launch assertion | **gating** |
 | H4 | no API key unless declared | `ANTHROPIC_API_KEY` is not in the allowlist unless the run declares `credentials: api_key` | record: credential source in the opening record | absent ⇒ `unk` | **gating** |
 | H5 | MCP surface is exactly what the launch gave | `--strict-mcp-config`, always | record: the MCP server **list** — length and names | list absent ⇒ `unk`, **never zero** | **gating** |
-| H6 | credentials are one file, copied | one file into the scratch home, nothing else | **not directly assertable in any record.** The evidence is the effect: H1a, H4, H5 | — | **advisory**, and § 8.3 says why an attestation is not evidence |
+| H6 | credentials are one file, copied | one file into the scratch home, nothing else, **re-copied immediately before every spawn** (amendment a1) | **not directly assertable in any record.** The evidence is the effect: H1a, H4, H5 | — | **advisory**, and § 8.3 says why an attestation is not evidence |
 | H7 | the working directory is ours | a directory metaharness created; `--add-dir` never passed | record: `cwd` in the opening record | absent ⇒ `unk` | **gating** |
 | H8 | hooks and customizations are not skipped | an argv **denylist**: neither `--bare` nor **`--safe-mode`**, and neither `CLAUDE_CODE_SAFE_MODE` nor `CLAUDE_CODE_SIMPLE` in the child environment | launch: the argv and environment as values | n/a — launch assertion | **gating** |
 | H9 | the vendor version is the pinned one | `doctor` before the run | record: the harness version in the opening record | absent ⇒ `unk` | **gating** |
@@ -753,6 +810,22 @@ Two more rows deserve their reasons in full, because both were bought with a rea
 * **H8** exists because `--bare` reads like a hermeticity flag and is the opposite: it *"skips
   hooks"* — which on this design is the control seam — and it also switches authentication to
   API-key-only, which silently breaks H4.
+
+**H6 gained a lifetime, and the first draft treated a credential as a file rather than as a token**
+(amendment a1). A governed run on 2026-08-22 died an hour in: *"Failed to authenticate: OAuth
+session expired and could not be refreshed"*. The copy in the scratch home was valid when the run
+started and was not when the harness went to refresh it, and a snapshot has nothing to refresh
+against. Three ways out were considered and the choice is stated with what it does not fix:
+
+| option | what it does | why not chosen |
+|---|---|---|
+| **(a) re-copy immediately before every spawn** | the freshest token the operator has, per session | **taken.** It shortens the window; it does not close it. A token that expires mid-session still kills that session |
+| (b) share the live file into the scratch home by hardlink or bind, so the harness's own refresh writes back | closes the window entirely, isolation kept for everything else | **not taken in v0.1, and open as Q13.** It makes the run a writer to the operator's own credential file — the one thing § 1.2 says the vendor keeps custody of — and whether the harness's refresh is atomic against a concurrent operator session is unverified |
+| **(c) surface the expiry as `auth.expired`** | the embedder can refresh and retry deterministically instead of reading the failure as a model failure | **taken**, together with (a) |
+
+(a) and (b) are alternatives; (a)+(c) is what v0.1 does. What remains unfixed is stated rather
+than hidden: a session longer than the remaining token lifetime still dies, and metaharness turns
+that from an unexplained failure into a named event.
 
 ### 8.2 What hermetic does not mean
 
@@ -802,6 +875,14 @@ approximately.
 | **C2 — replay vectors** | recorded vendor transcripts in, expected metaharness event stream out, byte-exact JSONL | free | O2, O3, and the transcript→event mapping |
 | **C3 — control vectors** | a scripted fake vendor process speaking the vendor's own wire — for Claude Code, `stream-json` plus `control_request`; for Codex, the app-server JSON-RPC — driven through allow, deny, `replace`, deadline expiry, cancel-instead-of-decide, a decision for an unknown call, and a decision that arrives after the window closed. Each step carries **one stimulus and its complete observable expectation, including the typed refusal** | free | § 7.7's four invariants, and § 6.1's refusal codes |
 | **C4 — one live run** | a real session against the real binary, with a **deliberate denial** in it | costs money and network; **never part of the default gate** | the rows nothing else can reach: the vendor really does wait for the hook, the deny really does stop the effect, the record really does say what the record-asserted rows (H1a, H1b, H4, H5, H7, H9, H10) read |
+
+**Amendment a3 — what C3 covers in M1, and what it does not.** The vectors run against a neutral
+scripted seam, not against `stream-json` plus `control_request` as the row above says. The reason
+is attribution rather than convenience: with the vendor's wire inside the C3 harness, a change to
+that wire reports a **C2** defect under a **C3** name, and the two tiers exist to be told apart.
+The vendor wire is covered by C2 against the real transcript reader. What is therefore **not**
+proven at C3 in M1: that the vendor's own control channel carries a decision. That needs the real
+spawner, and it is named here rather than implied by a green tier.
 
 C3 is the tier that carries the safety argument, and it is free. The pattern is the prior art's
 portable lifecycle vectors (§ 2.6 item 5), and the reason to copy it is that it makes the adapter's
@@ -975,6 +1056,13 @@ like a specification that passed.
 when metaharness could not do its job, and `3` when the harness died without producing one. It
 never exits `1`, because without an audit there is no verdict to contradict.** Stated because two
 exit-code tables for one verb is how a caller comes to treat `0` as "it was fine".
+
+**Amendment a3 — `--hermetic strict` implies the floor, so `1` and `3` are reachable without
+`--audit`.** The sentence above and `strict`'s own definition (§ 8.1: a gating row that is not
+`ok` fails the run) contradicted each other, and the build had to pick one. It picked `strict`:
+a hermeticity that reports a gap through exit `0` unless someone also remembered `--audit` is the
+same defect as one that only holds when someone remembered a spec file, which § 9.4 already
+refuses two paragraphs above. `--hermetic` and `--hermetic off` are unaffected.
 
 `3` is not a softer `1`. It is `aep-driver`'s `NoVerdict`, and it exists for the same reason: a
 crashed suite is not a failing suite, and submitting a failing verdict for something that never ran
@@ -1153,6 +1241,10 @@ is a row nobody intends to close.
 | Q10 | **What does Claude Code do when a `type: command` `PreToolUse` hook exceeds its timeout?** V7's fail-closed string is the SDK hook-*callback* path | one `claude -p` run with an on-disk hook that sleeps past its declared timeout, reading the transcript for whether the tool ran | § 7.7 rule 2 already fails closed from metaharness's side; the answer only says whether the vendor agrees |
 | Q11 | **Does matcher `""` behave as documented, and what does a child process per tool call cost?** The measured parity runs used two narrow matchers | one `claude -p` run with matcher `""` and a decision callback, counting hook invocations against tool calls and recording added latency | the seam enumerates the offered set instead, and § 7.8's coverage assertion becomes the guard that the enumeration is complete |
 | Q12 | **Is a hook `allow` honoured for a tool a settings allow-rule would have denied, and in which direction does the conflict resolve?** § 6 takes the grant authority; the resolution order is stated by two log strings and undriven | one run with a hook `allow` against a `deny` rule in `--settings` | metaharness's policy becomes `deny`-only and § 6's grant claim is withdrawn by name |
+| Q13 | **Can the operator's live credential file be shared into a scratch config home — hardlink, bind mount — so the harness's own refresh writes back, without handing the run write access to the operator's credential custody?** And, separately, which record does Claude Code write an expired-OAuth failure into, so `auth.expired` can be read from a field rather than from prose? (amendment a1) | two runs: one with a hardlinked credential file, reading whether a refresh during the run updates the operator's own file and whether a concurrent operator session survives it; one against a deliberately expired token, reading the transcript for the record that carries the failure | option (a) stands alone — the copy is re-taken per spawn, the window is short and not closed, and a session that outlives its token dies with `auth.expired` recorded before `session.ended` |
+| Q14 | **Does a `--settings` file placed inside `CLAUDE_CONFIG_DIR` count as the *user* source, which `--setting-sources ""` has just switched off?** If it does, the hook the seam depends on loads from nowhere and the guard silently stops guarding — the exact failure class § 7.8 exists for. Raised while building the adapter; the vendor string *"userSettings source is disabled (--setting-sources)"* says user settings can be switched off, and says nothing about where an explicit `--settings` path sits in that order (amendment a2) | one `claude -p` run with `--setting-sources ""` and a `--settings` file inside the scratch config home, reading `--include-hook-events` for whether the hook fired at all | nothing is lost: the adapter already places the settings file **outside** the config home, which is the placement that does not have to know the answer |
+| Q15 | **Does the vendor's own control channel actually carry a decision?** M1's C3 vectors drive a neutral scripted seam, not `stream-json` + `control_request` (amendment a3), so the wire itself is exercised only by C2 replay | one scripted fake vendor speaking `stream-json` with a `control_request`, driven through the same seven C3 stimuli | C3's safety argument stands for the metaharness half — correlation, ordering, deadlines, refusal codes — and the vendor half stays a C4 claim |
+| Q16 | **Where does the decision *envelope* belong — the thing that correlates one decision to one `call_id` on the way back to the child?** The adapter publishes the hook-response body and no envelope, because the real hook correlates by *which hook process is answering* and there is no hook process until the real spawner exists (amendment a3) | write the real spawner and the hook program, and read what correlates a response to a call in a driven run | the envelope stays the adapter's, which is where M1 already put it — the point of the row is that today's shape is provisional and was not read off the vendor |
 
 ---
 
@@ -1209,5 +1301,6 @@ identifier, ADR reference or credentials posture appears in § 2.6 or anywhere e
 | pattern from a private runtime, described generically, no names or records reproduced | § 2.6 |
 | `claude --help` / `codex --version` on 2.1.239 / 0.145.0, 2026-08-22 | V6, V10, V11, V12, V17 (absence side), H8's `--safe-mode` and H11's `--bare` clauses |
 | strings in the shipped vendor binary, quoted verbatim where the string is the evidence. **Where a count is given it is matching lines of `strings -n 6`** | V1–V5, V7, V7b, V8, V9, V13–V18 |
-| **not verified**, and labelled as such in place | Q1–Q12 |
+| **not verified**, and labelled as such in place | Q1–Q16 |
+| **observed in a live governed run and reported by the operator**, not reproduced here | amendment a1's failure: the expired OAuth session |
 | **a claim the first draft made and the review removed**, each with a Q row in its place | the trace-ir document form (Q9), the command-hook timeout (Q10), matcher `""` as proven (Q11), the hook `allow` conflict order (Q12), and `--frame`'s on-disk format (§ 9.3) |

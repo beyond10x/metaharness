@@ -1,17 +1,94 @@
-//! One interface to many agent harnesses.
+//! One interface to many agent harnesses: observable, steerable, hermetic.
 //!
-//! ```ignore
-//! Metaharness::new(Kind::Claude).hermetic().run("...").await?;
+//! ```no_run
+//! use metaharness::{Input, Metaharness};
+//! use metaharness::protocol::{Command, Decision, DecisionMode, Event, Kind};
+//!
+//! let mut run = Metaharness::new(Kind::Claude)
+//!     .with_decisions(DecisionMode::Ask)
+//!     .with_prompt("tidy the imports")
+//!     .start(Input::FromSpec)?;                 // exit 2 in this build: there is no spawner yet
+//!
+//! while let Some(line) = run.next_event()? {
+//!     if let Event::ToolRequested { call_id, decision_required: true, .. } = &line.event {
+//!         run.send(Command::ToolDecide {
+//!             call_id: call_id.clone(),
+//!             decision: Decision::Allow,
+//!         })?;
+//!     }
+//! }
+//! # Ok::<(), Box<dyn std::error::Error>>(())
 //! ```
 //!
-//! The builder is the library face of the same protocol the CLI speaks; both are defined by
-//! `docs/design/metaharness-protocol-v0.1.md` and unbuilt until that design is accepted.
+//! # What this build does and does not do
+//!
+//! | | |
+//! |---|---|
+//! | spec → launch plan → transcript → events → audit | **built**, and exercised end to end through [`ScriptedRunner`] |
+//! | driving the real vendor binary | **not built.** [`Metaharness::start`] refuses with [`Refusal::NoSpawner`], naming what is missing. A refusal, never a `todo!()` |
+//! | `Kind::Codex` | **no adapter.** Refused by name at start |
+//! | `--frame <file>` | **refused.** The on-disk frame format is owed and is not in v0.1; [`Metaharness::with_frame`] takes an in-memory value instead |
+//! | `--tool-surface owned` | **refused.** Strategy C means metaharness implements the tools itself, and per-step re-listing is unverified vendor behaviour |
+//!
+//! # Three properties that are easy to break by accident
+//!
+//! * **`next_event` hands over every currently-pending `tool.requested` before an answer to any
+//!   of them is due, and each one's deadline is armed at delivery.** Without both, a
+//!   single-threaded policy deciding call A would burn call B's budget and metaharness would
+//!   emit `deadline` denies the embedder never chose (design § 7.7 rule 5, finding F15).
+//! * **The decision reaches the child before any control does.** Cancelling first clears the
+//!   active call and leaves the child waiting on a correlation that no longer exists (rule 1).
+//! * **A missing field in the opening record is `unk`, never a zero and never a pass.** A bound
+//!   that read a missing MCP list as an empty one would report its blindest case as its best one.
+//!
+//! Everything here is decided by `docs/design/metaharness-protocol-v0.1.md`. Where this crate
+//! and that document could disagree, the document wins and the disagreement is a defect here.
 
-/// Which harness drives the run.
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub enum Kind {
-    /// Claude Code.
-    Claude,
-    /// Codex.
-    Codex,
-}
+mod audit;
+mod auditor;
+mod builder;
+mod clock;
+mod process;
+mod refusal;
+mod run;
+mod scripted;
+mod vectors;
+
+/// The harness-neutral wire: the events, the commands and the one options type.
+///
+/// Re-exported so an embedder needs one dependency to write a decision policy, and so the
+/// binary can `derive` its `run` flags on the same `RunSpec` the library takes.
+pub use metaharness_protocol as protocol;
+
+pub use audit::{
+    AuditReport, FloorInputs, RunExit, anything_was_adjudicated, decision_census,
+    exit_without_audit, hermetic_floor,
+};
+pub use auditor::{
+    AuditorInvoker, AuditorRun, AuditorVerdict, FakeAuditor, ProcessAuditor, auditor_argv,
+    count_verdict_rows, run_auditor,
+};
+pub use builder::{Input, Metaharness, check_spec, start_refusals};
+pub use clock::{Clock, ManualClock, SystemClock};
+pub use process::{
+    CredentialCopyView, HarnessProcess, LaunchPlanView, ProcessRunner, copy_credentials,
+};
+pub use refusal::Refusal;
+pub use run::{
+    DEADLINE_MARGIN_MS, DEFAULT_VENDOR_HOOK_TIMEOUT_MS, PendingCall, Run, deadline_reason,
+    decider_name, metaharness_deadline_ms, request_digest, seam_name, vendor_hook_timeout_ms,
+    warning,
+};
+pub use scripted::{
+    ScriptStep, ScriptedLog, ScriptedProcess, ScriptedRunner, ScriptedSeam, ScriptedSeams,
+};
+// The seam's neutral traits live in the protocol crate and its Claude half in the
+// adapter crate; both are re-exported here so an embedder needs one import.
+pub use metaharness_claude::{ClaudeSeam, ClaudeSeams};
+pub use metaharness_protocol::{HarnessSeam, SeamFactory};
+pub use vectors::{all_passed, capabilities, conformance_vectors, control_vectors};
+
+/// The adapter ids this build carries, in the order the CLI lists them.
+///
+/// Published as a value so a caller can ask what exists rather than discovering by refusal.
+pub const ADAPTERS: [&str; 1] = [metaharness_claude::ADAPTER_ID];
