@@ -211,11 +211,21 @@ impl Metaharness {
     /// absent or unrunnable arrives here as [`Refusal::Io`], which is exit `2` — metaharness
     /// could not do its job, never a verdict about the run.
     pub fn start(self, input: Input) -> Result<Run, Refusal> {
-        self.start_with(
-            input,
-            &mut crate::spawn::SpawnRunner::new(),
-            &mut metaharness_claude::ClaudeSeams,
-        )
+        // The runner and the seam are the kind's, because the two vendors do not put their record
+        // and their calls in the same place: Claude Code writes both down one pipe, codex writes
+        // its record to a session file and its calls to a hook channel beside it.
+        match self.spec.kind {
+            Kind::Claude => self.start_with(
+                input,
+                &mut crate::spawn::SpawnRunner::new(),
+                &mut metaharness_claude::ClaudeSeams,
+            ),
+            Kind::Codex => self.start_with(
+                input,
+                &mut crate::spawn_codex::CodexSpawnRunner::new(),
+                &mut metaharness_codex::CodexSeams,
+            ),
+        }
     }
 
     /// Start against a runner the caller supplies, with the real clock.
@@ -255,6 +265,35 @@ impl Metaharness {
         check_spec(&spec)?;
         let frame = resolve_frame(frame, &spec)?;
 
+        // One `match` and no trait. The two adapters' launch plans are different types with
+        // different fields — one carries a settings document and a `--settings` path, the other a
+        // `hooks.json` and a `config.toml` — and a trait to unify them would be an abstraction
+        // invented for two implementations. A third adapter is when it earns its keep. What is
+        // shared is what is genuinely neutral and already factored: the spec check, the frame
+        // resolution, the scratch root, the cwd, the ancestor walk and the control refusals.
+        match spec.kind {
+            Kind::Claude => start_claude(spec, frame, runner, seams, clock),
+            Kind::Codex => start_codex(spec, frame, runner, seams, clock),
+        }
+    }
+
+    fn applied(mut self, input: Input) -> RunSpec {
+        if let Input::Prompt(prompt) = input {
+            self.spec.prompt = Some(prompt);
+        }
+        self.spec
+    }
+}
+
+/// Start a Claude Code run: the M2 path, unchanged.
+fn start_claude(
+    spec: RunSpec,
+    frame: Option<Frame>,
+    runner: &mut dyn ProcessRunner,
+    seams: &mut dyn SeamFactory,
+    clock: Box<dyn Clock>,
+) -> Result<Run, Refusal> {
+    {
         let capabilities = metaharness_claude::capabilities();
         let refusals = start_refusals(&capabilities, &spec);
         if !refusals.is_empty() {
@@ -352,13 +391,145 @@ impl Metaharness {
             scratch: Some(scratch),
         }))
     }
+}
 
-    fn applied(mut self, input: Input) -> RunSpec {
-        if let Input::Prompt(prompt) = input {
-            self.spec.prompt = Some(prompt);
-        }
-        self.spec
+/// Start a codex run: CX-M2.
+///
+/// The same seven steps as [`start_claude`] and two of them land differently, because this vendor
+/// puts its record and its calls in different places:
+///
+/// * **the transcript is a file the child writes**, not its stdout, so the path handed to the
+///   runner is where the runner *copies the rollout to* rather than where it dumps a pipe; and
+/// * **the hook config lives inside the scratch `CODEX_HOME`**, because that is where codex
+///   declares a hook and there is no `--setting-sources` to switch that source off.
+fn start_codex(
+    spec: RunSpec,
+    frame: Option<Frame>,
+    runner: &mut dyn ProcessRunner,
+    seams: &mut dyn SeamFactory,
+    clock: Box<dyn Clock>,
+) -> Result<Run, Refusal> {
+    let capabilities = metaharness_codex::capabilities();
+    let refusals = start_refusals(&capabilities, &spec);
+    if !refusals.is_empty() {
+        return Err(Refusal::Control { refusals });
     }
+
+    let scratch = tempfile::TempDir::new()?;
+    let cwd = resolve_cwd(&spec, scratch.path())?;
+    let transcript_path = scratch.path().join("rollout.jsonl");
+
+    let context = metaharness_codex::LaunchContext {
+        scratch_root: scratch.path().to_path_buf(),
+        cwd: cwd.clone(),
+        credentials_file: credentials_file(&spec),
+        inherited_env: std::env::vars().collect::<BTreeMap<String, String>>(),
+        memory_ancestors: memory_ancestors(&cwd),
+        inputs_digest: None,
+    };
+    let plan =
+        metaharness_codex::plan_launch(&spec, &context).map_err(|refusal| Refusal::Launch {
+            detail: refusal.to_string(),
+        })?;
+
+    let channel = crate::spawn_codex::CodexHookChannel::create(scratch.path())?;
+    materialise_codex(&plan, scratch.path(), &channel)?;
+
+    let transcript = TranscriptRef {
+        path: Some(transcript_path.display().to_string()),
+        digest: None,
+        bytes: None,
+    };
+    // Always the hook: `--tool-surface owned` is refused by the codex launch plan by name, so
+    // there is no second value this could take.
+    let seam = Seam::Hook;
+    let bridge = seams.build(transcript.clone(), plan.attestation.clone(), seam);
+
+    let copies: Vec<CredentialCopyView<'_>> = plan
+        .credential_copies
+        .iter()
+        .map(|copy| CredentialCopyView {
+            from: copy.from.as_path(),
+            to: copy.to.as_path(),
+        })
+        .collect();
+    let view = LaunchPlanView {
+        program: &plan.program,
+        args: &plan.args,
+        env: &plan.env,
+        cwd: &plan.cwd,
+        credential_copies: &copies,
+        decision_channel: channel.root(),
+        transcript: &transcript_path,
+    };
+    let process = runner.start(&view)?;
+
+    let launch = LaunchFacts {
+        planned_cwd: Some(plan.cwd.display().to_string()),
+        // codex loads plugins from its own config and marketplace snapshots, and a scratch home
+        // has neither — the launch plan refuses `--plugin-dir` outright rather than pretending.
+        declared_plugins: Vec::new(),
+        pinned_versions: metaharness_codex::PINNED_VERSIONS
+            .iter()
+            .map(ToString::to_string)
+            .collect(),
+        transcript,
+    };
+
+    Ok(Run::new(RunParts {
+        stream: EventStream::new(RunId::new(format!(
+            "{}-{}",
+            spec.kind.as_str(),
+            std::process::id()
+        ))),
+        spec,
+        bridge,
+        process,
+        clock,
+        capabilities,
+        frame,
+        seam,
+        vendor_timeout_ms: vendor_hook_timeout_ms(&plan.hook),
+        launch,
+        scratch: Some(scratch),
+    }))
+}
+
+/// Perform the I/O the codex launch plan names and deliberately does not do.
+///
+/// | what | why it is here and not in the plan |
+/// |---|---|
+/// | the scratch `CODEX_HOME` and the temporary directory, empty | H1a's scratch home is a directory, and a directory has to be made |
+/// | `$CODEX_HOME/config.toml`, **the seam included** | the plan decides its contents; writing it is I/O. 0.145.0 reads its hooks out of `[hooks]` in this file and reads no standalone `hooks.json` at all |
+/// | the `PreToolUse` executable at the path the hook definition names | **the definition without the file is a seam that is never consulted** |
+/// | its executable bit | a hook the vendor cannot execute fails as a hook that did not fire, which looks exactly like a run where nothing was attempted |
+fn materialise_codex(
+    plan: &metaharness_codex::LaunchPlan,
+    scratch_root: &std::path::Path,
+    channel: &crate::spawn_codex::CodexHookChannel,
+) -> Result<(), Refusal> {
+    std::fs::create_dir_all(&plan.config_home)?;
+    // Deliberately a subdirectory of the scratch root and not the operator's own: codex refuses
+    // to create its helper shims when `CODEX_HOME` sits under the process's temporary directory,
+    // and the child's `TMPDIR` is this directory, so the config home is beside it rather than
+    // inside it.
+    std::fs::create_dir_all(scratch_root.join("tmp"))?;
+
+    std::fs::write(
+        metaharness_codex::config_path(scratch_root),
+        plan.config.as_bytes(),
+    )?;
+
+    let program_path = metaharness_codex::hook_program_path(scratch_root);
+    if let Some(parent) = program_path.parent() {
+        std::fs::create_dir_all(parent)?;
+    }
+    let program = metaharness_codex::hook_program(&metaharness_codex::HookChannelPaths::at_root(
+        channel.root(),
+    ));
+    std::fs::write(&program_path, program.as_bytes())?;
+    make_executable(&program_path)?;
+    Ok(())
 }
 
 /// Perform the four pieces of I/O the launch plan names and deliberately does not do.
@@ -500,14 +671,6 @@ fn resolve_frame(in_memory: Option<Frame>, spec: &RunSpec) -> Result<Option<Fram
 ///
 /// [`Refusal::NoAdapter`] or [`Refusal::ToolSurfaceOwned`].
 pub fn check_spec(spec: &RunSpec) -> Result<(), Refusal> {
-    if spec.kind == Kind::Codex {
-        // CX-M1: the codex adapter reads rollouts and declares its capabilities; nothing spawns.
-        return Err(Refusal::NotInThisMilestone {
-            verb: "run codex",
-            missing: "a driven codex spawn (CX-M2): the adapter's rollout reader and \
-                      capabilities exist, and no live codex process has answered the seam yet",
-        });
-    }
     if spec.tool_surface == ToolSurface::Owned {
         return Err(Refusal::ToolSurfaceOwned);
     }
@@ -520,13 +683,19 @@ pub fn check_spec(spec: &RunSpec) -> Result<(), Refusal> {
 /// spawn and not once per run: a copied operator-login token is a snapshot with a lifetime, and
 /// a governed run on 2026-08-22 died an hour in on an OAuth session that could not be refreshed
 /// (Q13).
+///
+/// Each vendor keeps its login in its own place and under its own name — `~/.claude/.credentials.json`,
+/// `~/.codex/auth.json` — and this is the one line that knows both, because the copy is the
+/// library's I/O and the adapters are pure.
 fn credentials_file(spec: &RunSpec) -> Option<PathBuf> {
+    let (directory, file) = match spec.kind {
+        Kind::Claude => (".claude", ".credentials.json"),
+        Kind::Codex => (".codex", "auth.json"),
+    };
     match spec.credentials {
-        CredentialSource::OperatorLogin => std::env::var_os("HOME").map(|home| {
-            PathBuf::from(home)
-                .join(".claude")
-                .join(".credentials.json")
-        }),
+        CredentialSource::OperatorLogin => {
+            std::env::var_os("HOME").map(|home| PathBuf::from(home).join(directory).join(file))
+        }
         CredentialSource::ApiKey | CredentialSource::None => None,
     }
 }
@@ -534,9 +703,10 @@ fn credentials_file(spec: &RunSpec) -> Option<PathBuf> {
 /// Every memory file discoverable above the scratch working directory (design § 8.1 H11).
 ///
 /// Walked and handed to the adapter rather than checked here, because H11's verdict is the
-/// adapter's launch assertion: auto-discovery is on in every run that is not `--bare`, and H8
-/// forbids `--bare`, so a `CLAUDE.md` in any ancestor enters the context of a run this design
-/// calls hermetic.
+/// adapter's launch assertion: on Claude Code auto-discovery is on in every run that is not
+/// `--bare`, and H8 forbids `--bare`; on codex the root-to-cwd `AGENTS.md` walk is native and has
+/// no switch at all. Either way a memory file in an ancestor enters the context of a run this
+/// design calls hermetic.
 fn memory_ancestors(cwd: &std::path::Path) -> Vec<PathBuf> {
     let mut found = Vec::new();
     for ancestor in cwd.ancestors().skip(1) {

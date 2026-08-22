@@ -445,7 +445,16 @@ pub fn conformance_vectors(kind: Kind) -> Result<Vec<VectorOutcome>, Refusal> {
             vectors.extend(crate::spawn_vectors::spawn_vectors());
             Ok(vectors)
         }
-        Kind::Codex => Ok(metaharness_codex::conformance_vectors()),
+        Kind::Codex => {
+            let mut vectors = metaharness_codex::conformance_vectors();
+            // The control tier is metaharness's own machinery and is adapter-neutral, so it is
+            // **not** repeated here: the C3 vectors in `control_vectors` drive a scripted process
+            // and assert § 7.7's ordering rules once, for every adapter. What is codex-specific is
+            // the spawn half — a real process, a real hook program, a real session file — and that
+            // is what this adds.
+            vectors.extend(crate::spawn_codex_vectors::spawn_vectors());
+            Ok(vectors)
+        }
     }
 }
 

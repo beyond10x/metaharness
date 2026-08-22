@@ -6,13 +6,15 @@
 //!
 //! # No test in this file may start a session
 //!
-//! `metaharness run claude -p …` now **spawns the real binary and bills a real account.** This
-//! file used to assert that it exited `2` because there was no spawner; when the spawner landed
-//! that assertion stopped being free, and the suite quietly spent money on two runs before
-//! anybody noticed. So: every `run` invocation here is one that is refused **before** the spawn —
-//! a kind with no adapter, a frame document, an owned tool surface — and
-//! `no_run_in_this_file_can_reach_a_spawn` holds that line mechanically. Paid runs live in
-//! `metaharness/tests/live.rs`, behind `METAHARNESS_LIVE=1`, and are never part of `task check`.
+//! `metaharness run claude -p …` **spawns the real binary and bills a real account**, and since
+//! CX-M2 so does `metaharness run codex -p …`. This file used to assert that `run` exited `2`
+//! because there was no spawner; when the spawner landed that assertion stopped being free, and
+//! the suite quietly spent money on two runs before anybody noticed. So: every `run` invocation
+//! here is one that is refused **before** the spawn — a frame document nothing can read, an owned
+//! tool surface, a missing prompt — and `no_run_in_this_file_can_reach_a_spawn` holds that line
+//! mechanically **for both kinds**. Paid runs live in `metaharness/tests/live.rs` and
+//! `metaharness/tests/live_codex.rs`, behind `METAHARNESS_LIVE=1`, and are never part of
+//! `task check`.
 
 use clap::Parser as _;
 use metaharness_cli::{Cli, execute};
@@ -43,6 +45,12 @@ fn a_run_with_a_bad_spec_exits_two_before_anything_is_spawned() {
 /// to let one back. Since the on-disk frame format landed (amendment a5), `--frame` alone no
 /// longer guarantees a refusal — a valid document proceeds to the spawn — so a `--frame` argv is
 /// only free when its path is a directory, and the interlock requires exactly that spelling.
+///
+/// **The codex escape hatch is gone.** Until CX-M2 a `codex` argv was free because `run codex`
+/// was refused by name before anything spawned; it now drives a real, paid `codex exec`, so a
+/// codex argv has to earn its place here the same way a claude one does. That escape hatch is
+/// exactly the shape of the defect this interlock was written after: an argv that was free when
+/// it was written and stopped being free when the milestone under it landed.
 #[test]
 fn no_run_in_this_file_can_reach_a_spawn() {
     let source = include_str!("verbs.rs");
@@ -54,16 +62,29 @@ fn no_run_in_this_file_can_reach_a_spawn() {
             && line.contains(r#""-p""#);
         if is_argv {
             assert!(
-                line.contains(r#""--frame", ".""#) || line.contains(r#""codex""#),
+                line.contains(r#""--frame", ".""#),
                 "this argv would spawn the vendor and bill for it: {line}"
             );
         }
     }
 }
 
+/// The free codex refusal: the frame path is a **directory**, which no filesystem reads as a
+/// file, and the frame is resolved above the kind dispatch — so this is refused on the way in on
+/// either adapter.
 #[test]
-fn a_codex_run_exits_two_by_name_because_nothing_spawns_codex_yet() {
-    assert_eq!(code_of(&["metaharness", "run", "codex", "-p", "hello"]), 2);
+fn a_codex_run_with_a_bad_spec_exits_two_before_anything_is_spawned() {
+    assert_eq!(
+        code_of(&["metaharness", "run", "codex", "--frame", ".", "-p", "x"]),
+        2
+    );
+}
+
+/// A codex run with nothing to do is refused by the adapter while the launch is being planned,
+/// which is before the spawn — so this costs nothing either.
+#[test]
+fn a_codex_run_with_no_prompt_exits_two_before_anything_is_spawned() {
+    assert_eq!(code_of(&["metaharness", "run", "codex"]), 2);
 }
 
 /// The two free frame refusals: a path nothing can read, and a document that is not a sealed

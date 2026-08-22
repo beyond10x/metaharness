@@ -67,13 +67,39 @@ document: digest-verified on load, refused by name when unreadable, untagged, mi
 edited after sealing, and enforced per call from the first turn. This is the seam an external
 driver integrates through — it writes the frame as a file and never links this workspace.
 
-**The Codex adapter exists (CX-M1).** `metaharness-codex` reads the session rollout — the record
-that carries timestamps, durations and per-turn usage where `codex exec --json` stdout does not —
-version-gated on the 0.145.0 pin, with every unmapped shape preserved as `opaque`. `capabilities
-codex`, `conformance codex` (4 replay vectors) and `doctor codex` all work with no model and no
-credential; `run codex` is refused by name until a driven spawn (CX-M2), and `tool.decide` stays
-refused until that run proves the vendor's documented hook contract from metaharness's own seam.
-The evidence base is `docs/research/2026-08-21-codex-harness-research.md`.
+**Codex is driven for real (CX-M2).** `metaharness run codex --hermetic -p "…"` starts a real
+`codex exec` into a scratch `CODEX_HOME`, copies the operator's `auth.json` in per spawn, declares
+a blocking `PreToolUse` hook, tails the **session rollout** for events — the record that carries
+timestamps, durations and per-turn usage where `codex exec --json` stdout carries none — retains
+those bytes for the auditor, and answers the hook per call. `capabilities codex`, `conformance
+codex` (**7** vectors, including three that run a real process and the real hook program) and
+`doctor codex` all still work with no model and no credential.
+
+**The seam was verified against a paid run, on this vendor too.** A policy that admitted no shell
+met a prompt that asked for one. The hook process received the call — `"tool_name":"Bash"`,
+`"tool_use_id":"exec-96257928-…"` — metaharness answered `deny` with a reason, and *the vendor's
+own session record* reads `Command blocked by PreToolUse hook: this step admits no shell, so the
+command did not run` with an **empty** `Output:`. The model's closing message was *"The command was
+blocked and did not run."* So `tool.decide` is `Honoured` and the call tier is `Delivered`. The
+`allow` half of that wire is **not** claimed: only the deny path has been driven.
+
+Three things about Codex cost more to learn than the code that uses them, and all three are silent
+failures — which is why every claim above is read from the run's own record and not from the file
+that configured it:
+
+- **A hook is declared in `config.toml`, not `hooks.json`.** A `hooks.json` is a plugin manifest's
+  file. An unrecognised key under `[hooks]` is dropped *without failing the config load*, so a
+  misconfigured seam and a run where nothing was attempted are the same observation.
+- **A hook in a fresh `CODEX_HOME` never fires without `--dangerously-bypass-hook-trust`.** A
+  scratch home cannot hold persisted trust. The flag warns about running *somebody else's* hook
+  unvetted; the only hook here is the one metaharness wrote a moment earlier.
+- **The hook speaks Claude Code's tool vocabulary.** `tool_name` is `Bash`, where the rollout calls
+  the same call `exec` and the binary's own tool list calls it `shell`. A rendering table built
+  from the record would have denied every shell call and reported it as a frame decision.
+
+One thing the live run found that nobody was looking for: `codex --version` says `0.145.0` and the
+`session_meta.cli_version` written by the run that binary starts says `0.144.0`. The adapter keeps
+one pin, the reader warns rather than widening it, and the split is **Q18**.
 
 **The eval machinery lives here now** (`evals/`), migrated from engineering-protocols under its
 `epic:metaharness-migration`: the driven eval reads its denial census from `tool.decided` events

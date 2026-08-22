@@ -191,7 +191,7 @@ pub struct Run {
     process: Box<dyn HarnessProcess>,
     clock: Box<dyn Clock>,
     capabilities: Capabilities,
-    operation_of_tool: BTreeMap<String, String>,
+    operation_of_tool: BTreeMap<String, Vec<String>>,
     frame: Option<Frame>,
     seam: Seam,
     vendor_timeout_ms: u64,
@@ -237,10 +237,24 @@ pub(crate) struct RunParts {
 
 impl Run {
     pub(crate) fn new(parts: RunParts) -> Self {
-        let mut operation_of_tool = BTreeMap::new();
+        // The reverse of **the adapter's own published rendering** (design § 8.4 O6), read from
+        // the capability descriptor rather than from one adapter's function. The loop must not
+        // hold a vendor's tool table, because a table that is right for one adapter and compiled
+        // into the loop is a table that is wrong for the next one — and the way it would be wrong
+        // is that every call the other vendor made would be denied and reported as a frame
+        // decision, which is a control that has stopped controlling while it still looks busy.
+        //
+        // The value is a **set** because a rendering need not be injective: codex writes *and*
+        // edits through one `apply_patch`, so one vendor tool answers to two operations, and
+        // admission asks whether **any** operation the frame admits renders to the tool that was
+        // called.
+        let mut operation_of_tool: BTreeMap<String, Vec<String>> = BTreeMap::new();
         for operation in &Operation::PARAMETERLESS {
-            if let Some(tool) = metaharness_claude::render_operation(operation) {
-                operation_of_tool.insert(tool.to_string(), operation.name().to_string());
+            if let Some(tool) = parts.capabilities.renders(operation) {
+                operation_of_tool
+                    .entry(tool.to_string())
+                    .or_default()
+                    .push(operation.name().to_string());
             }
         }
         Self {
@@ -443,6 +457,22 @@ impl Run {
 
     fn admit(&mut self, emissions: Vec<Emission>) -> std::io::Result<()> {
         for emission in emissions {
+            // A `tool.requested` the adapter stamped [`Seam::None`] onto is a **record of a call**
+            // and not a call awaiting a decision: no seam covers it, so nothing is blocked on it
+            // and nothing can be blocked by it. It is delivered and never decided, because a
+            // post-hoc record that drew a decision would put an entry in the census for a call
+            // metaharness never held — and on an adapter whose transcript is read from a file
+            // *beside* the live seam (codex's rollout) that is every call, twice.
+            if matches!(
+                emission.event,
+                Event::ToolRequested {
+                    seam: Seam::None,
+                    ..
+                }
+            ) {
+                self.outbox.push_back(emission);
+                continue;
+            }
             if matches!(emission.event, Event::ToolRequested { .. }) {
                 self.admit_call(emission)?;
                 continue;
@@ -604,7 +634,7 @@ impl Run {
             // claims what is true: metaharness adjudicated nothing here (amendment a3).
             return (Decision::Abstain, DecidedBy::Adapter, Seam::None);
         };
-        let Some(operation_name) = self.operation_of_tool.get(tool).cloned() else {
+        let Some(operations) = self.operation_of_tool.get(tool).cloned() else {
             self.warn(
                 warning::UNCOVERED_TOOL,
                 format!(
@@ -623,10 +653,11 @@ impl Run {
                 self.seam,
             );
         };
+        let operation_name = operations.join("/");
         let admitted = frame
             .operations
             .iter()
-            .any(|operation| operation.name() == operation_name);
+            .any(|operation| operations.iter().any(|name| name == operation.name()));
         if admitted {
             (Decision::Allow, DecidedBy::Frame, self.seam)
         } else {

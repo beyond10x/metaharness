@@ -160,7 +160,7 @@ mod tests {
         assert!(installed.render().contains("unverified"));
     }
 
-    /// The codex adapter exists (CX-M1), so `doctor codex` asks the machine rather than
+    /// The codex adapter drives a real binary (CX-M2), so `doctor codex` asks the machine rather than
     /// refusing: the answer is the installed version against the pin, or `Io` where no codex
     /// binary is installed — never a session.
     #[test]

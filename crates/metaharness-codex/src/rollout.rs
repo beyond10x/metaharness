@@ -39,6 +39,9 @@ pub struct RolloutReader {
     /// The last `token_count` usage, folded into `session.ended` because the rollout never
     /// carries cost and carries usage per turn rather than per session.
     last_usage: Option<Usage>,
+    /// What metaharness's own seam decided, handed in rather than computed here: the census
+    /// counts what *metaharness* did and no vendor record can see it (design D6, finding F10).
+    census: metaharness_protocol::DecisionCensus,
 }
 
 impl RolloutReader {
@@ -54,6 +57,7 @@ impl RolloutReader {
             turn: 0,
             last_complete: None,
             last_usage: None,
+            census: metaharness_protocol::DecisionCensus::default(),
         }
     }
 
@@ -62,6 +66,15 @@ impl RolloutReader {
     #[must_use]
     pub fn saw_terminal_record(&self) -> bool {
         self.saw_task_complete
+    }
+
+    /// Hand the terminal record metaharness's own decision census before it is emitted.
+    ///
+    /// Set rather than derived, for the reason design D6 gives: the census counts what
+    /// metaharness decided, and a rollout that recorded a call the seam denied cannot say who
+    /// denied it or why.
+    pub fn set_census(&mut self, census: metaharness_protocol::DecisionCensus) {
+        self.census = census;
     }
 
     /// One rollout line in, zero or more events out.
@@ -122,7 +135,7 @@ impl RolloutReader {
             subagents_spawned: None,
             usage: self.last_usage.take(),
             model_usage: None,
-            census: metaharness_protocol::DecisionCensus::default(),
+            census: self.census.clone(),
         };
         match at {
             Some(timestamp) => vec![Emission::at(timestamp, event)],

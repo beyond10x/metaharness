@@ -7,6 +7,49 @@ was amended and the amendment is named here.
 
 ### Added
 
+- **`metaharness run codex` drives a real Codex session (CX-M2).** A scratch `CODEX_HOME`, a
+  constructed child environment, the operator's `~/.codex/auth.json` copied in immediately before
+  every spawn, and a blocking `PreToolUse` hook metaharness answers per call. Events come from the
+  **session rollout**, discovered under the scratch home and tailed as it is written — the record
+  that carries timestamps, durations and per-turn usage where `codex exec --json` stdout carries
+  none — and every line is retained as the transcript for the auditor (O8), with the thin `--json`
+  stream retained *beside* it rather than as it. `--tool-surface owned`, `--max-turns` and
+  `--plugin-dir` are refused **by name** on this adapter rather than silently dropped: an option
+  that was set and ignored is a run that is not the one that was asked for.
+- **The seam holds on a second vendor, and it was proven with a paid run** (design amendment a7).
+  A policy admitting no shell met a prompt asking for one. The hook process received the call, the
+  embedder answered `deny` with a reason, and **the vendor's own session record** reads
+  `Command blocked by PreToolUse hook: this step admits no shell, so the command did not run` with
+  an **empty** `Output:` — the deny reached the child before the effect. `tool.decide` is now
+  `Honoured` and the **call tier is `Delivered`**; the `allow` half of that wire is deliberately
+  **not** claimed, because only the deny path has been driven.
+- **Three Codex facts that are each a silent failure, found the expensive way.** (1) A user hook is
+  declared in **`config.toml`** under `[hooks]`, not in a `hooks.json` — that is a plugin manifest's
+  file — and an unrecognised key there is dropped *without failing the config load*. (2) A hook in a
+  fresh `CODEX_HOME` **never fires** without `--dangerously-bypass-hook-trust`, because a scratch
+  home cannot hold persisted trust; the flag's warning is about running somebody else's hook
+  unvetted, not the one metaharness just wrote. (3) The hook speaks **Claude Code's** tool
+  vocabulary — `tool_name` is `Bash`, where the rollout calls the same call `exec` and the binary's
+  own tool list calls it `shell`, so the operation rendering targets the hook's word and a table
+  built from the record would have denied every shell call as a frame decision.
+- **`approval_policy = "never"` and `sandbox_mode = "read-only"` in the scratch config.** `codex
+  exec` on 0.145.0 has no `--ask-for-approval` flag, and the operator's own default (`on-request`)
+  would let a prompt nobody is there to answer turn a call away before the seam saw it. `never`
+  makes metaharness's hook the one thing that can refuse a call, so a denial is attributable.
+  `read-only` is this vendor's process-level floor, which Claude Code's CLI has no counterpart for
+  and which the attestation therefore gets to claim. Both read back from `codex doctor` against the
+  scratch home — `restricted fs + restricted network · approval Never` — for free.
+- **The builder dispatches by kind.** `Metaharness::start` and the start path now `match spec.kind`
+  into `start_claude` / `start_codex`, each with its own launch plan, runner and seam factory. A
+  `match` rather than a trait, deliberately: the two plans are different types with different
+  fields, and a third adapter is when the abstraction earns its keep. The Claude path is unchanged.
+- **Three C3 spawn vectors for the codex path**, mirroring the Claude ones: a fake vendor that
+  writes a real session file under a scratch `CODEX_HOME` and blocks on the real hook program, so
+  the seam round trip, the rollout tail-and-retain and the per-spawn credential copy are all checked
+  with no model, no network and no credential. `conformance codex` runs **7** vectors.
+- `metaharness/tests/live_codex.rs` — the C4 tier for this adapter: one live run behind `#[ignore]`
+  and `METAHARNESS_LIVE=1`, asserting the three facts nothing cheaper can reach, each from the run's
+  own record.
 - **Correction: the codex plugin went back to engineering-protocols.** The evals migration
   briefly carried `integrations/codex/` here as `evals/codex/`; the operator's call is the right
   boundary — a plugin (instruction surface, skill) is the subject repository's product, like the
@@ -23,8 +66,9 @@ was amended and the amendment is named here.
   declares every tier `Unverified` and keeps `tool.decide` refused until a driven run proves the
   vendor's documented hook contract; `doctor codex` checks the installed binary against the
   0.145.0 pin (and the version-token picker learned that `codex-cli 0.145.0` leads with a name,
-  not a number); `conformance codex` runs 4 replay vectors. `run codex` is refused by name:
-  CX-M2, the driven spawn, is what flips it. Evidence base:
+  not a number); `conformance codex` runs 4 replay vectors. At CX-M1 `run codex` was refused by
+  name and every tier was `Unverified`; CX-M2 above is the driven spawn that changed both, and it
+  changed them only as far as one live run reached. Evidence base:
   `docs/research/2026-08-21-codex-harness-research.md`, migrated here with the adapter.
 - **The operator-named working directory — `--cwd <dir>` (amendment a6).** The driven case's
   declaration: the child runs in a real tree instead of a scratch one. H7 and H11 move from
@@ -96,6 +140,13 @@ was amended and the amendment is named here.
   tests that asserted it exited `2` kept passing their argv through and billed two real sessions.
   Those tests now use only pre-spawn refusals, and an interlock over the test file's own source
   refuses to let a prompt-carrying `run` argv back in.
+- **The interlock's codex escape hatch is gone, and a second interlock covers the library tests.**
+  A `codex` argv used to be free because `run codex` was refused by name; CX-M2 made it a paid
+  session, which is the same shape of defect the interlock was written after — an argv that was
+  free when it was written and stopped being free when the milestone under it landed. `run codex`
+  argvs now have to earn their place the same way, and `metaharness/tests/run_loop.rs` gained an
+  interlock of its own: a `Metaharness::start` whose result is not an expected refusal is a call
+  that spawned, and the test file refuses to contain one.
 
 ### Not yet
 - `metaharness project` is gated on Q9 (`trace-ir/1` is `Serialize`-only, so a document written
@@ -103,4 +154,11 @@ was amended and the amendment is named here.
   carry. Both refuse with exit 2, each naming what it waits for.
 - `session.started` carries the transcript's path and not its digest: the opening record is line
   one of a file whose last line does not exist yet (**Q17**).
-- No Codex adapter.
+- On Codex: the `allow` half of the decision wire (only `deny` is driven), turn injection,
+  registration-level narrowing, and the `apply_patch` operation rendering — the hook's word for a
+  patch call is the vendor's documentation and not a driven observation (**Q5**).
+- **Q18:** `codex --version` reports `0.145.0` and the `session_meta.cli_version` written by the
+  run that binary starts reports `0.144.0`, on the same machine. `doctor codex` reads the first and
+  the hermetic floor reads the second, so a run can pass the pre-flight and report off-pin from its
+  own record — which is what the CX-M2 live run did. The pin is not widened to paper over it; the
+  reader warns.

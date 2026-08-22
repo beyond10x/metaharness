@@ -26,7 +26,7 @@
 //! |---|---|
 //! | spec → launch plan → transcript → events → audit | **built**, and exercised end to end through [`ScriptedRunner`] |
 //! | driving the real vendor binary | **built.** [`Metaharness::start`] spawns it through [`SpawnRunner`], and the `PreToolUse` hook it installs answers over a real channel |
-//! | `Kind::Codex` | **CX-M1**: the rollout reader, declared capabilities, doctor pin and C2 vectors exist; `run codex` is refused by name until a driven spawn (CX-M2) |
+//! | `Kind::Codex` | **built (CX-M2).** `metaharness run codex -p "…"` drives a real `codex exec` into a scratch `CODEX_HOME`, tails the session rollout for events, and answers a blocking `PreToolUse` hook per call. One live run proved the deny: the vendor's own record says `Command blocked by PreToolUse hook` with empty output |
 //! | `--frame <file>` | **built** (amendment a5): a sealed `metaharness.frame/1` document, resolved by the library at start, refused by name when unreadable, untagged, misshapen or digest-broken |
 //! | `--tool-surface owned` | **refused.** Strategy C means metaharness implements the tools itself, and per-step re-listing is unverified vendor behaviour |
 //!
@@ -54,6 +54,8 @@ mod refusal;
 mod run;
 mod scripted;
 mod spawn;
+mod spawn_codex;
+mod spawn_codex_vectors;
 mod spawn_vectors;
 mod vectors;
 
@@ -87,10 +89,13 @@ pub use scripted::{
     ScriptStep, ScriptedLog, ScriptedProcess, ScriptedRunner, ScriptedSeam, ScriptedSeams,
 };
 pub use spawn::{HookChannel, SpawnRunner, SpawnedProcess};
-// The seam's neutral traits live in the protocol crate and its Claude half in the
-// adapter crate; both are re-exported here so an embedder needs one import.
+pub use spawn_codex::{CodexHookChannel, CodexProcess, CodexSpawnRunner};
+// The seam's neutral traits live in the protocol crate and each vendor's half in that vendor's
+// adapter crate; all of them are re-exported here so an embedder needs one import.
 pub use metaharness_claude::{ClaudeSeam, ClaudeSeams};
+pub use metaharness_codex::{CodexSeam, CodexSeams};
 pub use metaharness_protocol::{HarnessSeam, SeamFactory};
+pub use spawn_codex_vectors::spawn_vectors as codex_spawn_vectors;
 pub use spawn_vectors::spawn_vectors;
 pub use vectors::{all_passed, capabilities, conformance_vectors, control_vectors};
 

@@ -2,6 +2,15 @@
 //!
 //! Every test here is named as the property it holds, because a test called `test_run_2` tells
 //! a later reader nothing about which guarantee they just broke.
+//!
+//! # No test in this file may start a session
+//!
+//! [`Metaharness::start`] spawns a real vendor binary and bills a real account — `claude` since
+//! M2 and `codex` since CX-M2. Every `start(…)` below either hands in a
+//! [`metaharness::ScriptedRunner`] (free, no process, no model) or is a **refusal raised before
+//! the spawn**, and `no_start_in_this_file_can_reach_a_spawn` holds that line mechanically over
+//! this file's own source. Paid runs live in `tests/live.rs` and `tests/live_codex.rs`, behind
+//! `METAHARNESS_LIVE=1`.
 
 use metaharness::protocol::{
     Command, CommandOutcome, CredentialSource, DecidedBy, Decision, DecisionMode, Digest, Event,
@@ -78,14 +87,60 @@ fn names(run: &Run) -> Vec<&'static str> {
 
 // ---------------------------------------------------------------- refusals, all exit 2
 
+/// The interlock, over this file's own source.
+///
+/// `Metaharness::start` is the **real** spawner on both adapters now. A call to it here is only
+/// free if the very next thing the test does is `expect_err` — that is, if the run is refused
+/// before a process exists. A call whose result is unwrapped is a call that spawned, and this test
+/// refuses to let one in.
 #[test]
-fn a_codex_run_is_refused_by_name_because_nothing_spawns_codex_yet() {
+fn no_start_in_this_file_can_reach_a_spawn() {
+    let source = include_str!("run_loop.rs");
+    // Split so the needle never appears whole in this file: a guard that matched its own source
+    // would report itself and hide the line it exists to find.
+    let needle = concat!(".start(", "Input::");
+    let lines: Vec<&str> = source.lines().collect();
+    for (index, line) in lines.iter().enumerate() {
+        // `start_with_clock` and `start_refusals` are different functions and are free; the
+        // argument is what pins this to the spawning one.
+        if !line.contains(needle) {
+            continue;
+        }
+        let next = lines
+            .get(index + 1)
+            .map(|line| line.trim())
+            .unwrap_or_default();
+        assert!(
+            next.starts_with(".expect_err("),
+            "a start whose result is not an expected refusal spawns the vendor and bills for it: \
+             {line}"
+        );
+    }
+}
+
+/// **Since CX-M2 `Kind::Codex` spawns a real, paid `codex exec`.** So the codex refusal this file
+/// may assert for free is a *pre-spawn* one, and this is it: a run with no prompt is a paid call
+/// for no observation, and the adapter says so before it starts anything.
+#[test]
+fn a_codex_run_with_no_prompt_is_refused_before_anything_is_spawned() {
     let refusal = Metaharness::new(Kind::Codex)
         .start(Input::FromSpec)
-        .expect_err("CX-M1 reads rollouts; nothing spawns codex");
-    assert!(matches!(refusal, Refusal::NotInThisMilestone { .. }));
-    assert!(refusal.to_string().contains("codex"), "{refusal}");
-    assert!(refusal.to_string().contains("CX-M2"), "{refusal}");
+        .expect_err("a run with nothing to do is refused");
+    assert!(matches!(refusal, Refusal::Launch { .. }), "{refusal}");
+    assert!(refusal.to_string().contains("no prompt"), "{refusal}");
+}
+
+/// An option `codex exec` cannot express is refused **by name** and never dropped, and this
+/// refusal is also free: it is raised while the launch is being planned, before the spawn.
+#[test]
+fn an_option_the_codex_surface_cannot_carry_is_refused_by_name() {
+    let refusal = Metaharness::new(Kind::Codex)
+        .with_prompt("x")
+        .with_max_turns(3)
+        .start(Input::FromSpec)
+        .expect_err("codex exec has no turn ceiling");
+    assert!(matches!(refusal, Refusal::Launch { .. }), "{refusal}");
+    assert!(refusal.to_string().contains("--max-turns"), "{refusal}");
 }
 
 #[test]
@@ -156,9 +211,15 @@ fn an_owned_tool_surface_is_refused_because_metaharness_does_not_implement_the_t
 fn a_bad_spec_is_refused_before_anything_is_spawned() {
     let refusal = Metaharness::new(Kind::Codex)
         .with_frame_file("x.yaml")
+        .with_prompt("this must never reach a spawn")
         .start(Input::FromSpec)
         .expect_err("refused");
-    assert!(matches!(refusal, Refusal::NotInThisMilestone { .. }));
+    // The frame document is resolved **above** the kind dispatch, so an unreadable one is a free
+    // refusal on every adapter and the prompt beside it never costs anything.
+    assert!(
+        matches!(refusal, Refusal::FrameUnreadable { .. }),
+        "{refusal}"
+    );
 }
 
 #[test]
