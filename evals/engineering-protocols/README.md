@@ -10,6 +10,22 @@
 > trace adapter exists in the subject repository. Everything below this line is the original
 > document, kept as the record of the eval's design and its paid results.
 
+## Results — the migrated eval, live (2026-08-22)
+
+| run | verdict | census | F13 parity | cost |
+|---|---|---|---|---|
+| 1 | 10 pass, 2 fail | 56 allow / 11 deny (9 surface, 2 allowlist) | census.denied 4 == permission_denials 4 | $1.69 |
+| 2 | **12 pass, 0 fail** | 51 allow / 13 deny (8 surface, 1 store, 2 allowlist, 2 other) | census.denied 7 == permission_denials 7 | $1.77 |
+
+Run 1's two fails were one finding: the denial-step model argued back instead of attempting the
+frontmatter edit, so store integrity went unexercised — the known never-attempted outcome the
+map's own header names. The denial prompt now names the `Edit` tool and forbids self-refusal,
+and run 2 exercised every guard: store integrity denied the hand edit, the driven surface denied
+the shell routes, the allowlist refused `ToolSearch`/`Agent` by name, zero forged fields, the
+store validated, and the run paused at the operator step. These are the first live proofs of the
+post-migration stack: ask mode, sealed frame documents, and the driver's own per-call policy,
+with no shell hook anywhere.
+
 # Plugin eval
 
 A repeatable, inspectable check that the planning plugin actually teaches an agent to plan: a
