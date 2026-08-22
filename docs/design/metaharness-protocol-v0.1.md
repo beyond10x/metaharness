@@ -562,9 +562,13 @@ One JSON object per file:
 - every § 5.1 field, `digest` included, spelled exactly as the wire spells them.
 
 **The digest is required to describe the contents.** It is SHA-256, hex, over the compact JSON
-serialization of the frame object with the `digest` and `format` fields absent and object keys
-sorted lexicographically at every level (which is `serde_json`'s default map order — an external
-producer needs no library of ours, only that rule). A document whose digest is absent, stale or
+serialization of the frame object with the `digest` and `format` fields absent, object keys
+sorted lexicographically at every level (which is `serde_json`'s default map order), and the
+`operations` list sorted by its `op` name — then by `server` and `tool` for `mcp.call`. The
+ordering rule is part of the format because the first cross-repository document failed on
+exactly this: the enum's derived order was the canonical one, and no producer outside this
+workspace could have known it. An external producer needs no library of ours, only these two
+rules. A document whose digest is absent, stale or
 wrong is **refused, never resealed**: an unsealed frame cited by digest downstream would pin
 nothing, and a resealing consumer would repair exactly the mutation the digest exists to catch.
 

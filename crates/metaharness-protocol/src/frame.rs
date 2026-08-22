@@ -123,7 +123,7 @@ pub enum Handoff {
 /// adapter renders them into vendor tool names and **never re-decides** what an admission
 /// implies — a second harness that decided `file.write` admitted a shell would be a weakening
 /// the protocol had no way to notice.
-#[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(tag = "op", rename_all = "snake_case")]
 pub enum Operation {
     /// Read a file.
@@ -186,6 +186,21 @@ impl Operation {
         Operation::TaskTodo,
     ];
 
+    /// The key an operation sorts by: its wire name, then the MCP coordinates where there are
+    /// any.
+    ///
+    /// This — not variant order — is [`Operation`]'s `Ord`, and the choice is a wire fact
+    /// (§ 5.5): an [`OperationSet`] serializes in this order, the sealed digest is over that
+    /// serialization, and *"operations sorted by their `op` name"* is a rule an external
+    /// producer can follow without reading this enum. A derived variant order would make the
+    /// canonical form depend on this file.
+    fn sort_key(&self) -> (&'static str, &str, &str) {
+        match self {
+            Operation::McpCall { server, tool } => ("mcp.call", server.as_str(), tool.as_str()),
+            other => (other.name(), "", ""),
+        }
+    }
+
     /// The operation's wire name.
     #[must_use]
     pub fn name(&self) -> &'static str {
@@ -202,6 +217,18 @@ impl Operation {
             Operation::TaskTodo => "task.todo",
             Operation::McpCall { .. } => "mcp.call",
         }
+    }
+}
+
+impl Ord for Operation {
+    fn cmp(&self, other: &Self) -> std::cmp::Ordering {
+        self.sort_key().cmp(&other.sort_key())
+    }
+}
+
+impl PartialOrd for Operation {
+    fn partial_cmp(&self, other: &Self) -> Option<std::cmp::Ordering> {
+        Some(self.cmp(other))
     }
 }
 
@@ -729,6 +756,28 @@ mod tests {
             sealed.render_instruction().contains(sealed.digest.as_str()),
             "the rendered frame names its digest"
         );
+    }
+
+    /// The set's iteration order is the document's canonical order, and it is the wire-name
+    /// order — a rule an external producer can follow — not the enum's variant order, which
+    /// nobody outside this file can see. The first cross-repository document failed on exactly
+    /// this.
+    #[test]
+    fn operations_iterate_in_wire_name_order_not_variant_order() {
+        let set = OperationSet::of([
+            Operation::Shell,
+            Operation::FileRead,
+            Operation::DirList,
+            Operation::McpCall {
+                server: "a".into(),
+                tool: "b".into(),
+            },
+        ]);
+        let names: Vec<String> = set
+            .iter()
+            .map(|operation| operation.name().to_string())
+            .collect();
+        assert_eq!(names, ["dir.list", "file.read", "mcp.call", "shell"]);
     }
 
     // ------------------------------------------------------------ the on-disk document
