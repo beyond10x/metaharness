@@ -21,9 +21,12 @@
 //! | `2` | metaharness could not do its job. **Never a verdict about the run** |
 //! | `3` | nobody found out — a gating row is `unk`, or the harness died without a record |
 
+use std::sync::mpsc::{Receiver, RecvTimeoutError};
+use std::time::Duration;
+
 use clap::{Args, Parser, Subcommand};
-use metaharness::protocol::{Kind, RunSpec, VectorOutcome};
-use metaharness::{Input, Metaharness, Refusal, RunExit};
+use metaharness::protocol::{Kind, RunSpec, VectorOutcome, parse_command_line};
+use metaharness::{Input, Metaharness, ProcessAuditor, Refusal, Run, RunExit};
 
 /// One interface to many agent harnesses.
 #[derive(Parser, Debug)]
@@ -141,24 +144,143 @@ pub fn execute(cli: Cli) -> i32 {
         }),
         Verb::Audit(_) => refuse(&Refusal::NotInThisMilestone {
             verb: "audit",
-            missing: "an event stream reader for a transcript metaharness did not produce, \
-                      which arrives with the real spawner",
+            // Not the spawner any more — that exists. What is missing is the launch facts the
+            // hermetic floor is evaluated against (the planned cwd, the declared plugins, the
+            // adapter's pin), which a transcript metaharness did not launch cannot carry.
+            missing: "the launch facts the hermetic floor compares a record against, which a \
+                      transcript metaharness did not itself launch does not carry",
         }),
-        Verb::Doctor(_) => refuse(&Refusal::NotInThisMilestone {
-            verb: "doctor",
-            missing: "the vendor binary, which this build never spawns",
-        }),
+        Verb::Doctor(args) => doctor(args.kind),
     }
 }
 
-/// `run` — the whole point, and the one verb this build cannot finish.
+/// How long the loop waits on a steering command before it looks at the run again.
+const STEER_POLL: Duration = Duration::from_millis(50);
+
+/// `run` — the whole point: spawn the harness, put its events on stdout, take steering on stdin.
 fn run(spec: RunSpec) -> i32 {
-    match Metaharness::from_spec(spec).start(Input::FromSpec) {
-        Ok(_) => {
-            // Unreachable while there is no spawner, and written as a real branch rather than
-            // an `unreachable!()` so the day the spawner lands, this is the line that changes.
-            eprintln!("the run started and this build has no loop to drive it");
-            RunExit::Broken.code()
+    let mut run = match Metaharness::from_spec(spec).start(Input::FromSpec) {
+        Ok(run) => run,
+        Err(refusal) => return refuse(&refusal),
+    };
+    if let Err(error) = drive(&mut run, &steering()) {
+        // A run that broke mid-flight is exit `2` and not a verdict: metaharness could not do
+        // its job, and the events already printed are what there is to go on.
+        return refuse(&Refusal::Io {
+            detail: error.to_string(),
+        });
+    }
+    verdict(&run)
+}
+
+/// Read steering commands off stdin, on their own thread.
+///
+/// A thread because the loop cannot block on stdin and on the child at the same time, and the
+/// child is the one that must not be kept waiting: **the run clock keeps elapsing while a
+/// decision is pending** (design § 7.6).
+fn steering() -> Receiver<String> {
+    let (sender, receiver) = std::sync::mpsc::channel();
+    std::thread::spawn(move || {
+        let mut line = String::new();
+        loop {
+            line.clear();
+            match std::io::BufRead::read_line(&mut std::io::stdin().lock(), &mut line) {
+                Ok(0) | Err(_) => break,
+                Ok(_) => {
+                    if sender.send(line.trim_end().to_string()).is_err() {
+                        break;
+                    }
+                }
+            }
+        }
+    });
+    receiver
+}
+
+/// Events out, commands in, until the run ends.
+fn drive(run: &mut Run, commands: &Receiver<String>) -> std::io::Result<()> {
+    loop {
+        while let Ok(line) = commands.try_recv() {
+            steer(run, &line)?;
+        }
+        // A call is pending and the embedder owes an answer, so the loop waits on **stdin**
+        // rather than on the child: diving back into the run here would spend that call's whole
+        // budget without ever looking for the answer that was already on its way.
+        if !run.pending_calls().is_empty() {
+            match commands.recv_timeout(STEER_POLL) {
+                Ok(line) => {
+                    steer(run, &line)?;
+                    continue;
+                }
+                Err(RecvTimeoutError::Timeout | RecvTimeoutError::Disconnected) => {}
+            }
+        }
+        match run.next_event()? {
+            Some(line) => emit(&line),
+            None => return Ok(()),
+        }
+    }
+}
+
+/// Apply one steering line, and answer it.
+///
+/// A line that will not parse is **not** silently dropped: design D9 says a command that can be
+/// ignored is a control surface that cannot be tested, so the refusal goes out as an event under
+/// the id the caller used, or under `-` when the line was too broken to carry one.
+fn steer(run: &mut Run, line: &str) -> std::io::Result<()> {
+    if line.trim().is_empty() {
+        return Ok(());
+    }
+    match parse_command_line(line) {
+        Ok(parsed) => {
+            run.send_as(parsed.id, parsed.command)?;
+        }
+        Err(error) => {
+            eprintln!("metaharness: the steering line was refused: {error}");
+        }
+    }
+    Ok(())
+}
+
+/// One event line on stdout.
+fn emit(line: &metaharness::protocol::EventLine) {
+    match serde_json::to_string(line) {
+        Ok(json) => println!("{json}"),
+        // An event that cannot be rendered is still an event that happened; saying so on stderr
+        // is better than a stream that silently skips one.
+        Err(error) => eprintln!("metaharness: an event could not be rendered: {error}"),
+    }
+}
+
+/// The floor, the auditor and the exit code.
+fn verdict(run: &Run) -> i32 {
+    if !run.wants_audit() {
+        return run.exit(None).code();
+    }
+    match run.audit(&mut ProcessAuditor) {
+        Ok(report) => {
+            // Always printed, and on stderr so it never mixes into the event stream a consumer
+            // is parsing. A report that hides "0 denials" reads as clean when it may mean
+            // nothing was ever attempted (design § 9.4).
+            eprintln!("{}", report.render());
+            run.exit(Some(&report)).code()
+        }
+        Err(refusal) => refuse(&refusal),
+    }
+}
+
+/// `doctor` — the installed vendor version against the adapter's pin, for free.
+fn doctor(kind: Kind) -> i32 {
+    match metaharness::installed(kind) {
+        Ok(installed) => {
+            println!("{}", installed.render());
+            if installed.on_pin() {
+                RunExit::Ok.code()
+            } else {
+                // A gap, not a refusal: the question was answered, and the answer is the wrong
+                // version. `2` would say metaharness could not find out.
+                RunExit::Gap.code()
+            }
         }
         Err(refusal) => refuse(&refusal),
     }

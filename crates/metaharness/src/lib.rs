@@ -7,7 +7,7 @@
 //! let mut run = Metaharness::new(Kind::Claude)
 //!     .with_decisions(DecisionMode::Ask)
 //!     .with_prompt("tidy the imports")
-//!     .start(Input::FromSpec)?;                 // exit 2 in this build: there is no spawner yet
+//!     .start(Input::FromSpec)?;                 // spawns the real `claude`
 //!
 //! while let Some(line) = run.next_event()? {
 //!     if let Event::ToolRequested { call_id, decision_required: true, .. } = &line.event {
@@ -25,7 +25,7 @@
 //! | | |
 //! |---|---|
 //! | spec → launch plan → transcript → events → audit | **built**, and exercised end to end through [`ScriptedRunner`] |
-//! | driving the real vendor binary | **not built.** [`Metaharness::start`] refuses with [`Refusal::NoSpawner`], naming what is missing. A refusal, never a `todo!()` |
+//! | driving the real vendor binary | **built.** [`Metaharness::start`] spawns it through [`SpawnRunner`], and the `PreToolUse` hook it installs answers over a real channel |
 //! | `Kind::Codex` | **no adapter.** Refused by name at start |
 //! | `--frame <file>` | **refused.** The on-disk frame format is owed and is not in v0.1; [`Metaharness::with_frame`] takes an in-memory value instead |
 //! | `--tool-surface owned` | **refused.** Strategy C means metaharness implements the tools itself, and per-step re-listing is unverified vendor behaviour |
@@ -48,10 +48,13 @@ mod audit;
 mod auditor;
 mod builder;
 mod clock;
+mod doctor;
 mod process;
 mod refusal;
 mod run;
 mod scripted;
+mod spawn;
+mod spawn_vectors;
 mod vectors;
 
 /// The harness-neutral wire: the events, the commands and the one options type.
@@ -70,6 +73,7 @@ pub use auditor::{
 };
 pub use builder::{Input, Metaharness, check_spec, start_refusals};
 pub use clock::{Clock, ManualClock, SystemClock};
+pub use doctor::{Installed, installed};
 pub use process::{
     CredentialCopyView, HarnessProcess, LaunchPlanView, ProcessRunner, copy_credentials,
 };
@@ -82,10 +86,12 @@ pub use run::{
 pub use scripted::{
     ScriptStep, ScriptedLog, ScriptedProcess, ScriptedRunner, ScriptedSeam, ScriptedSeams,
 };
+pub use spawn::{HookChannel, SpawnRunner, SpawnedProcess};
 // The seam's neutral traits live in the protocol crate and its Claude half in the
 // adapter crate; both are re-exported here so an embedder needs one import.
 pub use metaharness_claude::{ClaudeSeam, ClaudeSeams};
 pub use metaharness_protocol::{HarnessSeam, SeamFactory};
+pub use spawn_vectors::spawn_vectors;
 pub use vectors::{all_passed, capabilities, conformance_vectors, control_vectors};
 
 /// The adapter ids this build carries, in the order the CLI lists them.

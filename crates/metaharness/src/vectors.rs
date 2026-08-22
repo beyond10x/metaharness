@@ -440,6 +440,9 @@ pub fn conformance_vectors(kind: Kind) -> Result<Vec<VectorOutcome>, Refusal> {
         Kind::Claude => {
             let mut vectors = metaharness_claude::conformance_vectors();
             vectors.extend(control_vectors());
+            // The spawn half of C3: a real process and the real hook program, still with no
+            // model, no network and no credential.
+            vectors.extend(crate::spawn_vectors::spawn_vectors());
             Ok(vectors)
         }
         Kind::Codex => Err(Refusal::NoAdapter {

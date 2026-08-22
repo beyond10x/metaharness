@@ -111,19 +111,11 @@ fn an_owned_tool_surface_is_refused_because_metaharness_does_not_implement_the_t
     assert_eq!(refusal, Refusal::ToolSurfaceOwned);
 }
 
+/// A caller with two problems should learn about the one they can fix — and should learn it
+/// **before** anything is spawned, because a refusal that costs a process start is a refusal that
+/// costs money on the run after this one.
 #[test]
-fn starting_against_the_real_binary_refuses_and_names_the_missing_spawner() {
-    let refusal = Metaharness::new(Kind::Claude)
-        .with_prompt("hello")
-        .start(Input::FromSpec)
-        .expect_err("there is no spawner in this build");
-    assert_eq!(refusal, Refusal::NoSpawner);
-    assert!(refusal.to_string().contains("ScriptedRunner"));
-}
-
-#[test]
-fn a_bad_spec_is_refused_before_the_missing_spawner_is_mentioned() {
-    // A caller with two problems should learn about the one they can fix.
+fn a_bad_spec_is_refused_before_anything_is_spawned() {
     let refusal = Metaharness::new(Kind::Codex)
         .with_frame_file("x.yaml")
         .start(Input::FromSpec)

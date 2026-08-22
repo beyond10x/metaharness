@@ -3,6 +3,16 @@
 //! Every refusal is asserted to be exit `2` **and** to name what is missing. A refusal that only
 //! said "unsupported" would make the reader open the source to find out what to install, and a
 //! silent success would be worse than either.
+//!
+//! # No test in this file may start a session
+//!
+//! `metaharness run claude -p …` now **spawns the real binary and bills a real account.** This
+//! file used to assert that it exited `2` because there was no spawner; when the spawner landed
+//! that assertion stopped being free, and the suite quietly spent money on two runs before
+//! anybody noticed. So: every `run` invocation here is one that is refused **before** the spawn —
+//! a kind with no adapter, a frame document, an owned tool surface — and
+//! `no_run_in_this_file_can_reach_a_spawn` holds that line mechanically. Paid runs live in
+//! `metaharness/tests/live.rs`, behind `METAHARNESS_LIVE=1`, and are never part of `task check`.
 
 use clap::Parser as _;
 use metaharness_cli::{Cli, execute};
@@ -11,9 +21,45 @@ fn code_of(argv: &[&str]) -> i32 {
     execute(Cli::try_parse_from(argv).expect("the command line parses"))
 }
 
+/// The one `run` refusal that is still free to assert: a spec fault is caught before the spawn,
+/// so a caller with a bad spec never pays to find out.
 #[test]
-fn run_exits_two_because_this_build_has_no_spawner() {
-    assert_eq!(code_of(&["metaharness", "run", "claude", "-p", "hello"]), 2);
+fn a_run_with_a_bad_spec_exits_two_before_anything_is_spawned() {
+    assert_eq!(
+        code_of(&[
+            "metaharness",
+            "run",
+            "claude",
+            "--frame",
+            "f.yaml",
+            "-p",
+            "x"
+        ]),
+        2
+    );
+}
+
+/// The interlock, over this file's own source.
+///
+/// A prompt is what turns `run` into a session, so an argv that carries `-p` and is not refused
+/// on the way in is an argv that spends money. This test reads the file it lives in and refuses
+/// to let one back.
+#[test]
+fn no_run_in_this_file_can_reach_a_spawn() {
+    let source = include_str!("verbs.rs");
+    for line in source.lines() {
+        // An argv line names the binary too, which is what keeps this test from matching its
+        // own source.
+        let is_argv = line.contains(r#""metaharness""#)
+            && line.contains(r#""run""#)
+            && line.contains(r#""-p""#);
+        if is_argv {
+            assert!(
+                line.contains(r#""--frame""#) || line.contains(r#""codex""#),
+                "this argv would spawn the vendor and bill for it: {line}"
+            );
+        }
+    }
 }
 
 #[test]
@@ -104,17 +150,30 @@ fn audit_refuses_honestly_and_names_what_it_is_waiting_for() {
     );
 }
 
+/// `doctor` answers H9's question for free — it runs `claude --version` and nothing else.
+///
+/// The code is deliberately not asserted to be `0`: that depends on which version is installed
+/// on the machine running the suite, and a test that demanded one would fail on the next release
+/// for the one reason `doctor` exists to report. What is asserted is that it never reports
+/// "nobody found out" about a question it either answered or could not ask.
 #[test]
-fn doctor_refuses_honestly_because_it_needs_the_vendor_binary() {
-    assert_eq!(code_of(&["metaharness", "doctor", "claude"]), 2);
+fn doctor_answers_the_version_question_without_starting_a_session() {
+    let code = code_of(&["metaharness", "doctor", "claude"]);
+    assert!(code == 0 || code == 1 || code == 2, "{code}");
+    assert_ne!(code, 3);
+}
+
+#[test]
+fn doctor_for_a_kind_with_no_adapter_exits_two_by_name() {
+    assert_eq!(code_of(&["metaharness", "doctor", "codex"]), 2);
 }
 
 #[test]
 fn no_verb_ever_exits_one_without_a_verdict_to_contradict() {
     for argv in [
-        vec!["metaharness", "run", "claude", "-p", "x"],
+        // Never `run claude -p …`: that starts a paid session. See this file's own note.
         vec!["metaharness", "run", "codex"],
-        vec!["metaharness", "doctor", "claude"],
+        vec!["metaharness", "run", "claude", "--tool-surface", "owned"],
         vec!["metaharness", "project", "--events", "e.jsonl"],
         vec!["metaharness", "audit", "--transcript", "t.jsonl"],
     ] {

@@ -14,7 +14,8 @@
 //! * **It spawns nothing.** [`plan_launch`] returns the command line, the child environment, the
 //!   settings document, the hook definition and the copy list as *values*, because
 //!   `engineering-protocols` asserts its own argv rather than trusting it *"because every one of
-//!   the failures would be silent"* (design § 8.4 O7).
+//!   the failures would be silent"* (design § 8.4 O7). [`hook_program`] is the same rule applied
+//!   to the seam's executable: the program is a value this crate renders and a caller places.
 //! * **It reads no clock.** Every event's timestamp is the one the vendor recorded, passed
 //!   through, or absent — [`metaharness_protocol::Emission::at`] and
 //!   [`metaharness_protocol::Emission::untimed`] are the only two ways to make one (design D2).
@@ -24,14 +25,17 @@
 //!   ignored in silence; an unrecognised *record* is preserved.
 
 mod bridge;
+mod hook;
 mod launch;
 mod seam;
 mod transcript;
 mod vectors;
 
 pub use bridge::{ClaudeSeam, ClaudeSeams};
+pub use hook::{HOOK_WAIT_SECONDS, HookChannelPaths, hook_program};
 pub use launch::{
-    CredentialCopy, HOOK_TIMEOUT_SECONDS, LaunchContext, LaunchPlan, LaunchRefusal, plan_launch,
+    CredentialCopy, HOOK_TIMEOUT_SECONDS, LaunchContext, LaunchPlan, LaunchRefusal,
+    hook_program_path, plan_launch, settings_path,
 };
 pub use seam::{HookInput, capabilities, parse_hook_input, render_hook_response, render_operation};
 pub use transcript::TranscriptReader;

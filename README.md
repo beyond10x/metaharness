@@ -43,13 +43,25 @@ Two working systems, each of which built half of this and proved it:
 Pre-v1, and the design in `docs/design/` is what is binding — where this code and that document
 disagree, the document is amended rather than the disagreement left in the code.
 
-**M1 is built:** the event and command vocabulary, the workflow frame, the Claude Code adapter's
-launch construction and transcript reading, the run loop with per-call decisions, and `--audit`'s
-built-in hermetic floor. `metaharness capabilities claude`, `metaharness capabilities claude
---render` and `metaharness conformance claude` work today — the last one runs 14 conformance
-vectors with no model, no network and no credential.
+**M2 is built: `metaharness run claude --hermetic -p "…"` drives the real binary end to end.**
+It spawns Claude Code 2.1.239 into a scratch config home, installs a blocking `PreToolUse` hook,
+answers that hook's calls per call, streams the session out as protocol events on stdout, takes
+steering on stdin, retains the raw transcript, and exits on the hermetic floor's verdict.
+`capabilities`, `conformance` and `doctor` work with no model and no credential;
+`metaharness conformance claude` runs **17** vectors that way.
 
-**M1 does not drive the real `claude` binary.** The spawn is behind a trait, the whole path is
-exercised through a scripted process, and `metaharness run` refuses with exit 2 naming what is
-missing rather than pretending. `project`, `audit` and `doctor` refuse the same way, each naming
-what it is waiting for.
+**The seam is real, and it was verified against a paid run.** A frame that admitted no shell was
+given a prompt that asked for one: metaharness denied the call at the hook, the call did not run,
+and *the vendor's own terminal record* listed `Bash` in `permission_denials`. That is the claim
+the whole design exists to be able to make, and it is the one thing no free test tier can reach.
+
+Two findings from that first live run are worth naming, because both were defects in metaharness
+and neither was reachable without a real session: the hermetic floor read the wrong field for
+"was an API key in use", and it treated *"this run pinned no documents"* as *"nobody found out
+whether the documents moved"* — which made `--hermetic strict` unpassable. Both are fixed, both
+are regression-tested, and both are recorded as amendment a4 in the design.
+
+**What is still not built:** `metaharness project` (gated on Q9 — `trace-ir/1` has no reader) and
+`metaharness audit` over a transcript metaharness did not itself launch. Both refuse with exit 2
+naming what they wait for. There is no Codex adapter. The live runs cost money and are behind
+`METAHARNESS_LIVE=1`; they are never part of `task check`.

@@ -59,6 +59,26 @@ const SETTINGS_FILE: &str = "claude-settings.json";
 /// Where the caller must place the executable the `PreToolUse` hook runs.
 const HOOK_FILE: &str = "hooks/pretooluse";
 
+/// Where the argv's `--settings` points, for a caller that has to write the document there.
+///
+/// Published as a function of the scratch root rather than left for the caller to reconstruct
+/// from the argv, because a caller that rebuilt the path by string-matching `--settings` would
+/// be a second place that decides where the settings file lives — and the one thing that must
+/// not vary about it is that it is **outside** [`LaunchPlan::config_home`] (see [`SETTINGS_FILE`]).
+#[must_use]
+pub fn settings_path(scratch_root: &Path) -> PathBuf {
+    scratch_root.join(SETTINGS_FILE)
+}
+
+/// Where the caller must place the `PreToolUse` executable, which is the path the hook
+/// definition already names.
+///
+/// The program itself is [`crate::hook_program`]; this is only where it goes.
+#[must_use]
+pub fn hook_program_path(scratch_root: &Path) -> PathBuf {
+    scratch_root.join(HOOK_FILE)
+}
+
 /// The environment variables copied from the caller's own, when present.
 ///
 /// An allowlist and not a denylist, because a denylist is a list of the leaks somebody thought

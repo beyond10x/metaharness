@@ -1,10 +1,12 @@
 //! The spawn seam.
 //!
 //! Everything between "metaharness decided what to launch" and "a line came back" is behind
-//! this trait pair, for one reason: **a real spawner is not in M1**, and the whole
-//! spec → plan → transcript → events → audit path still has to be exercised. A `todo!()` there
-//! would have made the missing half invisible until somebody ran the binary; a seam makes the
-//! refusal a value ([`crate::StartRefusal::NoSpawner`]) and the rest of the path a test.
+//! this trait pair. It began as the seam that let M1 exercise the whole
+//! spec → plan → transcript → events → audit path with no vendor binary; it stays because the
+//! two implementations are worth having side by side. [`crate::SpawnRunner`] starts the real
+//! process, [`crate::ScriptedRunner`] plays a recorded one, and **every C3 control vector runs
+//! against the second** — which is what keeps the safety argument free of a model, a network and
+//! a credential.
 //!
 //! The view is borrowed and carries no adapter type, so a second adapter's plan can be launched
 //! by the same runner without this trait learning either adapter's name.
@@ -43,6 +45,24 @@ pub struct LaunchPlanView<'a> {
     pub cwd: &'a Path,
     /// The credential copies to perform **at this spawn**.
     pub credential_copies: &'a [CredentialCopyView<'a>],
+    /// Where the child's control seam meets metaharness.
+    ///
+    /// Named here rather than derived from [`LaunchPlanView::cwd`] because a runner that
+    /// reconstructed it by walking up from the working directory would be a second place that
+    /// decides where the channel lives, and the two could disagree by one directory without
+    /// anything failing loudly — the seam would simply never be consulted, which is the failure
+    /// § 7.8 exists for.
+    ///
+    /// The layout under it is the adapter's; nothing in this crate reads its contents through
+    /// this field.
+    pub decision_channel: &'a Path,
+    /// Where the raw vendor bytes are retained as they are read (design § 8.4 O8).
+    ///
+    /// The runner writes them, because it is the only party that sees the stream: three things
+    /// depend on the file existing and none of them works without it — `transcript_digest` and
+    /// `source_line` in the projection, the § 4.4 cross-check, and § 9.4's auditor, which reads
+    /// a transcript and not an event stream.
+    pub transcript: &'a Path,
 }
 
 /// Start the planned child.

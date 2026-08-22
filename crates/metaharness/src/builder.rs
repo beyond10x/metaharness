@@ -187,16 +187,23 @@ impl Metaharness {
 
     /// Start against the real vendor binary.
     ///
+    /// The default face: it spawns `claude`, installs the `PreToolUse` seam, and answers that
+    /// seam's calls over the channel [`crate::HookChannel`] describes. A caller that wants a
+    /// different process — the scripted fake every C3 vector runs against — uses
+    /// [`Metaharness::start_with`], which is the same function with the runner supplied.
+    ///
     /// # Errors
     ///
-    /// Always [`Refusal::NoSpawner`] in this build, after every other refusal has been checked
-    /// so the caller learns about a bad spec before it learns about the missing spawner. The
-    /// refusal is a tested behaviour rather than a `todo!()`, because a panic here would look
-    /// like a crash and exit `2` is what "metaharness could not do its job" means.
+    /// Every refusal a start can raise, checked in the order that tells a caller the most
+    /// useful thing first: the spec's own faults before the machine's. A vendor binary that is
+    /// absent or unrunnable arrives here as [`Refusal::Io`], which is exit `2` — metaharness
+    /// could not do its job, never a verdict about the run.
     pub fn start(self, input: Input) -> Result<Run, Refusal> {
-        let spec = self.applied(input);
-        check_spec(&spec)?;
-        Err(Refusal::NoSpawner)
+        self.start_with(
+            input,
+            &mut crate::spawn::SpawnRunner::new(),
+            &mut metaharness_claude::ClaudeSeams,
+        )
     }
 
     /// Start against a runner the caller supplies, with the real clock.
@@ -259,6 +266,13 @@ impl Metaharness {
             }
         })?;
 
+        // The plan names four pieces of I/O and performs none of them, because a pure function
+        // that wrote to a disk would be a pure function nobody could test. This is where they
+        // happen, once, before any runner sees the plan — so the scripted process and the real
+        // one are handed a world that was built the same way.
+        let channel = crate::spawn::HookChannel::create(scratch.path())?;
+        materialise(&plan, scratch.path(), &channel)?;
+
         let transcript = TranscriptRef {
             path: Some(transcript_path.display().to_string()),
             digest: None,
@@ -284,6 +298,8 @@ impl Metaharness {
             env: &plan.env,
             cwd: &plan.cwd,
             credential_copies: &copies,
+            decision_channel: channel.root(),
+            transcript: &transcript_path,
         };
         let process = runner.start(&view)?;
 
@@ -330,6 +346,67 @@ impl Metaharness {
         }
         self.spec
     }
+}
+
+/// Perform the four pieces of I/O the launch plan names and deliberately does not do.
+///
+/// | what | why it is here and not in the plan |
+/// |---|---|
+/// | the config home and the temporary directory, empty | H1a's scratch home is a directory, and a directory has to be made |
+/// | the settings document at the path the argv's `--settings` names | the plan decides its contents; writing it is I/O |
+/// | the `PreToolUse` executable at the path the hook definition names | the definition is a value; the program is a file, and **the definition without the file is a seam that is never consulted** |
+/// | the hook program's executable bit | a hook the vendor cannot execute fails as a hook that did not fire, which looks exactly like a run where nothing was attempted |
+///
+/// The settings document goes **outside** the config home, which is the placement the adapter
+/// chose so it would not have to know the answer to Q14 — and the answer, read from a live run
+/// on 2.1.239, is that the hook does fire from there under `--setting-sources ""`.
+fn materialise(
+    plan: &metaharness_claude::LaunchPlan,
+    scratch_root: &std::path::Path,
+    channel: &crate::spawn::HookChannel,
+) -> Result<(), Refusal> {
+    std::fs::create_dir_all(&plan.config_home)?;
+    std::fs::create_dir_all(scratch_root.join("tmp"))?;
+
+    std::fs::write(
+        metaharness_claude::settings_path(scratch_root),
+        serde_json::to_string_pretty(&plan.settings)
+            .map_err(|error| Refusal::Io {
+                detail: format!("the settings document could not be rendered: {error}"),
+            })?
+            .as_bytes(),
+    )?;
+
+    let program_path = metaharness_claude::hook_program_path(scratch_root);
+    if let Some(parent) = program_path.parent() {
+        std::fs::create_dir_all(parent)?;
+    }
+    let program = metaharness_claude::hook_program(&metaharness_claude::HookChannelPaths::at_root(
+        channel.root(),
+    ));
+    std::fs::write(&program_path, program.as_bytes())?;
+    make_executable(&program_path)?;
+    Ok(())
+}
+
+/// Give the hook program its executable bit.
+///
+/// Separated because it is the one step with a platform in it, and because forgetting it is a
+/// silent failure: the vendor reports a hook that would not run the same way it reports a hook
+/// that had nothing to say.
+#[cfg(unix)]
+fn make_executable(path: &std::path::Path) -> Result<(), Refusal> {
+    use std::os::unix::fs::PermissionsExt;
+    let mut permissions = std::fs::metadata(path)?.permissions();
+    permissions.set_mode(0o700);
+    std::fs::set_permissions(path, permissions)?;
+    Ok(())
+}
+
+/// The same, where there is no such bit.
+#[cfg(not(unix))]
+fn make_executable(_path: &std::path::Path) -> Result<(), Refusal> {
+    Ok(())
 }
 
 /// Every command this run's configuration will need that the adapter refuses.

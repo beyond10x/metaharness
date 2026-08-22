@@ -13,6 +13,11 @@
 > needed and did not have (V19–V21) and one new question (**Q14**).
 > **Amendment a3, 2026-08-22**, from building the run loop: a **fourth decision value**,
 > `abstain`, and four choices the document did not decide (§ 6, § 8.5, § 9.4).
+> **Amendment a4, 2026-08-22**, from the real spawner and the **first live runs**: three driven
+> rows (**V22–V24**) that close **Q16** and answer **Q14**; two corrections to § 8.1's floor
+> (**H4** and **H10**) that a live opening record found and no free tier could have; and one new
+> question (**Q17**). Marked at each point of change, on the same rule as the review's
+> corrections.
 > Both marked at each point of change, on the same rule as the review's corrections.
 > **Audience:** whoever reviews this for acceptance, and whoever builds it afterwards.
 > **Sources studied:** `former organization/engineering-protocols` (public, read-only), and a private
@@ -243,6 +248,16 @@ larger number, and mixing the two silently is how a figure becomes unreproducibl
 | V19 | **`--output-format stream-json` under `--print` requires `--verbose`.** Without it the CLI exits before the session starts: *"Error: When using --print, --output-format=stream-json requires --verbose"* | binary strings, **including the guard itself**: `if(c.outputFormat==="stream-json"&&!c.verbose){process.stderr.write(…)}`. Found by building the adapter: § 9.2's argv would not have run (amendment a2) |
 | V20 | **`--setting-sources ""` is the vendor's own defined no-sources case**, not an accident of parsing: the parser returns the empty list for the empty string | binary strings: `function R8u(e){if(e==="")return[];…}`, and its caller is the flag's own handler — `function Sn0(e){try{let t=R8u(e);…}catch(t){…"Invalid --setting-sources flag"…}}`. This upgrades H2/V12 from *the flag exists* to *the empty value is defined* (amendment a2) |
 | V21 | **2.1.239 offers no directory-listing tool.** `Glob` and `Grep` are present; `LS` is not | matching lines of `strings -n 3` (a shorter run than V1's `-n 6`, because `LS` is two characters — the shorter run is stated here rather than left to the reader): `LS` **0**, `Glob` 20, `Grep` 16, `Read` 35, `Write` 24, `Edit` 21. So the neutral operation `dir.list` renders to `Glob` (amendment a2) |
+
+**Amendment a4 — three rows that are driven rather than read.** The first live runs produced
+these, and they are the strongest evidence in this section: each was observed in a session that
+was actually paid for.
+
+| # | claim | how known |
+|---|---|---|
+| V22 | **The `PreToolUse` hook input carries `tool_use_id`, and it is the same string the transcript's `tool_use` block calls `id`.** So a decision correlates to exactly the hook process holding that call | **driven.** a live 2.1.239 run's hook received a `tool_use_id` equal, byte for byte, to the `id` on the `tool_use` block of the assistant record the same session had already written to stdout, and the binary builds the payload as `{…, hook_event_name:"PreToolUse", tool_name:e, tool_input:r, tool_use_id:t}` with the same `t` as its `toolUseID`. **This closes Q16** |
+| V23 | **The assistant record carrying a `tool_use` block reaches stdout *before* the hook runs** | **driven.** A hook that recorded how many bytes of stdout had already been flushed when it fired reported **5504**, and byte 5504 is exactly the end of the assistant record carrying that call. The seam does not depend on the ordering — a decision may be parked before its request arrives — but it is why the common path never waits |
+| V24 | **A `--settings` file *outside* `CLAUDE_CONFIG_DIR` still loads its hooks under `--setting-sources ""`** | **driven.** The hook fired in a live run configured exactly that way. **This answers Q14** in the direction the adapter had already chosen, so nothing moves |
 
 A string in a binary is weaker than a driven call. Every row above is labelled with its method, and
 § 12 lists what would upgrade the weak ones.
@@ -811,6 +826,28 @@ Two more rows deserve their reasons in full, because both were bought with a rea
   hooks"* — which on this design is the control seam — and it also switches authentication to
   API-key-only, which silently breaks H4.
 
+**Amendment a4 — H4 and H10 were both wrong in a way only a live run could show.** The first
+hermetic run against the real binary failed its own floor, and neither failure was the run's:
+
+* **H4 compared the wrong thing.** The row asks *"no API key unless declared"*, and the evidence
+  is the opening record's `apiKeySource`. The build read that field looking for the word the spec
+  used — `login` for an operator login — and 2.1.239 writes **`"none"`**, because under an
+  operator login there is no API *key*: the session authenticates from the copied credential
+  file. So every hermetic operator-login run would have reported a gap on the one row it most
+  clearly satisfied. The row now turns on **whether the record names a key at all**, which is
+  what H4 actually asserts and is robust to the vendor's choice of word.
+* **H10 made `--hermetic strict` unpassable for any run that pins nothing.** A run that copied no
+  input tree has **no governing document that could move under it**, so the row is *satisfied*,
+  not unknown. Reading it as `unk` failed `metaharness run claude --hermetic strict -p "…"` —
+  this document's own § 9.2 example — for having nothing to pin. This is finding **F3**'s shape a
+  second time, and it is corrected the same way: absence of evidence is not a property, but the
+  copied tree is *metaharness's own launch input*, so whether there is one is something
+  metaharness knows for certain rather than something it failed to observe.
+
+Both are recorded here rather than fixed silently because they are the argument for the C4 tier
+existing at all: **there is no real opening record below it**, so no free vector could have
+caught either one.
+
 **H6 gained a lifetime, and the first draft treated a credential as a file rather than as a token**
 (amendment a1). A governed run on 2026-08-22 died an hour in: *"Failed to authenticate: OAuth
 session expired and could not be refreshed"*. The copy in the scratch home was valid when the run
@@ -883,6 +920,22 @@ that wire reports a **C2** defect under a **C3** name, and the two tiers exist t
 The vendor wire is covered by C2 against the real transcript reader. What is therefore **not**
 proven at C3 in M1: that the vendor's own control channel carries a decision. That needs the real
 spawner, and it is named here rather than implied by a green tier.
+
+**Amendment a4 — C3 gained a second kind of vector, and C4 exists now.** Three **spawn vectors**
+join the seven control vectors. They drive the real [`SpawnRunner`] and the **real hook program**
+against a *fake vendor* — a shell script that prints stream-json and then runs the hook the launch
+installed — and they cover what a scripted process structurally cannot: that the installed program
+blocks and a decision reaches it through a second process, that the credential is copied at
+**every** spawn and not once per run (a1), and that the raw bytes are retained as they are read
+(O8). They remain free: `/bin/sh`, no model, no network, no credential.
+
+**C4 is written and it is gated twice.** `crates/metaharness/tests/live.rs` carries the two runs
+this tier is for — a hermetic run judged against its own floor, and a deliberate denial the model
+cannot route around. Both are `#[ignore]`d **and** behind `METAHARNESS_LIVE=1`, because a paid
+tier that a default gate could reach is a paid tier that bills an account by accident. That is not
+hypothetical: it happened once during the M2 build, when a CLI test that asserted `run` exited `2`
+kept running after `run` learned to spawn, and two sessions were billed before anybody noticed.
+The interlock that stops it recurring is a test over the test file's own source.
 
 C3 is the tier that carries the safety argument, and it is free. The pattern is the prior art's
 portable lifecycle vectors (§ 2.6 item 5), and the reason to copy it is that it makes the adapter's
@@ -1239,12 +1292,13 @@ is a row nobody intends to close.
 | Q8 | Is the Codex rollout JSONL adaptable to the same IR with no loss? (§ 2.5: no stability guarantee, drift observed) | project a corpus of rollout files and diff the census against `codex exec --json` | the Codex adapter's projection is partial and says which families it cannot fill |
 | Q9 | **Can a `trace-ir/1` document be read back by anything?** It is `Serialize`-only, its identity fields are `&'static str`, and no schema is published | a change **in `engineering-protocols`**: `Deserialize` on `trace-domain`'s IR types plus a generated `trace-ir.schema.json` | D6a stands as written — the projection is an in-process value and the auditor reads the raw transcript. Nothing in v0.1 depends on the document form |
 | Q10 | **What does Claude Code do when a `type: command` `PreToolUse` hook exceeds its timeout?** V7's fail-closed string is the SDK hook-*callback* path | one `claude -p` run with an on-disk hook that sleeps past its declared timeout, reading the transcript for whether the tool ran | § 7.7 rule 2 already fails closed from metaharness's side; the answer only says whether the vendor agrees |
-| Q11 | **Does matcher `""` behave as documented, and what does a child process per tool call cost?** The measured parity runs used two narrow matchers | one `claude -p` run with matcher `""` and a decision callback, counting hook invocations against tool calls and recording added latency | the seam enumerates the offered set instead, and § 7.8's coverage assertion becomes the guard that the enumeration is complete |
+| Q11 | **Does matcher `""` behave as documented, and what does a child process per tool call cost?** The measured parity runs used two narrow matchers. **Partly answered by amendment a4, and deliberately not called closed:** live runs with matcher `""` fired the hook for `Bash` and the deny was honoured — but a single tool is not "all tools", and neither the per-call child-process cost nor the behaviour over `Read`, `Glob`, `Grep`, `WebFetch` and `TodoWrite` was measured | one `claude -p` run with matcher `""` over a prompt that calls several **different** tools, counting hook invocations against tool calls and recording added latency | the seam enumerates the offered set instead, and § 7.8's coverage assertion becomes the guard that the enumeration is complete |
 | Q12 | **Is a hook `allow` honoured for a tool a settings allow-rule would have denied, and in which direction does the conflict resolve?** § 6 takes the grant authority; the resolution order is stated by two log strings and undriven | one run with a hook `allow` against a `deny` rule in `--settings` | metaharness's policy becomes `deny`-only and § 6's grant claim is withdrawn by name |
 | Q13 | **Can the operator's live credential file be shared into a scratch config home — hardlink, bind mount — so the harness's own refresh writes back, without handing the run write access to the operator's credential custody?** And, separately, which record does Claude Code write an expired-OAuth failure into, so `auth.expired` can be read from a field rather than from prose? (amendment a1) | two runs: one with a hardlinked credential file, reading whether a refresh during the run updates the operator's own file and whether a concurrent operator session survives it; one against a deliberately expired token, reading the transcript for the record that carries the failure | option (a) stands alone — the copy is re-taken per spawn, the window is short and not closed, and a session that outlives its token dies with `auth.expired` recorded before `session.ended` |
-| Q14 | **Does a `--settings` file placed inside `CLAUDE_CONFIG_DIR` count as the *user* source, which `--setting-sources ""` has just switched off?** If it does, the hook the seam depends on loads from nowhere and the guard silently stops guarding — the exact failure class § 7.8 exists for. Raised while building the adapter; the vendor string *"userSettings source is disabled (--setting-sources)"* says user settings can be switched off, and says nothing about where an explicit `--settings` path sits in that order (amendment a2) | one `claude -p` run with `--setting-sources ""` and a `--settings` file inside the scratch config home, reading `--include-hook-events` for whether the hook fired at all | nothing is lost: the adapter already places the settings file **outside** the config home, which is the placement that does not have to know the answer |
-| Q15 | **Does the vendor's own control channel actually carry a decision?** M1's C3 vectors drive a neutral scripted seam, not `stream-json` + `control_request` (amendment a3), so the wire itself is exercised only by C2 replay | one scripted fake vendor speaking `stream-json` with a `control_request`, driven through the same seven C3 stimuli | C3's safety argument stands for the metaharness half — correlation, ordering, deadlines, refusal codes — and the vendor half stays a C4 claim |
-| Q16 | **Where does the decision *envelope* belong — the thing that correlates one decision to one `call_id` on the way back to the child?** The adapter publishes the hook-response body and no envelope, because the real hook correlates by *which hook process is answering* and there is no hook process until the real spawner exists (amendment a3) | write the real spawner and the hook program, and read what correlates a response to a call in a driven run | the envelope stays the adapter's, which is where M1 already put it — the point of the row is that today's shape is provisional and was not read off the vendor |
+| Q14 | **Does a `--settings` file placed inside `CLAUDE_CONFIG_DIR` count as the *user* source, which `--setting-sources ""` has just switched off?** If it does, the hook the seam depends on loads from nowhere and the guard silently stops guarding — the exact failure class § 7.8 exists for. Raised while building the adapter; the vendor string *"userSettings source is disabled (--setting-sources)"* says user settings can be switched off, and says nothing about where an explicit `--settings` path sits in that order (amendment a2) | **CLOSED by amendment a4 (V24).** A live run with `--setting-sources ""` and the settings file **outside** the config home fired the hook. The placement the adapter had already chosen is the one that works, so nothing moves. What is still unasked is whether a settings file *inside* the config home would load — and the adapter has no reason to find out | — |
+| Q15 | **Does the vendor's own control channel actually carry a decision?** (amendment a3). **The half that matters is now driven and the row is narrowed rather than closed:** the seam this adapter actually uses — the on-disk `PreToolUse` hook — carried a `deny` to the real 2.1.239 in a live run, the call did not run, and the vendor's own terminal record listed `Bash` in `permission_denials` (amendment a4). What remains unexercised is the *other* channel, `stream-json` + `control_request`, which this adapter does not use and refuses `SHADOWED` rather than trusting | one scripted fake vendor speaking `stream-json` with a `control_request`, driven through the same seven C3 stimuli — needed only if `can_use_tool` is ever adopted as a seam | C3's safety argument stands for the metaharness half — correlation, ordering, deadlines, refusal codes — and the hook half is now a driven C4 claim rather than a pending one |
+| Q16 | **Where does the decision *envelope* belong — the thing that correlates one decision to one `call_id` on the way back to the child?** (amendment a3) | **CLOSED by amendment a4 (V22).** The spawner and the hook program are written, and the answer was read off the vendor: the hook input carries **`tool_use_id`**, which *is* the transcript's `tool_use` block `id` and therefore `Event::ToolRequested`'s `call_id`. The correlation is exact and needs no digest, no ordering assumption and no per-process bookkeeping. **M1's provisional envelope — `{"call_id":…, "response":…}` — turns out to be exactly right, so nothing about it changes.** The one thing that did change is where the rendezvous *name* comes from: the hook process picks its own, publishes its stdin under it, and metaharness matches `tool_use_id` to a call — so the shell parses no JSON | — |
+| Q17 | **Can `session.started` carry the transcript's digest, when the transcript is a file the run is still writing?** § 8.4 O8 says the opening record references the retained bytes **and their digest**, and the opening record is emitted at line 1 of a file whose last line does not exist yet. M2 retains the bytes and the path, and leaves `digest` and `bytes` absent there (amendment a4) | decide which of two shapes the IR wants: a digest emitted at `session.ended`, when the file is complete, or a `transcript.sealed` event carrying it — then check whether `trace-spec`'s `transcript_digest` expectation can read it from either | O8 is met in substance — the bytes are retained and the auditor reads them by path — and the § 4.4 cross-check stays unbuilt, which it already is |
 
 ---
 

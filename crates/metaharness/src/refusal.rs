@@ -35,8 +35,6 @@ pub enum Refusal {
     /// re-listing depends on vendor behaviour nobody has driven (Q1). It is opt-in in the design
     /// and unbuilt here (design § 7.5).
     ToolSurfaceOwned,
-    /// There is no real spawner in this build.
-    NoSpawner,
     /// The adapter refused to plan the launch.
     Launch {
         /// What the adapter said, verbatim.
@@ -121,10 +119,9 @@ impl Refusal {
     pub fn code(&self) -> Option<RefusalCode> {
         match self {
             Refusal::Control { refusals } => refusals.first().map(|(_, refused)| refused.code),
-            Refusal::NoAdapter { .. }
-            | Refusal::FrameFile { .. }
-            | Refusal::ToolSurfaceOwned
-            | Refusal::NoSpawner => Some(RefusalCode::UnsupportedControl),
+            Refusal::NoAdapter { .. } | Refusal::FrameFile { .. } | Refusal::ToolSurfaceOwned => {
+                Some(RefusalCode::UnsupportedControl)
+            }
             _ => None,
         }
     }
@@ -149,11 +146,6 @@ impl fmt::Display for Refusal {
                 "--tool-surface owned is refused: it requires metaharness to implement read, \
                  write, edit and shell itself, and per-step tool re-listing depends on vendor \
                  behaviour nobody has driven (Q1). Use --tool-surface native",
-            ),
-            Refusal::NoSpawner => f.write_str(
-                "there is no real spawner in this build: driving the vendor binary is a later \
-                 milestone. The whole path is exercised through metaharness::ScriptedRunner, and \
-                 Metaharness::start_with takes any ProcessRunner",
             ),
             Refusal::Launch { detail } => {
                 write!(f, "the adapter refused to plan the launch: {detail}")

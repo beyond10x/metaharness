@@ -186,7 +186,8 @@ pub fn render_hook_response(decision: &Decision) -> Value {
 /// What the vendor hands the `PreToolUse` hook on stdin.
 ///
 /// The field set is the one the working hooks in `engineering-protocols` read
-/// (`hooks/lib.sh`, `hooks/store-integrity.sh`): `tool_name`, `tool_input`, `session_id`.
+/// (`hooks/lib.sh`, `hooks/store-integrity.sh`): `tool_name`, `tool_input`, `session_id` — plus
+/// [`HookInput::tool_use_id`], which those hooks never needed and this seam cannot work without.
 #[derive(Debug, Clone, PartialEq)]
 pub struct HookInput {
     /// The tool about to run, as the vendor names it.
@@ -197,6 +198,23 @@ pub struct HookInput {
     pub tool_input: Value,
     /// The vendor's session id, which correlates the decision to the transcript.
     pub session_id: Option<String>,
+    /// **The correlation key: the id of the very `tool_use` block this call came from.**
+    ///
+    /// The same string the transcript's `tool_use` block calls `id`, which is what
+    /// `Event::ToolRequested` carries as its `call_id` — so a decision routed by `call_id`
+    /// reaches exactly the hook process that is holding that call, and no other.
+    ///
+    /// Verified twice against 2.1.239 (row **V22**): the binary builds the payload as
+    /// `{…, hook_event_name:"PreToolUse", tool_name:e, tool_input:r, tool_use_id:t}` and passes
+    /// the same `t` as its `toolUseID`; and a live run's hook received
+    /// `"tool_use_id":"toolu_01WmYm29Vf6BGKGYtfhmjPSS"` for the id the stream-json assistant
+    /// record carried. Before that was read, design § 12 **Q16** had to leave the correlation
+    /// provisional — *"there is no hook process until the real spawner exists"*.
+    ///
+    /// `Option`, because a record that stopped carrying it must be visible as a missing field
+    /// rather than as an empty string that silently matches nothing. A request metaharness
+    /// cannot correlate is one it never answers, and the hook's own backstop denies it.
+    pub tool_use_id: Option<String>,
     /// Which hook event this is. Always `PreToolUse` for the seam this adapter installs; read
     /// rather than assumed, so a settings file that grew a second hook is visible.
     pub hook_event_name: Option<String>,
@@ -227,6 +245,7 @@ pub fn parse_hook_input(input: &str) -> Result<HookInput, Refused> {
         tool_name: string_field(object.get("tool_name")),
         tool_input: object.get("tool_input").cloned().unwrap_or(Value::Null),
         session_id: string_field(object.get("session_id")),
+        tool_use_id: string_field(object.get("tool_use_id")),
         hook_event_name: string_field(object.get("hook_event_name")),
     })
 }
@@ -392,6 +411,34 @@ mod tests {
         assert_eq!(parsed.session_id.as_deref(), Some("s-1"));
         assert_eq!(parsed.hook_event_name.as_deref(), Some("PreToolUse"));
         assert_eq!(parsed.tool_input["anything"], json!([1, 2]));
+    }
+
+    /// The correlation key, read from the shape 2.1.239 actually sends (row **V22**). The paths
+    /// and ids here are synthesized: a fixture that carried a real session's home directory
+    /// would put one operator's machine into this repository forever.
+    #[test]
+    fn the_hook_input_carries_the_tool_use_id_the_decision_is_routed_by() {
+        let parsed = parse_hook_input(
+            r#"{"session_id":"sess-1","transcript_path":"/scratch/run-1/claude-home/x.jsonl",
+                "cwd":"/scratch/run-1/work","permission_mode":"default",
+                "hook_event_name":"PreToolUse","tool_name":"Bash",
+                "tool_input":{"command":"echo hi","description":"Run echo hi"},
+                "tool_use_id":"toolu_0000000000000000000001"}"#,
+        )
+        .expect("parses");
+        assert_eq!(
+            parsed.tool_use_id.as_deref(),
+            Some("toolu_0000000000000000000001")
+        );
+        assert_eq!(parsed.tool_name.as_deref(), Some("Bash"));
+    }
+
+    /// A record that stopped carrying the key reads as absent, never as an empty string: an
+    /// empty key would correlate to nothing and look like a call nobody asked about.
+    #[test]
+    fn a_hook_input_without_the_correlation_key_says_so_rather_than_inventing_one() {
+        let parsed = parse_hook_input(r#"{"tool_name":"Read"}"#).expect("parses");
+        assert_eq!(parsed.tool_use_id, None);
     }
 
     /// A field the reader does not know is ignored in silence; the record is still read

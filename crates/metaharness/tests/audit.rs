@@ -247,6 +247,70 @@ fn a_credential_source_the_run_did_not_declare_is_a_gap() {
     );
 }
 
+/// The defect the **first live run** found, kept as a row.
+///
+/// 2.1.239 writes `apiKeySource: "none"` under an operator login — there is no API *key*,
+/// because the session authenticates from the copied credential file. H4 read that as a
+/// mismatch and failed a run that was hermetic in every way the row exists to check. No free
+/// tier could have caught it: there is no real opening record below C4 (amendment a4).
+#[test]
+fn an_operator_login_reporting_no_api_key_source_is_exactly_what_h4_wants() {
+    let spec = RunSpec::new(Kind::Claude); // defaults to operator-login
+    let record = with_record(good_record(), |record| {
+        if let Event::SessionStarted {
+            credential_source, ..
+        } = record
+        {
+            *credential_source = Some("none".to_string());
+        }
+    });
+    assert_eq!(
+        verdict_of(
+            &hermetic_floor(&[record], &inputs(&spec, &pins(), &[])),
+            HermeticRow::H4
+        ),
+        Verdict::Ok
+    );
+}
+
+/// The other half of the same live failure: a run that pins no input tree has no governing
+/// document that could move under it, so H10 is satisfied rather than unknown. Reading it as
+/// `unk` made `--hermetic strict` unpassable for every run that pins nothing — including the
+/// design's own worked example (amendment a4).
+#[test]
+fn a_run_that_pinned_no_input_tree_satisfies_h10_rather_than_leaving_it_unknown() {
+    let spec = RunSpec::new(Kind::Claude);
+    let record = with_record(good_record(), |record| {
+        if let Event::SessionStarted { inputs_digest, .. } = record {
+            *inputs_digest = None;
+        }
+    });
+    let rows = hermetic_floor(&[record], &inputs(&spec, &pins(), &[]));
+    assert_eq!(verdict_of(&rows, HermeticRow::H10), Verdict::Ok);
+    let detail = rows
+        .iter()
+        .find(|row| row.row == HermeticRow::H10)
+        .map(|row| row.detail.clone())
+        .unwrap_or_default();
+    assert!(
+        detail.contains("pinned no input tree"),
+        "the row must say why it passed, not merely that it did: {detail}"
+    );
+}
+
+/// And the row still fails nothing quietly: a run that **did** pin a tree reports its digest.
+#[test]
+fn a_run_that_pinned_a_tree_reports_its_digest_in_h10() {
+    let spec = RunSpec::new(Kind::Claude);
+    let record = with_record(good_record(), |record| {
+        if let Event::SessionStarted { inputs_digest, .. } = record {
+            *inputs_digest = Some(metaharness::protocol::Digest::of(b"the copied tree"));
+        }
+    });
+    let rows = hermetic_floor(&[record], &inputs(&spec, &pins(), &[]));
+    assert_eq!(verdict_of(&rows, HermeticRow::H10), Verdict::Ok);
+}
+
 #[test]
 fn a_vendor_off_its_pin_is_a_gap_and_the_report_names_both_versions() {
     let spec = RunSpec::new(Kind::Claude);
@@ -724,8 +788,9 @@ fn a_run_goes_from_spec_through_plan_and_transcript_to_a_judged_verdict() {
         "O8: the bytes are retained"
     );
 
-    // H7 and H10 are unk here because the scratch cwd is not in the fixture record and no input
-    // tree was copied — which is exactly the point: absence of evidence is not hermeticity.
+    // H7 is unk here because the scratch cwd is not in the fixture record — which is exactly
+    // the point: absence of evidence is not hermeticity. H10 passes, because a run that pinned
+    // no tree has none that could move (amendment a4).
     assert_eq!(run.exit(Some(&report)), RunExit::NoVerdict);
 }
 

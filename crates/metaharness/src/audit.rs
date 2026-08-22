@@ -343,29 +343,49 @@ pub fn hermetic_floor(events: &[Event], inputs: &FloorInputs<'_>) -> Vec<RowVerd
             Verdict::Unk,
             "the opening record does not say where the credential came from",
         ),
+        // H4 asks one question — **was an API key in use, and was one declared?** — and it is
+        // deliberately not "does the record name the credential source the spec named".
+        //
+        // The record's field is `apiKeySource`, and under an operator login 2.1.239 reports
+        // `"none"`: there is no API *key*, because the session authenticates from the copied
+        // credential file. The first live run failed here, on a run that was hermetic in every
+        // way the row exists to check, because the earlier reading looked for the word "login"
+        // in a field that never carries it (amendment a4). No free tier could have caught it —
+        // there is no real opening record below C4.
         Some(observed) => {
             let normalized = observed.to_ascii_lowercase().replace(['_', ' '], "-");
-            let expected = match inputs.spec.credentials {
-                CredentialSource::OperatorLogin => "login",
-                CredentialSource::ApiKey => "api",
-                CredentialSource::None => "none",
-            };
-            if normalized.contains(expected) {
-                row(
-                    HermeticRow::H4,
-                    Verdict::Ok,
-                    format!("the record says {observed:?} and the run declared {expected:?}"),
-                )
-            } else {
-                row(
+            // The row turns on whether the record **names an API key**, not on whether it
+            // repeats the word the spec used. `apiKeySource` is a field about keys: 2.1.239
+            // writes `"none"` under an operator login and names the variable when a key is in
+            // use, and neither of those is the string "operator-login".
+            let names_a_key = normalized.contains("api") || normalized.contains("key");
+            let declared_a_key = inputs.spec.credentials == CredentialSource::ApiKey;
+            match (declared_a_key, names_a_key) {
+                (false, true) => row(
                     HermeticRow::H4,
                     Verdict::Gap,
                     format!(
-                        "the run declared {expected:?} and the record says {observed:?}; the \
-                         vendor's own word for a source varies, so this row matches the family \
-                         and prints what it saw"
+                        "the run declared no API key and the record says {observed:?}; an \
+                         exported key takes precedence over the operator login and may point at \
+                         an account with no credits"
                     ),
-                )
+                ),
+                (true, false) => row(
+                    HermeticRow::H4,
+                    Verdict::Gap,
+                    format!(
+                        "the run declared credentials: api-key and the record says {observed:?}, \
+                         which names no key at all"
+                    ),
+                ),
+                _ => row(
+                    HermeticRow::H4,
+                    Verdict::Ok,
+                    format!(
+                        "the record says {observed:?}, which agrees with the API key this run \
+                         declared"
+                    ),
+                ),
             }
         }
     });
@@ -451,11 +471,19 @@ pub fn hermetic_floor(events: &[Event], inputs: &FloorInputs<'_>) -> Vec<RowVerd
     });
 
     // H10 — governing documents cannot move under the run.
+    //
+    // **A run that copied no input tree has no governing document that could move**, so the row
+    // is satisfied rather than unknown. That is not absence of evidence read as a property: the
+    // copied tree is metaharness's own launch input, so whether there is one is something
+    // metaharness knows for certain rather than something it failed to observe. Reading it as
+    // `unk` made `--hermetic strict` unpassable for every run that pins nothing — including the
+    // design's own § 9.2 example — which is finding F3's shape a second time (amendment a4).
     rows.push(match inputs_digest {
         None => row(
             HermeticRow::H10,
-            Verdict::Unk,
-            "the opening record carries no digest of the copied input tree",
+            Verdict::Ok,
+            "the run pinned no input tree, so there is no governing document that could move \
+             under it",
         ),
         Some(digest) => row(
             HermeticRow::H10,
