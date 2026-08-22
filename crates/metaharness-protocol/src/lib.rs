@@ -43,7 +43,9 @@ mod tests {
 
     #[test]
     fn the_wire_round_trips_as_json_lines() {
-        let event = Event::Started { kind: "claude".into() };
+        let event = Event::Started {
+            kind: "claude".into(),
+        };
         let line = serde_json::to_string(&event).expect("serializes");
         let back: Event = serde_json::from_str(&line).expect("parses");
         assert!(matches!(back, Event::Started { kind } if kind == "claude"));
