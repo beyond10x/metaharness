@@ -12,7 +12,7 @@ members = [
 version = "0.1.0"
 edition = "2024"
 license = "Apache-2.0"
-repository = "https://github.com/metaharness/metaharness"
+repository = "https://github.com/beyond10x/metaharness"
 rust-version = "1.98"
 
 # One version per dependency for the whole workspace, so two crates cannot disagree about the
