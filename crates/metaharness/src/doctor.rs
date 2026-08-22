@@ -62,12 +62,10 @@ impl Installed {
 /// [`Refusal::NoAdapter`] for a kind this build has no adapter for, and [`Refusal::Io`] when the
 /// binary is absent or would not run — both exit `2`, because neither is a verdict about a run.
 pub fn installed(kind: Kind) -> Result<Installed, Refusal> {
-    if kind == Kind::Codex {
-        return Err(Refusal::NoAdapter {
-            kind: Kind::Codex.as_str().to_string(),
-        });
-    }
-    let program = metaharness_claude::ADAPTER_ID;
+    let program = match kind {
+        Kind::Claude => metaharness_claude::ADAPTER_ID,
+        Kind::Codex => metaharness_codex::ADAPTER_ID,
+    };
     let output = std::process::Command::new(program)
         .arg("--version")
         .output()
@@ -87,15 +85,22 @@ pub fn installed(kind: Kind) -> Result<Installed, Refusal> {
         });
     }
     let reported = String::from_utf8_lossy(&output.stdout).trim().to_string();
-    Ok(Installed {
-        adapter: metaharness_claude::ADAPTER_ID.to_string(),
-        program: program.to_string(),
-        version: version_token(&reported),
-        reported,
-        pinned: metaharness_claude::PINNED_VERSIONS
+    let pinned: Vec<String> = match kind {
+        Kind::Claude => metaharness_claude::PINNED_VERSIONS
             .iter()
             .map(ToString::to_string)
             .collect(),
+        Kind::Codex => metaharness_codex::PINNED_VERSIONS
+            .iter()
+            .map(ToString::to_string)
+            .collect(),
+    };
+    Ok(Installed {
+        adapter: program.to_string(),
+        program: program.to_string(),
+        version: version_token(&reported),
+        reported,
+        pinned,
     })
 }
 
@@ -105,9 +110,12 @@ pub fn installed(kind: Kind) -> Result<Installed, Refusal> {
 /// Reduced rather than matched whole, because the parenthesised product name is prose the vendor
 /// is free to change and a pin that broke on it would be a pin on the wrong thing.
 fn version_token(reported: &str) -> String {
+    // The first token that starts with a digit: `claude` prints `2.1.239 (Claude Code)` and
+    // `codex` prints `codex-cli 0.145.0`, and a picker that took the first word read the
+    // second one's own name as its version.
     reported
         .split_whitespace()
-        .next()
+        .find(|token| token.starts_with(|c: char| c.is_ascii_digit()))
         .unwrap_or(reported)
         .to_string()
 }
@@ -152,11 +160,14 @@ mod tests {
         assert!(installed.render().contains("unverified"));
     }
 
+    /// The codex adapter exists (CX-M1), so `doctor codex` asks the machine rather than
+    /// refusing: the answer is the installed version against the pin, or `Io` where no codex
+    /// binary is installed — never a session.
     #[test]
-    fn codex_is_refused_by_name_rather_than_answered_about() {
-        assert!(matches!(
-            installed(Kind::Codex),
-            Err(Refusal::NoAdapter { .. })
-        ));
+    fn codex_is_answered_about_from_the_installed_binary_or_refused_as_io() {
+        match installed(Kind::Codex) {
+            Ok(installed) => assert_eq!(installed.pinned, vec!["0.145.0".to_string()]),
+            Err(refusal) => assert!(matches!(refusal, Refusal::Io { .. })),
+        }
     }
 }

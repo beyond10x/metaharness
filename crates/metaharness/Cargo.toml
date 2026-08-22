@@ -15,6 +15,7 @@ clap = ["metaharness-protocol/clap"]
 [dependencies]
 metaharness-protocol = { path = "../metaharness-protocol" }
 metaharness-claude = { path = "../metaharness-claude" }
+metaharness-codex = { path = "../metaharness-codex" }
 serde_json = { workspace = true }
 tempfile = { workspace = true }
 

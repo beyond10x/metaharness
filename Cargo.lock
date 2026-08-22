@@ -226,6 +226,7 @@ name = "metaharness"
 version = "0.1.0"
 dependencies = [
  "metaharness-claude",
+ "metaharness-codex",
  "metaharness-protocol",
  "serde_json",
  "tempfile",
@@ -255,6 +256,7 @@ name = "metaharness-codex"
 version = "0.1.0"
 dependencies = [
  "metaharness-protocol",
+ "serde_json",
 ]
 
 [[package]]

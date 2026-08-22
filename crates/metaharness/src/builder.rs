@@ -501,8 +501,11 @@ fn resolve_frame(in_memory: Option<Frame>, spec: &RunSpec) -> Result<Option<Fram
 /// [`Refusal::NoAdapter`] or [`Refusal::ToolSurfaceOwned`].
 pub fn check_spec(spec: &RunSpec) -> Result<(), Refusal> {
     if spec.kind == Kind::Codex {
-        return Err(Refusal::NoAdapter {
-            kind: Kind::Codex.as_str().to_string(),
+        // CX-M1: the codex adapter reads rollouts and declares its capabilities; nothing spawns.
+        return Err(Refusal::NotInThisMilestone {
+            verb: "run codex",
+            missing: "a driven codex spawn (CX-M2): the adapter's rollout reader and \
+                      capabilities exist, and no live codex process has answered the seam yet",
         });
     }
     if spec.tool_surface == ToolSurface::Owned {

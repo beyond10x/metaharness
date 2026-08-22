@@ -6,6 +6,21 @@ was amended and the amendment is named here.
 ## [Unreleased]
 
 ### Added
+
+- **`metaharness-codex`, CX-M1: the adapter's input is built and its claims are labelled.** The
+  rollout reader maps `$CODEX_HOME/sessions/…/rollout-*.jsonl` — session_meta, paired
+  function/custom tool calls, token_count (usage and rate limits), task_started/complete — onto
+  the protocol's events, with a terminal `session.ended` built at finish from the vendor's own
+  duration and usage and **no invented cost** (the vendor never emits one). The format has no
+  documented stability guarantee, so the reader version-gates on `cli_version` (a warning, never
+  a mid-read refusal) and preserves every unmapped shape as `opaque` — the April-era
+  `exec_command_begin` drift is a conformance vector, not a failure. `capabilities codex`
+  declares every tier `Unverified` and keeps `tool.decide` refused until a driven run proves the
+  vendor's documented hook contract; `doctor codex` checks the installed binary against the
+  0.145.0 pin (and the version-token picker learned that `codex-cli 0.145.0` leads with a name,
+  not a number); `conformance codex` runs 4 replay vectors. `run codex` is refused by name:
+  CX-M2, the driven spawn, is what flips it. Evidence base:
+  `docs/research/2026-08-21-codex-harness-research.md`, migrated here with the adapter.
 - **The operator-named working directory — `--cwd <dir>` (amendment a6).** The driven case's
   declaration: the child runs in a real tree instead of a scratch one. H7 and H11 move from
   imposed to attested-unavailable with the trade named — `--hermetic strict` refuses such a run,

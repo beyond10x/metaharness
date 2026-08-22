@@ -79,17 +79,13 @@ fn names(run: &Run) -> Vec<&'static str> {
 // ---------------------------------------------------------------- refusals, all exit 2
 
 #[test]
-fn a_codex_run_is_refused_by_name_because_there_is_no_codex_adapter() {
+fn a_codex_run_is_refused_by_name_because_nothing_spawns_codex_yet() {
     let refusal = Metaharness::new(Kind::Codex)
         .start(Input::FromSpec)
-        .expect_err("codex has no adapter in this build");
-    assert_eq!(
-        refusal,
-        Refusal::NoAdapter {
-            kind: "codex".to_string()
-        }
-    );
-    assert!(refusal.to_string().contains("codex"));
+        .expect_err("CX-M1 reads rollouts; nothing spawns codex");
+    assert!(matches!(refusal, Refusal::NotInThisMilestone { .. }));
+    assert!(refusal.to_string().contains("codex"), "{refusal}");
+    assert!(refusal.to_string().contains("CX-M2"), "{refusal}");
 }
 
 #[test]
@@ -162,7 +158,7 @@ fn a_bad_spec_is_refused_before_anything_is_spawned() {
         .with_frame_file("x.yaml")
         .start(Input::FromSpec)
         .expect_err("refused");
-    assert!(matches!(refusal, Refusal::NoAdapter { .. }));
+    assert!(matches!(refusal, Refusal::NotInThisMilestone { .. }));
 }
 
 #[test]

@@ -62,7 +62,7 @@ fn no_run_in_this_file_can_reach_a_spawn() {
 }
 
 #[test]
-fn a_codex_run_exits_two_by_name_because_there_is_no_codex_adapter() {
+fn a_codex_run_exits_two_by_name_because_nothing_spawns_codex_yet() {
     assert_eq!(code_of(&["metaharness", "run", "codex", "-p", "hello"]), 2);
 }
 
@@ -114,8 +114,8 @@ fn capabilities_render_works_and_needs_no_run() {
 }
 
 #[test]
-fn capabilities_for_a_kind_with_no_adapter_exits_two() {
-    assert_eq!(code_of(&["metaharness", "capabilities", "codex"]), 2);
+fn capabilities_for_codex_work_now_that_the_adapter_declares_them() {
+    assert_eq!(code_of(&["metaharness", "capabilities", "codex"]), 0);
 }
 
 #[test]
@@ -124,10 +124,8 @@ fn conformance_runs_every_free_vector_and_exits_zero_when_they_pass() {
 }
 
 #[test]
-fn conformance_for_a_kind_with_no_adapter_exits_two_and_not_zero() {
-    // A conformance run that silently reported zero vectors would read exactly like one that
-    // passed.
-    assert_eq!(code_of(&["metaharness", "conformance", "codex"]), 2);
+fn conformance_for_codex_runs_its_replay_vectors_and_passes() {
+    assert_eq!(code_of(&["metaharness", "conformance", "codex"]), 0);
 }
 
 #[test]
@@ -180,9 +178,13 @@ fn doctor_answers_the_version_question_without_starting_a_session() {
     assert_ne!(code, 3);
 }
 
+/// The same posture as the claude row above: `doctor codex` runs `codex --version` and nothing
+/// else, and the exit depends on what this machine has installed — never on a session.
 #[test]
-fn doctor_for_a_kind_with_no_adapter_exits_two_by_name() {
-    assert_eq!(code_of(&["metaharness", "doctor", "codex"]), 2);
+fn doctor_answers_the_codex_version_question_without_starting_a_session() {
+    let code = code_of(&["metaharness", "doctor", "codex"]);
+    assert!(code == 0 || code == 1 || code == 2, "{code}");
+    assert_ne!(code, 3);
 }
 
 #[test]

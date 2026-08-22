@@ -445,9 +445,7 @@ pub fn conformance_vectors(kind: Kind) -> Result<Vec<VectorOutcome>, Refusal> {
             vectors.extend(crate::spawn_vectors::spawn_vectors());
             Ok(vectors)
         }
-        Kind::Codex => Err(Refusal::NoAdapter {
-            kind: Kind::Codex.as_str().to_string(),
-        }),
+        Kind::Codex => Ok(metaharness_codex::conformance_vectors()),
     }
 }
 
@@ -455,13 +453,12 @@ pub fn conformance_vectors(kind: Kind) -> Result<Vec<VectorOutcome>, Refusal> {
 ///
 /// # Errors
 ///
-/// [`Refusal::NoAdapter`] for a kind this build has no adapter for.
+/// None today — both kinds have adapters — and the `Result` stays so a future kind without one
+/// refuses instead of panicking.
 pub fn capabilities(kind: Kind) -> Result<metaharness_protocol::Capabilities, Refusal> {
     match kind {
         Kind::Claude => Ok(metaharness_claude::capabilities()),
-        Kind::Codex => Err(Refusal::NoAdapter {
-            kind: Kind::Codex.as_str().to_string(),
-        }),
+        Kind::Codex => Ok(metaharness_codex::capabilities()),
     }
 }
 

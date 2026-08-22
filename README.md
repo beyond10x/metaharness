@@ -67,7 +67,19 @@ document: digest-verified on load, refused by name when unreadable, untagged, mi
 edited after sealing, and enforced per call from the first turn. This is the seam an external
 driver integrates through — it writes the frame as a file and never links this workspace.
 
+**The Codex adapter exists (CX-M1).** `metaharness-codex` reads the session rollout — the record
+that carries timestamps, durations and per-turn usage where `codex exec --json` stdout does not —
+version-gated on the 0.145.0 pin, with every unmapped shape preserved as `opaque`. `capabilities
+codex`, `conformance codex` (4 replay vectors) and `doctor codex` all work with no model and no
+credential; `run codex` is refused by name until a driven spawn (CX-M2), and `tool.decide` stays
+refused until that run proves the vendor's documented hook contract from metaharness's own seam.
+The evidence base is `docs/research/2026-08-21-codex-harness-research.md`.
+
+**The eval machinery lives here now** (`evals/`), migrated from engineering-protocols under its
+`epic:metaharness-migration`: the driven eval reads its denial census from `tool.decided` events
+in the run's own streams, and nothing under `evals/` is part of `task check`.
+
 **What is still not built:** `metaharness project` (gated on Q9 — `trace-ir/1` has no reader) and
 `metaharness audit` over a transcript metaharness did not itself launch. Both refuse with exit 2
-naming what they wait for. There is no Codex adapter. The live runs cost money and are behind
+naming what they wait for. The live runs cost money and are behind
 `METAHARNESS_LIVE=1`; they are never part of `task check`.
