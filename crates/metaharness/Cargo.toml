@@ -1,0 +1,16 @@
+[package]
+name = "metaharness"
+description = "One interface to many agent harnesses: observable, steerable, hermetic."
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+repository.workspace = true
+rust-version.workspace = true
+
+[dependencies]
+metaharness-protocol = { path = "../metaharness-protocol" }
+metaharness-claude = { path = "../metaharness-claude" }
+metaharness-codex = { path = "../metaharness-codex" }
+
+[lints]
+workspace = true

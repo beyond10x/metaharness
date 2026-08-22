@@ -1,0 +1,19 @@
+[package]
+name = "metaharness-cli"
+description = "The metaharness binary: run a harness, stream events, accept steering."
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+repository.workspace = true
+rust-version.workspace = true
+
+[[bin]]
+name = "metaharness"
+path = "src/main.rs"
+
+[dependencies]
+clap = { version = "4", features = ["derive"] }
+metaharness = { path = "../metaharness" }
+
+[lints]
+workspace = true

@@ -1,0 +1,14 @@
+version: "3"
+
+tasks:
+  check:
+    desc: The full gate — format, lint, test. Green before any push.
+    cmds:
+      - cargo fmt --check
+      - cargo clippy --workspace --all-targets -- -D warnings
+      - cargo test --workspace
+
+  fmt:
+    desc: Format the workspace.
+    cmds:
+      - cargo fmt
