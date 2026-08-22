@@ -7,6 +7,11 @@ was amended and the amendment is named here.
 
 ### Added
 
+- **Correction: the codex plugin went back to engineering-protocols.** The evals migration
+  briefly carried `integrations/codex/` here as `evals/codex/`; the operator's call is the right
+  boundary — a plugin (instruction surface, skill) is the subject repository's product, like the
+  claude plugin's skills and agents that never left. This repository keeps the harness machinery:
+  the `metaharness-codex` adapter and its research record.
 - **`metaharness-codex`, CX-M1: the adapter's input is built and its claims are labelled.** The
   rollout reader maps `$CODEX_HOME/sessions/…/rollout-*.jsonl` — session_meta, paired
   function/custom tool calls, token_count (usage and rate limits), task_started/complete — onto
