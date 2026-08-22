@@ -97,7 +97,9 @@ pub use metaharness_codex::{CodexSeam, CodexSeams};
 pub use metaharness_protocol::{HarnessSeam, SeamFactory};
 pub use spawn_codex_vectors::spawn_vectors as codex_spawn_vectors;
 pub use spawn_vectors::spawn_vectors;
-pub use vectors::{all_passed, capabilities, conformance_vectors, control_vectors};
+pub use vectors::{
+    all_passed, capabilities, conformance_vectors, contract_result, control_vectors,
+};
 
 /// The adapter ids this build carries, in the order the CLI lists them.
 ///

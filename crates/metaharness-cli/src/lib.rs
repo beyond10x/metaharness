@@ -82,12 +82,17 @@ pub struct CapabilitiesArgs {
     pub render: bool,
 }
 
-/// `conformance <kind>`.
+/// `conformance <kind> [--contract]`.
 #[derive(Args, Debug)]
 pub struct ConformanceArgs {
     /// Which harness.
     #[arg(value_enum)]
     pub kind: Kind,
+    /// Emit the run as a `contract_result` record (design `adapter-contract-v0.1.md`, CT-1)
+    /// instead of the human vector lines — the adapter's conformance as a contract between the
+    /// vendor and `metaharness.event/1`, in the shape `engineering-protocols` reads.
+    #[arg(long)]
+    pub contract: bool,
 }
 
 /// `project --events <f> --to trace-ir`.
@@ -134,7 +139,7 @@ pub fn execute(cli: Cli) -> i32 {
     match cli.command {
         Verb::Run(args) => run(args.spec),
         Verb::Capabilities(args) => capabilities(&args),
-        Verb::Conformance(args) => conformance(args.kind),
+        Verb::Conformance(args) => conformance(args.kind, args.contract),
         Verb::Project(_) => refuse(&Refusal::NotInThisMilestone {
             verb: "project",
             // Q9: `trace-ir/1` is a Serialize-only Rust type with no published schema, so a
@@ -313,19 +318,28 @@ fn capabilities(args: &CapabilitiesArgs) -> i32 {
     }
 }
 
-fn conformance(kind: Kind) -> i32 {
+fn conformance(kind: Kind, contract: bool) -> i32 {
     let vectors = match metaharness::conformance_vectors(kind) {
         Ok(vectors) => vectors,
         Err(refusal) => return refuse(&refusal),
     };
-    for vector in &vectors {
-        println!("{}", render_vector(vector));
-    }
     let failed = vectors.iter().filter(|vector| !vector.passed).count();
-    println!(
-        "{} vectors, {failed} failed — no model, no network, no credential",
-        vectors.len()
-    );
+    if contract {
+        // The record and nothing else on stdout, so a consumer pipes it straight into the
+        // evidence shape it already reads. The exit code still carries the verdict.
+        match metaharness::contract_result(kind, &vectors) {
+            Ok(record) => println!("{record}"),
+            Err(refusal) => return refuse(&refusal),
+        }
+    } else {
+        for vector in &vectors {
+            println!("{}", render_vector(vector));
+        }
+        println!(
+            "{} vectors, {failed} failed — no model, no network, no credential",
+            vectors.len()
+        );
+    }
     if failed == 0 {
         RunExit::Ok.code()
     } else {

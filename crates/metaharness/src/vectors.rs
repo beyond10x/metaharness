@@ -477,9 +477,93 @@ pub fn all_passed(vectors: &[VectorOutcome]) -> bool {
     !vectors.is_empty() && vectors.iter().all(|vector| vector.passed)
 }
 
+/// An adapter's conformance run, as a `contract_result` record.
+///
+/// The reuse `engineering-protocols`' `contract-testing` principle asks for, made concrete
+/// without a dependency crossing the boundary: metaharness emits the *shape* EP defines —
+/// `{checked, failed, breaking_changes, provider, consumer}` — so a consumer reads an adapter's
+/// conformance as a contract between the vendor and the protocol wire (design
+/// `adapter-contract-v0.1.md`, CT-1).
+///
+/// - `provider` is the vendor and its pin (`codex 0.145.0`) — the side that can move under us;
+/// - `consumer` is [`metaharness_protocol::EVENT_FORMAT`], the wire the adapter maps onto;
+/// - `checked` is the vector count (the principle's `checked > 0`: a run that checked nothing
+///   asserts nothing);
+/// - `failed` is any red vector, either face;
+/// - `breaking_changes` is the subset in the **vendor-facing tiers (C1, C2)** — a failure there
+///   means the *vendor* moved, which is what breaks a consumer. A C3 failure is metaharness's own
+///   control machinery regressing: counted in `failed`, never here.
+///
+/// # Errors
+///
+/// [`Refusal::NoAdapter`] for a kind with no adapter, surfaced by [`capabilities`].
+pub fn contract_result(
+    kind: Kind,
+    vectors: &[VectorOutcome],
+) -> Result<serde_json::Value, Refusal> {
+    let pin = capabilities(kind)?.versions_pinned.join(", ");
+    let failed = vectors.iter().filter(|vector| !vector.passed).count();
+    let breaking_changes = vectors
+        .iter()
+        .filter(|vector| {
+            !vector.passed && matches!(vector.tier, ConformanceTier::C1 | ConformanceTier::C2)
+        })
+        .count();
+    Ok(serde_json::json!({
+        "kind": "contract_result",
+        "provider": format!("{} {pin}", kind.as_str()),
+        "consumer": metaharness_protocol::EVENT_FORMAT,
+        "checked": vectors.len(),
+        "failed": failed,
+        "breaking_changes": breaking_changes,
+    }))
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    /// CT-1: an adapter's conformance run is a `contract_result` — the shape a consumer reads,
+    /// with the pin in the provider and the vendor-tier failures called out as breaking.
+    #[test]
+    fn conformance_emits_a_contract_result_with_the_pin_in_the_provider() {
+        for (kind, expected_provider_prefix) in [(Kind::Claude, "claude "), (Kind::Codex, "codex ")]
+        {
+            let vectors = conformance_vectors(kind).expect("the adapter exists");
+            let record = contract_result(kind, &vectors).expect("a record");
+            assert_eq!(record["kind"], "contract_result");
+            assert_eq!(record["consumer"], metaharness_protocol::EVENT_FORMAT);
+            assert_eq!(record["checked"].as_u64(), Some(vectors.len() as u64));
+            // A green run: no failures, so nothing breaking, and checked > 0 (the principle's
+            // rule that a run which checked nothing asserts nothing).
+            assert_eq!(record["failed"].as_u64(), Some(0));
+            assert_eq!(record["breaking_changes"].as_u64(), Some(0));
+            assert!(record["checked"].as_u64().unwrap() > 0);
+            let provider = record["provider"].as_str().expect("a provider string");
+            assert!(
+                provider.starts_with(expected_provider_prefix),
+                "provider {provider:?} names the vendor"
+            );
+            // The pin travels in the provider — the fact CX-M2's Q18 is about, made checkable.
+            assert!(
+                provider.trim_end().len() > expected_provider_prefix.len(),
+                "provider {provider:?} carries a version after the vendor"
+            );
+        }
+    }
+
+    /// `breaking_changes` counts only the vendor-facing tiers: a C3 failure is metaharness's own
+    /// control machinery regressing, red in `failed` but not a vendor break.
+    #[test]
+    fn a_c3_failure_is_failed_but_not_breaking() {
+        let vectors = vec![
+            VectorOutcome::failed("x/c3", ConformanceTier::C3, "internal"),
+            VectorOutcome::failed("x/c2", ConformanceTier::C2, "vendor moved"),
+        ];
+        let record = contract_result(Kind::Claude, &vectors).expect("a record");
+        assert_eq!(record["failed"].as_u64(), Some(2));
+        assert_eq!(record["breaking_changes"].as_u64(), Some(1));
+    }
 
     /// C3 is the tier that carries the safety argument, and it is free — so every vector in it
     /// runs in the default gate and every one of them must pass.

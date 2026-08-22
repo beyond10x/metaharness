@@ -7,6 +7,18 @@ was amended and the amendment is named here.
 
 ### Added
 
+- **An adapter's conformance run is a `contract_result` (CT-1, design
+  `adapter-contract-v0.1.md`).** `metaharness conformance <kind> --contract` emits the record
+  `engineering-protocols`' `contract-testing` principle reads — `{checked, failed,
+  breaking_changes, provider, consumer}` — so a consumer reads the `metaharness ⇄ vendor` mapping
+  as a contract without a crate dependency crossing the boundary: the vocabulary is shared, the
+  code is not. `provider` carries the pin (`codex 0.145.0`), `consumer` is `metaharness.event/1`,
+  and `breaking_changes` counts only the vendor-facing tiers (C1/C2) — a C3 failure is
+  metaharness's own control machinery regressing, red in `failed` but not the vendor's fault.
+  The design is written against the three drifts CX-M2's live run surfaced (the `Bash`/`exec`
+  vocabulary split, the 0.144/0.145 version mismatch, the un-joinable ids); CT-2–4 (recorded
+  golden vendor samples, the version reconciliation, cross-adapter symmetry) stay proposed.
+
 - **`metaharness run codex` drives a real Codex session (CX-M2).** A scratch `CODEX_HOME`, a
   constructed child environment, the operator's `~/.codex/auth.json` copied in immediately before
   every spawn, and a blocking `PreToolUse` hook metaharness answers per call. Events come from the

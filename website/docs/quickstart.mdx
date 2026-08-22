@@ -1,0 +1,112 @@
+---
+id: quickstart
+title: Quickstart
+sidebar_position: 2
+---
+
+# Quickstart
+
+Three of the four verbs below need **no model, no network and no credential**. Start with those:
+they tell you whether the seam is wired before you spend anything on a live run.
+
+## Build
+
+```bash
+git clone git@github.com:beyond10x/metaharness.git
+cd metaharness
+cargo build --release
+```
+
+The workspace gate — format, lint, test — is one task:
+
+```bash
+task check     # cargo fmt --check && cargo clippy -D warnings && cargo test --workspace
+```
+
+Nothing under `evals/` runs in `task check`. A paid run is never part of a gate.
+
+## 1. Is the installed vendor the one the adapter was written against?
+
+```bash
+metaharness doctor claude
+metaharness doctor codex
+```
+
+Every adapter claim about a vendor binary is pinned to a version. `doctor` compares the installed
+binary against that pin. During a run, `--strict-version` turns a mismatch from a warning into a
+refusal before anything spawns.
+
+## 2. What does the adapter say it can do?
+
+```bash
+metaharness capabilities claude
+metaharness capabilities claude --render
+```
+
+Declared tiers, pinned versions, and — with `--render` — the neutral-operation → vendor-tool
+table. This exists so an embedder can refuse *early* rather than discovering mid-run that a tier
+is absent.
+
+## 3. Does the seam actually hold?
+
+```bash
+metaharness conformance claude    # 17 vectors
+metaharness conformance codex     # 7 vectors, 3 of which run a real process and the real hook
+```
+
+Free conformance vectors: no model, no network, no credential.
+
+## 4. A real run
+
+```bash
+metaharness run claude --hermetic -p "list the crates in this workspace"
+```
+
+What happens:
+
+1. `claude` is spawned into a **scratch config home** — not yours.
+2. A blocking `PreToolUse` hook is installed, and metaharness answers it **per call**.
+3. The session streams out of stdout as [protocol events](./protocol/events.mdx), one JSON object
+   per line.
+4. Steering [commands](./protocol/commands.mdx) are read from stdin, one JSON object per line.
+5. The raw vendor transcript is retained for the auditor.
+6. The process exits on the [hermetic floor's](./hermetic.mdx) verdict.
+
+### Deciding each call yourself
+
+```bash
+metaharness run claude --hermetic --decisions ask -p "…"
+```
+
+With `--decisions ask`, every tool call arrives as a `tool.requested` event carrying
+`decision_required: true`, and the run blocks until you answer with `tool.decide`. See
+[the control seam](./control-seam.mdx).
+
+### Governing a run from outside the process
+
+```bash
+metaharness run claude --hermetic --frame step.frame.json -p "…"
+```
+
+The [frame](./frames.mdx) is a sealed `metaharness.frame/1` document: digest-verified on load and
+enforced from the first turn. This is the seam an external driver integrates through — it writes
+the frame as a file and never links this workspace.
+
+### Running over a real repository
+
+```bash
+metaharness run claude --hermetic --cwd ~/projects/thing -p "…"
+```
+
+`--cwd` is the declaration that **trades two hermetic rows for real work**: the child runs in your
+tree, so H7 and H11 stop being impositions and are attested *unavailable*, naming the directory.
+`--hermetic strict` therefore refuses such a run, plain `--hermetic` reports it honestly.
+
+## Exit codes
+
+| Code | Meaning |
+|---|---|
+| `0` | The run completed and every gating hermetic row is `ok`. |
+| `1` | A gating row is `gap` — a control did not hold. |
+| `2` | Refused: a verb or option that is not built, naming what it waits for. |
+| `3` | A gating row is `unk` — nobody found out. Not a softer `gap`. |

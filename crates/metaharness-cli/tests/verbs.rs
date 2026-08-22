@@ -149,6 +149,21 @@ fn conformance_for_codex_runs_its_replay_vectors_and_passes() {
     assert_eq!(code_of(&["metaharness", "conformance", "codex"]), 0);
 }
 
+/// CT-1: `--contract` emits the record and still carries the verdict in the exit code. The
+/// record's shape is pinned in the library test; here the flag's own contract — parses, runs
+/// free, exits on the same verdict — is what is asserted.
+#[test]
+fn conformance_contract_flag_runs_free_and_carries_the_verdict() {
+    assert_eq!(
+        code_of(&["metaharness", "conformance", "codex", "--contract"]),
+        0
+    );
+    assert_eq!(
+        code_of(&["metaharness", "conformance", "claude", "--contract"]),
+        0
+    );
+}
+
 #[test]
 fn conformance_covers_the_adapters_tiers_and_this_crates_control_tier() {
     let vectors = metaharness::conformance_vectors(metaharness::protocol::Kind::Claude)

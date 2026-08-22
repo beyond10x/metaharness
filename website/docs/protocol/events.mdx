@@ -1,0 +1,118 @@
+---
+id: events
+title: Events (out)
+sidebar_position: 1
+---
+
+# Events
+
+One JSON object per line on stdout. Every line carries its own format tag,
+`metaharness.event/1`.
+
+```json
+{"format":"metaharness.event/1","event":"tool.requested","call_id":"…","name":"Bash", "…":"…"}
+```
+
+## Two rules about the tag, and one asymmetry
+
+- **The tag is on every line**, not on a handshake, so a truncated capture is still
+  self-describing.
+- **A consumer that reads a tag it does not know refuses the line and says so.** It does not
+  guess.
+- **The asymmetry:** unknown *fields* on a known event are ignored in silence; an unknown *event
+  name* is a named refusal. This wire is an authored schema, so a misspelling is a mistake the
+  author wants to be told about.
+
+## The 19 events
+
+| Event | What it is |
+|---|---|
+| `session.started` | The opening record. The only place that can distinguish **offered** from **called**. |
+| `session.ended` | The terminal record. The source of every resource fact. |
+| `step.entered` / `step.left` | The embedder's unit of work opened / closed. |
+| `turn.started` / `turn.ended` | The vendor's unit of work. |
+| `text` | Model text. |
+| `thinking` | Reasoning content, where the vendor emits it. |
+| `thinking.estimate` | An estimate, where it does not. |
+| `injection` | Text the **harness** put in the conversation — a loaded skill, an injected frame. |
+| `tool.requested` | A tool call, **before** the decision and before any effect. |
+| `tool.decided` | The denial record. A first-class event, not a log file. |
+| `tool.result` | What the tool returned. |
+| `usage` | Tokens for one request or turn. |
+| `rate_limit` | A rate-limit window. |
+| `command.result` | The answer to exactly one command. |
+| `warning` | **metaharness** has something to say. |
+| `opaque` | **The vendor** said something the adapter could not read. |
+| `auth.expired` | The credential the run launched with stopped working mid-flight. |
+
+## Why three tool events and not two
+
+A denial has no result, and a decision is not a result.
+
+Folding the decision into the result could not express *"this was refused and nothing ran"*
+without inventing a fake result.
+
+```text
+tool.requested  ──▶  tool.decided  ──▶  tool.result
+   (before)          (allow / deny)     (only if it ran)
+        └──────── correlated by call_id ────────┘
+```
+
+## `session.started` carries the hermetic evidence
+
+The field set is deliberately the IR's rather than a shorter one — **a field metaharness omits is
+an expectation kind that becomes undecidable.**
+
+| Field | Evidence for |
+|---|---|
+| `offered_tools` | Offered is not called, and only this record tells them apart. |
+| `plugins` | [H1a](../hermetic.mdx) |
+| `output_style` | H1b |
+| `credential_source` | H4 |
+| `mcp_servers` | H5. **`None` is `unk`, never zero.** |
+| `cwd` | H7 |
+| `harness_version` | H9 — the version *observed*, against which the pin is checked. |
+| `inputs_digest` | H10 |
+| `hermetic` | metaharness's own attestation. **Not evidence** — it sits beside the vendor's record so a reader can notice when the two disagree. |
+
+## `session.ended` keeps two denial counts apart
+
+| Field | Whose count |
+|---|---|
+| `permission_denials` | **The vendor's own** denial list, passed through and never added to. |
+| `census` | What **metaharness's** seam did. |
+
+They are distinct on purpose. Anything downstream counting denials should read `tool.decided`
+events from the run's own stream.
+
+## `opaque` is mandatory and unconditional
+
+A record the adapter cannot map becomes `opaque` and is **never dropped**. An adapter that
+recognised a record's envelope and read nothing out of it emits `opaque` too — an event that
+produced nothing has vanished whatever the intention was.
+
+It carries the raw record's digest, so the record is **citable without being reproduced**, plus
+the 1-based line of the retained transcript it came from.
+
+`warning` and `opaque` are not the same channel: `warning` is metaharness speaking, `opaque` is
+the vendor speaking unintelligibly.
+
+## `auth.expired` — a recorded deviation from design v0.1
+
+An operator-login token is a snapshot with a lifetime. A governed run observed on **2026-08-22**
+died an hour in with the vendor reporting an expired OAuth session that could not be refreshed —
+and a copied file cannot refresh itself.
+
+What this event is **not**:
+
+- Not the `error` channel the design refuses.
+- Not a second terminal record — the run still ends with `session.ended`.
+- Not a paraphrase — the vendor's own words are passed through, because metaharness does not
+  paraphrase a diagnosis it did not make.
+
+It exists so an embedder can tell *"the credential aged out"* from *"the model failed"* without
+matching on vendor prose, and retry deterministically.
+
+## `injection` has no expectation kind, deliberately
+
+A matcher over injected text is a wording assertion in a structural costume.

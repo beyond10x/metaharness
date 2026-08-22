@@ -1,0 +1,98 @@
+---
+id: control-seam
+title: The control seam
+sidebar_position: 4
+---
+
+# The control seam
+
+**Which tools the harness may call is decided per call, by the embedder, through the protocol —
+not once at launch.**
+
+A launch-time allowlist answers the question "may this agent ever run a shell?". The seam answers
+"may this agent run *this* shell command, right now, in this step?" — and it answers it while the
+harness waits.
+
+## Four tiers of control
+
+Control is not one thing. An adapter declares what it delivers at each of four tiers, and an
+embedder that needs a tier the adapter does not have is **refused early** rather than quietly
+served something weaker.
+
+| Tier | What it can do | What it costs / cannot do |
+|---|---|---|
+| `registration` | Decide the set of tools the model is offered, before the session starts. | Cannot see an argument. Cannot change within a session. |
+| `call` | Present **every call for a decision before it executes**, and the harness waits. | Costs a round trip. Only as universal as the seam's coverage. |
+| `turn` | Add text to the conversation between turns. | Cannot stop a call. Only advises. |
+| `kill` | Stop a running turn. | Loses the turn. Cannot be selective. |
+
+### Tier status is a first-class fact
+
+| Status | Meaning |
+|---|---|
+| `delivered` | Driven, and asserted by a conformance vector. |
+| `unverified` | The mechanism is present on the vendor's surface and metaharness **has not driven it**. An embedder that requires it is refused, not quietly served. |
+| `absent` | The vendor has no such mechanism at this tier. |
+
+Read them with `metaharness capabilities <kind>`.
+
+## Who decides: `--decisions`
+
+| Mode | Behaviour |
+|---|---|
+| `frame` *(default)* | The adapter decides from the [frame's](./frames.mdx) admitted set. No round trip. |
+| `ask` | The embedder decides. The run blocks — one round trip per call. |
+
+An embedder that answers "yes" to everything the frame already admits has bought nothing. That is
+why `frame` is the default and `ask` is opt-in.
+
+**A run in `frame` mode is still fully audited.** Both modes emit `tool.decided`, and the decision
+census counts both.
+
+## Whose tools: `--tool-surface`
+
+| Surface | Status |
+|---|---|
+| `native` *(default)* | The vendor's own tools, narrowed at the decision seam. |
+| `owned` | metaharness owns the tool surface and runs the tools itself. **Refused** in this build — per-step re-listing depends on unverified vendor behaviour. |
+
+## Three properties that are easy to break by accident
+
+These are stated here because each was a real bug or a near miss, and each is invisible until a
+live run.
+
+1. **Every currently-pending `tool.requested` is handed over before an answer to any of them is
+   due, and each one's deadline is armed at delivery.** Without both, a single-threaded policy
+   deciding call A would burn call B's budget, and metaharness would emit `deadline` denials the
+   embedder never chose.
+
+2. **The decision reaches the child before any control does.** Cancelling first clears the active
+   call and leaves the child waiting on a correlation that no longer exists.
+
+3. **A record the adapter cannot map becomes `Event::Opaque` and is never dropped.** The failure
+   that costs the most is a checker reporting *"the tool was never called"* when what actually
+   happened is that it stopped being able to see tool calls.
+
+## The census is metaharness's, not the vendor's
+
+The decision census counts what **metaharness** decided. The vendor's record cannot see it, so the
+census is *set* on the terminal record rather than computed by the transcript reader.
+
+This matters for anything downstream that counts denials: read them from `tool.decided` events in
+the run's own stream, not from the vendor's transcript.
+
+## Proof, not configuration
+
+The seam has been driven against a paid run on both vendors. On Codex, the evidence chain reads:
+
+| Layer | What it said |
+|---|---|
+| The hook process | `"tool_name":"Bash"`, `"tool_use_id":"exec-96257928-…"` |
+| metaharness | answered `deny`, with a reason |
+| The vendor's session record | `Command blocked by PreToolUse hook: this step admits no shell, so the command did not run` — with an **empty** `Output:` |
+| The model's closing message | *"The command was blocked and did not run."* |
+
+So `tool.decide` is `Honoured` and the `call` tier is `Delivered`.
+
+The **`allow` half of that wire is not claimed** on Codex: only the deny path has been driven.
+That distinction is the point of `unverified` existing as a status.

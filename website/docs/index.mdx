@@ -1,0 +1,90 @@
+---
+id: index
+slug: /
+title: What metaharness is
+sidebar_label: What it is
+sidebar_position: 1
+---
+
+# metaharness
+
+One interface to many agent harnesses.
+
+A harness — Claude Code, Codex, the next one — keeps its own loop, its own tools and its own
+credentials. metaharness drives it **from outside** and makes the run observable, steerable and
+hermetic, the same way regardless of which harness is inside.
+
+```text
+              events out (JSONL) ─────────▶  your process / your workflow engine
+metaharness
+              commands in (steering) ◀─────  approve / deny a tool call, inject, halt
+```
+
+## Two faces, one run
+
+<div className="mh-two-col">
+
+**As a binary**
+
+```bash
+metaharness run claude --hermetic -p "tidy the imports"
+```
+
+Events on stdout, steering on stdin. Swap `claude` for `codex` and the protocol does not change.
+
+**As a library**
+
+```rust
+Metaharness::new(Kind::Claude)
+    .with_hermetic(HermeticMode::Strict)
+    .with_decisions(DecisionMode::Ask)
+    .start(Input::FromSpec)?;
+```
+
+The same run, embedded, answering `tool.requested` events as they arrive.
+
+</div>
+
+## The three promises
+
+| | Promise | What it means concretely |
+|---|---|---|
+| 1 | **Unified** | One event stream, one command set. Everything harness-specific lives in that harness's adapter crate and nowhere else. |
+| 2 | **[Hermetic](./hermetic.mdx)** | A run shares credentials with the operator and nothing else — no ambient plugins, no account-level MCP servers, no inherited environment. Hermeticity is asserted from the transcript, not assumed from a directory. |
+| 3 | **[In control at every step](./control-seam.mdx)** | Which tools the harness may call is decided *per call*, by the embedder, through the protocol — not once at launch. |
+
+## The claim this exists to make
+
+A frame that admitted no shell was given a prompt that asked for one.
+
+- metaharness denied the call at the hook.
+- The call did not run.
+- **The vendor's own terminal record** listed `Bash` in `permission_denials`.
+
+That is the one claim no free test tier can reach, and it has now been made against **two**
+vendors — Claude Code and Codex. See [Status](./status.mdx).
+
+## A principle worth stating twice
+
+> **Absence of evidence is not a property.**
+>
+> Hermeticity, tool restriction and denial behaviour are asserted from the run's own record,
+> never from the configuration that was supposed to produce them. A crashed check is not a
+> passing check: a verdict of `unk` ("nobody found out") is its own outcome, distinct from `gap`.
+
+## Where it came from
+
+Two working systems, each of which built half of this and proved it.
+
+- [`engineering-protocols`](https://github.com/former organization/engineering-protocols) — hermetic
+  headless evals, deterministic hook enforcement with 1:1 denial audits, and a transcript IR
+  (`trace-ir/1`) that turns "the agent behaved" into a checked claim.
+- former organization's agent runtime — harness adapter classes (a vendor keeps its loop; we drive its
+  documented surface), approvals as blocking calls, steering, and the port seam that makes
+  in-process and over-the-wire tool binding indistinguishable to the loop.
+
+## Start here
+
+- [Quickstart](./quickstart.mdx) — a first run, with no credential and no model.
+- [CLI reference](./reference/cli.mdx) — every verb and flag.
+- [Status](./status.mdx) — what is built, what is refused, and what it is waiting for.
