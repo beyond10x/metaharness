@@ -1,0 +1,96 @@
+---
+id: claude
+title: Claude Code
+sidebar_position: 1
+---
+
+# The `claude` adapter
+
+Pinned to **2.1.239**. Adapter class: `harness` — the vendor keeps its loop, its sessions, its
+tools, its authentication and its credential custody; metaharness drives its documented outside
+surface.
+
+```bash
+metaharness run claude --hermetic -p "…"
+metaharness conformance claude    # 17 vectors, no model / no network / no credential
+metaharness doctor claude
+```
+
+## What a run does
+
+1. Spawns `claude` into a **scratch config home**.
+2. Installs a blocking `PreToolUse` hook and answers its calls **per call**.
+3. Streams the session out as protocol events on stdout; takes steering on stdin.
+4. Retains the raw transcript.
+5. Exits on the [hermetic floor's](../hermetic.mdx) verdict.
+
+## Declared capabilities
+
+| Tier | Status |
+|---|---|
+| `registration` | `delivered` |
+| `call` | `delivered` |
+| `turn` | `unverified` |
+| `kill` | `delivered` |
+
+| Command | Support |
+|---|---|
+| `tool.decide` | honoured |
+| `interrupt` | honoured |
+| `halt` | honoured |
+| `frame.set`, `message.inject`, `steer`, `permission.set` | refused — `UNSUPPORTED_CONTROL` |
+
+`steer` is refused because **Claude Code headless has no mid-turn tier**. That is a property of
+the surface, not an omission in the adapter.
+
+## Operation rendering
+
+| Neutral operation | Vendor tool |
+|---|---|
+| `file.read` | `Read` |
+| `file.write` | `Write` |
+| `file.edit` | `Edit` |
+| `dir.list` | `Glob` |
+| `search` | `Grep` |
+| `shell` | `Bash` |
+| `web.read` | `WebFetch` |
+| `skill.load` | `Skill` |
+| `subagent.spawn` | `Task` |
+| `task.todo` | `TodoWrite` |
+| `mcp.call` | *(none)* |
+
+Print it yourself: `metaharness capabilities claude --render`.
+
+## Three things this crate deliberately does not do
+
+| | |
+|---|---|
+| **It spawns nothing.** | `plan_launch` returns the command line, the child environment, the settings document, the hook definition and the copy list as **values** — because a consumer asserts its own argv rather than trusting it, *"because every one of the failures would be silent"*. The hook program is the same rule applied to the seam's executable. |
+| **It reads no clock.** | Every event's timestamp is the one the vendor recorded, passed through — or absent. |
+| **It drops nothing.** | An unmappable record becomes `opaque` with the vendor's `type`, `subtype`, a digest and its 1-based source line. An unrecognised *field* is ignored in silence; an unrecognised *record* is preserved. |
+
+## The live proof
+
+A frame that admitted no shell met a prompt that asked for one.
+
+- metaharness denied the call at the hook.
+- The call did not run.
+- **The vendor's own terminal record** listed `Bash` in `permission_denials`.
+
+### Two defects that only a paid run could find
+
+Both were metaharness's, and neither was reachable without a real session:
+
+1. The hermetic floor read **the wrong field** for "was an API key in use".
+2. It treated *"this run pinned no documents"* as *"nobody found out whether the documents
+   moved"* — which made `--hermetic strict` unpassable.
+
+Both are fixed, both are regression-tested, and both are recorded as design amendment **a4**.
+
+## Evidence discipline
+
+Every claim this adapter makes about the binary is either read from the design document's § 2.7 —
+where each row carries its own method — or **labelled unverified at the point of use**, with the
+open question that would close it.
+
+> A string in a binary is weaker than a driven call, and this crate says which it has.

@@ -1,0 +1,8 @@
+{
+  "label": "Harnesses",
+  "position": 7,
+  "link": {
+    "type": "generated-index",
+    "description": "One adapter crate per vendor. Every claim about a vendor binary is pinned to a version and verified against it, or labelled unverified."
+  }
+}

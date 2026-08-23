@@ -1,0 +1,120 @@
+---
+id: library
+title: Library API
+sidebar_position: 2
+---
+
+# Library API
+
+Library first, binary second. The `metaharness` crate is the primary face; `metaharness-cli` is a
+thin process boundary over it.
+
+> Everything is in the library beside `main.rs`, so an integration test can read the **real verb
+> surface** instead of a copy of it.
+
+## The whole loop
+
+```rust
+use metaharness::{Input, Metaharness};
+use metaharness::protocol::{Command, Decision, DecisionMode, Event, Kind};
+
+let mut run = Metaharness::new(Kind::Claude)
+    .with_decisions(DecisionMode::Ask)
+    .with_prompt("tidy the imports")
+    .start(Input::FromSpec)?;                 // spawns the real `claude`
+
+while let Some(line) = run.next_event()? {
+    if let Event::ToolRequested { call_id, decision_required: true, .. } = &line.event {
+        run.send(Command::ToolDecide {
+            call_id: call_id.clone(),
+            decision: Decision::Allow,
+        })?;
+    }
+}
+```
+
+## The builder
+
+`Metaharness::new(Kind)` and then any of:
+
+| Method | Sets |
+|---|---|
+| `.with_hermetic(HermeticMode)` | `off` / `on` / `strict` |
+| `.with_prompt(impl Into<String>)` | the opening prompt |
+| `.with_frame(Frame)` | an in-memory [frame](../frames.mdx) |
+| `.with_frame_file(impl Into<PathBuf>)` | a sealed `metaharness.frame/1` document |
+| `.with_decisions(DecisionMode)` | `Frame` or `Ask` |
+| `.with_tool_surface(ToolSurface)` | `Native` or `Owned` (refused) |
+| `.with_credentials(CredentialSource)` | `OperatorLogin`, `ApiKey`, `None` |
+| `.with_model(impl Into<String>)` | the model to ask for |
+| `.with_max_turns(u32)` | a ceiling on turns |
+| `.with_plugin_dir(impl Into<PathBuf>)` | a plugin directory, repeatable |
+| `.with_cwd(impl Into<PathBuf>)` | an operator-named working directory |
+| `.with_strict_version(bool)` | refuse on a version outside the pin |
+| `.with_audit(bool)` | judge the run |
+| `.with_spec_file(impl Into<PathBuf>)` | the expectation document |
+| `.with_auditor(impl Into<String>)` | the auditor argv prefix |
+| `.with_auditor_arg(impl Into<String>)` | one pass-through auditor argument |
+
+:::info One `RunSpec`, two spellings
+The builder's `with_…` methods and the CLI's flags are **two spellings of the same struct**, and
+neither can grow a knob the other cannot express.
+:::
+
+## Starting
+
+| Method | Use |
+|---|---|
+| `.start(Input)` | Against the real vendor binary. Dispatches runner and seam by `Kind`. |
+| `.start_with(Input, &mut dyn ProcessRunner, &mut dyn SeamFactory)` | Against a runner you supply — the scripted fake every C3 vector runs against. |
+| `.start_with_clock(…, Box<dyn Clock>)` | The same, with the clock supplied. |
+
+The clock is a seam because a decision deadline has to be able to expire **in a test**; a vector
+that slept for real would buy a slow suite and prove the same thing.
+
+### `Input`
+
+| Variant | Meaning |
+|---|---|
+| `Input::Prompt(String)` | Start with this prompt. Sets `RunSpec::prompt`, so the spec stays the one place a run is described. |
+| `Input::FromSpec` | Start with whatever prompt the spec already carries — the driven case, where the caller built the whole spec. |
+
+### Refusals are ordered
+
+Every refusal a start can raise is checked in the order that tells a caller the most useful thing
+first: **the spec's own faults before the machine's**.
+
+A vendor binary that is absent or unrunnable arrives as `Refusal::Io`, which is exit `2` —
+*metaharness could not do its job*, never a verdict about the run.
+
+## Driving a run
+
+| Method | Returns |
+|---|---|
+| `run.next_event()` | `io::Result<Option<EventLine>>` |
+| `run.send(Command)` | `io::Result<CommandOutcome>` |
+| `run.send_as(id, Command)` | the same, with your own command id |
+
+## Why the two vendors need different runners
+
+`start` dispatches on `Kind` because the two vendors do not put their record and their calls in
+the same place:
+
+| Vendor | Record | Calls |
+|---|---|---|
+| Claude Code | down one pipe | down the same pipe |
+| Codex | a session rollout file | a hook channel beside it |
+
+## Crate layout
+
+| Crate | Role |
+|---|---|
+| `metaharness-protocol` | The wire, the frame, the hermetic contract, the seam traits. **Depends on no adapter.** |
+| `metaharness` | The library face: builder, run loop, spawning, audit. |
+| `metaharness-claude` | Everything claude-specific. |
+| `metaharness-codex` | Everything codex-specific. |
+| `metaharness-cli` | The verb surface. |
+
+The seam traits live in the protocol crate rather than in the library face because they are the
+neutral shape an adapter fills in. **Nothing there names a vendor** — which is what keeps an
+embedder from accidentally depending on which harness is inside.

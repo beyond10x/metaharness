@@ -1,0 +1,120 @@
+---
+id: cli
+title: CLI reference
+sidebar_position: 1
+---
+
+# CLI reference
+
+```text
+metaharness <VERB> [OPTIONS]
+```
+
+Six verbs. Three of them need no model, no network and no credential.
+
+| Verb | What it does |
+|---|---|
+| `run <KIND>` | Run a harness session: events as JSON lines on stdout, commands as JSON lines on stdin. |
+| `capabilities <KIND>` | What an adapter says it can do: declared tiers, pinned versions, operation rendering. |
+| `conformance <KIND>` | The free conformance vectors: no model, no network, no credential. |
+| `doctor <KIND>` | The installed vendor version against the adapter's pin. |
+| `project --events <FILE>` | Project an event stream into `trace-ir/1`. **Refuses with exit 2** — see [Status](../status.mdx). |
+| `audit --transcript <FILE>` | Judge a transcript offline. **Refuses with exit 2**. |
+
+`<KIND>` is `claude` or `codex`.
+
+## `metaharness run`
+
+### The run itself
+
+| Flag | Default | Meaning |
+|---|---|---|
+| `<KIND>` | — | Which harness. |
+| `-p, --prompt <TEXT>` | — | The prompt to start with. |
+| `--model <NAME>` | — | The model to ask for. Passed through to the vendor, which resolves it. |
+| `--max-turns <N>` | — | A ceiling on turns. |
+| `--cwd <DIR>` | scratch | An operator-named working directory for the child. **Trades two hermetic rows for real work** — see below. |
+
+### Hermeticity
+
+| Flag | Default | Meaning |
+|---|---|---|
+| `--hermetic [off\|on\|strict]` | `off`; bare `--hermetic` means `on` | See [the hermetic contract](../hermetic.mdx). |
+| `--credentials <SOURCE>` | `operator-login` | `operator-login`, `api-key`, or `none`. |
+| `--plugin-dir <DIR>` | *(none)* | Plugin directories to load, **and only these**. Repeatable. |
+| `--strict-version` | off | Refuse before the run when the installed vendor version is outside the adapter's pin, instead of warning. |
+
+**`--credentials none`** means the run is expected to fail at the first request — and that is
+sometimes exactly what a test wants.
+
+**`--credentials api-key`** is a declaration: without it, `ANTHROPIC_API_KEY` is not in the child
+environment at all.
+
+### Control
+
+| Flag | Default | Meaning |
+|---|---|---|
+| `--frame <FILE>` | — | A sealed `metaharness.frame/1` document. See [frames](../frames.mdx). |
+| `--decisions <MODE>` | `frame` | `frame` (the adapter decides from the admitted set) or `ask` (the embedder decides; one round trip per call). |
+| `--tool-surface <SURFACE>` | `native` | `native`, or `owned` — which this build **refuses**. |
+
+The frame is a **path**, not a parsed value, on purpose: resolving it is the library's job, and
+parsing it in the binary would put protocol logic in the CLI.
+
+### Audit
+
+| Flag | Meaning |
+|---|---|
+| `--audit` | Judge the run: the built-in hermetic floor always, the external auditor when `--spec` is given. |
+| `--spec <FILE>` | The expectation document the external auditor is pointed at. |
+| `--auditor <PREFIX>` | The external auditor, as an **argv prefix**. |
+| `-- <AUDITOR_ARGS>…` | Arguments passed through to the auditor after everything metaharness adds. |
+
+:::danger A `--spec` with no `--auditor` is a refusal, not a skip
+A specification nobody checked reads exactly like a specification that passed.
+:::
+
+`--auditor` takes an **argv prefix**, so a single-word program name is a degenerate prefix and a
+two-word subcommand is not a special case.
+
+## `--cwd`: the declaration that trades two rows for real work
+
+The child runs **in this tree**. So:
+
+- **H7** ("the working directory is ours") and **H11** ("no memory file outside the copied tree")
+  stop being impositions and are attested **unavailable**, naming this directory.
+- `--hermetic strict` therefore **refuses** such a run.
+- Plain `--hermetic` reports it honestly.
+- `--add-dir` stays denied either way.
+
+The embedder that wants a governed run over a real repository accepts exactly that trade.
+
+## `metaharness capabilities`
+
+| Flag | Meaning |
+|---|---|
+| `--render` | Print the neutral-operation → vendor-tool table instead of the whole descriptor. |
+
+A rendering that only exists inside a run cannot be asserted on before one — which is why it is
+published here.
+
+## `metaharness audit` and `metaharness project`
+
+| Flag | Verb | Meaning |
+|---|---|---|
+| `--events <FILE>` | both | The event stream. Required for `project`, optional for `audit`. |
+| `--to <FORM>` | `project` | The target form. Default `trace-ir`. |
+| `--transcript <FILE>` | `audit` | The raw vendor transcript to judge. |
+| `--spec <FILE>` | `audit` | The expectation document. |
+| `--auditor <PREFIX>` | `audit` | The external auditor, as an argv prefix. |
+
+Both currently **refuse with exit 2, naming what they wait for**.
+
+## Exit codes
+
+| Code | Meaning |
+|---|---|
+| `0` | Completed; every gating hermetic row is `ok`. |
+| `1` | A gating row is `gap`. |
+| `2` | Refused — a verb or option that is not built. |
+| `3` | A gating row is `unk`. Not a softer `gap`. |

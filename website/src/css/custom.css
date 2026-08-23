@@ -1,30 +1,54 @@
 /**
- * Any CSS included here will be global. The classic template
- * bundles Infima by default. Infima is a CSS framework designed to
- * work well for content-centric websites.
+ * Global styles. Docusaurus uses Infima; these override its variables.
  */
 
-/* You can override the default Infima variables here. */
 :root {
-  --ifm-color-primary: #2e8555;
-  --ifm-color-primary-dark: #29784c;
-  --ifm-color-primary-darker: #277148;
-  --ifm-color-primary-darkest: #205d3b;
-  --ifm-color-primary-light: #33925d;
-  --ifm-color-primary-lighter: #359962;
-  --ifm-color-primary-lightest: #3cad6e;
-  --ifm-code-font-size: 95%;
+  --ifm-color-primary: #14708a;
+  --ifm-color-primary-dark: #12657c;
+  --ifm-color-primary-darker: #115f75;
+  --ifm-color-primary-darkest: #0e4e60;
+  --ifm-color-primary-light: #167b98;
+  --ifm-color-primary-lighter: #17819f;
+  --ifm-color-primary-lightest: #d8ecf2;
+  --ifm-code-font-size: 92%;
   --docusaurus-highlighted-code-line-bg: rgba(0, 0, 0, 0.1);
 }
 
-/* For readability concerns, you should choose a lighter palette in dark mode. */
 [data-theme='dark'] {
-  --ifm-color-primary: #25c2a0;
-  --ifm-color-primary-dark: #21af90;
-  --ifm-color-primary-darker: #1fa588;
-  --ifm-color-primary-darkest: #1a8870;
-  --ifm-color-primary-light: #29d5b0;
-  --ifm-color-primary-lighter: #32d8b4;
-  --ifm-color-primary-lightest: #4fddbf;
+  --ifm-color-primary: #4dc4e6;
+  --ifm-color-primary-dark: #32bbe1;
+  --ifm-color-primary-darker: #24b6de;
+  --ifm-color-primary-darkest: #1d95b7;
+  --ifm-color-primary-light: #68cdeb;
+  --ifm-color-primary-lighter: #76d2ed;
+  --ifm-color-primary-lightest: #a1dff3;
   --docusaurus-highlighted-code-line-bg: rgba(0, 0, 0, 0.3);
+}
+
+/* The docs lean on tables for facts-per-row; make them readable rather than cramped. */
+.markdown table {
+  display: table;
+  width: 100%;
+}
+
+.markdown table th,
+.markdown table td {
+  vertical-align: top;
+}
+
+/* Two-column blocks on the landing doc page. */
+.mh-two-col {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 1.5rem;
+}
+
+.mh-two-col > * {
+  min-width: 0;
+}
+
+@media screen and (max-width: 996px) {
+  .mh-two-col {
+    grid-template-columns: 1fr;
+  }
 }

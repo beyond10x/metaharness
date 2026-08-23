@@ -12,3 +12,16 @@ tasks:
     desc: Format the workspace.
     cmds:
       - cargo fmt
+
+  docs:
+    desc: The public documentation site, in dev mode with hot reload.
+    dir: website
+    cmds:
+      - npm start
+
+  docs:build:
+    desc: Build the documentation site. A broken link fails the build.
+    dir: website
+    cmds:
+      - npm ci
+      - npm run build

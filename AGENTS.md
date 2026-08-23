@@ -24,6 +24,27 @@ The paid and recorded evaluation machinery migrated out of `engineering-protocol
 Nothing under `evals/` runs in `task check` — a paid run is never part of a gate. The subject
 checkout is `EP_REPO` (default `~/projects/engineering-protocols`).
 
+## What lives in `website/`
+
+The **public** documentation site (Docusaurus, published to GitHub Pages at
+`https://beyond10x.github.io/metaharness/`). Written for a reader who does not have this
+checkout: what metaharness is, how to run one, the wire, the contracts, the adapters.
+
+The split with `docs/` is deliberate and one-way:
+
+- `docs/design/` and `docs/research/` carry the **reasoning** — open questions, the amendment
+  record, per-claim evidence labels. They are not published.
+- `website/docs/` states the **conclusion** and cites where the reasoning lives.
+- Where the two disagree, the design document is right and the site is stale.
+
+`task docs` runs it, `task docs:build` builds it, and a broken link fails the build
+(`onBrokenLinks: 'throw'`). Nothing under `website/` runs in `task check`; CI builds it on every
+PR that touches it (`.github/workflows/docs.yml`). The built site is never committed — publishing
+goes through the Pages deployment API, not a `gh-pages` branch, so `build/` never becomes history.
+
+A claim on the site obeys the same rule as a claim in the code: pinned to a version and verified
+against it, or labelled unverified.
+
 ## Rules
 
 - Rust CLIs use clap (derive). Hand-rolled argv parsing is banned.

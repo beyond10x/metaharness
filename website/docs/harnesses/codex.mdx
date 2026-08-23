@@ -1,0 +1,123 @@
+---
+id: codex
+title: Codex
+sidebar_position: 2
+---
+
+# The `codex` adapter
+
+Pinned to **0.145.0**. Adapter class: `harness`.
+
+```bash
+metaharness run codex --hermetic -p "…"
+metaharness conformance codex     # 7 vectors, 3 of which run a real process and the real hook
+metaharness doctor codex
+```
+
+## What a run does
+
+1. Starts a real `codex exec` into a scratch `CODEX_HOME`.
+2. Copies the operator's `auth.json` in **per spawn**.
+3. Declares a blocking `PreToolUse` hook.
+4. Tails the **session rollout** for events — the record that carries timestamps, durations and
+   per-turn usage, where `codex exec --json` stdout carries none.
+5. Retains those bytes for the auditor and answers the hook per call.
+
+`capabilities codex`, `conformance codex` and `doctor codex` all work with **no model and no
+credential**.
+
+## Declared capabilities
+
+| Tier | Status | Why |
+|---|---|---|
+| `registration` | `unverified` | `codex exec` takes no tool allowlist. `sandbox_mode` and `approval_policy` constrain the **process**, not the offered tool set. Declared rather than claimed. |
+| `call` | **`delivered`** | Driven, live. See below. |
+| `turn` | `unverified` | `thread/inject` is an app-server method; this adapter drives `codex exec`, which has no channel for text between turns. |
+| `kill` | `delivered` | By terminating the child — metaharness's own act on a process it started, not a claim about a vendor surface. |
+
+## Operation rendering
+
+Deliberately sparse. An operation with no vendor tool publishes as `None` — **a fact worth
+publishing rather than an omission**.
+
+| Neutral operation | Vendor tool |
+|---|---|
+| `shell` | `Bash` |
+| `file.write` | `apply_patch` |
+| `file.edit` | `apply_patch` |
+| everything else | *(none)* |
+
+The `apply_patch` rendering comes from the vendor's documentation, **not from a driven
+observation**, and is labelled as such.
+
+## The live proof, and its exact limits
+
+A policy that admitted no shell met a prompt that asked for one.
+
+| Layer | What it said |
+|---|---|
+| The hook process | `{"tool_name":"Bash","tool_use_id":"exec-96257928-…"}` |
+| metaharness | answered `deny`, with a reason |
+| The vendor's session record | `Command blocked by PreToolUse hook: this step admits no shell, so the command did not run` — with an **empty** `Output:` |
+| The model's closing message | *"The command was blocked and did not run."* |
+
+So `tool.decide` is `Honoured` and the `call` tier is `Delivered`. Design amendment **a7**.
+
+:::warning The `allow` half is not claimed
+Only the **deny** path has been driven. The 0.145.0 binary carries a string suggesting some
+`permissionDecision` values are refused at `PreToolUse`. An `allow` the vendor rejects would be a
+hook response it discards — so the grant half of this wire stays `unverified` until a run drives
+it.
+:::
+
+Also not claimed: the turn tier, the registration tier, and the `apply_patch` rendering.
+
+## Three things that cost more to learn than the code using them
+
+Each is a **silent failure**. This is why every claim above is read from the run's own record
+rather than from the file that configured it.
+
+### 1. A hook is declared in `config.toml`, not `hooks.json`
+
+A `hooks.json` is a *plugin manifest's* file. An unrecognised key under `[hooks]` is dropped
+**without failing the config load** — so a misconfigured seam and a run where nothing was
+attempted are the same observation.
+
+### 2. A hook in a fresh `CODEX_HOME` never fires without `--dangerously-bypass-hook-trust`
+
+A scratch home cannot hold persisted trust. The flag's warning is about running *somebody else's*
+hook unvetted; the only hook here is the one metaharness wrote a moment earlier.
+
+### 3. The hook speaks Claude Code's tool vocabulary
+
+`tool_name` is `Bash` — where the rollout calls the same call `exec` and the binary's own
+model-facing list calls it `shell`.
+
+A rendering table built from the *record* would have denied every shell call and reported it as a
+frame decision.
+
+## A version split nobody was looking for
+
+`codex --version` says **0.145.0**. The `session_meta.cli_version` written by the run that same
+binary starts says **0.144.0**.
+
+The adapter keeps one pin, the reader **warns rather than widening it**, and the split is tracked
+as open question **Q18**.
+
+## The rollout format has no stability guarantee
+
+It drifts within a single install. That is why the version gate is a warning and **never a refusal
+mid-read** — and why the pin is a single entry: a verdict that changed because the *reader*
+changed must be visible as such, not as a change in the agent's behaviour.
+
+## Evidence labels
+
+The evidence base is the research record `docs/research/2026-08-21-codex-harness-research.md`.
+Every claim there is labelled, and this crate inherits the label at the point of use:
+
+| Label | Meaning |
+|---|---|
+| **V** | Verified locally against the binary and 2,437 rollout files. |
+| **D** | Official docs. |
+| **I** | Inferred. |
+| **?** | Unknown. |

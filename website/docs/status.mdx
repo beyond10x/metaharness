@@ -1,0 +1,89 @@
+---
+id: status
+title: Status
+sidebar_position: 9
+---
+
+# Status
+
+**Pre-v1.** The design in `docs/design/` is what is binding — where the code and that document
+disagree, **the document is amended** rather than the disagreement left in the code.
+
+## Built
+
+| | |
+|---|---|
+| **Claude Code, driven end to end** | `metaharness run claude --hermetic -p "…"` spawns 2.1.239 into a scratch config home, installs a blocking `PreToolUse` hook, answers it per call, streams protocol events on stdout, takes steering on stdin, retains the raw transcript, and exits on the hermetic floor's verdict. |
+| **Codex, driven end to end (CX-M2)** | `metaharness run codex --hermetic -p "…"` starts a real `codex exec` into a scratch `CODEX_HOME`, copies `auth.json` per spawn, declares a blocking `PreToolUse` hook, and tails the **session rollout** for events. |
+| **Free verbs** | `capabilities`, `conformance` and `doctor` work with **no model and no credential**. `conformance claude` runs **17** vectors; `conformance codex` runs **7**, three of which drive a real process and the real hook program. |
+| **Frames across the process boundary (a5)** | `--frame step.frame.json` takes a sealed `metaharness.frame/1` document — digest-verified on load, refused by name when unreadable, untagged, misshapen or edited after sealing, enforced per call from the first turn. |
+| **The eval machinery** | Lives in `evals/`, migrated from `engineering-protocols`. Reads its denial census from `tool.decided` events in the run's own streams. **Nothing under `evals/` is part of `task check`.** |
+
+## Proven against paid runs — on both vendors
+
+A frame that admitted no shell met a prompt that asked for one. The call did not run, and **the
+vendor's own record says so**.
+
+| Vendor | The vendor's own evidence |
+|---|---|
+| Claude Code | `Bash` in `permission_denials` |
+| Codex | `Command blocked by PreToolUse hook…` with an **empty** `Output:` |
+
+That is the claim the whole design exists to be able to make, and it is the one thing no free test
+tier can reach.
+
+Live runs cost money, sit behind `METAHARNESS_LIVE=1`, and are **never** part of `task check`.
+
+## Not built — and refusing by name
+
+| Verb | Waiting on |
+|---|---|
+| `metaharness project` | **Q9** — `trace-ir/1` has no reader. |
+| `metaharness audit` over a transcript metaharness did not itself launch | named at the refusal. |
+
+Both refuse with **exit 2**, naming what they wait for.
+
+| Also refused | Why |
+|---|---|
+| `--tool-surface owned` | Strategy C means metaharness implements the tools itself, and per-step re-listing is unverified vendor behaviour (**Q1**). |
+| `steer` on Claude Code | Claude Code headless has no mid-turn tier. |
+| The `allow` half of Codex's decision wire | Only the deny path has been driven. |
+
+## Open questions in flight
+
+| Q | Question |
+|---|---|
+| **Q1** | Per-step tool re-listing — is it a verifiable vendor behaviour? Gates `--tool-surface owned`. |
+| **Q9** | A reader for `trace-ir/1`. Gates `metaharness project`. |
+| **Q13** | Credential lifetime. Answered in part by the `auth.expired` event and the per-spawn copy. |
+| **Q18** | `codex --version` says `0.145.0`; the same binary's `session_meta.cli_version` says `0.144.0`. The adapter keeps one pin and the reader warns rather than widening it. |
+
+## Roadmap directions
+
+Each is a direction, not a work order. Ordered roughly by how much it de-risks everything else.
+
+| # | Direction |
+|---|---|
+| 1 | **Contract-test every adapter mapping.** The vendor side pinned by recorded wire samples, the metaharness side by the event/command vocabulary — drift on either side a red contract rather than a surprise in a paid run. The first slice (CT-1) is built: `conformance <kind> --contract` emits a `contract_result`. |
+| 2 | **More harnesses: `pi`, `opencode`** — same pattern, research record first, live proof last. |
+| 3 | **metaharness usage ≡ flux usage** — UX parity with `flux run --stream-json`, and possibly a `metaharness-flux` adapter, likely the cheapest of all. |
+| 4 | **Sandbox inversion** — wrap the inner harness in a sandbox *metaharness* owns and disable the vendor's own inside it. One enforcement surface, vendor-independent, and H3/H7/H11 plus network isolation become impositions metaharness can actually make. |
+
+### Why contract testing, concretely
+
+CX-M2's single paid run surfaced **three real drifts**, and none was a bug in the adapter's logic
+— each was a *fact about a vendor* the adapter asserts and could be wrong about.
+
+| Drift | What a contract test pins |
+|---|---|
+| The hook's `tool_name` is `Bash`, not the `exec` the rollout uses or the `shell` the model-facing list uses. | A recorded real hook input; the rendering table must agree with it. |
+| `codex --version` and `session_meta.cli_version` disagree. | The pinned version is a **pair of sources to reconcile**, not one string. |
+| The hook `tool_use_id` and the rollout `call_id` do not join. | The correlation key the adapter claims must be the one the records share. |
+
+## The gate
+
+```bash
+task check      # cargo fmt --check + clippy -D warnings + cargo test --workspace
+```
+
+Green before any push. A paid run is never part of a gate.
