@@ -10,7 +10,7 @@ crate (`metaharness-protocol`) depends on no adapter.
 
 ## Consumers that keep this honest
 
-- `~/projects/engineering-protocols` — its eval harness and reference driver replace direct
+- `~/beyond10x/engineering-protocols` — its eval harness and reference driver replace direct
   `claude …` invocations with `metaharness run claude --hermetic …`; its workflows (planning as
   request → classify → route-to-entities) must be drivable deterministically through this
   interface. That repo's `integrations/` carries the harness-specific residue that migrates here.
@@ -22,7 +22,7 @@ crate (`metaharness-protocol`) depends on no adapter.
 The paid and recorded evaluation machinery migrated out of `engineering-protocols` (its
 `epic:metaharness-migration`): eval scripts, recorded transcripts, contracts and result records.
 Nothing under `evals/` runs in `task check` — a paid run is never part of a gate. The subject
-checkout is `EP_REPO` (default `~/projects/engineering-protocols`).
+checkout is `EP_REPO` (default `~/beyond10x/engineering-protocols`).
 
 ## What lives in `website/`
 

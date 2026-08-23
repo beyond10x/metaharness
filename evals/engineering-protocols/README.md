@@ -1,7 +1,7 @@
 > **Migrated from `engineering-protocols/integrations/claude-code/eval/`, 2026-08-22, under that
 > repository's `epic:metaharness-migration`.** The eval logic, its recorded transcripts, contracts
 > and result tables live here now; the subject stays the engineering-protocols checkout named by
-> `EP_REPO` (default `~/projects/engineering-protocols`). What changed in the move:
+> `EP_REPO` (default `~/beyond10x/engineering-protocols`). What changed in the move:
 > `run-driven.sh` drives the subject's `protocol drive run`, whose every `llm` step now spawns
 > through `metaharness run claude` in ask mode — the scratch config home, credential copy and env
 > hygiene left this eval for metaharness itself, and the denial census reads `tool.decided`

@@ -18,7 +18,7 @@ set -uo pipefail
 CHECKS_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 EVAL_DIR="$(cd "$CHECKS_DIR/.." && pwd)"
 # Migrated: this eval lives in the metaharness repository; the subject checkout comes from EP_REPO.
-REPO="${EP_REPO:-$HOME/projects/engineering-protocols}"
+REPO="${EP_REPO:-$HOME/beyond10x/engineering-protocols}"
 PLUGIN_DIR="$REPO/integrations/claude-code"
 CONTRACTS="$CHECKS_DIR/contracts"
 TRANSCRIPTS="$CHECKS_DIR/transcripts"

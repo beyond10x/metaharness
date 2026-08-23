@@ -40,13 +40,13 @@
 # and must never be — part of any default gate.
 #
 # Environment:
-#   EP_REPO              the engineering-protocols checkout (default: ~/projects/engineering-protocols)
+#   EP_REPO              the engineering-protocols checkout (default: ~/beyond10x/engineering-protocols)
 #   EVAL_MAX_ITERATIONS  driver loop bound (default 12)
 set -uo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 MH_REPO="$(cd "$SCRIPT_DIR/../.." && pwd)"
-REPO="${EP_REPO:-$HOME/projects/engineering-protocols}"
+REPO="${EP_REPO:-$HOME/beyond10x/engineering-protocols}"
 MAX_ITERATIONS="${EVAL_MAX_ITERATIONS:-12}"
 TASK_ID="EVAL-1"
 
