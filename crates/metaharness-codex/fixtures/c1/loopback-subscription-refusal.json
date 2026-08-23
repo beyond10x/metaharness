@@ -1,0 +1,6 @@
+{
+  "refusal": {
+    "code": "UNSUPPORTED_CONTROL",
+    "display": "the run declared credentials: loopback over a ChatGPT-plan login, and that half of milestone LP-4 is not built: V-LP6 asks whether subscription traffic can be routed through a model_providers entry at all, and nothing here has answered it — the API-key half is built and free-tested, this one needs one live turn nobody has spent. It is refused by name rather than degraded to the credential-copy path, because a run that asked for no credential in the child and got auth.json copied into its scratch home would be wrong in the direction that matters"
+  }
+}

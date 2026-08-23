@@ -1137,7 +1137,8 @@ mod tests {
 
     fn custody_over(dir: &Path, token: &str) -> (PathBuf, Arc<CredentialCustody>) {
         let path = fake_credential(dir, token);
-        let custody = CredentialCustody::open(&path).expect("the fake credential opens");
+        let custody = CredentialCustody::open(metaharness_protocol::Kind::Claude, &path)
+            .expect("the fake credential opens");
         (path, Arc::new(custody))
     }
 

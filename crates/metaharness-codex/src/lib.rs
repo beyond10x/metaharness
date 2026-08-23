@@ -24,9 +24,13 @@
 //!   run refused a shell call at that hook and **the vendor's own record shows the command
 //!   blocked with empty output**, so [`capabilities`] declares the call tier `Delivered` and
 //!   `tool.decide` `Honoured`. Design amendment a7.
-//! * **What is still not claimed:** the `allow` half of the decision wire (only `deny` has been
-//!   driven), the turn tier, the registration tier, and the `apply_patch` rendering — the hook's
-//!   word for a patch call is the vendor's documentation and not a driven observation.
+//! * **Also driven (R2.4, 2026-08-23):** the `allow` half of the decision wire — a live run held a
+//!   `Bash` call at the hook, answered `allow`, and the rollout's `custom_tool_call_output`
+//!   carried the command's output (observed on the child-`PATH` codex 0.144.0; the pin is
+//!   0.145.0 and the two-install warning fired).
+//! * **What is still not claimed:** the turn tier, the registration tier, and the `apply_patch`
+//!   rendering — the hook's word for a patch call is the vendor's documentation and not a driven
+//!   observation.
 //! * **What this vendor's record does not contain:** three of amendment a9's four payload fields.
 //!   The rollout reports reasoning tokens and so `usage.thinking_tokens` is carried; it reports no
 //!   per-iteration list, no speed tier, no cost anywhere, and no per-tool result record beside a
@@ -59,8 +63,8 @@ mod vectors;
 pub use bridge::{CodexSeam, CodexSeams, hook_request_line};
 pub use hook::{HOOK_WAIT_SECONDS, HookChannelPaths, hook_program};
 pub use launch::{
-    CredentialCopy, HOOK_TIMEOUT_SECONDS, LaunchContext, LaunchPlan, LaunchRefusal, child_path,
-    config_path, hook_program_path, plan_launch,
+    CodexLogin, CredentialCopy, HOOK_TIMEOUT_SECONDS, LOOPBACK_ENV_KEY, LaunchContext, LaunchPlan,
+    LaunchRefusal, LoopbackParams, child_path, config_path, hook_program_path, plan_launch,
 };
 pub use rollout::RolloutReader;
 pub use seam::{HookInput, capabilities, parse_hook_input, render_hook_response, render_operation};

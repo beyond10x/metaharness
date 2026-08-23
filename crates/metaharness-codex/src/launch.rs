@@ -91,22 +91,36 @@ const HOOK_PROGRAM: &str = "hooks/pretooluse";
 /// there is no flag with which to name a directory and the only candidate location is one the
 /// vendor itself looks at. This constant is the candidate.
 ///
-/// **The placement is undriven, and that is a claim about this adapter, not about codex.** What is
-/// read — from strings in the 0.145.0 binary, which is weaker than a driven call and is labelled
-/// so at every other point in this crate:
+/// Chosen from strings in the binary, and then **driven once**:
 ///
 /// * the binary resolves `plugins/cache` and `plugins/data` **under the Codex home**, so
 ///   `$CODEX_HOME/plugins` is the vendor's own neighbourhood rather than an invention here;
 /// * a marketplace's plugin entries are `./plugins/<plugin-name>` relative to a marketplace root,
 ///   which is the same shape this constant produces with the scratch home as that root.
 ///
-/// What is **not** known: whether 0.145.0 loads a plugin from this path with no marketplace
-/// manifest and no `codex plugin add` behind it. This launch writes **no** `[marketplaces]` table
-/// to go with the copy, deliberately: an unrecognised key under a table this binary reads is
-/// dropped without failing the config load (see [`CONFIG_FILE`]), and a *malformed* one could fail
-/// it outright — which on this vendor is a run with no seam. So the copy is made, the attestation
-/// says in as many words that the load is unverified, and H1a's verdict is left to the run's own
-/// record. See `docs/design/metaharness-protocol-v0.1.md` **Q19**.
+/// # What one live run observed (2026-08-23, run `codex-2139643`)
+///
+/// A directed probe copied `integrations/codex` to this placement, digest `154857db…`, and asked
+/// the model to answer **from its runtime context only, using no tools**. It answered *"Available
+/// skills catalog — `## Skills`"* with **zero tool calls** — the census read `0/0/0/0` and no
+/// `tool.requested` was emitted at all — so the catalog could not have been read off disk. **The
+/// vendor surfaced the injected plugin's skills into the model's context from this path**, with no
+/// `[marketplaces]` table and no `codex plugin add` behind it.
+///
+/// Two limits travel with that, and they are why `loaded_by` still does not claim the row outright:
+///
+/// * **The child was 0.144.0**, the binary this machine's constructed `PATH` resolves, against a
+///   pin of 0.145.0 (Q18/a8). The observation is a fact about that binary and an inference about
+///   the pin.
+/// * **The vendor's opening record still lists no plugins** — `session.started.plugins` was
+///   `null` — so **H1a still reads `unk`** on this vendor. What was observed is the plugin's
+///   *content* reaching the model, which is what the treated arm of an evaluation needs; it is not
+///   the vendor enumerating what it loaded, which is what H1a asks for.
+///
+/// This launch still writes **no** `[marketplaces]` table, deliberately: an unrecognised key under
+/// a table this binary reads is dropped without failing the config load (see [`CONFIG_FILE`]), a
+/// *malformed* one could fail it outright — which on this vendor is a run with no seam — and the
+/// probe shows the copy alone is enough. See `docs/design/metaharness-protocol-v0.1.md` **Q19**.
 const PLUGIN_HOME: &str = "plugins";
 
 /// The emitted hook declares **no matcher at all**, which is every tool.
@@ -183,7 +197,21 @@ pub struct LaunchContext {
     pub cwd: PathBuf,
     /// The operator's credential file, when the run declared
     /// [`CredentialSource::OperatorLogin`]. `~/.codex/auth.json`, and nothing else in that home.
+    ///
+    /// Under [`CredentialSource::Loopback`] the same file is metaharness's own custody and
+    /// **never travels**: the caller opens it on its side of the socket, and this plan's copy
+    /// list stays empty whatever this field says.
     pub credentials_file: Option<PathBuf>,
+    /// The running loopback proxy's endpoint, placeholder and the login class behind it, under
+    /// [`CredentialSource::Loopback`] (LP-4).
+    ///
+    /// The one value in this context that **cannot** be known before the run's own machinery
+    /// starts: the proxy binds an ephemeral port, so unlike the static `--model-endpoint` there is
+    /// nothing for a pure function to compute. The caller starts the proxy, fills this, and only
+    /// then plans — and a `credentials: loopback` run that arrives here without it is
+    /// [`LaunchRefusal::LoopbackNotStarted`] rather than a child launched at no endpoint with no
+    /// credential.
+    pub loopback: Option<LoopbackParams>,
     /// The caller's own environment. Read here and **not** inherited (design § 8.1 H3).
     pub inherited_env: BTreeMap<String, String>,
     /// What an ancestor walk from [`LaunchContext::cwd`] found. Non-empty is a refusal before the
@@ -198,6 +226,63 @@ pub struct LaunchContext {
     /// goes and whether the run may proceed.
     pub plugins: Vec<PluginTree>,
 }
+
+/// What a started loopback proxy tells the launch, and the whole of it.
+///
+/// Two strings and one classification: this crate plans launches and owns no threads, so the proxy
+/// itself stays on the library side and only its addressable facts cross the seam. Both strings are
+/// per-run — an ephemeral port and a nonce-bearing placeholder — which is what stops one run
+/// reaching another's endpoint by accident.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct LoopbackParams {
+    /// What the child's provider `base_url` is built from: `http://127.0.0.1:<port>`.
+    pub base_url: String,
+    /// The placeholder the child authenticates with, `mh-run-<id>-<nonce>`.
+    ///
+    /// Worthless anywhere but that port, which is the point of putting it in the child instead of
+    /// the operator's token. It reaches the child in the environment variable the provider entry's
+    /// `env_key` names ([`LOOPBACK_ENV_KEY`]), never in a file.
+    pub placeholder: String,
+    /// Which login the custody behind the proxy holds, as the caller read it off `auth.json`.
+    ///
+    /// Carried here rather than discovered here, because this function reads no file — and carried
+    /// **at all** because the two classes are not interchangeable on this vendor: see
+    /// [`CodexLogin`].
+    pub login: CodexLogin,
+}
+
+/// Which shape of login an operator's `~/.codex/auth.json` holds.
+///
+/// The distinction is V-LP6's, and it decides whether the loopback door opens at all. The
+/// **field names** are read from the pinned binary's own `AuthDotJson` serde metadata (0.145.0:
+/// `OPENAI_API_KEY`, `auth_mode`, `tokens`, `last_refresh`, `agent_identity`,
+/// `personal_access_token`, `bedrock_api_key`), so the classification is not a guess about the
+/// file; what stays unverified is what the vendor *does* with a subscription token when a custom
+/// provider is in force, which is exactly why one class is refused.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum CodexLogin {
+    /// `OPENAI_API_KEY` in `auth.json`: a key the proxy can replay upstream as a bearer.
+    ApiKey,
+    /// `tokens`: a ChatGPT-plan login. **V-LP6's open half** — whether subscription traffic can be
+    /// routed through a `model_providers` entry at all is unanswered, and the answer needs one
+    /// live turn nobody here has spent.
+    Subscription,
+}
+
+/// The environment variable the loopback provider entry's `env_key` names.
+///
+/// Deliberately not `OPENAI_API_KEY`: that one is scrubbed under every credential source but
+/// `api-key` (H3/H4), and a placeholder arriving under the operator's own variable name would be
+/// indistinguishable from the leak the scrub exists to catch.
+pub const LOOPBACK_ENV_KEY: &str = "METAHARNESS_LOOPBACK_KEY";
+
+/// The provider id the loopback entry is declared under.
+///
+/// Prefixed, because 0.145.0 refuses a custom provider that collides with a built-in one —
+/// `model_providers contains reserved built-in provider IDs: … Built-in providers cannot be
+/// overridden. Rename your custom provider (for example, openai-custom)`, read verbatim from the
+/// pinned binary — and a refused config on this vendor is a run with no seam.
+const LOOPBACK_PROVIDER: &str = "metaharness_loopback";
 
 /// One file to copy into the scratch config home, and the only one.
 ///
@@ -310,14 +395,31 @@ pub enum LaunchRefusal {
         /// Which row forbids it.
         row: HermeticRow,
     },
-    /// The run declared `credentials: loopback`, which this adapter does not carry yet.
+    /// The run declared `credentials: loopback` and no proxy was started for it.
+    ///
+    /// Refused rather than planned, because the alternative is the worst of both worlds: a child
+    /// with no credential *and* no endpoint, which fails at its first request with a vendor error
+    /// about authentication and tells nobody that metaharness never started the thing that was
+    /// supposed to hold the credential.
+    LoopbackNotStarted,
+    /// A loopback proxy was started for a run that did not declare `credentials: loopback`.
+    ///
+    /// The mirror of the row above, and the dangerous direction: an api-key run whose provider
+    /// pointed at a local proxy would send the operator's real key to it. Refused rather than
+    /// resolved by precedence.
+    LoopbackProxyUndeclared {
+        /// The endpoint that would have been imposed on the child.
+        base_url: String,
+    },
+    /// The run declared `credentials: loopback` over a **subscription** login, which this adapter
+    /// does not route (V-LP6's open half).
     ///
     /// **Refused by name, never degraded to the copy path.** The model-adapter rule is that there
     /// is no silent fallback between adapter classes, and the copy path is exactly the thing the
     /// loopback provider exists to replace — a run that asked for "no credential in the child"
-    /// and got a credential copied into the scratch home would be wrong in the direction that
+    /// and got `auth.json` copied into the scratch home would be wrong in the direction that
     /// matters, and nothing in its record would say so.
-    LoopbackUnsupported,
+    LoopbackSubscriptionUnverified,
     /// A declared plugin directory cannot be installed (crossing #4).
     ///
     /// The same two silent-nothing cases the claude adapter refuses, refused here for the same
@@ -329,11 +431,12 @@ pub enum LaunchRefusal {
         /// Which of the two, in the words that say what to do about it.
         why: String,
     },
-    /// The run asked for a decision mode this adapter has not driven.
+    /// The run asked for a decision mode the descriptor does not call delivered.
     ///
-    /// Design § 8.4 O4 over the mode table: `observe` is the `allow` half of this vendor's
-    /// decision wire and only the `deny` half has been driven, so it is refused by name rather
-    /// than served with a grant the vendor may discard.
+    /// Design § 8.4 O4 over the mode table. Every mode the table carries today is delivered —
+    /// `observe` joined on 2026-08-23 when R2.4's live run drove the `allow` half — so this fires
+    /// only when a mode the table has not yet verified is asked for, and it is refused by name
+    /// rather than served with a response the vendor may discard.
     DecisionModeUnverified {
         /// The mode that was asked for.
         mode: DecisionMode,
@@ -358,7 +461,7 @@ impl LaunchRefusal {
     pub fn code(&self) -> Option<RefusalCode> {
         match self {
             LaunchRefusal::UnsupportedOption { .. }
-            | LaunchRefusal::LoopbackUnsupported
+            | LaunchRefusal::LoopbackSubscriptionUnverified
             | LaunchRefusal::DecisionModeUnverified { .. } => Some(RefusalCode::UnsupportedControl),
             _ => None,
         }
@@ -415,14 +518,25 @@ impl fmt::Display for LaunchRefusal {
                 "{}: the constructed child environment carries {key}",
                 row.id()
             ),
-            LaunchRefusal::LoopbackUnsupported => f.write_str(
-                "the run declared credentials: loopback and the codex adapter does not carry the \
-                 loopback provider yet: that is milestone LP-4, shaped by V-LP6, which verified \
-                 that routing subscription traffic through a metaharness-owned provider is \
-                 possible and whose confirming paid run has not been done. It is refused by name \
-                 rather than degraded to the credential-copy path, because a run that asked for \
-                 no credential in the child and got one copied into its scratch home would be \
-                 wrong in the direction that matters",
+            LaunchRefusal::LoopbackNotStarted => f.write_str(
+                "the run declared credentials: loopback and the launch context carries no proxy; \
+                 the base URL is an ephemeral port and is therefore only known after the proxy \
+                 starts, so the caller starts it and fills LaunchContext.loopback before planning",
+            ),
+            LaunchRefusal::LoopbackProxyUndeclared { base_url } => write!(
+                f,
+                "a loopback proxy at {base_url} was started for a run that did not declare \
+                 credentials: loopback; pointing a credentialed child at a local proxy would send \
+                 the operator's own key to it, so the two are refused rather than composed"
+            ),
+            LaunchRefusal::LoopbackSubscriptionUnverified => f.write_str(
+                "the run declared credentials: loopback over a ChatGPT-plan login, and that half \
+                 of milestone LP-4 is not built: V-LP6 asks whether subscription traffic can be \
+                 routed through a model_providers entry at all, and nothing here has answered it \
+                 — the API-key half is built and free-tested, this one needs one live turn nobody \
+                 has spent. It is refused by name rather than degraded to the credential-copy \
+                 path, because a run that asked for no credential in the child and got auth.json \
+                 copied into its scratch home would be wrong in the direction that matters",
             ),
             LaunchRefusal::PluginDirUnusable { directory, why } => write!(
                 f,
@@ -434,10 +548,8 @@ impl fmt::Display for LaunchRefusal {
             LaunchRefusal::DecisionModeUnverified { mode, status } => write!(
                 f,
                 "the run asked for --decisions {} and the {ADAPTER_ID} adapter declares that mode \
-                 {}. Observe mode is the allow half of this vendor's PreToolUse wire and nothing \
-                 else, and only the deny half has been driven (CX-M2); the allow half is milestone \
-                 R2.4. It is refused by name rather than served with a grant this binary may \
-                 discard, because a discarded allow on a capture run looks exactly like a capture \
+                 {}. It is refused by name rather than served with a response this binary may \
+                 discard, because a discarded decision on a run looks exactly like a decision \
                  that worked",
                 mode.as_str(),
                 match status {
@@ -504,13 +616,21 @@ pub fn plan_launch(spec: &RunSpec, context: &LaunchContext) -> Result<LaunchPlan
         }
     }
 
+    // `loopback` is exempt: under it the declared endpoint is not the child's provider base at
+    // all — it is the **proxy's upstream**, one hop further out — and the child holds a
+    // placeholder either way. The row exists to stop an operator credential travelling to a
+    // foreign host, and a loopback run has no credential in the child to travel.
     if let Some(endpoint) = &spec.model_endpoint
-        && spec.credentials != CredentialSource::None
+        && !matches!(
+            spec.credentials,
+            CredentialSource::None | CredentialSource::Loopback
+        )
     {
         return Err(LaunchRefusal::EndpointWithCredential {
             endpoint: endpoint.clone(),
         });
     }
+    guard_loopback(spec, context)?;
 
     let config_home = context.scratch_root.join(CONFIG_HOME);
     let credential_copies = credential_copies(spec, context, &config_home)?;
@@ -527,7 +647,7 @@ pub fn plan_launch(spec: &RunSpec, context: &LaunchContext) -> Result<LaunchPlan
         cwd: context.cwd.clone(),
         config_home: config_home.clone(),
         credential_copies,
-        config: build_config(spec, &hook),
+        config: build_config(spec, context, &hook),
         hook,
         attestation: attest(spec, context, &config_home, &plugin_installs),
         plugin_installs,
@@ -598,10 +718,13 @@ fn installed_plugins(installs: &[PluginInstall]) -> Vec<InstalledPlugin> {
             digest: install.digest.clone(),
             loaded_by: format!(
                 "nothing names it to the vendor: codex exec has no --plugin-dir, and this launch \
-                 writes no marketplace entry. It is copied to {} because the 0.145.0 binary keeps \
-                 its own plugins under CODEX_HOME/plugins — a string read from a binary, not a \
-                 driven call. **Whether codex loads it from there is unverified (Q19).** The \
-                 opening record's plugin list is the only thing that can say, and H1a reads it",
+                 writes no marketplace entry. It is copied to {} because this binary keeps its own \
+                 plugins under CODEX_HOME/plugins. **Driven once (Q19, 2026-08-23, run \
+                 codex-2139643): the vendor surfaced the injected plugin's skills catalog into the \
+                 model's context from this placement** — the model quoted its first heading with \
+                 zero tool calls, so nothing was read off disk. Two limits: the child was codex \
+                 0.144.0 against a 0.145.0 pin, and the opening record still lists no plugins, so \
+                 H1a reads unk on this vendor rather than confirming this row",
                 install.to.display()
             ),
         })
@@ -620,13 +743,32 @@ fn guard_decision_mode(spec: &RunSpec) -> Result<(), LaunchRefusal> {
     })
 }
 
+/// The declaration and the started proxy must agree, in both directions — and the login behind
+/// the proxy must be one this adapter routes.
+///
+/// Three failures rather than one, because they fail in opposite ways: without a proxy the child
+/// reaches nothing; with an undeclared proxy a credentialed child reaches a local socket holding
+/// the operator's own key; and over a subscription login the route itself is unverified (V-LP6).
+/// None is a warning — a control that reports and proceeds has already stopped controlling
+/// (design § 7.1).
+fn guard_loopback(spec: &RunSpec, context: &LaunchContext) -> Result<(), LaunchRefusal> {
+    let declared = spec.credentials == CredentialSource::Loopback;
+    match (declared, &context.loopback) {
+        (true, None) => Err(LaunchRefusal::LoopbackNotStarted),
+        (false, Some(params)) => Err(LaunchRefusal::LoopbackProxyUndeclared {
+            base_url: params.base_url.clone(),
+        }),
+        (true, Some(params)) => match params.login {
+            CodexLogin::ApiKey => Ok(()),
+            CodexLogin::Subscription => Err(LaunchRefusal::LoopbackSubscriptionUnverified),
+        },
+        // Both absent: the two halves agree, which is the whole of the check.
+        (false, None) => Ok(()),
+    }
+}
+
 /// The spec fields `codex exec` cannot carry, refused by name.
 fn unsupported_options(spec: &RunSpec) -> Result<(), LaunchRefusal> {
-    // First, and before any argv or environment exists: a loopback run must not get as far as a
-    // plan on this vendor, because the library reads the plan to decide what to start.
-    if spec.credentials == CredentialSource::Loopback {
-        return Err(LaunchRefusal::LoopbackUnsupported);
-    }
     if spec.max_turns.is_some() {
         return Err(LaunchRefusal::UnsupportedOption {
             option: "--max-turns",
@@ -675,12 +817,10 @@ fn credential_copies(
                 Err(LaunchRefusal::ApiKeyMissing)
             }
         }
-        // Unreachable through `plan_launch`, which refuses loopback before it gets here. Repeated
-        // rather than left to an `unreachable!`, so a future caller that reaches this function by
-        // another road gets the refusal instead of a panic or an empty copy list that would read
-        // as "loopback is supported and copies nothing".
-        CredentialSource::Loopback => Err(LaunchRefusal::LoopbackUnsupported),
-        CredentialSource::None => Ok(Vec::new()),
+        // Nothing travels under either, and `Loopback` is the stronger of the two: the operator's
+        // `auth.json` is real and is held by metaharness's own custody, on this side of the
+        // socket, so the copy list being empty is the whole H6 claim (LP-4).
+        CredentialSource::Loopback | CredentialSource::None => Ok(Vec::new()),
     }
 }
 
@@ -752,6 +892,15 @@ fn build_env(
         && let Some((key, value)) = api_key(&context.inherited_env)
     {
         env.insert(key.to_string(), value);
+    }
+    if let Some(loopback) = &context.loopback {
+        // The whole of what a loopback child holds: one string, under this plan's own variable
+        // name, worth nothing anywhere but one ephemeral port. The provider entry in the scratch
+        // `config.toml` is what points the child at that port; **no `OPENAI_API_KEY` and no
+        // `CODEX_API_KEY` travels beside it** — both stay scrubbed, because the run did not
+        // declare `api-key` — and no `auth.json` is copied, which is the H6 upgrade LP-4 exists
+        // for.
+        env.insert(LOOPBACK_ENV_KEY.to_string(), loopback.placeholder.clone());
     }
     guard_environment(&env, spec.credentials)?;
     Ok(env)
@@ -877,7 +1026,12 @@ fn build_hook(hook_path: &Path) -> Value {
 /// recognises — `[[hooks.PreToolUse]]`, `[[hooks.PreToolUse.hooks]]`, `type`, `command`,
 /// `timeout` — and an unrecognised one would be **ignored in silence**, which is why the seam is
 /// asserted from a hook request that arrived and never from this text.
-fn build_config(spec: &RunSpec, hook: &Value) -> String {
+///
+/// At most **one** `model_provider` is ever written. The loopback door and the declared endpoint
+/// are two different providers for two different reasons, and a document that carried both would
+/// leave the vendor's own precedence deciding which brain answered — a fact this design says must
+/// be checkable rather than resolved by a rule nobody here owns.
+fn build_config(spec: &RunSpec, context: &LaunchContext, hook: &Value) -> String {
     let mut document = String::from(
         "# metaharness scratch CODEX_HOME. Generated per run; edited by nobody.\n\n\
          # The seam is the only thing that may refuse a call. `codex exec` on 0.145.0 has no\n\
@@ -885,17 +1039,47 @@ fn build_config(spec: &RunSpec, hook: &Value) -> String {
          # own default is `on-request` — which in a headless run means a call can be turned away\n\
          # by a prompt nobody is there to answer, before the hook ever sees it. `never` makes the\n\
          # hook the one thing that decides, so a denial is attributable to metaharness.\n\
-         approval_policy = \"never\"\n\n\
-         # The vendor\'s own floor beneath the seam, and Claude Code has no counterpart for it\n\
-         # (design § 7.4, V17): the child cannot write outside its workspace or reach the network,\n\
-         # whatever the seam allows. Named here so the attestation can claim it.\n\
-         sandbox_mode = \"read-only\"\n",
+         approval_policy = \"never\"\n",
+    );
+    let _ = writeln!(
+        document,
+        "\n# The vendor's own floor beneath the seam, and Claude Code has no counterpart for it\n\
+         # (design § 7.4, V17). It is **not** a constant: it is what the run's cwd declaration\n\
+         # decides, because on this vendor the two are one setting.\n\
+         #\n\
+         # {}\n\
+         sandbox_mode = {}",
+        sandbox_reason(spec),
+        quote(sandbox_mode(spec))
     );
     // Top-level keys must precede the first table header, or TOML files them under it.
     if let Some(effort) = &spec.effort {
         let _ = writeln!(document, "\nmodel_reasoning_effort = {}", quote(effort));
     }
-    if let Some(endpoint) = &spec.model_endpoint {
+    if let Some(loopback) = &context.loopback {
+        // The loopback door (LP-4). The child's provider is metaharness's own port, and the key it
+        // authenticates with is the placeholder in [`LOOPBACK_ENV_KEY`] — so `env_key` is named
+        // here where the endpoint provider deliberately names none. The upstream the proxy
+        // forwards to (the vendor, or a gateway the run declared) is on the far side of that port
+        // and never appears in this document: the child cannot address it, which is the whole
+        // inspection claim.
+        let base = format!("{}/v1", loopback.base_url.trim_end_matches('/'));
+        let _ = writeln!(
+            document,
+            "\n# metaharness is this run's model provider (loopback design, LP-4). The child holds\n\
+             # no credential: {LOOPBACK_ENV_KEY} carries a per-run placeholder, and the real token\n\
+             # is attached by the proxy from one custody on the other side of this port.\n\
+             model_provider = {provider}\n\n\
+             [model_providers.{LOOPBACK_PROVIDER}]\n\
+             name = {provider}\n\
+             base_url = {base}\n\
+             wire_api = \"responses\"\n\
+             env_key = {key}",
+            provider = quote(LOOPBACK_PROVIDER),
+            base = quote(&base),
+            key = quote(LOOPBACK_ENV_KEY),
+        );
+    } else if let Some(endpoint) = &spec.model_endpoint {
         // The generic model adapter (MA-1): the run's brain is this gateway's, reached on the
         // Responses wire at {root}/v1/responses. No `env_key`, and therefore no auth header at
         // all — verified against the pin (MA-V2): a provider that names no env_key spawns and
@@ -940,6 +1124,64 @@ fn build_config(spec: &RunSpec, hook: &Value) -> String {
         }
     }
     document
+}
+
+/// The vendor sandbox a **scratch-cwd** run gets: the child may read, and write nothing.
+///
+/// Unchanged since CX-M2, and the posture every run had until 2026-08-23.
+const SANDBOX_READ_ONLY: &str = "read-only";
+
+/// The vendor sandbox an **operator-named-cwd** run gets (amendment a6).
+///
+/// The value is the vendor's own, in the vendor's own spelling: `SandboxMode` deserialises
+/// `read-only`, `workspace-write` and `danger-full-access` — kebab-case, read from the pinned
+/// 0.145.0 binary's serde variant list, where the snake-case trio beside it belongs to a different
+/// type entirely. A guessed spelling would be an unrecognised value in a file this vendor parses
+/// leniently, which is the silent failure this module is written against.
+const SANDBOX_WORKSPACE_WRITE: &str = "workspace-write";
+
+/// Which vendor sandbox this run gets, and the whole of the rule.
+///
+/// **This is the fix for what a paid run found (2026-08-23, run codex-1982431).** A run with
+/// `--cwd <a real repository>` spawned, worked, and could not write one file: the child reported
+/// *"this workspace is mounted read-only"* and the vendor's own stream said *"the workspace is
+/// read-only, so the planning-store patch was rejected."* The cause was this function's absence —
+/// the scratch config named `read-only` for every run, so amendment a6's trade (give up H7 and H11,
+/// get real work in a real tree) bought a repository the child could only look at.
+///
+/// The grant is exactly the a6 case and nothing wider. The vendor's own description of the value,
+/// verbatim from the binary: *"`sandbox_mode` is `workspace-write`: The sandbox permits reading
+/// files, and editing files in `cwd` and `writable_roots`. Editing files in other directories
+/// requires approval."* The child is spawned **in** the named tree, so `cwd` is that tree and no
+/// `writable_roots` entry is needed — naming one would widen the grant beyond what was declared.
+///
+/// What this does **not** do: `--add-dir` is still never passed, `danger-full-access` is never
+/// written, and no `[sandbox_workspace_write]` table is emitted — so `network_access` keeps
+/// whatever default this vendor applies, which is **undriven here** and therefore claimed nowhere.
+/// A filesystem grant is not a network grant, and this function does not quietly make it one.
+fn sandbox_mode(spec: &RunSpec) -> &'static str {
+    if spec.cwd.is_some() {
+        SANDBOX_WORKSPACE_WRITE
+    } else {
+        SANDBOX_READ_ONLY
+    }
+}
+
+/// The comment the config carries beside its sandbox line, so the file says why it is what it is.
+///
+/// Wrapped by hand at the width the rest of this document uses: a comment that runs off the side
+/// of a terminal is one an operator reading a retained scratch home will not read.
+fn sandbox_reason(spec: &RunSpec) -> &'static str {
+    if spec.cwd.is_some() {
+        "This run was pointed at the operator's own tree (--cwd, amendment a6), so the child\n\
+         # can edit files in it — that is what a6 trades H7 and H11 for. Without this grant the\n\
+         # trade buys a repository nobody can write to, which is what a paid run found on\n\
+         # 2026-08-23: \"the workspace is read-only, so the planning-store patch was rejected\".\n\
+         # --add-dir is still never passed, and no writable_roots widens it past this tree."
+    } else {
+        "The cwd is scratch, so the child can write nothing at all: it reads, and the seam\n\
+         # decides the rest."
+    }
 }
 
 /// One TOML basic string.
@@ -1008,17 +1250,24 @@ fn attest(
 
     attest_cwd(spec, context, &mut imposed, &mut unavailable);
 
-    if spec.credentials == CredentialSource::OperatorLogin {
-        imposed.push(control_imposed(
+    match spec.credentials {
+        CredentialSource::OperatorLogin => imposed.push(control_imposed(
             HermeticRow::H6,
             "one auth.json copied into the scratch home immediately before every spawn, and \
              nothing else (Q13)",
-        ));
-    } else {
-        unavailable.push(control_unavailable(
+        )),
+        // The upgrade LP-4 exists for. H6's copy row is advisory — it claims something about a
+        // file this plan hands to a runner — whereas this claim is readable off the launch values
+        // themselves: no entry in `credential_copies`, and a provider key that is worth nothing
+        // anywhere but one ephemeral loopback port.
+        CredentialSource::Loopback => imposed.push(control_imposed(
+            HermeticRow::H6,
+            format!("the scratch CODEX_HOME holds no auth.json at all: {LOOPBACK_POSTURE}"),
+        )),
+        CredentialSource::ApiKey | CredentialSource::None => unavailable.push(control_unavailable(
             HermeticRow::H6,
             "the run declared no operator login, so there is no credential file to copy",
-        ));
+        )),
     }
     match &context.inputs_digest {
         Some(digest) => imposed.push(control_imposed(
@@ -1062,8 +1311,10 @@ fn plugin_posture(config_home: &str, installs: &[PluginInstall]) -> String {
     format!(
         "CODEX_HOME={config_home}, and the declared set is {names:?} — each copied into the scratch \
          home at launch and digested before the copy. **Nothing names them to the vendor**: this \
-         binary has no --plugin-dir and this launch writes no marketplace entry, so whether they \
-         are loaded is unverified (Q19) and the record is what answers it"
+         binary has no --plugin-dir and this launch writes no marketplace entry. One live run \
+         (Q19) observed the vendor surfacing an injected plugin's skills catalog into the model's \
+         context from this placement, with zero tool calls; the opening record still lists no \
+         plugins, so this row is answered from the record and reads unk when there is none"
     )
 }
 
@@ -1072,6 +1323,12 @@ fn plugin_posture(config_home: &str, installs: &[PluginInstall]) -> String {
 /// An operator-named directory (amendment a6) is real work in a real tree: the rows are attested
 /// unavailable with the declaration named, which is what makes `--hermetic strict` refuse such a
 /// run instead of this attestation quietly claiming a directory metaharness never made.
+///
+/// **H7's sentence also carries what the vendor sandbox was set to**, in both directions, because
+/// that is the difference between a run that could change the operator's repository and one that
+/// could not — and a reader must be able to see it in the run's own record without diffing two
+/// scratch config files that no longer exist. It is stated in the row that names the a6 trade
+/// because it *is* the trade: [`sandbox_mode`] grants it, and this says so.
 fn attest_cwd(
     spec: &RunSpec,
     context: &LaunchContext,
@@ -1083,7 +1340,11 @@ fn attest_cwd(
             HermeticRow::H7,
             format!(
                 "the run was pointed at the operator's directory {} (--cwd), which metaharness did \
-                 not create; --add-dir is still never passed",
+                 not create; --add-dir is still never passed. THE CHILD COULD WRITE TO THAT TREE: \
+                 the vendor sandbox was widened to it for this run — sandbox_mode = \
+                 \"{SANDBOX_WORKSPACE_WRITE}\", which permits editing files in the cwd — because \
+                 a6 trades this row for real work and a tree the child cannot write to is not \
+                 that. A scratch-cwd run keeps sandbox_mode = \"{SANDBOX_READ_ONLY}\"",
                 context.cwd.display()
             ),
         ));
@@ -1099,7 +1360,9 @@ fn attest_cwd(
         imposed.push(control_imposed(
             HermeticRow::H7,
             format!(
-                "cwd {} is under the scratch root, and --add-dir is never passed",
+                "cwd {} is under the scratch root, --add-dir is never passed, and the vendor \
+                 sandbox stays sandbox_mode = \"{SANDBOX_READ_ONLY}\": the child writes nothing, \
+                 anywhere",
                 context.cwd.display()
             ),
         ));
@@ -1110,11 +1373,28 @@ fn attest_cwd(
     }
 }
 
-fn api_key_posture(credentials: CredentialSource) -> &'static str {
-    if credentials == CredentialSource::ApiKey {
-        "an API key is in the child environment because the run declared credentials: api-key"
-    } else {
-        "neither OPENAI_API_KEY nor CODEX_API_KEY is in the child environment"
+/// The one sentence that says what a loopback run's credential posture is.
+///
+/// Written once and used by both H4 and H6, because the two rows are two views of the same fact
+/// and a reader who found them worded differently would have to work out whether they meant
+/// different things.
+const LOOPBACK_POSTURE: &str = "no operator credential in the child; a placeholder in \
+                                METAHARNESS_LOOPBACK_KEY authenticates to metaharness's loopback \
+                                proxy, which holds custody";
+
+fn api_key_posture(credentials: CredentialSource) -> String {
+    match credentials {
+        CredentialSource::ApiKey => {
+            "an API key is in the child environment because the run declared credentials: api-key"
+                .to_string()
+        }
+        CredentialSource::Loopback => format!(
+            "neither OPENAI_API_KEY nor CODEX_API_KEY is in the child environment — \
+             {LOOPBACK_POSTURE}"
+        ),
+        CredentialSource::OperatorLogin | CredentialSource::None => {
+            "neither OPENAI_API_KEY nor CODEX_API_KEY is in the child environment".to_string()
+        }
     }
 }
 
@@ -1182,6 +1462,9 @@ mod tests {
             memory_ancestors: Vec::new(),
             inputs_digest: Some(Digest::of(b"inputs")),
             plugins: Vec::new(),
+            // No proxy: every case below is a pure plan against a synthetic world, and a loopback
+            // endpoint is by construction a port something really bound.
+            loopback: None,
         }
     }
 
@@ -1206,6 +1489,19 @@ mod tests {
             },
         });
         (spec, context, digest)
+    }
+
+    /// A spec and a context for a loopback run over an API-key login: the half LP-4 builds.
+    fn loopback_world() -> (RunSpec, LaunchContext) {
+        let mut spec = spec();
+        spec.credentials = CredentialSource::Loopback;
+        let mut context = context();
+        context.loopback = Some(LoopbackParams {
+            base_url: "http://127.0.0.1:45999".to_string(),
+            placeholder: "mh-run-codex-7-nonce".to_string(),
+            login: CodexLogin::ApiKey,
+        });
+        (spec, context)
     }
 
     fn spec() -> RunSpec {
@@ -1571,6 +1867,135 @@ mod tests {
         assert_eq!(plan.cwd, PathBuf::from("/operator/repo"));
     }
 
+    // ------------------------------------- the a6 trade is a writable tree, or it is nothing
+
+    /// A plan for a run pointed at the operator's own tree.
+    fn named_cwd_plan() -> LaunchPlan {
+        let mut spec = spec();
+        spec.cwd = Some(PathBuf::from("/operator/repo"));
+        let mut context = context();
+        context.cwd = PathBuf::from("/operator/repo");
+        context.memory_ancestors = vec![PathBuf::from("/operator/repo/AGENTS.md")];
+        plan_launch(&spec, &context).expect("an operator cwd plans")
+    }
+
+    /// Whether a config document grants the child write access to the tree it runs in.
+    ///
+    /// A function rather than an inline assertion so the mutation test below can run **the same
+    /// check** against a document with the grant taken out — a check that cannot go red is not a
+    /// check.
+    fn grants_the_named_tree(config: &str) -> bool {
+        config.contains(r#"sandbox_mode = "workspace-write""#)
+    }
+
+    /// What the paid run of 2026-08-23 found, as a test: with `--cwd` the child must be able to
+    /// **write** to the tree it was pointed at. Before this, the scratch config said `read-only`
+    /// for every run and the vendor rejected every patch — *"the workspace is read-only, so the
+    /// planning-store patch was rejected"* — so a6's trade bought a repository nobody could
+    /// change.
+    #[test]
+    fn an_operator_named_cwd_grants_the_child_write_access_to_that_tree() {
+        let config = named_cwd_plan().config;
+        assert!(
+            grants_the_named_tree(&config),
+            "a --cwd run must widen the vendor sandbox to the named tree, or the a6 trade is \
+             meaningless on this vendor:\n{config}"
+        );
+        assert!(
+            !config.contains(r#"sandbox_mode = "read-only""#),
+            "one sandbox_mode is written, not two:\n{config}"
+        );
+        // The grant is exactly the declared tree: no extra writable root, and never the value that
+        // switches the sandbox off altogether. Asserted on the **keys**, not on the words — the
+        // comment above them says `writable_roots` on purpose, and a substring check would be
+        // testing prose.
+        assert!(!config.contains("writable_roots ="), "{config}");
+        assert!(!config.contains("danger-full-access\""), "{config}");
+        // A filesystem grant is not a network grant: no [sandbox_workspace_write] table is written,
+        // so nothing here claims or changes this vendor's network default.
+        assert!(!config.contains("[sandbox_workspace_write]"), "{config}");
+        assert!(!config.contains("network_access ="), "{config}");
+    }
+
+    /// The other half of the polarity, and the one that keeps every existing run honest: a scratch
+    /// cwd is still `read-only`. This is the posture every run had before the fix, and it must not
+    /// have moved.
+    #[test]
+    fn a_scratch_cwd_run_still_writes_nothing_anywhere() {
+        let config = plan().config;
+        assert!(config.contains(r#"sandbox_mode = "read-only""#), "{config}");
+        assert!(
+            !grants_the_named_tree(&config),
+            "a scratch run must not be granted write access to anything:\n{config}"
+        );
+    }
+
+    /// The mutation: take the grant out of a named-cwd config and the check must go red. A test
+    /// that passes on a document with the fix removed would be describing nothing.
+    #[test]
+    fn a_config_with_the_grant_stripped_fails_the_same_check() {
+        let config = named_cwd_plan().config;
+        assert!(grants_the_named_tree(&config), "the real plan grants it");
+        let stripped = config.replace(
+            r#"sandbox_mode = "workspace-write""#,
+            r#"sandbox_mode = "read-only""#,
+        );
+        assert_ne!(stripped, config, "the mutation found its line");
+        assert!(
+            !grants_the_named_tree(&stripped),
+            "the check passed on a config that grants nothing, so it is decoration"
+        );
+    }
+
+    /// The grant is **visible in the run's own record**, not only in a file that lives for the
+    /// length of a spawn: H7's row says the tree was writable, in words a reader does not have to
+    /// diff two configs to understand — and the scratch case says the opposite just as plainly.
+    #[test]
+    fn the_attestation_says_the_operators_tree_was_writable_without_reading_a_config() {
+        let named = named_cwd_plan();
+        let row = named
+            .attestation
+            .unavailable
+            .iter()
+            .find(|control| control.row == HermeticRow::H7)
+            .expect("H7 is attested unavailable under a named cwd");
+        assert!(
+            row.why.contains("COULD WRITE TO THAT TREE"),
+            "a reader must see the grant stated, not implied: {}",
+            row.why
+        );
+        assert!(row.why.contains("workspace-write"), "{}", row.why);
+        assert!(row.why.contains("/operator/repo"), "{}", row.why);
+
+        let scratch = plan();
+        let row = scratch
+            .attestation
+            .imposed
+            .iter()
+            .find(|control| control.row == HermeticRow::H7)
+            .expect("H7 is imposed under a scratch cwd");
+        assert!(
+            row.how.contains("read-only") && row.how.contains("writes nothing"),
+            "the scratch case must state its posture just as plainly: {}",
+            row.how
+        );
+    }
+
+    /// `--hermetic strict` must still refuse a named-cwd run: the grant changes what the child may
+    /// do, **not** what the attestation claims. H7 and H11 stay unavailable, which is what the
+    /// strict floor reads.
+    #[test]
+    fn granting_the_tree_does_not_make_a_named_cwd_run_hermetically_clean() {
+        let plan = named_cwd_plan();
+        for row in [HermeticRow::H7, HermeticRow::H11] {
+            assert!(
+                !plan.attestation.claims(row),
+                "{} is claimed on a run that writes to the operator's tree",
+                row.id()
+            );
+        }
+    }
+
     #[test]
     fn a_working_directory_outside_the_scratch_root_is_refused() {
         let mut context = context();
@@ -1603,27 +2028,17 @@ mod tests {
 
     // ------------------------------------------------------------ observe mode (a10) and #4
 
-    /// Observe mode is the **allow** half of this vendor's decision wire, and only the deny half
-    /// has been driven. So it is refused by name — naming the milestone that would close it —
-    /// rather than served with a grant this binary may discard, which on a capture run would be
-    /// indistinguishable from a capture that worked.
+    /// Observe mode is the **allow** half of this vendor's decision wire, and that half was
+    /// driven live on 2026-08-23 (R2.4): the hook held a real `Bash` call, metaharness answered
+    /// `allow`, and the rollout's own `custom_tool_call_output` carried the command's output. So
+    /// an observe run plans, and the attestation says which posture decided it — the refusal this
+    /// test used to pin moved with the evidence, not before it.
     #[test]
-    fn a_codex_observe_run_is_refused_by_name_because_the_allow_half_is_undriven() {
+    fn a_codex_observe_run_plans_now_that_the_allow_half_is_driven() {
         let mut spec = spec();
         spec.decisions = DecisionMode::Observe;
-        let refusal = plan_launch(&spec, &context()).expect_err("observe is refused here");
-        assert_eq!(
-            refusal,
-            LaunchRefusal::DecisionModeUnverified {
-                mode: DecisionMode::Observe,
-                status: TierStatus::Unverified,
-            }
-        );
-        assert_eq!(refusal.code(), Some(RefusalCode::UnsupportedControl));
-        let sentence = refusal.to_string();
-        for named in ["allow half", "R2.4"] {
-            assert!(sentence.contains(named), "{sentence}");
-        }
+        let plan = plan_launch(&spec, &context()).expect("observe plans since R2.4's live run");
+        assert_eq!(plan.attestation.decisions, DecisionMode::Observe);
     }
 
     /// The refusal and the published descriptor are one decision, not two: a mode the table calls
@@ -1669,10 +2084,19 @@ mod tests {
         assert_eq!(attested[0].name, "codex");
         assert_eq!(attested[0].digest, digest);
         assert_eq!(attested[0].source, "/operator/integrations/codex");
+        // The record carries the observation **and both of its limits**. A row that had been
+        // upgraded to a bare "it loads" would be claiming the vendor's plugin list (which is
+        // still absent) and the pinned binary (which is not the one that was driven).
+        let loaded_by = &attested[0].loaded_by;
+        assert!(loaded_by.contains("Q19"), "{loaded_by}");
         assert!(
-            attested[0].loaded_by.contains("unverified") && attested[0].loaded_by.contains("Q19"),
-            "the record must say the load is undriven, not imply it: {}",
-            attested[0].loaded_by
+            loaded_by.contains("Driven once") && loaded_by.contains("skills catalog"),
+            "the record must say what was observed, not imply it: {loaded_by}"
+        );
+        assert!(
+            loaded_by.contains("0.144.0") && loaded_by.contains("unk"),
+            "the observation's two limits — the off-pin binary and the still-absent plugin list — \
+             travel with it or the row overclaims: {loaded_by}"
         );
         // No argv and no config key were invented to go with the copy: an unrecognised key under
         // a table this binary reads is dropped in silence, and a malformed one fails the config
@@ -1723,16 +2147,131 @@ mod tests {
         assert!(json.contains(r#""decisions":"frame""#), "{json}");
     }
 
-    /// LP-3 vector 3. The loopback provider is Claude-Code-only this milestone, and this vendor
-    /// says so **by name**: V-LP6 verified the route is feasible and its confirming paid run has
-    /// not been done, so the door is stated as unbuilt rather than degraded in silence to the
-    /// credential-copy path — which is precisely what the loopback design exists to replace.
+    // ------------------------------------------------------------ the loopback door (LP-4)
+
+    /// LP-4 vector 1. The whole of what a loopback child is given, and the three things it is not:
+    /// no `auth.json` copy, no `OPENAI_API_KEY`, no `CODEX_API_KEY`. The provider entry is where
+    /// the port arrives, because on this vendor a base URL is a config key and not an environment
+    /// variable — so a launch vector that read only the environment would pin nothing about it.
     #[test]
-    fn a_codex_loopback_run_is_refused_by_name_as_a_later_milestone() {
-        let mut spec = spec();
-        spec.credentials = CredentialSource::Loopback;
-        let refusal = plan_launch(&spec, &context()).expect_err("codex has no loopback provider");
-        assert_eq!(refusal, LaunchRefusal::LoopbackUnsupported);
+    fn a_loopback_child_gets_a_provider_at_the_proxy_a_placeholder_key_and_no_auth_json() {
+        let (spec, context) = loopback_world();
+        let plan = plan_launch(&spec, &context).expect("the loopback launch plans");
+
+        assert!(
+            plan.credential_copies.is_empty(),
+            "no auth.json travels under loopback; that is the whole of the H6 upgrade"
+        );
+        assert_eq!(
+            plan.env.get(LOOPBACK_ENV_KEY).map(String::as_str),
+            Some("mh-run-codex-7-nonce"),
+            "the placeholder reaches the child under the name the provider's env_key gives it"
+        );
+        for absent in ["OPENAI_API_KEY", "CODEX_API_KEY"] {
+            assert!(
+                !plan.env.contains_key(absent),
+                "{absent} must not travel beside the placeholder: two credential variables mean \
+                 two spellings on the wire and a precedence rule nobody here owns"
+            );
+        }
+        for line in [
+            "model_provider = \"metaharness_loopback\"",
+            "[model_providers.metaharness_loopback]",
+            "base_url = \"http://127.0.0.1:45999/v1\"",
+            "wire_api = \"responses\"",
+            "env_key = \"METAHARNESS_LOOPBACK_KEY\"",
+        ] {
+            assert!(
+                plan.config.contains(line),
+                "missing {line} in:\n{}",
+                plan.config
+            );
+        }
+        // The seam survives the provider injection: a config that lost its hook would be a run
+        // with no guard, and on this vendor that failure is silent.
+        assert!(
+            plan.config.contains("[[hooks.PreToolUse]]"),
+            "{}",
+            plan.config
+        );
+    }
+
+    /// LP-4 vector 2. The two rows the attestation must state differently under loopback: H6 is an
+    /// **imposition** here rather than an unavailable row, because "no credential in the child at
+    /// all" is stronger than "one file, copied" — and it is readable off the launch values.
+    #[test]
+    fn a_loopback_run_attests_the_stronger_h6_rather_than_giving_the_row_up() {
+        let (spec, context) = loopback_world();
+        let plan = plan_launch(&spec, &context).expect("the loopback launch plans");
+        assert!(
+            plan.attestation.claims(HermeticRow::H6),
+            "H6 is an imposition under loopback: {:?}",
+            plan.attestation
+        );
+        for row in [HermeticRow::H4, HermeticRow::H6] {
+            let control = plan
+                .attestation
+                .imposed
+                .iter()
+                .find(|control| control.row == row)
+                .unwrap_or_else(|| panic!("{} must be imposed", row.id()));
+            assert!(
+                control.how.contains("loopback proxy, which holds custody"),
+                "{} does not state the loopback posture: {}",
+                row.id(),
+                control.how
+            );
+        }
+    }
+
+    /// LP-4 vector 3. `loopback` is not `api-key`, so H3's scrub still deletes an exported key:
+    /// the child authenticates with the placeholder and nothing else, whatever the operator's own
+    /// environment holds.
+    #[test]
+    fn a_loopback_run_still_scrubs_an_exported_api_key_from_the_child() {
+        let (spec, mut context) = loopback_world();
+        context
+            .inherited_env
+            .insert("OPENAI_API_KEY".to_string(), "sk-operators-own".to_string());
+        let plan = plan_launch(&spec, &context).expect("the loopback launch plans");
+        assert!(!plan.env.contains_key("OPENAI_API_KEY"), "{:?}", plan.env);
+        assert!(is_scrubbed("OPENAI_API_KEY", CredentialSource::Loopback));
+    }
+
+    /// LP-4 vector 4. Under loopback a declared endpoint is the **proxy's upstream**, one hop
+    /// further out, so the two compose instead of refusing — and the child's own provider is still
+    /// the loopback port, because a document naming both would leave the vendor's precedence
+    /// deciding which brain answered.
+    #[test]
+    fn a_declared_endpoint_under_loopback_is_the_proxys_upstream_and_never_the_childs_provider() {
+        let (mut spec, context) = loopback_world();
+        spec.model_endpoint = Some("https://llmgw.example".to_string());
+        let plan = plan_launch(&spec, &context).expect("endpoint + loopback compose");
+        assert!(
+            !plan.config.contains("llmgw.example"),
+            "the upstream must not be addressable by the child: {}",
+            plan.config
+        );
+        assert_eq!(
+            plan.config.matches("model_provider = ").count(),
+            1,
+            "exactly one provider is ever selected: {}",
+            plan.config
+        );
+    }
+
+    /// LP-4 vector 5. **V-LP6's open half, refused by name.** A ChatGPT-plan login is not routed
+    /// through a `model_providers` entry by this adapter, because nobody here has verified that
+    /// the vendor honours one for subscription traffic — and the alternative, degrading to the
+    /// credential-copy path, is precisely what the loopback design exists to replace.
+    #[test]
+    fn a_loopback_run_over_a_subscription_login_is_refused_by_name_and_never_degraded() {
+        let (spec, mut context) = loopback_world();
+        if let Some(loopback) = context.loopback.as_mut() {
+            loopback.login = CodexLogin::Subscription;
+        }
+        let refusal = plan_launch(&spec, &context).expect_err("the subscription half is unbuilt");
+        assert_eq!(refusal, LaunchRefusal::LoopbackSubscriptionUnverified);
         assert_eq!(
             refusal.code(),
             Some(RefusalCode::UnsupportedControl),
@@ -1752,16 +2291,42 @@ mod tests {
         );
     }
 
-    /// Defence in depth: the copy list itself refuses loopback, so a caller that reached this
-    /// function by another road gets the refusal rather than an empty list that would read as
-    /// "loopback is supported and copies nothing".
+    /// LP-4 vector 6. The declaration and the started proxy must agree in **both** directions, and
+    /// the dangerous direction is the second: a credentialed child pointed at a local port would
+    /// send the operator's own key to whatever is listening on it.
     #[test]
-    fn the_copy_list_refuses_loopback_too_rather_than_returning_nothing() {
-        let mut spec = spec();
-        spec.credentials = CredentialSource::Loopback;
+    fn a_loopback_declaration_and_a_started_proxy_must_agree_in_both_directions() {
+        let mut declared_only = spec();
+        declared_only.credentials = CredentialSource::Loopback;
         assert_eq!(
-            credential_copies(&spec, &context(), Path::new("/scratch/run-1/codex-home")),
-            Err(LaunchRefusal::LoopbackUnsupported)
+            plan_launch(&declared_only, &context()),
+            Err(LaunchRefusal::LoopbackNotStarted)
+        );
+
+        let (_, context) = loopback_world();
+        // An api-key run that somehow got a proxy: refused, never composed.
+        let mut undeclared = spec();
+        undeclared.credentials = CredentialSource::ApiKey;
+        let mut context = context;
+        context
+            .inherited_env
+            .insert("OPENAI_API_KEY".to_string(), "sk-test".to_string());
+        assert_eq!(
+            plan_launch(&undeclared, &context),
+            Err(LaunchRefusal::LoopbackProxyUndeclared {
+                base_url: "http://127.0.0.1:45999".to_string()
+            })
+        );
+    }
+
+    /// The copy list is empty under loopback rather than refusing: the custody is real and is held
+    /// on metaharness's side of the socket, so "copies nothing" is the claim, not an omission.
+    #[test]
+    fn the_copy_list_is_empty_under_loopback_because_custody_stays_on_this_side() {
+        let (spec, context) = loopback_world();
+        assert_eq!(
+            credential_copies(&spec, &context, Path::new("/scratch/run-1/codex-home")),
+            Ok(Vec::new())
         );
     }
 
@@ -1804,7 +2369,11 @@ mod tests {
                 option: "--max-turns",
                 why: "codex exec has no turn ceiling",
             },
-            LaunchRefusal::LoopbackUnsupported,
+            LaunchRefusal::LoopbackNotStarted,
+            LaunchRefusal::LoopbackProxyUndeclared {
+                base_url: "http://127.0.0.1:1".to_string(),
+            },
+            LaunchRefusal::LoopbackSubscriptionUnverified,
         ];
         for refusal in refusals {
             let sentence = refusal.to_string();

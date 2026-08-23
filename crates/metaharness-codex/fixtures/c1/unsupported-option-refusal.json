@@ -1,0 +1,6 @@
+{
+  "refusal": {
+    "code": "UNSUPPORTED_CONTROL",
+    "display": "the run asked for --max-turns and codex exec 0.145.0 has no way to express it: codex exec has no turn ceiling; the run ends when the task does, and a ceiling metaharness enforced by killing the child would be a different thing wearing the same name. It is refused rather than dropped, because an option that was set and ignored is a run that is not the one that was asked for"
+  }
+}

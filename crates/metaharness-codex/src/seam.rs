@@ -41,10 +41,14 @@ pub fn capabilities() -> Capabilities {
     //      admits no shell, so the command did not run`;
     //   3. the model was told, not walled — its last message was "The command was blocked and did
     //      not run."
-    // What is **not** claimed by this row: `allow`. Only the deny path has been driven, and the
-    // 0.145.0 binary carries a string suggesting some `permissionDecision` values are refused at
-    // `PreToolUse`. An `allow` that the vendor rejects would be a hook response it discards, so the
-    // grant half of this wire stays unverified until a run drives it.
+    // What is **not** claimed by this row: `allow` **against the vendor**. The grant half is built
+    // and free-proven — rendered by `render_hook_response`, driven through the real hook program by
+    // `c3/codex-spawn-an-allow-reaches-the-hook-process-and-the-call-proceeds` — and no paid run has
+    // executed an allowed call yet. The 0.145.0 binary carries a literal that would refuse an allow
+    // at `PreToolUse` beside the one that requires it for `updatedInput` (both quoted in
+    // `render_hook_response`), and a string table cannot say which path emits which. A hook response
+    // the vendor discards is a guard that decided nothing, so the row stays as it is until
+    // `tests/live_codex.rs`'s allow vector is spent.
     commands.insert("tool.decide".to_string(), CommandSupport::Honoured);
 
     Capabilities {
@@ -69,13 +73,15 @@ pub fn capabilities() -> Capabilities {
             (Tier::Kill, TierStatus::Delivered),
         ]),
         commands,
-        // Two delivered and one not, and the split is the same driven/undriven line the tier table
-        // draws. `frame` and `ask` reach this wire through a **deny**, which CX-M2 drove and the
-        // vendor's own record confirmed. `observe` is the **allow** half and nothing else — the
-        // half no run here has driven, and the 0.145.0 binary carries a string suggesting some
-        // `permissionDecision` values are refused at `PreToolUse`. An allow the vendor discards is
-        // a hook response that decided nothing, which on a capture run would be indistinguishable
-        // from a capture that worked. Refused by name at plan time until a run drives it (R2.4).
+        // All three delivered, and each end of the wire has now been driven. `frame` and `ask`
+        // reach this wire through a **deny**, which CX-M2 drove and the vendor's own record
+        // confirmed. `observe` is the **allow** half and nothing else — driven live on
+        // 2026-08-23 (R2.4): the hook received a real `Bash` call, metaharness answered
+        // `permissionDecision: allow`, and the rollout's own `custom_tool_call_output` carried the
+        // command's output. The binary that honoured it was the child-`PATH` codex **0.144.0**
+        // (the pin is 0.145.0; the two-install warning fired, as it must) — so the grant is a
+        // driven fact about 0.144.0 and an inference about 0.145.0 until one machine holds one
+        // install.
         decision_modes: BTreeMap::from([
             (
                 DecisionMode::Frame.as_str().to_string(),
@@ -87,7 +93,7 @@ pub fn capabilities() -> Capabilities {
             ),
             (
                 DecisionMode::Observe.as_str().to_string(),
-                TierStatus::Unverified,
+                TierStatus::Delivered,
             ),
         ]),
         rendering: rendering(),
@@ -163,8 +169,34 @@ const UNSTATED_DENY_REASON: &str =
 /// function serving two vendors would be one file that must stay true of two binaries nobody
 /// synchronises.
 ///
-/// `permissionDecision: "ask"` is **refused by this wire for `PreToolUse`** (§ 2.5) and this
-/// adapter never emits it: a headless run has no human at a terminal to return the question to.
+/// # What the binary itself refuses, read from it and quoted
+///
+/// 0.145.0 carries a literal for every way a `PreToolUse` response can be wrong, and each one is a
+/// rule this function obeys (`strings` over the pinned binary, 2026-08-23):
+///
+/// | the binary's own string, verbatim | what this renderer does about it |
+/// |---|---|
+/// | `PreToolUse hook returned permissionDecision:deny without a non-empty permissionDecisionReason` | a `deny` with an empty reason gets [`UNSTATED_DENY_REASON`], never an empty string |
+/// | `PreToolUse hook returned permissionDecisionReason without permissionDecision` | a reason is written only beside a decision |
+/// | `PreToolUse hook returned updatedInput without permissionDecision:allow` | [`Decision::Replace`] renders `updatedInput` **with** `permissionDecision: "allow"` — the pairing the vendor requires |
+/// | `PreToolUse hook returned unsupported permissionDecision:ask` | never emitted: a headless run has no human at a terminal to return the question to |
+/// | `PreToolUse hook returned unsupported decision:approve` | the legacy `decision` field is never written at all |
+/// | `PreToolUse hook returned unsupported continue:false`, `… unsupported stopReason`, `… unsupported suppressOutput` | none of those keys is ever written |
+///
+/// # The allow half, and the string that sits across it
+///
+/// The same binary also carries `PreToolUse hook returned unsupported permissionDecision:allow` —
+/// beside the `ask` one, in the same string table. Which code path emits which **cannot be told
+/// from a string table**, and the two readings are opposite: either `allow` is refused at this
+/// event, or that literal belongs to another surface (it sits next to `PermissionRequest hook
+/// denied approval`). What is certain is that the vendor requires `permissionDecision: "allow"`
+/// wherever `updatedInput` is used, which is the same value this renders.
+///
+/// So the grant half is **built, free-proven and undriven**: the envelope is rendered here, a C3
+/// spawn vector drives it through the real hook program to a process holding a call
+/// (`c3/codex-spawn-an-allow-reaches-the-hook-process-and-the-call-proceeds`), and only a paid run
+/// can say whether 0.145.0 honours it — `tests/live_codex.rs` carries that vector, gated. Nothing
+/// here upgrades a capability on the strength of a string.
 #[must_use]
 pub fn render_hook_response(decision: &Decision) -> Value {
     let mut output = Map::new();
@@ -282,4 +314,90 @@ pub fn parse_hook_input(input: &str) -> Result<HookInput, Refused> {
 
 fn string_field(value: Option<&Value>) -> Option<String> {
     value.and_then(Value::as_str).map(ToString::to_string)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    /// The grant half of the wire, as bytes. Every key here is one the 0.145.0 binary names, and
+    /// the two that are **absent** are the ones it refuses beside a bare allow.
+    #[test]
+    fn an_allow_renders_the_envelope_this_vendor_names_and_carries_no_reason() {
+        let rendered = render_hook_response(&Decision::Allow);
+        assert_eq!(
+            rendered,
+            json!({
+                "hookSpecificOutput": {
+                    "hookEventName": "PreToolUse",
+                    "permissionDecision": "allow",
+                }
+            })
+        );
+        let output = &rendered["hookSpecificOutput"];
+        assert!(
+            output.get("permissionDecisionReason").is_none(),
+            "0.145.0 refuses a permissionDecisionReason without a permissionDecision, and a reason \
+             beside an allow is a field this wire never asked for: {rendered}"
+        );
+        assert!(
+            output.get("decision").is_none(),
+            "the legacy `decision` field is never written: its `approve` value is refused by name"
+        );
+        for never in ["continue", "stopReason", "suppressOutput"] {
+            assert!(
+                output.get(never).is_none(),
+                "{never} is refused by this wire"
+            );
+        }
+    }
+
+    /// `updatedInput` travels **with** `permissionDecision: "allow"`, because the vendor's own
+    /// string says a bare `updatedInput` is refused — a replacement the harness discards would run
+    /// the call the embedder asked to change.
+    #[test]
+    fn a_replacement_is_an_allow_carrying_the_new_input_and_never_a_bare_updated_input() {
+        let rendered = render_hook_response(&Decision::Replace {
+            input: json!({"command": "ls -1"}),
+        });
+        let output = &rendered["hookSpecificOutput"];
+        assert_eq!(output["permissionDecision"], json!("allow"));
+        assert_eq!(output["updatedInput"], json!({"command": "ls -1"}));
+    }
+
+    /// Fail-closed polarity, both ways: no decision may render as another, and the two that mean
+    /// "do not run" must never come out as the one that means "run".
+    #[test]
+    fn no_decision_renders_as_a_different_one() {
+        let allow = render_hook_response(&Decision::Allow);
+        let deny = render_hook_response(&Decision::Deny {
+            reason: "this step admits no shell".to_string(),
+        });
+        assert_eq!(deny["hookSpecificOutput"]["permissionDecision"], "deny");
+        assert_ne!(allow, deny);
+        assert!(
+            !deny.to_string().contains("\"allow\""),
+            "a deny that carried the grant value would let the call run: {deny}"
+        );
+        // An abstain is *no bytes*, not an allow: the vendor's own approval policy decides, and
+        // metaharness has claimed nothing (amendment a3).
+        assert_eq!(render_hook_response(&Decision::Abstain), Value::Null);
+    }
+
+    /// A deny the embedder gave no reason for still carries one, because this vendor refuses a
+    /// `deny` with an empty `permissionDecisionReason` — and a refused hook response is a guard
+    /// that has stopped guarding.
+    #[test]
+    fn a_deny_without_a_stated_reason_still_carries_a_non_empty_one() {
+        for reason in ["", "   "] {
+            let rendered = render_hook_response(&Decision::Deny {
+                reason: reason.to_string(),
+            });
+            let carried = rendered["hookSpecificOutput"]["permissionDecisionReason"]
+                .as_str()
+                .expect("a reason is always written");
+            assert!(!carried.trim().is_empty(), "{rendered}");
+            assert_eq!(carried, UNSTATED_DENY_REASON);
+        }
+    }
 }

@@ -16,10 +16,10 @@ byte.
 
 | fact | value |
 |---|---|
-| captured | 2026-08-23 |
+| captured | 2026-08-23; the codex record **re-recorded the same day** when its launch face was filled (CT-4's gap closed, LP-4's free half, the allow vector) |
 | command | `./target/debug/metaharness conformance claude --contract` and `… codex --contract`, both exit `0` |
-| tree state | CT-1..CT-4 built, protocol amendments a9 and a10, the loopback wave in the working tree |
-| re-recorded | 2026-08-23, for the claude re-pin (amendment a10): `provider` moved `claude 2.1.239` → `claude 2.1.240` and nothing else did — `checked: 20`, `failed: 0`, `breaking_changes: 0`, and the codex record byte-identical. That is the one field the table below says a pin move touches |
+| tree state | CT-1..CT-4 built, protocol amendments a9 through a11, the loopback wave; the codex C1 vectors, the codex loopback door, observe mode and plugin injection in the working tree |
+| re-recorded | 2026-08-23, both records, one cause each: the claude re-pin (amendment a11) moved `provider` `claude 2.1.239` → `claude 2.1.240`, the observe/plugin launch vectors (amendment a10) moved claude's `checked` 20 → 24, and the codex launch face filling CT-4's gap plus the loopback door moved codex's `checked` 10 → 17. `failed: 0` and `breaking_changes: 0` throughout |
 | stdout only | the `golden-version-pair` warning goes to **stderr** and is therefore not in these files — that is the CLI's contract, not an omission. **Codex still carries it** (0.144.0 vs 0.145.0); claude's stopped when the pin met the recorded capture at 2.1.240 |
 | reproducible | every vector in both runs is free: no model, no network, no credential, no clock |
 | reviewed | before commit: no path, no account identifier, no credential. Six keys, two integers, three constants and a pinned version each |
@@ -27,7 +27,12 @@ byte.
 | file | record |
 |---|---|
 | `contract-result-claude.json` | `checked: 20` — 4 launch, 3 synthesised replays, 3 golden (CT-2/CT-3), 7 control, 3 spawn |
-| `contract-result-codex.json` | `checked: 10` — 4 synthesised replays, 3 golden, 3 spawn. No launch vector; the codex declaration names that gap (CT-4) |
+| `contract-result-codex.json` | `checked: 17` — **6 launch**, 4 synthesised replays, 3 golden, **4 spawn**. Was `10` until 2026-08-23, when the launch face CT-4 recorded as a named gap was filled (+6: two of them the loopback door's, LP-4) and the spawn tier gained the allow round trip (+1) |
+
+The two adapters' counts differ and always will: they are counts of *that adapter's* vectors, not a
+score. Codex carries no `control` tier of its own — those seven vectors are metaharness's own
+machinery and run once, under claude — and its launch face needs two more vectors than claude's
+because one vendor's credential door has two classes and only one of them is routed.
 
 ## What it is for
 
@@ -45,5 +50,7 @@ thing to fix.
    files through the library path, offline, from the same vectors the CLI runs.
 3. Read the diff: it is one line per adapter, and every changed field is a claim.
 4. Update the counts in the table above, the vector-count pins that moved
-   (`crates/metaharness-claude/tests/adapter.rs`, `crates/metaharness/src/vectors.rs`), and the
-   changelog — and tell the consumer, because it is building against these bytes.
+   (`crates/metaharness-claude/tests/adapter.rs`, `crates/metaharness/src/vectors.rs`,
+   `crates/metaharness/src/spawn_codex_vectors.rs`), the site's own counts
+   (`website/docs/status.mdx`, `website/docs/harnesses/codex.mdx`), and the changelog — and tell the
+   consumer, because it is building against these bytes.

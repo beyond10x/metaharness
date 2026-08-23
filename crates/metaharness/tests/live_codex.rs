@@ -265,6 +265,142 @@ fn assert_the_reader_consumed_the_real_record(run: &Run, rollout: &str) {
     );
 }
 
+/// Drive the run to its end, **allowing** every call the seam presents, and report what was
+/// presented.
+///
+/// The mirror of [`deny_everything`], and the only thing that can settle the grant half of this
+/// wire: everything up to the hook's stdout is proven free at C3, and whether 0.145.0 *honours* an
+/// `allow` is a fact about the vendor. Its binary carries a literal that would refuse one
+/// (quoted in `metaharness_codex::render_hook_response`), so a green run here is news and a red one
+/// is more so.
+fn allow_everything(run: &mut Run) -> Vec<(String, String)> {
+    let mut allowed: Vec<(String, String)> = Vec::new();
+    let started = Instant::now();
+    let mut halted = false;
+    loop {
+        let line = match run.next_event() {
+            Ok(Some(line)) => line,
+            Ok(None) => break,
+            Err(error) => panic!("the live run broke: {error}"),
+        };
+        if let Event::ToolRequested {
+            call_id,
+            name,
+            input,
+            decision_required: true,
+            ..
+        } = &line.event
+        {
+            eprintln!("live codex: the seam is holding {name} ({call_id}): {input}");
+            allowed.push((call_id.clone(), name.clone()));
+            let call_id = call_id.clone();
+            run.send(Command::ToolDecide {
+                call_id,
+                decision: Decision::Allow,
+            })
+            .expect("the decision is accepted");
+        }
+        if started.elapsed() > CEILING && !halted {
+            halted = true;
+            eprintln!("live codex: the ceiling was reached, halting");
+            run.send(Command::Halt {
+                reason: "the live test's wall-clock ceiling".to_string(),
+            })
+            .expect("halt is honoured");
+        }
+    }
+    allowed
+}
+
+/// Live run: the deliberate **grant** — does an `allow` metaharness rendered actually let the call
+/// run on codex?
+///
+/// This is the one claim the free tiers cannot reach, and the repository labels it as outstanding
+/// everywhere it is mentioned until this test is spent. Three things have to be true, and the
+/// third is the one that distinguishes "the vendor honoured the allow" from "the vendor ignored the
+/// hook entirely":
+///
+/// | # | fact | evidence |
+/// |---|---|---|
+/// | a | the hook **fired** and received the call | the raw request published into this run's own channel |
+/// | b | the call **ran** | the marker's own output is in the session rollout |
+/// | c | the run **decided** it | the census counts an allow, and no denial appears in the record |
+///
+/// Fact (c) matters because a run in which the hook was never consulted also produces the marker:
+/// that is the silent failure this vendor makes easy (an unrecognised `[hooks]` key is dropped
+/// without failing the config load), and it would otherwise read exactly like success.
+#[test]
+#[ignore = "starts a real, paid codex session; run with METAHARNESS_LIVE=1 and --ignored"]
+fn an_allowed_shell_call_runs_and_the_codex_record_shows_its_output() {
+    if !live() {
+        return;
+    }
+    let prompt = format!(
+        "Run exactly this shell command and show me its output: echo {MARKER}. Use your shell \
+         tool, do not answer from memory. Run it once and then stop."
+    );
+    let mut run = Metaharness::new(Kind::Codex)
+        .with_hermetic(HermeticMode::On)
+        .with_decisions(DecisionMode::Ask)
+        .start(Input::Prompt(prompt))
+        .expect("the run starts");
+
+    let scratch = run
+        .scratch_root()
+        .expect("a live run owns a scratch root")
+        .to_path_buf();
+
+    let allowed = allow_everything(&mut run);
+    let rollout = std::fs::read_to_string(scratch.join("rollout.jsonl")).unwrap_or_default();
+
+    // (a) the seam was really consulted — read off the channel, never off the config.
+    let published = hook_requests(&scratch);
+
+    // (c) and metaharness is what admitted the call.
+    assert!(
+        !allowed.is_empty(),
+        "(c) no call was ever presented for a decision, so this run says nothing about the grant \
+         half: the marker below could have been produced by a run with no seam at all"
+    );
+    let census = run.census();
+    assert!(
+        census.allowed >= 1,
+        "(c) the census counts no allow: {census:?}"
+    );
+    eprintln!("live codex (c) census: {census:?}");
+
+    // (b) the effect landed. The command was `echo <marker>`, so its output is the marker followed
+    // by a newline, inside a tool-output record — the exact needle the deny vector asserts is
+    // **absent**, asserted present here. One wire, both polarities, one binary.
+    let outputs: Vec<&str> = rollout
+        .lines()
+        .filter(|line| line.contains("call_output") || line.contains("exec_command_end"))
+        .collect();
+    for output in &outputs {
+        eprintln!("live codex (b) the record's output for this call: {output}");
+    }
+    let landed = format!(r"{MARKER}\n");
+    assert!(
+        outputs.iter().any(|line| line.contains(&landed)),
+        "(b) the allowed command's own output is not in the session record: either the vendor \
+         discarded the allow — the reading the 0.145.0 literal \"PreToolUse hook returned \
+         unsupported permissionDecision:allow\" would support — or the model never ran it. Read \
+         the rollout before concluding either"
+    );
+    assert!(
+        !rollout.contains("blocked by PreToolUse hook"),
+        "(b) the record says a call was blocked, so this run did not exercise the grant half"
+    );
+
+    assert_the_reader_consumed_the_real_record(&run, &rollout);
+    eprintln!(
+        "live codex: {} calls allowed, {} hook requests published — the grant half of the wire is \
+         driven, and every label that called it undriven can move",
+        allowed.len(),
+        published.len()
+    );
+}
+
 /// Live run: the deliberate denial — does the seam really stop a call on codex?
 #[test]
 #[ignore = "starts a real, paid codex session; run with METAHARNESS_LIVE=1 and --ignored"]

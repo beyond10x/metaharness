@@ -20,8 +20,11 @@ page mapping "adapter contract" onto that tooling's vocabulary.
 four milestones are all built: the record (CT-1), recorded real wire on both faces (CT-2), the
 version pair (CT-3) and the per-adapter authoring shape (CT-4). The reuse is the vocabulary and
 not a dependency — `engineering-protocols` never appears in a `Cargo.toml` here. What the last
-milestone surfaced is carried in that page: the two adapters are not yet symmetrical, because
-codex tests no launch face, and the checklist now says so out loud instead of leaving it absent.
+milestone surfaced is carried in that page: the two adapters were not symmetrical, because codex
+tested no launch face, and the checklist said so out loud instead of leaving it absent. **That gap
+is closed as of 2026-08-23** — six recorded C1 expectations, `checked: 10 → 17` on codex — and the
+way it closed is the argument for the shape: an absence nobody could see became a declared gap,
+then a deliberate count movement with the diff read.
 
 ## 2. More harnesses: pi, opencode
 

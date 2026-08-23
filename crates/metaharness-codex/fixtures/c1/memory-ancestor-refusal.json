@@ -1,0 +1,6 @@
+{
+  "refusal": {
+    "code": null,
+    "display": "H11: the ancestor walk found /scratch/AGENTS.md, and AGENTS.md discovery is native to codex — a root-to-cwd walk on every run"
+  }
+}

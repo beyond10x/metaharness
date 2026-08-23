@@ -72,6 +72,61 @@ and official documentation fetched today. Every fact is labelled: **V** verified
 - Live-control alternatives to transcript parsing: `codex mcp-server` (stdio MCP) and
   `codex app-server` (JSON-RPC `thread/start`, `turn/start`). (V)
 
+## Appendix, 2026-08-23: provider, credential and hook-response facts read from the binary
+
+Added while building the codex loopback door (LP-4) and the allow half of the decision wire. The
+method is **narrower** than the record above and is labelled as such: these are literals and serde
+field lists read out of the pinned `codex` 0.145.0 binary (`strings /usr/bin/codex`), not observed
+behaviour. A field name in a struct is evidence about the *shape* the binary parses; it is **not**
+evidence about what the binary does with it.
+
+### Custom model providers
+
+- `ModelProviderInfo` deserialises `base_url`, `env_key`, `env_key_instructions`,
+  `experimental_bearer_token`, `aws`, `query_params`, `http_headers`, `request_max_retries`,
+  `stream_max_retries`, `stream_idle_timeout_ms`, `websocket_connect_timeout_ms`,
+  `requires_openai_auth`, `supports_websockets`, `wire_api`. (V — the binary's own serde field list)
+- A custom provider id may not collide with a built-in one:
+  `model_providers contains reserved built-in provider IDs: … Built-in providers cannot be
+  overridden. Rename your custom provider (for example, openai-custom)`. metaharness's entries are
+  therefore `metaharness_endpoint` and `metaharness_loopback`. (V — verbatim literal)
+- `https://api.openai.com/v1/responses` is a literal in the same binary: the host an API-key run
+  talks to, and what the loopback proxy forwards to when the run named no gateway. (V)
+- **Unknown (?):** whether a ChatGPT-plan (subscription) session honours a custom provider's
+  `base_url` at all, or rewrites it to `chatgpt.com/backend-api/codex`. Both hosts are literals in
+  the binary; which path wins is behaviour, and behaviour needs a run. This is **V-LP6's open half**
+  and it is why the codex loopback door refuses a subscription login by name.
+
+### `auth.json`, the two login classes
+
+- `struct AuthDotJson with 7 elements`: `OPENAI_API_KEY`, `auth_mode`, `tokens`, `last_refresh`,
+  `agent_identity`, `personal_access_token`, `bedrock_api_key`; the token object carries
+  `access_token`, `refresh_token`, `account_id`, `id_token`, `chatgpt_user_id`, `plan_type`, …
+  (V — the binary's own serde field list)
+- So the two classes are **distinguishable before a run starts**, which is what lets metaharness
+  refuse the unrouted one by name instead of failing at the first request an hour in.
+
+### What a `PreToolUse` hook response may say
+
+Every literal below is verbatim, and each one is a rule the adapter's renderer obeys (V):
+
+- `PreToolUse hook returned permissionDecision:deny without a non-empty permissionDecisionReason`
+- `PreToolUse hook returned permissionDecisionReason without permissionDecision`
+- `PreToolUse hook returned updatedInput without permissionDecision:allow`
+- `PreToolUse hook returned unsupported permissionDecision:ask`
+- `PreToolUse hook returned unsupported decision:approve`
+- `PreToolUse hook returned unsupported continue:false` / `… unsupported stopReason` /
+  `… unsupported suppressOutput`
+
+**And the one that cuts the other way:** the same table also holds
+`PreToolUse hook returned unsupported permissionDecision:allow`, next to
+`PermissionRequest hook denied approval`. Two readings, opposite in consequence — either `allow` is
+refused at this event, or that literal belongs to another surface — and **a string table cannot say
+which** (?). Note that the `updatedInput` literal *requires* `permissionDecision:allow`, which is
+hard to reconcile with allow being refused outright at the same event. The adapter renders `allow`,
+proves the rendering and its delivery free at C3, and leaves the vendor half labelled undriven until
+`tests/live_codex.rs`'s allow vector is spent. Nothing was upgraded on the strength of a string.
+
 ## What this changes for wave 4
 
 The W4.4 adapter is smaller than budgeted (the rollout carries more than stream-json does), and

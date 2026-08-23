@@ -12,10 +12,11 @@
 //! in another tier, or produces red is an unmet obligation, and so is a row declared unfilled
 //! without saying why.
 //!
-//! The two adapters do not answer identically today, and that is the finding, not a defect in the
-//! shape: claude fills all four rows, codex fills three and names its missing launch face. Before
-//! the shape existed that absence was invisible — the codex contract record read `checked: 10`,
-//! `failed: 0`, and said nothing at all about a face it never tested.
+//! The two adapters answer identically **since 2026-08-23**, and how they got there is the whole
+//! argument for the shape. On its first run codex filled three rows and named its missing launch
+//! face; before the shape existed that absence was invisible — the codex contract record read
+//! `checked: 10`, `failed: 0`, and said nothing at all about a face it never tested. Filling the
+//! row is what moved the record to `checked: 17`, deliberately and with the diff read.
 
 use metaharness::protocol::{ContractObligations, Kind, Obligation};
 use metaharness::{ADAPTERS, conformance_vectors, contract_obligations, contract_result};
@@ -43,39 +44,39 @@ fn the_claude_adapter_fills_the_contract_authoring_shape() {
     assert!(unmet.is_empty(), "{unmet:#?}");
 }
 
-/// The codex adapter likewise — three rows filled, one row a named gap, and nothing declared that
-/// the run does not deliver.
+/// The codex adapter likewise — all four rows filled since the launch face was recorded, and
+/// nothing declared that the run does not deliver.
 #[test]
 fn the_codex_adapter_fills_the_contract_authoring_shape() {
     let unmet = unmet(Kind::Codex);
     assert!(unmet.is_empty(), "{unmet:#?}");
 }
 
-/// Today's asymmetry, pinned so that closing it is a deliberate act.
+/// The asymmetry CT-4 found, now closed — and pinned closed, so re-opening it is deliberate too.
 ///
-/// Codex has no `fixtures/c1/` and therefore no launch vector; its launch plan is pinned by unit
-/// tests, which redden this workspace's suite and never the record a consumer reads. Recording that
-/// as a **named** gap rather than an absence is the same rule the version pair follows: never a
-/// silent pass. When the row is filled, this test goes red and is deleted with the gap.
+/// Until 2026-08-23 the codex launch row was a **named gap**: no `fixtures/c1/`, a launch plan
+/// pinned by unit tests that redden this workspace's suite and never the record a consumer reads.
+/// Filling it moved `checked` from 10 to 17, which is the only way a count is allowed to move. What
+/// replaces the gap test is this: **no** adapter may answer the launch row with a gap now that both
+/// can answer it with vectors, because the next adapter inherits the standard the last one set.
 #[test]
-fn the_codex_launch_row_is_a_named_gap_rather_than_a_silent_absence() {
-    let declared = contract_obligations(Kind::Codex).expect("the adapter exists");
-    let Obligation::Gap(reason) = declared.launch else {
-        panic!(
-            "the codex launch row is filled now — delete this test, and check that the record's \
-             `checked` count and every vector-count pin moved with it"
+fn no_adapter_answers_the_launch_row_with_a_gap_any_more() {
+    for kind in KINDS {
+        let declared = contract_obligations(kind).expect("the adapter exists");
+        let Obligation::Filled(ids) = declared.launch else {
+            panic!(
+                "{}'s launch row is a gap again. If that is deliberate, the reason belongs in the \
+                 declaration and this test's sentence has to change with it — but the standard \
+                 both adapters meet today is a recorded launch expectation, not a unit test",
+                kind.as_str()
+            );
+        };
+        assert!(
+            !ids.is_empty(),
+            "{} declares its launch face filled by no vector at all",
+            kind.as_str()
         );
-    };
-    assert!(
-        reason.contains("C1") && reason.contains("src/launch.rs"),
-        "the gap names what stands in for the missing vectors: {reason}"
-    );
-    // And the claude adapter is the row's worked example, which is what makes the gap actionable.
-    let claude = contract_obligations(Kind::Claude).expect("the adapter exists");
-    let Obligation::Filled(ids) = claude.launch else {
-        panic!("the claude launch row is the filled one the codex gap points at");
-    };
-    assert!(!ids.is_empty());
+    }
 }
 
 /// No adapter reaches a consumer without a declaration.

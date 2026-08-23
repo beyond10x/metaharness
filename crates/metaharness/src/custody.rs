@@ -24,20 +24,34 @@
 //! metaharness back in the business of writing the operator's credential, which is the custody
 //! rule (design § 1.2) this whole design exists to keep.
 //!
-//! # The file shape this reads
+//! # The file shapes this reads — one per vendor, named by [`Kind`]
 //!
-//! Claude Code's `~/.claude/.credentials.json`, inspected on 2026-08-23 for **field names only**
-//! — no value in this repository, this module's tests, or any error it raises ever comes from the
-//! operator's real file:
+//! Two vendors keep their login in two places under two shapes, and this module is the one line
+//! that knows both. **Field names only**; no value in this repository, this module's tests, or any
+//! error it raises ever comes from an operator's real file.
+//!
+//! Claude Code's `~/.claude/.credentials.json`, inspected on 2026-08-23:
 //!
 //! ```text
 //! { "claudeAiOauth": { "accessToken", "refreshToken", "expiresAt",
 //!                      "refreshTokenExpiresAt", "scopes", "subscriptionType", "rateLimitTier" } }
 //! ```
 //!
-//! Only `claudeAiOauth.accessToken` is read. `expiresAt` is deliberately **not** consulted: a
-//! clock-based prediction of expiry is a second opinion that can disagree with the upstream, and
-//! the upstream's 401 is the only authority on whether a token still works.
+//! Codex's `~/.codex/auth.json`, whose field names are read from the **pinned binary's own serde
+//! metadata** (`codex` 0.145.0: `struct AuthDotJson with 7 elements` — `OPENAI_API_KEY`,
+//! `auth_mode`, `tokens`, `last_refresh`, `agent_identity`, `personal_access_token`,
+//! `bedrock_api_key`; the token object carries `access_token`, `refresh_token`, `account_id`,
+//! `id_token`, …). It holds **either** of two logins, and which one it holds decides whether the
+//! codex loopback door opens at all (V-LP6, [`CodexLogin`]):
+//!
+//! ```text
+//! { "OPENAI_API_KEY": "…" }                       // an API key the proxy can replay
+//! { "tokens": { "access_token": "…", … } }        // a ChatGPT-plan login
+//! ```
+//!
+//! Only the access token is read from either. `expiresAt`/`last_refresh` are deliberately **not**
+//! consulted: a clock-based prediction of expiry is a second opinion that can disagree with the
+//! upstream, and the upstream's 401 is the only authority on whether a token still works.
 //!
 //! # Why the lock is a sidecar and not the credential file
 //!
@@ -57,37 +71,55 @@ use std::fs::{File, OpenOptions};
 use std::io;
 use std::path::{Path, PathBuf};
 
+use metaharness_protocol::Kind;
+
+pub use metaharness_codex::CodexLogin;
+
 /// One credential file, and the lock that makes reads of it serialize.
 ///
-/// Cheap to clone by `Arc` and safe to share: it holds no token, only paths. The token is read
-/// from the file at every call, because a token cached in a field is the copy-with-a-lifetime
-/// problem again, one scope smaller.
+/// Cheap to clone by `Arc` and safe to share: it holds no token, only paths and which vendor's
+/// shape to read. The token is read from the file at every call, because a token cached in a field
+/// is the copy-with-a-lifetime problem again, one scope smaller.
 #[derive(Debug)]
 pub struct CredentialCustody {
+    kind: Kind,
     credential: PathBuf,
     lock: PathBuf,
+    /// Which login the file held when it was opened — a **class**, never a value.
+    ///
+    /// Read once because it is what the launch is refused or permitted on (V-LP6), and a class
+    /// that changed mid-run would mean the operator logged out and in as somebody else, which is
+    /// not a case this build promises to follow. `None` on a vendor that draws no such
+    /// distinction — Claude Code's file is one shape and its proxy replays one bearer either way.
+    login: Option<CodexLogin>,
 }
 
 impl CredentialCustody {
-    /// The operator's live credential file (Claude Code's `.credentials.json` shape).
+    /// The operator's live credential file, in the shape this vendor keeps it in.
     ///
-    /// Reads it once, under the lock, to prove the shape is the one this module knows. A run
-    /// whose custody is malformed is refused **at launch** rather than an hour in, which is the
-    /// failure Q13 recorded. The token read for that check is dropped and never stored.
+    /// Reads it once, under the lock, to prove the shape is one this module knows. A run whose
+    /// custody is malformed is refused **at launch** rather than an hour in, which is the failure
+    /// Q13 recorded. The token read for that check is dropped and never stored; what is kept is
+    /// which of the two codex logins it was ([`CredentialCustody::login`]).
     ///
     /// # Errors
     ///
     /// [`io::ErrorKind::NotFound`] and friends when the file or its directory cannot be used, and
-    /// [`io::ErrorKind::InvalidData`] when the file is not the shape above. Every message names
-    /// the path; none of them can name a token, because the parse either found a string at
-    /// `claudeAiOauth.accessToken` or reports that it did not.
-    pub fn open(path: &Path) -> io::Result<Self> {
-        let custody = Self {
+    /// [`io::ErrorKind::InvalidData`] when the file is not a shape above. Every message names the
+    /// path; none of them can name a token, because the parse either found a string at a known
+    /// field or reports that it did not.
+    pub fn open(kind: Kind, path: &Path) -> io::Result<Self> {
+        let mut custody = Self {
+            kind,
             credential: path.to_path_buf(),
             lock: lock_path(path),
+            login: None,
         };
-        match custody.read_token() {
-            Ok(_) => Ok(custody),
+        match custody.read_credential() {
+            Ok((_, login)) => {
+                custody.login = login;
+                Ok(custody)
+            }
             Err(CustodyError::Io { detail }) => {
                 Err(io::Error::new(io::ErrorKind::NotFound, detail))
             }
@@ -96,6 +128,17 @@ impl CredentialCustody {
                 other.to_string(),
             )),
         }
+    }
+
+    /// Which login this custody holds, as read when it was opened.
+    ///
+    /// `Some` only for [`Kind::Codex`], where the two classes route differently and one of them is
+    /// refused by name (V-LP6). `None` for Claude Code, whose file is one shape — reported as an
+    /// absent distinction rather than as a default, because a default here would be this module
+    /// claiming something about a vendor it was not asked about.
+    #[must_use]
+    pub fn login(&self) -> Option<CodexLogin> {
+        self.login
     }
 
     /// The current access token, read under the file lock.
@@ -107,6 +150,11 @@ impl CredentialCustody {
     /// accepted — which is a real mid-run possibility, since another process owns the file.
     pub fn bearer(&self) -> Result<String, CustodyError> {
         self.read_token()
+    }
+
+    /// The token half of [`CredentialCustody::read_credential`], for callers that want no class.
+    fn read_token(&self) -> Result<String, CustodyError> {
+        self.read_credential().map(|(token, _)| token)
     }
 
     /// Re-read the file under the lock, expecting the vendor's own tooling to have refreshed it.
@@ -142,12 +190,16 @@ impl CredentialCustody {
     /// function, so a reader can never observe a half-written file — which is exactly what a
     /// refresher that writes in place produces, and what a torn read of would hand the upstream
     /// as a credential.
-    fn read_token(&self) -> Result<String, CustodyError> {
+    fn read_credential(&self) -> Result<(String, Option<CodexLogin>), CustodyError> {
         let _guard = self.locked()?;
         let bytes = std::fs::read(&self.credential).map_err(|error| CustodyError::Io {
             detail: format!("{}: {error}", self.credential.display()),
         })?;
-        access_token(&bytes).map_err(|detail| CustodyError::Malformed {
+        let read = match self.kind {
+            Kind::Claude => claude_access_token(&bytes).map(|token| (token, None)),
+            Kind::Codex => codex_credential(&bytes).map(|(token, login)| (token, Some(login))),
+        };
+        read.map_err(|detail| CustodyError::Malformed {
             path: self.credential.clone(),
             detail,
         })
@@ -197,22 +249,54 @@ fn lock_path(credential: &Path) -> PathBuf {
 /// The error strings name the **field that was wrong**, never its contents: a diagnostic that
 /// echoed the file would put a live credential into a log, which is the one thing this module
 /// cannot do.
-fn access_token(bytes: &[u8]) -> Result<String, String> {
-    let parsed: serde_json::Value =
-        serde_json::from_slice(bytes).map_err(|error| format!("not JSON: {error}"))?;
+fn claude_access_token(bytes: &[u8]) -> Result<String, String> {
+    let parsed = parse(bytes)?;
     let oauth = parsed
         .get("claudeAiOauth")
         .ok_or_else(|| "no claudeAiOauth object".to_string())?;
     let token = oauth
         .get("accessToken")
         .ok_or_else(|| "claudeAiOauth has no accessToken".to_string())?;
-    let token = token
-        .as_str()
-        .ok_or_else(|| "claudeAiOauth.accessToken is not a string".to_string())?;
-    if token.is_empty() {
-        return Err("claudeAiOauth.accessToken is empty".to_string());
+    string_field(token, "claudeAiOauth.accessToken")
+}
+
+/// The bearer and the login class out of codex's `auth.json`, or why neither was there.
+///
+/// The two classes are read in the order the file itself distinguishes them: an `OPENAI_API_KEY`
+/// string is an API-key login, and a `tokens.access_token` string is a ChatGPT-plan one. A file
+/// carrying **both** is read as the API key, because that is the class the loopback door routes
+/// and reading it the other way would refuse a run this build can honour — and the refusal it
+/// would raise names an unverified vendor behaviour, which is a thing to state, not to guess into.
+fn codex_credential(bytes: &[u8]) -> Result<(String, CodexLogin), String> {
+    let parsed = parse(bytes)?;
+    if let Some(key) = parsed.get("OPENAI_API_KEY").filter(|key| !key.is_null()) {
+        return Ok((string_field(key, "OPENAI_API_KEY")?, CodexLogin::ApiKey));
     }
-    Ok(token.to_string())
+    if let Some(tokens) = parsed.get("tokens").filter(|tokens| !tokens.is_null()) {
+        let token = tokens
+            .get("access_token")
+            .ok_or_else(|| "tokens has no access_token".to_string())?;
+        return Ok((
+            string_field(token, "tokens.access_token")?,
+            CodexLogin::Subscription,
+        ));
+    }
+    Err("neither an OPENAI_API_KEY nor a tokens object: this is not a codex login".to_string())
+}
+
+fn parse(bytes: &[u8]) -> Result<serde_json::Value, String> {
+    serde_json::from_slice(bytes).map_err(|error| format!("not JSON: {error}"))
+}
+
+/// One string field, named rather than valued in every error it can raise.
+fn string_field(value: &serde_json::Value, named: &str) -> Result<String, String> {
+    let text = value
+        .as_str()
+        .ok_or_else(|| format!("{named} is not a string"))?;
+    if text.is_empty() {
+        return Err(format!("{named} is empty"));
+    }
+    Ok(text.to_string())
 }
 
 /// Why custody could not answer.
@@ -247,7 +331,7 @@ impl fmt::Display for CustodyError {
             CustodyError::Io { detail } => write!(f, "the credential could not be read: {detail}"),
             CustodyError::Malformed { path, detail } => write!(
                 f,
-                "{} is not a Claude Code credential file: {detail}",
+                "{} is not a credential file in the shape its vendor writes: {detail}",
                 path.display()
             ),
             CustodyError::StillStale => f.write_str(
@@ -304,12 +388,82 @@ mod tests {
     fn the_bearer_is_the_access_token_out_of_the_vendors_shape() {
         let dir = tempfile::TempDir::new().expect("a directory");
         let path = fake_credential(dir.path(), "fake-token-one");
-        let custody = CredentialCustody::open(&path).expect("the fake credential opens");
+        let custody =
+            CredentialCustody::open(Kind::Claude, &path).expect("the fake credential opens");
         assert_eq!(
             custody.bearer().expect("a bearer"),
             "fake-token-one",
             "the bearer is claudeAiOauth.accessToken verbatim; anything else means this module \
              would hand the upstream a value the vendor did not issue"
+        );
+    }
+
+    /// A codex `auth.json` in the API-key shape: the class the loopback door routes (LP-4).
+    ///
+    /// The field name is the pinned binary's own (`AuthDotJson`); the value is one no account has
+    /// ever been issued.
+    #[test]
+    fn a_codex_api_key_login_reads_as_a_bearer_and_as_the_class_the_door_routes() {
+        let dir = tempfile::TempDir::new().expect("a directory");
+        let path = dir.path().join("auth.json");
+        std::fs::write(
+            &path,
+            br#"{"OPENAI_API_KEY":"sk-not-a-real-key","tokens":null,"last_refresh":null}"#,
+        )
+        .expect("a codex login");
+        let custody = CredentialCustody::open(Kind::Codex, &path).expect("it opens");
+        assert_eq!(custody.bearer().expect("a bearer"), "sk-not-a-real-key");
+        assert_eq!(custody.login(), Some(CodexLogin::ApiKey));
+    }
+
+    /// A codex `auth.json` in the ChatGPT-plan shape opens — and is classified, which is what the
+    /// launch refuses on. **Classifying is not routing**: V-LP6 is unanswered, so the door says so
+    /// by name rather than sending a subscription token at a provider nobody has proven honours it.
+    #[test]
+    fn a_codex_subscription_login_opens_and_is_classified_rather_than_refused_here() {
+        let dir = tempfile::TempDir::new().expect("a directory");
+        let path = dir.path().join("auth.json");
+        std::fs::write(
+            &path,
+            br#"{"OPENAI_API_KEY":null,"tokens":{"access_token":"fake-chatgpt-access","refresh_token":"fake-refresh","account_id":"fake-account"},"last_refresh":"2026-08-23T00:00:00Z"}"#,
+        )
+        .expect("a codex login");
+        let custody = CredentialCustody::open(Kind::Codex, &path).expect("it opens");
+        assert_eq!(custody.bearer().expect("a bearer"), "fake-chatgpt-access");
+        assert_eq!(custody.login(), Some(CodexLogin::Subscription));
+    }
+
+    /// A Claude Code login draws no such distinction, and the absence is reported as one.
+    #[test]
+    fn a_claude_login_reports_no_codex_login_class_at_all() {
+        let dir = tempfile::TempDir::new().expect("a directory");
+        let path = fake_credential(dir.path(), "fake-token-one");
+        let custody = CredentialCustody::open(Kind::Claude, &path).expect("it opens");
+        assert_eq!(custody.login(), None);
+    }
+
+    /// Each vendor's shape is read as that vendor's, and the other one is a named refusal rather
+    /// than an empty token: reading a codex file with the claude parser would otherwise produce
+    /// "no token" for a file that holds a perfectly good one.
+    #[test]
+    fn one_vendors_credential_is_not_read_as_the_others() {
+        let dir = tempfile::TempDir::new().expect("a directory");
+        let claude = fake_credential(dir.path(), "fake-token-one");
+        let error = CredentialCustody::open(Kind::Codex, &claude)
+            .expect_err("a claude file is not a codex login");
+        assert!(
+            error.to_string().contains("not a codex login"),
+            "the refusal must name the shape it wanted: {error}"
+        );
+
+        let codex = dir.path().join("auth.json");
+        std::fs::write(&codex, br#"{"OPENAI_API_KEY":"sk-not-a-real-key"}"#)
+            .expect("a codex login");
+        let error = CredentialCustody::open(Kind::Claude, &codex)
+            .expect_err("a codex file is not a claude login");
+        assert!(
+            error.to_string().contains("claudeAiOauth"),
+            "the refusal must name the field it wanted: {error}"
         );
     }
 
@@ -320,7 +474,8 @@ mod tests {
         let dir = tempfile::TempDir::new().expect("a directory");
         let path = dir.path().join(".credentials.json");
         std::fs::write(&path, br#"{"someOtherVendor": {"token": "x"}}"#).expect("a wrong shape");
-        let error = CredentialCustody::open(&path).expect_err("a wrong shape is not custody");
+        let error =
+            CredentialCustody::open(Kind::Claude, &path).expect_err("a wrong shape is not custody");
         assert_eq!(
             error.kind(),
             io::ErrorKind::InvalidData,
@@ -338,7 +493,7 @@ mod tests {
     fn a_missing_credential_file_is_notfound_and_names_the_path() {
         let dir = tempfile::TempDir::new().expect("a directory");
         let path = dir.path().join("absent.json");
-        let error = CredentialCustody::open(&path).expect_err("nothing to open");
+        let error = CredentialCustody::open(Kind::Claude, &path).expect_err("nothing to open");
         assert_eq!(error.kind(), io::ErrorKind::NotFound);
         assert!(
             error.to_string().contains("absent.json"),
@@ -352,7 +507,7 @@ mod tests {
     fn a_reread_that_is_byte_identical_is_stillstale_and_not_a_success() {
         let dir = tempfile::TempDir::new().expect("a directory");
         let path = fake_credential(dir.path(), "fake-token-stale");
-        let custody = CredentialCustody::open(&path).expect("it opens");
+        let custody = CredentialCustody::open(Kind::Claude, &path).expect("it opens");
         assert_eq!(
             custody.refreshed("fake-token-stale"),
             Err(CustodyError::StillStale),
@@ -365,7 +520,7 @@ mod tests {
     fn a_reread_after_the_vendor_rewrote_the_file_yields_the_new_token() {
         let dir = tempfile::TempDir::new().expect("a directory");
         let path = fake_credential(dir.path(), "fake-token-stale");
-        let custody = CredentialCustody::open(&path).expect("it opens");
+        let custody = CredentialCustody::open(Kind::Claude, &path).expect("it opens");
         write_credential(&path, "fake-token-fresh");
         assert_eq!(
             custody
@@ -428,8 +583,8 @@ mod tests {
                 let torn = Arc::clone(&torn);
                 let seen = Arc::clone(&seen);
                 std::thread::spawn(move || {
-                    let custody =
-                        CredentialCustody::open(&path).expect("a second handle on one file");
+                    let custody = CredentialCustody::open(Kind::Claude, &path)
+                        .expect("a second handle on one file");
                     for _ in 0..200 {
                         // A `stale` no file ever holds, so every read is a "fresh" answer and the
                         // call exercises the locked re-read rather than the equality shortcut.

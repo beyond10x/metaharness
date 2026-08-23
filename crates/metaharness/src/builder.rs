@@ -39,6 +39,23 @@ use metaharness_protocol::SeamFactory;
 /// H3 exists to ignore.
 const VENDOR_UPSTREAM: &str = "https://api.anthropic.com";
 
+/// The same for codex, whose API-key traffic goes to `api.openai.com`.
+///
+/// `https://api.openai.com/v1/responses` is a literal in the pinned 0.145.0 binary, and the
+/// provider entry this launch writes names `{proxy}/v1` — so a child request to `/v1/responses`
+/// arrives here as the same path on this host. The **subscription** host is deliberately not
+/// listed: that half of the door is refused by name (V-LP6), and a default nobody routes to would
+/// be a claim wearing a constant's clothes.
+const CODEX_VENDOR_UPSTREAM: &str = "https://api.openai.com";
+
+/// Where this run's proxy forwards when the run named no gateway of its own.
+fn vendor_upstream(kind: Kind) -> &'static str {
+    match kind {
+        Kind::Claude => VENDOR_UPSTREAM,
+        Kind::Codex => CODEX_VENDOR_UPSTREAM,
+    }
+}
+
 /// What a run starts with.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum Input {
@@ -471,7 +488,7 @@ fn start_claude(
             scratch: Some(scratch),
             // Handed over rather than kept here: the run is what the port is scoped to, so the
             // thing that ends the run closes it.
-            loopback,
+            loopback: loopback.map(|started| started.handle),
         }))
     }
 }
@@ -493,7 +510,7 @@ fn loopback_for(
     spec: &RunSpec,
     credentials: Option<&Path>,
     run_id: &str,
-) -> Result<Option<LoopbackHandle>, Refusal> {
+) -> Result<Option<StartedLoopback>, Refusal> {
     match spec.credentials {
         CredentialSource::Loopback => Ok(Some(start_loopback(spec, credentials, run_id)?)),
         CredentialSource::OperatorLogin | CredentialSource::ApiKey | CredentialSource::None => {
@@ -502,11 +519,44 @@ fn loopback_for(
     }
 }
 
-/// The two facts a started proxy contributes to the launch plan, and nothing else.
-fn loopback_params(handle: Option<&LoopbackHandle>) -> Option<metaharness_claude::LoopbackParams> {
-    handle.map(|handle| metaharness_claude::LoopbackParams {
-        base_url: handle.base_url(),
-        placeholder: handle.placeholder().to_string(),
+/// A running proxy and the one thing about the custody behind it a launch plan may know.
+///
+/// The class travels beside the handle rather than inside it because it is a fact about the
+/// **operator's file**, not about the socket: the proxy is the same object either way, and it is
+/// the codex launch plan that refuses one of the two by name (V-LP6).
+struct StartedLoopback {
+    handle: LoopbackHandle,
+    login: Option<metaharness_codex::CodexLogin>,
+}
+
+/// The two facts a started proxy contributes to a Claude Code launch plan, and nothing else.
+fn loopback_params(
+    started: Option<&StartedLoopback>,
+) -> Option<metaharness_claude::LoopbackParams> {
+    started.map(|started| metaharness_claude::LoopbackParams {
+        base_url: started.handle.base_url(),
+        placeholder: started.handle.placeholder().to_string(),
+    })
+}
+
+/// The same for codex, plus the login class its door is opened or refused on.
+///
+/// A subscription custody produces a `LoopbackParams` all the same, and the **plan** refuses it —
+/// rather than the builder refusing first — so the refusal is the adapter's own, is carried by a
+/// C1 vector, and reads identically whether a run reached it through this library or through a
+/// caller planning a launch directly.
+fn codex_loopback_params(
+    started: Option<&StartedLoopback>,
+) -> Option<metaharness_codex::LoopbackParams> {
+    started.map(|started| metaharness_codex::LoopbackParams {
+        base_url: started.handle.base_url(),
+        placeholder: started.handle.placeholder().to_string(),
+        // A codex custody always classifies; `None` cannot arise here, and `Subscription` is the
+        // conservative reading of a class that somehow did not, because it is the one that
+        // refuses.
+        login: started
+            .login
+            .unwrap_or(metaharness_codex::CodexLogin::Subscription),
     })
 }
 
@@ -520,12 +570,12 @@ fn start_loopback(
     spec: &RunSpec,
     credentials: Option<&Path>,
     run_id: &str,
-) -> Result<LoopbackHandle, Refusal> {
+) -> Result<StartedLoopback, Refusal> {
     let missing = metaharness_claude::LaunchRefusal::CredentialFileMissing.to_string();
     let Some(path) = credentials else {
         return Err(Refusal::Launch { detail: missing });
     };
-    let custody = CredentialCustody::open(path).map_err(|error| Refusal::Launch {
+    let custody = CredentialCustody::open(spec.kind, path).map_err(|error| Refusal::Launch {
         detail: if error.kind() == std::io::ErrorKind::NotFound {
             format!("{missing} ({error})")
         } else {
@@ -535,17 +585,24 @@ fn start_loopback(
             )
         },
     })?;
+    let login = custody.login();
     // A gateway the run named becomes the **proxy's** upstream, one hop further out than it would
     // be without the proxy; with no gateway named it is the vendor's own host. Either way the
     // child sees only the loopback port, which is what makes the hop inspectable.
-    let upstream = spec.model_endpoint.as_deref().unwrap_or(VENDOR_UPSTREAM);
-    LoopbackProxy::start(upstream, Arc::new(custody), run_id).map_err(|error| Refusal::Launch {
-        detail: format!(
-            "the loopback proxy could not start in front of {upstream}: {error}. The run is \
-             refused rather than started without it, because a child pointed at a port nothing \
-             is listening on fails with a vendor error about the network and names none of this"
-        ),
-    })
+    let upstream = spec
+        .model_endpoint
+        .as_deref()
+        .unwrap_or_else(|| vendor_upstream(spec.kind));
+    let handle = LoopbackProxy::start(upstream, Arc::new(custody), run_id).map_err(|error| {
+        Refusal::Launch {
+            detail: format!(
+                "the loopback proxy could not start in front of {upstream}: {error}. The run is \
+                 refused rather than started without it, because a child pointed at a port nothing \
+                 is listening on fails with a vendor error about the network and names none of this"
+            ),
+        }
+    })?;
+    Ok(StartedLoopback { handle, login })
 }
 
 /// Start a codex run: CX-M2.
@@ -558,9 +615,12 @@ fn start_loopback(
 /// * **the hook config lives inside the scratch `CODEX_HOME`**, because that is where codex
 ///   declares a hook and there is no `--setting-sources` to switch that source off.
 ///
-/// **No proxy is ever started here.** `credentials: loopback` is refused by the codex launch plan
-/// by name, below, before this function reaches a spawn — so the door is stated as unbuilt (LP-4)
-/// rather than degraded to the credential-copy path the loopback provider exists to replace.
+/// The loopback proxy is started here too (LP-4), in the same out-of-order step as
+/// [`start_claude`]: its base URL is an ephemeral port, so the proxy binds first and the plan is
+/// made second. **Where the two vendors differ is what the child is told** — Claude Code takes a
+/// base URL from its environment, codex takes a `model_providers` entry from the scratch
+/// `config.toml` — and **which logins are routed**: a ChatGPT-plan custody is refused by the codex
+/// launch plan by name, because V-LP6 is unanswered (see `docs/design/loopback-provider-v0.1.md`).
 fn start_codex(
     spec: RunSpec,
     credentials: Option<PathBuf>,
@@ -578,6 +638,13 @@ fn start_codex(
     let scratch = tempfile::TempDir::new()?;
     let cwd = resolve_cwd(&spec, scratch.path())?;
     let transcript_path = scratch.path().join("rollout.jsonl");
+    let run_id = run_id(&spec);
+
+    // Held in a local, so every `?` below this line drops it — and `LoopbackHandle::drop` stops
+    // the accept thread. A launch refused after the proxy started (a subscription custody is the
+    // real case) must not leave a port open on the operator's machine with their credential
+    // behind it.
+    let loopback = loopback_for(&spec, credentials.as_deref(), &run_id)?;
 
     let context = metaharness_codex::LaunchContext {
         scratch_root: scratch.path().to_path_buf(),
@@ -587,6 +654,7 @@ fn start_codex(
         memory_ancestors: memory_ancestors(&cwd),
         inputs_digest: None,
         plugins: plugin_trees(&spec),
+        loopback: codex_loopback_params(loopback.as_ref()),
     };
     let plan =
         metaharness_codex::plan_launch(&spec, &context).map_err(|refusal| Refusal::Launch {
@@ -640,7 +708,7 @@ fn start_codex(
     };
 
     Ok(Run::new(RunParts {
-        stream: EventStream::new(RunId::new(run_id(&spec))),
+        stream: EventStream::new(RunId::new(run_id)),
         spec,
         bridge,
         process,
@@ -659,8 +727,9 @@ fn start_codex(
             metaharness_codex::HookChannelPaths::under(scratch.path()).requests,
         ],
         scratch: Some(scratch),
-        // Never. See this function's header: the plan refused loopback before this line.
-        loopback: None,
+        // Handed over rather than kept here: the run is what the port is scoped to, so the thing
+        // that ends the run closes it (LP-4).
+        loopback: loopback.map(|started| started.handle),
     }))
 }
 
@@ -1455,14 +1524,278 @@ mod tests {
         );
     }
 
-    /// Step 6 at the library seam: the codex path never starts a proxy, because the codex launch
-    /// plan refuses `credentials: loopback` before a spawn exists to point at one.
+    // ------------------------------------------------------- the codex loopback door (LP-4)
+
+    /// A codex `auth.json` in the API-key shape — the class the door routes. The field name is the
+    /// pinned binary's own (`AuthDotJson`); no account has ever been issued this key.
+    fn fake_codex_credential(dir: &std::path::Path) -> PathBuf {
+        let path = dir.join("auth.json");
+        let body = serde_json::json!({
+            "OPENAI_API_KEY": FAKE_CODEX_KEY,
+            "tokens": null,
+            "last_refresh": null,
+        });
+        std::fs::write(&path, serde_json::to_vec(&body).expect("a credential body"))
+            .expect("the fake credential");
+        path
+    }
+
+    /// The same file in the ChatGPT-plan shape: opens as custody, and is refused by the launch.
+    fn fake_codex_subscription(dir: &std::path::Path) -> PathBuf {
+        let path = dir.join("auth.json");
+        let body = serde_json::json!({
+            "OPENAI_API_KEY": null,
+            "tokens": {
+                "access_token": "fake-chatgpt-access",
+                "refresh_token": "fake-chatgpt-refresh",
+                "account_id": "fake-account",
+            },
+            "last_refresh": "2026-08-23T00:00:00Z",
+        });
+        std::fs::write(&path, serde_json::to_vec(&body).expect("a credential body"))
+            .expect("the fake credential");
+        path
+    }
+
+    /// The key the fake codex credential holds. No account has ever issued it.
+    const FAKE_CODEX_KEY: &str = "sk-fake-operator-key-lp4";
+
+    /// What the scripted codex child was given, read from where **this vendor** is told it.
+    #[derive(Debug, Default, Clone)]
+    struct CodexChildRecord {
+        provider_base: Option<String>,
+        placeholder: Option<String>,
+        api_key: Option<String>,
+        auth_json_exists: bool,
+        answer: Option<String>,
+    }
+
+    /// A runner whose child reads its provider out of the scratch `config.toml` and really dials
+    /// it.
+    ///
+    /// Reading the file rather than the plan is the point: on this vendor the base URL is a config
+    /// key, so a vector that asserted on the plan's value alone would pass while the document that
+    /// carries it was never written — and a codex child with no `[model_providers]` entry silently
+    /// talks to the vendor's own host instead.
+    struct CodexDiallingRunner {
+        log: ScriptedLog,
+        record: Arc<Mutex<CodexChildRecord>>,
+    }
+
+    impl ProcessRunner for CodexDiallingRunner {
+        fn start(&mut self, plan: &LaunchPlanView) -> std::io::Result<Box<dyn HarnessProcess>> {
+            let home = PathBuf::from(plan.env.get("CODEX_HOME").cloned().unwrap_or_default());
+            let config = std::fs::read_to_string(home.join("config.toml")).unwrap_or_default();
+            let provider_base = config.lines().find_map(|line| {
+                line.strip_prefix("base_url = ")
+                    .map(|value| value.trim_matches('"').to_string())
+            });
+            let mut record = CodexChildRecord {
+                provider_base: provider_base.clone(),
+                placeholder: plan.env.get(metaharness_codex::LOOPBACK_ENV_KEY).cloned(),
+                api_key: plan
+                    .env
+                    .get("OPENAI_API_KEY")
+                    .or_else(|| plan.env.get("CODEX_API_KEY"))
+                    .cloned(),
+                auth_json_exists: home.join("auth.json").exists(),
+                answer: None,
+            };
+            if let (Some(base), Some(placeholder)) = (&provider_base, &record.placeholder) {
+                record.answer = Some(dial_responses(base, placeholder));
+            }
+            *self.record.lock().expect("the record") = record;
+            Ok(Box::new(ScriptedProcess::new(
+                vec![ScriptStep::line(END)],
+                self.log.clone(),
+            )))
+        }
+    }
+
+    /// One `POST {base}/responses` at the proxy, in the spelling an `env_key` provider uses.
+    ///
+    /// The path is the Responses wire because that is the `wire_api` the provider entry declares;
+    /// what the proxy does with the path is nothing at all — it relays it verbatim, which is why
+    /// this vector can dial a codex-shaped request through a proxy written for a different vendor.
+    fn dial_responses(base: &str, placeholder: &str) -> String {
+        let rest = base.trim_start_matches("http://");
+        let (authority, path) = rest.split_once('/').unwrap_or((rest, ""));
+        let port: u16 = authority
+            .rsplit(':')
+            .next()
+            .and_then(|text| text.parse().ok())
+            .expect("a provider base ending in a port");
+        let body = r#"{"model":"gpt-fake","input":[]}"#;
+        let request = format!(
+            "POST /{path}/responses HTTP/1.1\r\nHost: 127.0.0.1\r\n\
+             Authorization: Bearer {placeholder}\r\ncontent-type: application/json\r\n\
+             Content-Length: {}\r\n\r\n{body}",
+            body.len()
+        );
+        let mut stream = TcpStream::connect(("127.0.0.1", port)).expect("the proxy port");
+        stream
+            .set_read_timeout(Some(Duration::from_secs(10)))
+            .expect("a bounded wait");
+        stream
+            .write_all(request.as_bytes())
+            .expect("the whole request");
+        stream.flush().expect("the flush");
+        let mut all = Vec::new();
+        stream.read_to_end(&mut all).expect("the whole answer");
+        String::from_utf8_lossy(&all).to_string()
+    }
+
+    /// What a loopback codex child must have been given, and what it must not. Returns the
+    /// provider base it read out of the scratch `config.toml`, because the port in it is what the
+    /// rest of the vector is about.
+    ///
+    /// Each assertion is a spike finding and each would fail silently: a provider entry that never
+    /// reached the config file leaves the child talking to the vendor's own host, and a second
+    /// credential variable beside the placeholder puts a second spelling on the wire.
+    fn assert_codex_child(child: &CodexChildRecord) -> String {
+        let base = child
+            .provider_base
+            .clone()
+            .expect("the scratch config.toml names a provider base");
+        assert!(
+            base.starts_with("http://127.0.0.1:") && base.ends_with("/v1"),
+            "the child's provider must be this run's loopback port, got {base:?}"
+        );
+        assert!(
+            child
+                .placeholder
+                .as_deref()
+                .is_some_and(|value| value.starts_with("mh-run-codex-")),
+            "the child must hold this run's placeholder and nothing else, got {:?}",
+            child.placeholder
+        );
+        assert_eq!(
+            child.api_key, None,
+            "no OPENAI_API_KEY or CODEX_API_KEY may travel beside the placeholder"
+        );
+        assert!(
+            !child.auth_json_exists,
+            "a loopback run writes no auth.json into the scratch CODEX_HOME; that is the H6 upgrade"
+        );
+        assert!(
+            child
+                .answer
+                .as_deref()
+                .is_some_and(|answer| answer.starts_with("HTTP/1.1 200 OK")),
+            "the child's own request must have been answered through the proxy, got {:?}",
+            child.answer
+        );
+        base
+    }
+
+    /// What the far side of the proxy must have seen on a codex run: the custody key, the path
+    /// verbatim, and no placeholder anywhere.
+    fn assert_upstream_saw_codex_custody(seen: &[Seen], placeholder: &str) {
+        assert_eq!(seen.len(), 1, "exactly one request reached the upstream");
+        assert_eq!(
+            seen[0].target, "/v1/responses",
+            "the path is relayed verbatim: the proxy curates no vendor's routes"
+        );
+        assert_eq!(
+            seen[0].header("authorization"),
+            Some(format!("Bearer {FAKE_CODEX_KEY}").as_str()),
+            "the upstream must see the custody key: the placeholder is worthless to it, and a \
+             proxy that forwarded the placeholder would be spending nothing and reporting success"
+        );
+        assert!(
+            !seen[0]
+                .headers
+                .iter()
+                .any(|(_, value)| value.contains(placeholder)),
+            "no header may still carry the placeholder: {:?}",
+            seen[0].headers
+        );
+    }
+
+    /// LP-4, end to end and free: the builder starts a proxy in front of a fabricated codex
+    /// custody, writes a `model_providers` entry pointing at it into the scratch `CODEX_HOME`, the
+    /// child dials that entry with the per-run placeholder, the fake upstream sees the **custody
+    /// key** and no trace of the placeholder, no `auth.json` is copied anywhere, and the run's
+    /// wind-up closes the port behind it.
+    ///
+    /// What this does **not** prove is that `codex` itself honours the entry — no vendor binary
+    /// runs here. That is the paid half of LP-4, and it is labelled as outstanding rather than
+    /// implied by this vector's green.
     #[test]
-    fn a_codex_loopback_run_is_refused_by_name_and_starts_no_proxy() {
+    fn a_codex_loopback_run_points_the_child_at_the_proxy_and_the_upstream_sees_custody() {
+        let home = tempfile::TempDir::new().expect("a directory");
+        let credential = fake_codex_credential(home.path());
+        let upstream = FakeUpstream::serving();
+        let record = Arc::new(Mutex::new(CodexChildRecord::default()));
+        let log = ScriptedLog::new();
+        let mut runner = CodexDiallingRunner {
+            log: log.clone(),
+            record: Arc::clone(&record),
+        };
+        let mut seams = ScriptedSeams;
+
+        let mut run = Metaharness::new(Kind::Codex)
+            .with_credentials(CredentialSource::Loopback)
+            // Under loopback a declared endpoint is the **proxy's** upstream, not the child's
+            // provider, so this is where the fake upstream goes.
+            .with_model_endpoint(upstream.base())
+            .start_resolved(
+                Input::Prompt("go".to_string()),
+                &mut runner,
+                &mut seams,
+                Box::new(ManualClock::new()),
+                Some(credential),
+            )
+            .expect("a codex loopback run starts");
+
+        let child = record.lock().expect("the record").clone();
+        let base = assert_codex_child(&child);
+        assert!(
+            log.credential_copies().is_empty(),
+            "a loopback run copies no credential anywhere"
+        );
+        let placeholder = child.placeholder.clone().expect("a placeholder");
+        assert_upstream_saw_codex_custody(&upstream.requests(), &placeholder);
+
+        let port: u16 = base
+            .trim_end_matches("/v1")
+            .rsplit(':')
+            .next()
+            .and_then(|text| text.parse().ok())
+            .expect("a port");
+        assert!(port_accepts(port), "the proxy is up while the run is");
+
+        let lines = run.drain().expect("the run drains");
+        assert!(
+            lines
+                .iter()
+                .any(|line| line.event.name() == "session.ended"),
+            "the run must complete: {lines:?}"
+        );
+        assert!(
+            port_stops_accepting(port, Duration::from_secs(2)),
+            "the run wound up and the loopback port is still accepting; a proxy that outlives its \
+             run holds the operator's live credential behind a socket nothing is scoped to"
+        );
+        let after = run
+            .loopback_report()
+            .expect("the counters survive the shutdown for the audit that reads them");
+        assert!(after.forwarded >= 1, "{after:?}");
+        assert_eq!(after.refused, 0, "nothing was answered 401 at the port");
+    }
+
+    /// V-LP6's open half at the library seam: a ChatGPT-plan custody is refused **by name**,
+    /// nothing is spawned, and the port that was opened to look at the custody does not outlive
+    /// the refusal.
+    #[test]
+    fn a_codex_loopback_run_over_a_subscription_login_is_refused_by_name_and_spawns_nothing() {
+        let home = tempfile::TempDir::new().expect("a directory");
+        let credential = fake_codex_subscription(home.path());
         let log = ScriptedLog::new();
         let mut runner =
             crate::scripted::ScriptedRunner::new(vec![ScriptStep::line(END)], log.clone());
         let mut seams = ScriptedSeams;
+
         let refusal = Metaharness::new(Kind::Codex)
             .with_credentials(CredentialSource::Loopback)
             .start_resolved(
@@ -1470,17 +1803,61 @@ mod tests {
                 &mut runner,
                 &mut seams,
                 Box::new(ManualClock::new()),
-                None,
+                Some(credential),
             )
-            .expect_err("codex has no loopback provider");
+            .expect_err("the subscription half of the codex door is unbuilt");
         let Refusal::Launch { detail } = &refusal else {
             panic!("expected a launch refusal, got {refusal:?}");
         };
         assert!(
             detail.contains("LP-4") && detail.contains("V-LP6"),
-            "the refusal must name the milestone and its verification: {detail}"
+            "the refusal must name the milestone and its open verification: {detail}"
+        );
+        assert!(
+            detail.contains("refused by name rather than degraded"),
+            "the refusal must say it is not a silent fallback to the copy path: {detail}"
         );
         assert_eq!(log.spawns(), 0, "nothing was spawned");
+        assert!(
+            log.credential_copies().is_empty(),
+            "and nothing was copied either"
+        );
+    }
+
+    /// A codex loopback run with nothing to put in custody is refused before any spawn, in both
+    /// spellings of "nothing": no file named at all, and a named file that is not there.
+    #[test]
+    fn a_codex_loopback_run_without_a_credential_file_is_refused_before_any_spawn() {
+        let empty = tempfile::TempDir::new().expect("a directory");
+        let log = ScriptedLog::new();
+        let mut seams = ScriptedSeams;
+
+        for named in [None, Some(empty.path().join("auth.json"))] {
+            let mut runner =
+                crate::scripted::ScriptedRunner::new(vec![ScriptStep::line(END)], log.clone());
+            let refusal = Metaharness::new(Kind::Codex)
+                .with_credentials(CredentialSource::Loopback)
+                .start_resolved(
+                    Input::Prompt("go".to_string()),
+                    &mut runner,
+                    &mut seams,
+                    Box::new(ManualClock::new()),
+                    named.clone(),
+                )
+                .expect_err("a loopback run with no custody is refused");
+            let Refusal::Launch { detail } = &refusal else {
+                panic!("expected a launch refusal, got {refusal:?}");
+            };
+            assert!(
+                detail.contains("credential file") && detail.contains("custody"),
+                "the refusal must name what was missing and why loopback needs it, got: {detail}"
+            );
+        }
+        assert_eq!(
+            log.spawns(),
+            0,
+            "a refused loopback run must not have spawned a child"
+        );
     }
 }
 
