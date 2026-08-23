@@ -479,6 +479,43 @@ mod tests {
     }
 }
 
+/// The neutral-operation → tool table for this loop.
+///
+/// Every operation the b10x toolset serves, and `None` for the three it does not: this loop has no
+/// web fetch, no skill mechanism, no subagents and no todo list, and saying so is the point — a
+/// consumer reading `None` knows the run could not have done it, where a missing key would only
+/// say nobody wrote one down.
+///
+/// `shell` renders to `run`, which is the one row worth pausing on. `run` is **not** a shell: it
+/// takes an argv and a program from a declared set. It is the closest thing this loop has to the
+/// neutral operation *start a process*, and rendering it here is what lets a consumer ask that
+/// question of every harness in one vocabulary. What the operation admits is still the loop's own
+/// business, and `exec.argv-only` is still true.
+fn rendering() -> std::collections::BTreeMap<String, Option<String>> {
+    use metaharness_protocol::Operation;
+    let mut table: std::collections::BTreeMap<String, Option<String>> = Operation::PARAMETERLESS
+        .iter()
+        .map(|operation| {
+            let tool = match operation {
+                Operation::FileRead => Some("workspace_read"),
+                Operation::FileWrite => Some("workspace_write"),
+                Operation::FileEdit => Some("workspace_edit"),
+                Operation::DirList => Some("workspace_list"),
+                Operation::Search => Some("workspace_grep"),
+                Operation::Shell => Some("run"),
+                Operation::WebRead
+                | Operation::SkillLoad
+                | Operation::SubagentSpawn
+                | Operation::TaskTodo => None,
+                Operation::McpCall { .. } => None,
+            };
+            (operation.name().to_string(), tool.map(ToString::to_string))
+        })
+        .collect();
+    table.insert("mcp.call".to_string(), None);
+    table
+}
+
 /// What this adapter can and cannot do, published as a value.
 ///
 /// **Observe only, and every tier that implies a decision is `Unverified` rather than
@@ -530,8 +567,47 @@ pub fn capabilities() -> metaharness_protocol::Capabilities {
             ("ask".to_string(), TierStatus::Unverified),
             ("frame".to_string(), TierStatus::Unverified),
         ]),
-        // Nothing is rendered: this adapter publishes no neutral operation onto a vendor tool,
-        // because the toolset is the loop's own and metaharness does not compose it.
-        rendering: BTreeMap::new(),
+        // **Published, and the empty table this held for one commit was a mistake.** The rendering
+        // is what lets anything downstream ask *did this run write a file* without knowing whose
+        // verb a write is spelled with — design § 8.4 O6, *a rendering that only exists inside a
+        // run cannot be read*. An adapter that published none forced every consumer to learn its
+        // tool names, which is how a corpus ends up with `Bash` written into it.
+        rendering: rendering(),
+    }
+}
+
+#[cfg(test)]
+mod rendering_tests {
+    #[test]
+    fn every_operation_this_loop_serves_names_the_tool_that_serves_it() {
+        // The table is what lets a consumer ask *did this run write a file* without knowing whose
+        // verb a write is spelled with. An adapter that published none forces every consumer to
+        // learn its tool names, which is how a corpus ends up with one vendor's `Bash` in it.
+        let table = super::rendering();
+        for (operation, tool) in [
+            ("file.read", "workspace_read"),
+            ("file.write", "workspace_write"),
+            ("file.edit", "workspace_edit"),
+            ("dir.list", "workspace_list"),
+            ("search", "workspace_grep"),
+            ("shell", "run"),
+        ] {
+            assert_eq!(
+                table.get(operation).and_then(Option::as_deref),
+                Some(tool),
+                "{operation}"
+            );
+        }
+    }
+
+    #[test]
+    fn an_operation_this_loop_cannot_perform_is_named_and_answered_none() {
+        // `None` says the run could not have done it. A missing key would only say nobody wrote
+        // one down, and those are different facts about the same run.
+        let table = super::rendering();
+        for absent in ["web.read", "skill.load", "subagent.spawn", "task.todo", "mcp.call"] {
+            assert!(table.contains_key(absent), "{absent} is named");
+            assert_eq!(table[absent], None, "{absent} is not served");
+        }
     }
 }
