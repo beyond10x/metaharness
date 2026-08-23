@@ -275,6 +275,14 @@ pub enum LaunchRefusal {
         /// Which row forbids it.
         row: HermeticRow,
     },
+    /// The run declared `credentials: loopback`, which this adapter does not carry yet.
+    ///
+    /// **Refused by name, never degraded to the copy path.** The model-adapter rule is that there
+    /// is no silent fallback between adapter classes, and the copy path is exactly the thing the
+    /// loopback provider exists to replace — a run that asked for "no credential in the child"
+    /// and got a credential copied into the scratch home would be wrong in the direction that
+    /// matters, and nothing in its record would say so.
+    LoopbackUnsupported,
     /// The run asked for something `codex exec` has no way to express.
     ///
     /// A refusal and never a silent drop: an option the caller set and the adapter ignored is a
@@ -292,7 +300,9 @@ impl LaunchRefusal {
     #[must_use]
     pub fn code(&self) -> Option<RefusalCode> {
         match self {
-            LaunchRefusal::UnsupportedOption { .. } => Some(RefusalCode::UnsupportedControl),
+            LaunchRefusal::UnsupportedOption { .. } | LaunchRefusal::LoopbackUnsupported => {
+                Some(RefusalCode::UnsupportedControl)
+            }
             _ => None,
         }
     }
@@ -347,6 +357,15 @@ impl fmt::Display for LaunchRefusal {
                 f,
                 "{}: the constructed child environment carries {key}",
                 row.id()
+            ),
+            LaunchRefusal::LoopbackUnsupported => f.write_str(
+                "the run declared credentials: loopback and the codex adapter does not carry the \
+                 loopback provider yet: that is milestone LP-4, shaped by V-LP6, which verified \
+                 that routing subscription traffic through a metaharness-owned provider is \
+                 possible and whose confirming paid run has not been done. It is refused by name \
+                 rather than degraded to the credential-copy path, because a run that asked for \
+                 no credential in the child and got one copied into its scratch home would be \
+                 wrong in the direction that matters",
             ),
             LaunchRefusal::UnsupportedOption { option, why } => write!(
                 f,
@@ -434,6 +453,11 @@ pub fn plan_launch(spec: &RunSpec, context: &LaunchContext) -> Result<LaunchPlan
 
 /// The spec fields `codex exec` cannot carry, refused by name.
 fn unsupported_options(spec: &RunSpec) -> Result<(), LaunchRefusal> {
+    // First, and before any argv or environment exists: a loopback run must not get as far as a
+    // plan on this vendor, because the library reads the plan to decide what to start.
+    if spec.credentials == CredentialSource::Loopback {
+        return Err(LaunchRefusal::LoopbackUnsupported);
+    }
     if spec.max_turns.is_some() {
         return Err(LaunchRefusal::UnsupportedOption {
             option: "--max-turns",
@@ -482,6 +506,11 @@ fn credential_copies(
                 Err(LaunchRefusal::ApiKeyMissing)
             }
         }
+        // Unreachable through `plan_launch`, which refuses loopback before it gets here. Repeated
+        // rather than left to an `unreachable!`, so a future caller that reaches this function by
+        // another road gets the refusal instead of a panic or an empty copy list that would read
+        // as "loopback is supported and copies nothing".
+        CredentialSource::Loopback => Err(LaunchRefusal::LoopbackUnsupported),
         CredentialSource::None => Ok(Vec::new()),
     }
 }
@@ -1355,6 +1384,48 @@ mod tests {
         assert_eq!(refusal.code(), Some(RefusalCode::UnsupportedControl));
     }
 
+    /// LP-3 vector 3. The loopback provider is Claude-Code-only this milestone, and this vendor
+    /// says so **by name**: V-LP6 verified the route is feasible and its confirming paid run has
+    /// not been done, so the door is stated as unbuilt rather than degraded in silence to the
+    /// credential-copy path — which is precisely what the loopback design exists to replace.
+    #[test]
+    fn a_codex_loopback_run_is_refused_by_name_as_a_later_milestone() {
+        let mut spec = spec();
+        spec.credentials = CredentialSource::Loopback;
+        let refusal = plan_launch(&spec, &context()).expect_err("codex has no loopback provider");
+        assert_eq!(refusal, LaunchRefusal::LoopbackUnsupported);
+        assert_eq!(
+            refusal.code(),
+            Some(RefusalCode::UnsupportedControl),
+            "the refusal carries a code, so an embedder matches on it rather than on prose"
+        );
+        let sentence = refusal.to_string();
+        for named in ["LP-4", "V-LP6"] {
+            assert!(
+                sentence.contains(named),
+                "the refusal must name the milestone and the verification that shaped it, or the \
+                 reader cannot tell 'not built' from 'impossible': {sentence}"
+            );
+        }
+        assert!(
+            sentence.contains("refused by name rather than degraded"),
+            "the refusal must say it is not a silent fallback to the copy path: {sentence}"
+        );
+    }
+
+    /// Defence in depth: the copy list itself refuses loopback, so a caller that reached this
+    /// function by another road gets the refusal rather than an empty list that would read as
+    /// "loopback is supported and copies nothing".
+    #[test]
+    fn the_copy_list_refuses_loopback_too_rather_than_returning_nothing() {
+        let mut spec = spec();
+        spec.credentials = CredentialSource::Loopback;
+        assert_eq!(
+            credential_copies(&spec, &context(), Path::new("/scratch/run-1/codex-home")),
+            Err(LaunchRefusal::LoopbackUnsupported)
+        );
+    }
+
     #[test]
     fn a_run_for_another_harness_is_refused_by_name() {
         let mut spec = spec();
@@ -1394,6 +1465,7 @@ mod tests {
                 option: "--max-turns",
                 why: "codex exec has no turn ceiling",
             },
+            LaunchRefusal::LoopbackUnsupported,
         ];
         for refusal in refusals {
             let sentence = refusal.to_string();

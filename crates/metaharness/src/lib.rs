@@ -48,7 +48,9 @@ mod audit;
 mod auditor;
 mod builder;
 mod clock;
+mod custody;
 mod doctor;
+mod loopback;
 mod process;
 mod refusal;
 mod run;
@@ -75,7 +77,9 @@ pub use auditor::{
 };
 pub use builder::{Input, Metaharness, check_spec, start_refusals};
 pub use clock::{Clock, ManualClock, SystemClock};
+pub use custody::{CredentialCustody, CustodyError};
 pub use doctor::{Installed, installed};
+pub use loopback::{LoopbackHandle, LoopbackProxy, ProxyReport};
 pub use process::{
     CredentialCopyView, HarnessProcess, LaunchPlanView, ProcessRunner, copy_credentials,
 };
@@ -98,7 +102,8 @@ pub use metaharness_protocol::{HarnessSeam, SeamFactory};
 pub use spawn_codex_vectors::spawn_vectors as codex_spawn_vectors;
 pub use spawn_vectors::spawn_vectors;
 pub use vectors::{
-    all_passed, capabilities, conformance_vectors, contract_result, control_vectors,
+    all_passed, capabilities, conformance_vectors, contract_obligations, contract_result,
+    control_vectors,
 };
 
 /// The adapter ids this build carries, in the order the CLI lists them.

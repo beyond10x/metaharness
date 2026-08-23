@@ -19,10 +19,26 @@ rust-version = "1.98"
 # shape of a type they both put on the wire.
 [workspace.dependencies]
 clap = { version = "4", features = ["derive"] }
+# The loopback proxy's per-run placeholder is the only thing between any local process and the
+# operator's live token, because the proxy listens on 127.0.0.1 where every process on the box can
+# reach it. A nonce derived from the clock or the pid would be guessable; this is the OS entropy
+# source and it is already in the tree under `tempfile`, so it costs no new crate.
+getrandom = "0.4"
+# `flock` on the custody lock file, so the serialization survives a process that dies holding it —
+# a lock *file* created with `create_new` would strand every later run behind a crash. Already in
+# the tree under `tempfile`, so the `fs` feature costs no new crate; `fs2` would have cost one.
+rustix = { version = "1", features = ["fs"] }
+# The upstream leg is TLS to a vendor API and this workspace links no async runtime: rustls is the
+# one TLS client that works on a plain blocking `TcpStream`. `ring` rather than the default
+# `aws-lc-rs` so the build needs no cmake; `prefer-post-quantum` is off for the same reason.
+rustls = { version = "0.23", default-features = false, features = ["ring", "std", "tls12"] }
 serde = { version = "1", features = ["derive"] }
 serde_json = "1"
 sha2 = "0.10"
 tempfile = "3"
+# The trust anchors rustls verifies the upstream against. Mozilla's set, compiled in, rather than
+# the platform store: the proxy must trust the same roots on an operator's laptop and in CI.
+webpki-roots = "1"
 
 [workspace.lints.rust]
 missing_docs = "warn"

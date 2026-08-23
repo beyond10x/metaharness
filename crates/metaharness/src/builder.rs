@@ -14,7 +14,8 @@
 //! `metaharness.frame/1` document; giving both spellings at once is refused by name.
 
 use std::collections::BTreeMap;
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
+use std::sync::Arc;
 
 use metaharness_protocol::{
     Capabilities, CredentialSource, DecisionMode, EventStream, Frame, HermeticMode, Kind, Refused,
@@ -22,10 +23,20 @@ use metaharness_protocol::{
 };
 
 use crate::clock::{Clock, SystemClock};
+use crate::custody::CredentialCustody;
+use crate::loopback::{LoopbackHandle, LoopbackProxy};
 use crate::process::{CredentialCopyView, LaunchPlanView, ProcessRunner};
 use crate::refusal::Refusal;
 use crate::run::{LaunchFacts, Run, RunParts, vendor_hook_timeout_ms};
 use metaharness_protocol::SeamFactory;
+
+/// Where a loopback proxy forwards when the run named no gateway of its own.
+///
+/// The vendor's own host, stated here rather than inherited from the child's environment: the
+/// whole point of the provider is that metaharness decides where the traffic goes, and a default
+/// read out of an ambient `ANTHROPIC_BASE_URL` would put that decision back in the environment
+/// H3 exists to ignore.
+const VENDOR_UPSTREAM: &str = "https://api.anthropic.com";
 
 /// What a run starts with.
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -288,6 +299,25 @@ impl Metaharness {
         seams: &mut dyn SeamFactory,
         clock: Box<dyn Clock>,
     ) -> Result<Run, Refusal> {
+        let credentials = credentials_file(&self.spec);
+        self.start_resolved(input, runner, seams, clock, credentials)
+    }
+
+    /// The same start, with the operator's credential file already resolved.
+    ///
+    /// Private, and the seam the loopback vectors drive: [`credentials_file`] answers out of
+    /// `HOME`, and a vector that took that answer would open the operator's **real**
+    /// `.credentials.json` in order to prove that a run does not copy it. Resolving one step
+    /// higher lets a test name a file it fabricated and keeps the operator's own out of the
+    /// suite entirely.
+    fn start_resolved(
+        self,
+        input: Input,
+        runner: &mut dyn ProcessRunner,
+        seams: &mut dyn SeamFactory,
+        clock: Box<dyn Clock>,
+        credentials: Option<PathBuf>,
+    ) -> Result<Run, Refusal> {
         let frame = self.frame.clone();
         let spec = self.applied(input);
         check_spec(&spec)?;
@@ -300,8 +330,8 @@ impl Metaharness {
         // shared is what is genuinely neutral and already factored: the spec check, the frame
         // resolution, the scratch root, the cwd, the ancestor walk and the control refusals.
         match spec.kind {
-            Kind::Claude => start_claude(spec, frame, runner, seams, clock),
-            Kind::Codex => start_codex(spec, frame, runner, seams, clock),
+            Kind::Claude => start_claude(spec, credentials, frame, runner, seams, clock),
+            Kind::Codex => start_codex(spec, credentials, frame, runner, seams, clock),
         }
     }
 
@@ -313,9 +343,16 @@ impl Metaharness {
     }
 }
 
-/// Start a Claude Code run: the M2 path, unchanged.
+/// Start a Claude Code run: the M2 path, plus LP-3's proxy.
+///
+/// One step is out of order compared with every other credential source, and deliberately: the
+/// loopback proxy is **started before the launch is planned**. Its base URL is an ephemeral port,
+/// so unlike `--model-endpoint` — a static string the spec already carries into `plan_launch` —
+/// there is nothing for a pure function to compute until something has bound a socket. So: start
+/// the proxy, put its two facts in the context, then plan.
 fn start_claude(
     spec: RunSpec,
+    credentials: Option<PathBuf>,
     frame: Option<Frame>,
     runner: &mut dyn ProcessRunner,
     seams: &mut dyn SeamFactory,
@@ -331,14 +368,21 @@ fn start_claude(
         let scratch = tempfile::TempDir::new()?;
         let cwd = resolve_cwd(&spec, scratch.path())?;
         let transcript_path = scratch.path().join("transcript.jsonl");
+        let run_id = run_id(&spec);
+
+        // Held in a local, so every `?` below this line drops it — and `LoopbackHandle::drop`
+        // stops the accept thread. A launch refused after the proxy started must not leave a port
+        // open on the operator's machine holding their live credential behind it.
+        let loopback = loopback_for(&spec, credentials.as_deref(), &run_id)?;
 
         let context = metaharness_claude::LaunchContext {
             scratch_root: scratch.path().to_path_buf(),
             cwd: cwd.clone(),
-            credentials_file: credentials_file(&spec),
+            credentials_file: credentials,
             inherited_env: std::env::vars().collect::<BTreeMap<String, String>>(),
             memory_ancestors: memory_ancestors(&cwd),
             inputs_digest: None,
+            loopback: loopback_params(loopback.as_ref()),
         };
         let plan = metaharness_claude::plan_launch(&spec, &context).map_err(|refusal| {
             Refusal::Launch {
@@ -402,11 +446,7 @@ fn start_claude(
         };
 
         Ok(Run::new(RunParts {
-            stream: EventStream::new(RunId::new(format!(
-                "{}-{}",
-                spec.kind.as_str(),
-                std::process::id()
-            ))),
+            stream: EventStream::new(RunId::new(run_id)),
             spec,
             bridge,
             process,
@@ -423,8 +463,83 @@ fn start_claude(
                 metaharness_claude::HookChannelPaths::under(scratch.path()).requests,
             ],
             scratch: Some(scratch),
+            // Handed over rather than kept here: the run is what the port is scoped to, so the
+            // thing that ends the run closes it.
+            loopback,
         }))
     }
+}
+
+/// The run's id, which under loopback is also what the placeholder names.
+///
+/// Computed before the proxy starts rather than at the end, because the placeholder carries it —
+/// `mh-run-<id>-<nonce>` — and a request arriving at the port can then be attributed to a run
+/// without a session table.
+fn run_id(spec: &RunSpec) -> String {
+    format!("{}-{}", spec.kind.as_str(), std::process::id())
+}
+
+/// The proxy this run needs, or none because it declared another credential source.
+///
+/// A function rather than an inline `match` so the one condition that starts a listening socket
+/// on the operator's machine is a single readable line, in one place, with a name.
+fn loopback_for(
+    spec: &RunSpec,
+    credentials: Option<&Path>,
+    run_id: &str,
+) -> Result<Option<LoopbackHandle>, Refusal> {
+    match spec.credentials {
+        CredentialSource::Loopback => Ok(Some(start_loopback(spec, credentials, run_id)?)),
+        CredentialSource::OperatorLogin | CredentialSource::ApiKey | CredentialSource::None => {
+            Ok(None)
+        }
+    }
+}
+
+/// The two facts a started proxy contributes to the launch plan, and nothing else.
+fn loopback_params(handle: Option<&LoopbackHandle>) -> Option<metaharness_claude::LoopbackParams> {
+    handle.map(|handle| metaharness_claude::LoopbackParams {
+        base_url: handle.base_url(),
+        placeholder: handle.placeholder().to_string(),
+    })
+}
+
+/// Open custody on the operator's credential and put a proxy in front of it.
+///
+/// Every failure here is a **launch refusal**, never a panic: the operator asked for a run and
+/// what they get back is a reason, on the same path as every other thing that can be wrong with a
+/// spec. Three of them are distinguishable and each sends the reader somewhere different — no
+/// file was named, the named file is not there, and the file is there but is not a credential.
+fn start_loopback(
+    spec: &RunSpec,
+    credentials: Option<&Path>,
+    run_id: &str,
+) -> Result<LoopbackHandle, Refusal> {
+    let missing = metaharness_claude::LaunchRefusal::CredentialFileMissing.to_string();
+    let Some(path) = credentials else {
+        return Err(Refusal::Launch { detail: missing });
+    };
+    let custody = CredentialCustody::open(path).map_err(|error| Refusal::Launch {
+        detail: if error.kind() == std::io::ErrorKind::NotFound {
+            format!("{missing} ({error})")
+        } else {
+            format!(
+                "the loopback proxy has no custody to hold: {error}. metaharness never writes \
+                 this file — it only reads it under a lock — so the fix is the vendor's own login"
+            )
+        },
+    })?;
+    // A gateway the run named becomes the **proxy's** upstream, one hop further out than it would
+    // be without the proxy; with no gateway named it is the vendor's own host. Either way the
+    // child sees only the loopback port, which is what makes the hop inspectable.
+    let upstream = spec.model_endpoint.as_deref().unwrap_or(VENDOR_UPSTREAM);
+    LoopbackProxy::start(upstream, Arc::new(custody), run_id).map_err(|error| Refusal::Launch {
+        detail: format!(
+            "the loopback proxy could not start in front of {upstream}: {error}. The run is \
+             refused rather than started without it, because a child pointed at a port nothing \
+             is listening on fails with a vendor error about the network and names none of this"
+        ),
+    })
 }
 
 /// Start a codex run: CX-M2.
@@ -436,8 +551,13 @@ fn start_claude(
 ///   runner is where the runner *copies the rollout to* rather than where it dumps a pipe; and
 /// * **the hook config lives inside the scratch `CODEX_HOME`**, because that is where codex
 ///   declares a hook and there is no `--setting-sources` to switch that source off.
+///
+/// **No proxy is ever started here.** `credentials: loopback` is refused by the codex launch plan
+/// by name, below, before this function reaches a spawn — so the door is stated as unbuilt (LP-4)
+/// rather than degraded to the credential-copy path the loopback provider exists to replace.
 fn start_codex(
     spec: RunSpec,
+    credentials: Option<PathBuf>,
     frame: Option<Frame>,
     runner: &mut dyn ProcessRunner,
     seams: &mut dyn SeamFactory,
@@ -456,7 +576,7 @@ fn start_codex(
     let context = metaharness_codex::LaunchContext {
         scratch_root: scratch.path().to_path_buf(),
         cwd: cwd.clone(),
-        credentials_file: credentials_file(&spec),
+        credentials_file: credentials,
         inherited_env: std::env::vars().collect::<BTreeMap<String, String>>(),
         memory_ancestors: memory_ancestors(&cwd),
         inputs_digest: None,
@@ -511,11 +631,7 @@ fn start_codex(
     };
 
     Ok(Run::new(RunParts {
-        stream: EventStream::new(RunId::new(format!(
-            "{}-{}",
-            spec.kind.as_str(),
-            std::process::id()
-        ))),
+        stream: EventStream::new(RunId::new(run_id(&spec))),
         spec,
         bridge,
         process,
@@ -534,6 +650,8 @@ fn start_codex(
             metaharness_codex::HookChannelPaths::under(scratch.path()).requests,
         ],
         scratch: Some(scratch),
+        // Never. See this function's header: the plan refused loopback before this line.
+        loopback: None,
     }))
 }
 
@@ -721,10 +839,15 @@ pub fn check_spec(spec: &RunSpec) -> Result<(), Refusal> {
 
 /// The operator's credential file, **named and not read**.
 ///
-/// Whether it exists is the spawn's problem, because the copy happens immediately before every
-/// spawn and not once per run: a copied operator-login token is a snapshot with a lifetime, and
-/// a governed run on 2026-08-22 died an hour in on an OAuth session that could not be refreshed
-/// (Q13).
+/// Under an operator login, whether it exists is the spawn's problem, because the copy happens
+/// immediately before every spawn and not once per run: a copied operator-login token is a
+/// snapshot with a lifetime, and a governed run on 2026-08-22 died an hour in on an OAuth session
+/// that could not be refreshed (Q13).
+///
+/// Under `loopback` the same path means something different: it is the file
+/// [`crate::CredentialCustody`] takes custody of, **on this side of the socket**, and it is
+/// opened at start rather than at the spawn — a malformed custody refuses the run before it costs
+/// anything, which is the other half of the same incident.
 ///
 /// Each vendor keeps its login in its own place and under its own name — `~/.claude/.credentials.json`,
 /// `~/.codex/auth.json` — and this is the one line that knows both, because the copy is the
@@ -735,7 +858,7 @@ fn credentials_file(spec: &RunSpec) -> Option<PathBuf> {
         Kind::Codex => (".codex", "auth.json"),
     };
     match spec.credentials {
-        CredentialSource::OperatorLogin => {
+        CredentialSource::OperatorLogin | CredentialSource::Loopback => {
             std::env::var_os("HOME").map(|home| PathBuf::from(home).join(directory).join(file))
         }
         CredentialSource::ApiKey | CredentialSource::None => None,
@@ -760,4 +883,482 @@ fn memory_ancestors(cwd: &std::path::Path) -> Vec<PathBuf> {
         }
     }
     found
+}
+
+#[cfg(test)]
+mod tests {
+    //! The loopback provider as the library wires it (LP-3).
+    //!
+    //! Free and model-free by construction: the child is a scripted process that speaks one real
+    //! HTTP request at the real proxy, and the upstream is a socket this module opened. No paid
+    //! call, no network, and — the rule that matters most here — **no operator credential**: the
+    //! file every vector below puts in custody is one it wrote itself, holding a token no account
+    //! has ever issued.
+
+    use std::io::{BufRead, BufReader, Read, Write};
+    use std::net::{Shutdown, TcpListener, TcpStream};
+    use std::path::PathBuf;
+    use std::sync::atomic::{AtomicBool, Ordering};
+    use std::sync::{Arc, Mutex};
+    use std::time::Duration;
+
+    use metaharness_protocol::Kind;
+
+    use super::{Input, Metaharness};
+    use crate::clock::ManualClock;
+    use crate::process::{HarnessProcess, LaunchPlanView, ProcessRunner};
+    use crate::refusal::Refusal;
+    use crate::scripted::{ScriptStep, ScriptedLog, ScriptedProcess, ScriptedSeams};
+    use metaharness_protocol::CredentialSource;
+
+    /// The token the fake credential holds. No account has ever issued it.
+    const FAKE_TOKEN: &str = "fake-operator-token-lp3";
+
+    /// The one line the scripted child writes, so the run has a terminal record to end on.
+    const END: &str = r#"{"emit":"session.ended","is_error":false,"subtype":"success"}"#;
+
+    /// A credential file in the vendor's shape, in a directory of the test's own.
+    fn fake_credential(dir: &std::path::Path) -> PathBuf {
+        let path = dir.join(".credentials.json");
+        let body = serde_json::json!({
+            "claudeAiOauth": {
+                "accessToken": FAKE_TOKEN,
+                "refreshToken": "fake-refresh-token",
+                "expiresAt": 4_102_444_800_000_i64,
+                "refreshTokenExpiresAt": 4_102_444_800_000_i64,
+                "scopes": ["user:inference"],
+                "subscriptionType": "fake",
+                "rateLimitTier": "fake",
+            }
+        });
+        std::fs::write(&path, serde_json::to_vec(&body).expect("a credential body"))
+            .expect("the fake credential");
+        path
+    }
+
+    /// One request the fake upstream saw, in the form the assertions need it.
+    #[derive(Debug, Clone, Default)]
+    struct Seen {
+        target: String,
+        headers: Vec<(String, String)>,
+    }
+
+    impl Seen {
+        fn header(&self, name: &str) -> Option<&str> {
+            self.headers
+                .iter()
+                .find(|(candidate, _)| candidate.eq_ignore_ascii_case(name))
+                .map(|(_, value)| value.as_str())
+        }
+    }
+
+    /// An upstream that answers 200 to anything and records what it was asked.
+    ///
+    /// Deliberately not the vendor: the point of the vector is that the proxy attached the
+    /// **custody** token on the way out, and that is only observable from the far side.
+    struct FakeUpstream {
+        port: u16,
+        seen: Arc<Mutex<Vec<Seen>>>,
+        stopping: Arc<AtomicBool>,
+    }
+
+    impl FakeUpstream {
+        fn serving() -> Self {
+            let listener = TcpListener::bind(("127.0.0.1", 0)).expect("a fake upstream port");
+            let port = listener.local_addr().expect("its address").port();
+            let seen = Arc::new(Mutex::new(Vec::new()));
+            let stopping = Arc::new(AtomicBool::new(false));
+            {
+                let seen = Arc::clone(&seen);
+                let stopping = Arc::clone(&stopping);
+                std::thread::spawn(move || {
+                    for incoming in listener.incoming() {
+                        if stopping.load(Ordering::SeqCst) {
+                            break;
+                        }
+                        let Ok(stream) = incoming else { break };
+                        let seen = Arc::clone(&seen);
+                        std::thread::spawn(move || answer(&stream, &seen));
+                    }
+                });
+            }
+            Self {
+                port,
+                seen,
+                stopping,
+            }
+        }
+
+        fn base(&self) -> String {
+            format!("http://127.0.0.1:{}", self.port)
+        }
+
+        fn requests(&self) -> Vec<Seen> {
+            self.seen.lock().expect("the record").clone()
+        }
+    }
+
+    impl Drop for FakeUpstream {
+        fn drop(&mut self) {
+            self.stopping.store(true, Ordering::SeqCst);
+            let _ = TcpStream::connect(("127.0.0.1", self.port));
+        }
+    }
+
+    fn answer(stream: &TcpStream, seen: &Mutex<Vec<Seen>>) {
+        let mut reader = BufReader::new(stream);
+        let mut request = Seen::default();
+        let mut length = 0usize;
+        let mut first = true;
+        loop {
+            let mut line = String::new();
+            if reader.read_line(&mut line).unwrap_or(0) == 0 {
+                return;
+            }
+            let line = line.trim_end_matches(['\r', '\n']).to_string();
+            if line.is_empty() {
+                break;
+            }
+            if first {
+                first = false;
+                request.target = line
+                    .split_whitespace()
+                    .nth(1)
+                    .unwrap_or_default()
+                    .to_string();
+                continue;
+            }
+            if let Some((name, value)) = line.split_once(':') {
+                let (name, value) = (name.trim().to_string(), value.trim().to_string());
+                if name.eq_ignore_ascii_case("content-length") {
+                    length = value.parse().unwrap_or(0);
+                }
+                request.headers.push((name, value));
+            }
+        }
+        let mut body = vec![0u8; length];
+        let _ = reader.read_exact(&mut body);
+        seen.lock().expect("the record").push(request);
+
+        let body = r#"{"type":"message","content":[]}"#;
+        let head = format!(
+            "HTTP/1.1 200 OK\r\nContent-Type: application/json\r\nContent-Length: {}\r\n\
+             Connection: close\r\n\r\n",
+            body.len()
+        );
+        let mut out = stream;
+        let _ = out.write_all(head.as_bytes());
+        let _ = out.write_all(body.as_bytes());
+        let _ = out.flush();
+        let _ = stream.shutdown(Shutdown::Both);
+    }
+
+    /// What the scripted child was given and what came back when it used it.
+    #[derive(Debug, Default, Clone)]
+    struct ChildRecord {
+        base_url: Option<String>,
+        auth_token: Option<String>,
+        disable_traffic: Option<String>,
+        api_key: Option<String>,
+        answer: Option<String>,
+    }
+
+    /// A runner whose child really dials the base URL it was given.
+    ///
+    /// The scripted runner records a plan; this one **uses** it. Without a child that speaks, the
+    /// vector would prove that metaharness wrote three environment variables and nothing about
+    /// whether a request made with them reaches the upstream carrying the operator's bearer.
+    struct DiallingRunner {
+        log: ScriptedLog,
+        record: Arc<Mutex<ChildRecord>>,
+    }
+
+    impl ProcessRunner for DiallingRunner {
+        fn start(&mut self, plan: &LaunchPlanView) -> std::io::Result<Box<dyn HarnessProcess>> {
+            let value = |key: &str| plan.env.get(key).cloned();
+            let mut record = ChildRecord {
+                base_url: value("ANTHROPIC_BASE_URL"),
+                auth_token: value("ANTHROPIC_AUTH_TOKEN"),
+                disable_traffic: value("CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC"),
+                api_key: value("ANTHROPIC_API_KEY"),
+                answer: None,
+            };
+            if let (Some(base), Some(token)) = (&record.base_url, &record.auth_token) {
+                record.answer = Some(dial(base, token));
+            }
+            *self.record.lock().expect("the record") = record;
+            Ok(Box::new(ScriptedProcess::new(
+                vec![ScriptStep::line(END)],
+                self.log.clone(),
+            )))
+        }
+    }
+
+    /// One `POST /v1/messages` at the proxy, in the spelling `ANTHROPIC_AUTH_TOKEN` documents.
+    fn dial(base_url: &str, token: &str) -> String {
+        let port: u16 = base_url
+            .rsplit(':')
+            .next()
+            .and_then(|text| text.parse().ok())
+            .expect("a base URL ending in a port");
+        let body = r#"{"model":"claude-opus-5","messages":[]}"#;
+        let request = format!(
+            "POST /v1/messages HTTP/1.1\r\nHost: 127.0.0.1\r\nAuthorization: Bearer {token}\r\n\
+             anthropic-version: 2023-06-01\r\ncontent-type: application/json\r\n\
+             Content-Length: {}\r\n\r\n{body}",
+            body.len()
+        );
+        let mut stream = TcpStream::connect(("127.0.0.1", port)).expect("the proxy port");
+        stream
+            .set_read_timeout(Some(Duration::from_secs(10)))
+            .expect("a bounded wait");
+        stream
+            .write_all(request.as_bytes())
+            .expect("the whole request");
+        stream.flush().expect("the flush");
+        let mut all = Vec::new();
+        stream.read_to_end(&mut all).expect("the whole answer");
+        String::from_utf8_lossy(&all).to_string()
+    }
+
+    /// The three variables a loopback child runs on, and the one it must not have.
+    ///
+    /// Each absence and each presence is a spike finding, and each would fail silently: a second
+    /// credential variable puts a second spelling on the wire, and a missing
+    /// `CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC` lets the binary reach `api.anthropic.com`
+    /// directly for analytics — past the base URL and out of the proxy's sight.
+    fn assert_child_env(child: &ChildRecord) {
+        let base_url = child.base_url.as_deref().unwrap_or_default();
+        assert!(
+            base_url.starts_with("http://127.0.0.1:"),
+            "the child must be pointed at a loopback port, got {base_url:?}"
+        );
+        assert!(
+            child
+                .auth_token
+                .as_deref()
+                .is_some_and(|token| token.starts_with("mh-run-claude-")),
+            "the child must hold this run's placeholder and nothing else, got {:?}",
+            child.auth_token
+        );
+        assert_eq!(
+            child.disable_traffic.as_deref(),
+            Some("1"),
+            "without this the binary opens api.anthropic.com for analytics whatever the base URL \
+             says, and \"the proxy sees every request\" stops being true"
+        );
+        assert_eq!(
+            child.api_key, None,
+            "no ANTHROPIC_API_KEY may travel beside the placeholder bearer"
+        );
+    }
+
+    /// What the far side of the proxy must have seen: the custody token, and no placeholder.
+    fn assert_upstream_saw_custody(seen: &[Seen], placeholder: &str) {
+        assert_eq!(seen.len(), 1, "exactly one request reached the upstream");
+        assert_eq!(seen[0].target, "/v1/messages");
+        assert_eq!(
+            seen[0].header("authorization"),
+            Some(format!("Bearer {FAKE_TOKEN}").as_str()),
+            "the upstream must see the custody token: the placeholder is worthless to it, and a \
+             proxy that forwarded the placeholder would be spending nothing and reporting success"
+        );
+        assert!(
+            !seen[0]
+                .headers
+                .iter()
+                .any(|(_, value)| value.contains(placeholder)),
+            "no header may still carry the placeholder: {:?}",
+            seen[0].headers
+        );
+    }
+
+    /// Whether anything is still listening there.
+    fn port_accepts(port: u16) -> bool {
+        TcpStream::connect_timeout(
+            &std::net::SocketAddr::from(([127, 0, 0, 1], port)),
+            Duration::from_millis(500),
+        )
+        .is_ok()
+    }
+
+    /// Whether the port is free of a listener within `patience`, polled rather than asked once.
+    ///
+    /// The guarantee this stands in for is **not** raced: `LoopbackHandle::shutdown` joins the
+    /// accept thread, and that thread owns the `TcpListener`, so the listening socket is closed
+    /// before `drain` returns. What is polled here is the difference between that guarantee and
+    /// what a single `connect` can observe — **a port number is machine-wide**, and the ephemeral
+    /// number this run has just released is immediately available to every other process on the
+    /// box. One accepting connect therefore does not falsify "this run's proxy stopped serving";
+    /// an accepting connect that persists does, which is what the bound is for.
+    ///
+    /// Measured, not supposed: under a synthetic bind/close load this assertion failed 3 of 25
+    /// runs, and each failing probe was answered by a socket that **closed the connection at once**
+    /// (42µs–872µs, never this proxy's 401) and was gone from `ss -ltn` by the next millisecond —
+    /// a stranger holding the number, not a proxy outliving its run. The same shutdown path, run
+    /// 27,000 times in isolation and under that load, never once left this proxy's own listener up.
+    fn port_stops_accepting(port: u16, patience: Duration) -> bool {
+        let deadline = std::time::Instant::now() + patience;
+        loop {
+            if !port_accepts(port) {
+                return true;
+            }
+            if std::time::Instant::now() >= deadline {
+                return false;
+            }
+            std::thread::sleep(Duration::from_millis(20));
+        }
+    }
+
+    /// Vector 4. The whole path, end to end and free: the builder starts a proxy in front of a
+    /// fabricated custody, the child is handed its port and placeholder, a real request goes
+    /// through it, the fake upstream sees the **custody token** and no trace of the placeholder,
+    /// and the run's wind-up closes the port behind it.
+    #[test]
+    fn a_loopback_run_proxies_the_childs_request_with_custody_and_closes_the_port_after() {
+        let home = tempfile::TempDir::new().expect("a directory");
+        let credential = fake_credential(home.path());
+        let upstream = FakeUpstream::serving();
+        let record = Arc::new(Mutex::new(ChildRecord::default()));
+        let log = ScriptedLog::new();
+        let mut runner = DiallingRunner {
+            log: log.clone(),
+            record: Arc::clone(&record),
+        };
+        let mut seams = ScriptedSeams;
+
+        let mut run = Metaharness::new(Kind::Claude)
+            .with_credentials(CredentialSource::Loopback)
+            // The gateway case: under loopback a declared endpoint is the **proxy's** upstream,
+            // not the child's base URL, so this is where the fake upstream goes.
+            .with_model_endpoint(upstream.base())
+            .start_resolved(
+                Input::Prompt("go".to_string()),
+                &mut runner,
+                &mut seams,
+                Box::new(ManualClock::new()),
+                Some(credential),
+            )
+            .expect("a loopback run starts");
+
+        let child = record.lock().expect("the record").clone();
+        assert_child_env(&child);
+        let base_url = child.base_url.clone().expect("the child got a base URL");
+        let placeholder = child.auth_token.clone().expect("a placeholder");
+        assert!(
+            child
+                .answer
+                .as_deref()
+                .is_some_and(|answer| answer.starts_with("HTTP/1.1 200 OK")),
+            "the child's own request must have been answered through the proxy, got {:?}",
+            child.answer
+        );
+        assert!(
+            log.credential_copies().is_empty(),
+            "a loopback run copies no credential anywhere; that is the H6 upgrade"
+        );
+        assert_upstream_saw_custody(&upstream.requests(), &placeholder);
+
+        let live = run.loopback_report().expect("a loopback run has a report");
+        assert!(
+            live.forwarded >= 1,
+            "the proxy's counters must be readable while the run is going, got {live:?}"
+        );
+        assert_eq!(live.refused, 0, "nothing was answered 401 at the port");
+
+        let port: u16 = base_url
+            .rsplit(':')
+            .next()
+            .and_then(|text| text.parse().ok())
+            .expect("a port");
+        assert!(port_accepts(port), "the proxy is up while the run is");
+
+        let lines = run.drain().expect("the run drains");
+        assert!(
+            lines
+                .iter()
+                .any(|line| line.event.name() == "session.ended"),
+            "the run must complete: {lines:?}"
+        );
+
+        assert!(
+            port_stops_accepting(port, Duration::from_secs(2)),
+            "the run wound up and the loopback port is still accepting; a proxy that outlives its \
+             run holds the operator's live credential behind a socket nothing is scoped to"
+        );
+        let after = run
+            .loopback_report()
+            .expect("the counters survive the shutdown for the audit that reads them");
+        assert_eq!(
+            after.forwarded, live.forwarded,
+            "the final report is the counters as they stood at wind-up"
+        );
+    }
+
+    /// Vector 5. A loopback run with nothing to put in custody is refused **before** anything is
+    /// spawned, in both spellings of "nothing": no file named at all, and a named file that is
+    /// not there. The second is the real one — it is what an operator who has never logged in
+    /// hits — and it must not read as a network fault an hour later.
+    #[test]
+    fn a_loopback_run_without_a_credential_file_is_refused_before_any_spawn() {
+        let empty = tempfile::TempDir::new().expect("a directory");
+        let log = ScriptedLog::new();
+        let mut seams = ScriptedSeams;
+
+        for named in [None, Some(empty.path().join(".credentials.json"))] {
+            let mut runner =
+                crate::scripted::ScriptedRunner::new(vec![ScriptStep::line(END)], log.clone());
+            let refusal = Metaharness::new(Kind::Claude)
+                .with_credentials(CredentialSource::Loopback)
+                .start_resolved(
+                    Input::Prompt("go".to_string()),
+                    &mut runner,
+                    &mut seams,
+                    Box::new(ManualClock::new()),
+                    named.clone(),
+                )
+                .expect_err("a loopback run with no custody is refused");
+            let Refusal::Launch { detail } = &refusal else {
+                panic!("expected a launch refusal, got {refusal:?}");
+            };
+            assert!(
+                detail.contains("needs the operator's credential file")
+                    && detail.contains("custody"),
+                "the refusal must name what was missing and why loopback needs it, got: {detail}"
+            );
+        }
+        assert_eq!(
+            log.spawns(),
+            0,
+            "a refused loopback run must not have spawned a child"
+        );
+    }
+
+    /// Step 6 at the library seam: the codex path never starts a proxy, because the codex launch
+    /// plan refuses `credentials: loopback` before a spawn exists to point at one.
+    #[test]
+    fn a_codex_loopback_run_is_refused_by_name_and_starts_no_proxy() {
+        let log = ScriptedLog::new();
+        let mut runner =
+            crate::scripted::ScriptedRunner::new(vec![ScriptStep::line(END)], log.clone());
+        let mut seams = ScriptedSeams;
+        let refusal = Metaharness::new(Kind::Codex)
+            .with_credentials(CredentialSource::Loopback)
+            .start_resolved(
+                Input::Prompt("go".to_string()),
+                &mut runner,
+                &mut seams,
+                Box::new(ManualClock::new()),
+                None,
+            )
+            .expect_err("codex has no loopback provider");
+        let Refusal::Launch { detail } = &refusal else {
+            panic!("expected a launch refusal, got {refusal:?}");
+        };
+        assert!(
+            detail.contains("LP-4") && detail.contains("V-LP6"),
+            "the refusal must name the milestone and its verification: {detail}"
+        );
+        assert_eq!(log.spawns(), 0, "nothing was spawned");
+    }
 }

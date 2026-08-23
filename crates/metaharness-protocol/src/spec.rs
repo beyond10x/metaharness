@@ -51,6 +51,11 @@ pub enum DecisionMode {
 }
 
 /// Where the run's credential comes from.
+///
+/// The four sources differ in **where the live token is while the child runs**, which is the only
+/// distinction the hermetic rows care about: in the scratch home ([`CredentialSource::ApiKey`],
+/// [`CredentialSource::OperatorLogin`]), on metaharness's side of a socket
+/// ([`CredentialSource::Loopback`]), or nowhere ([`CredentialSource::None`]).
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 #[cfg_attr(feature = "clap", derive(clap::ValueEnum))]
 #[serde(rename_all = "kebab-case")]
@@ -62,6 +67,19 @@ pub enum CredentialSource {
     /// An API key the run declared. Without this declaration `ANTHROPIC_API_KEY` is not in the
     /// child environment at all (design § 8.1 H4).
     ApiKey,
+    /// **No credential in the child; metaharness proxies with custody.**
+    ///
+    /// The loopback provider (`docs/design/loopback-provider-v0.1.md`, LP-3): metaharness runs a
+    /// per-run proxy on 127.0.0.1, the child is pointed at it and authenticates with a
+    /// placeholder that names the run, and the operator's real bearer is attached on the way
+    /// upstream from one custody. The scratch home holds no credential file at all, so H6 stops
+    /// being *"credentials are one file, copied"* and becomes the strictly stronger *"no
+    /// credential in the child"* — attestable from the launch values rather than asserted.
+    ///
+    /// Claude Code only in this milestone. The codex adapter refuses it **by name**: V-LP6
+    /// verified the route is feasible and the confirming paid run has not been done, so the door
+    /// is stated as unbuilt rather than degraded in silence to the copy path.
+    Loopback,
     /// No credential. The run is expected to fail at the first request, and that is sometimes
     /// exactly what a test wants.
     None,

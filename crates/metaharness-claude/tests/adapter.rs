@@ -24,6 +24,7 @@ fn context() -> LaunchContext {
         inherited_env: BTreeMap::from([("HOME".to_string(), "/operator".to_string())]),
         memory_ancestors: Vec::new(),
         inputs_digest: Some(Digest::of(b"inputs")),
+        loopback: None,
     }
 }
 

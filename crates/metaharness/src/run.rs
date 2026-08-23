@@ -216,6 +216,24 @@ pub struct Run {
     /// — the only party that knows a vendor's layout — and deliberately never the whole scratch
     /// root, because the scratch home also holds a copied credential.
     wire: Vec<std::path::PathBuf>,
+    /// This run's loopback proxy, under `credentials: loopback` and nothing else.
+    ///
+    /// **The run owns it because the run is what it is scoped to**: one port and one placeholder
+    /// per run (loopback design, decision 2), so the thing that ends the run is the thing that
+    /// must close the port. It is taken and shut down at [`Run::wind_up`]; a run abandoned
+    /// without ever winding up is covered by `LoopbackHandle`'s own `Drop`, which is the safety
+    /// net rather than the mechanism.
+    ///
+    /// The custody the proxy holds is **not** stored beside it: `LoopbackProxy::start` moved the
+    /// `Arc<CredentialCustody>` into the serving threads, so it lives exactly as long as there is
+    /// something to serve and a second owner here would only be a way for the two lifetimes to
+    /// drift apart.
+    loopback: Option<crate::loopback::LoopbackHandle>,
+    /// The proxy's counters as they stood when it was shut down.
+    ///
+    /// Kept because the audit that wants them runs **after** the run: a `loopback_report` that
+    /// went silent at wind-up would be readable only from inside the loop it describes.
+    loopback_final: Option<crate::loopback::ProxyReport>,
 }
 
 impl std::fmt::Debug for Run {
@@ -243,6 +261,8 @@ pub(crate) struct RunParts {
     pub(crate) launch: LaunchFacts,
     pub(crate) scratch: Option<tempfile::TempDir>,
     pub(crate) wire: Vec<std::path::PathBuf>,
+    /// The started loopback proxy, or `None` for every other credential source.
+    pub(crate) loopback: Option<crate::loopback::LoopbackHandle>,
 }
 
 impl Run {
@@ -291,6 +311,8 @@ impl Run {
             launch: parts.launch,
             scratch: parts.scratch,
             wire: parts.wire,
+            loopback: parts.loopback,
+            loopback_final: None,
         }
     }
 
@@ -347,6 +369,21 @@ impl Run {
 
     pub(crate) fn launch_facts(&self) -> &LaunchFacts {
         &self.launch
+    }
+
+    /// What this run's loopback proxy did, in four numbers, or `None` if it had no proxy.
+    ///
+    /// Readable **during** the run from the live proxy and **after** it from the snapshot taken
+    /// at wind-up, because the two readers are different: an operator watching a run wants the
+    /// live count, and an audit of a finished run wants the final one. This is the whole of what
+    /// a run can say about its own wire without carrying content — the design makes request-body
+    /// logging opt-in and this build implements none of it.
+    #[must_use]
+    pub fn loopback_report(&self) -> Option<crate::loopback::ProxyReport> {
+        self.loopback
+            .as_ref()
+            .map(crate::loopback::LoopbackHandle::report)
+            .or(self.loopback_final)
     }
 
     /// The scratch root this run owns, deleted when the run is dropped.
@@ -790,7 +827,28 @@ impl Run {
         self.bridge.set_census(self.census.clone());
         let emissions = self.bridge.finish();
         self.outbox.extend(emissions);
+        self.stop_loopback();
         self.finished = true;
+    }
+
+    /// Close this run's loopback port, and keep its counters.
+    ///
+    /// Here rather than in a `Drop`, and after the wire is retained, for the same reason
+    /// [`Run::retain_wire`] is: this is the last moment the run is both over and intact. Every
+    /// path that ends a run reaches [`Run::wind_up`] — the child's stream ending, and `halt`,
+    /// which kills the child and winds up itself — so this is the whole of the deliberate
+    /// shutdown. `interrupt` is deliberately **not** one of them: it abandons pending decisions
+    /// and the child keeps streaming, so a proxy closed there would take the endpoint out from
+    /// under a run that is still going.
+    ///
+    /// Idempotent by the `take`, because `halt` winds up and the loop may reach the same call
+    /// again. A run abandoned without winding up leaks nothing either: `LoopbackHandle`'s `Drop`
+    /// stops the accept thread, which is the net under this, not the mechanism.
+    fn stop_loopback(&mut self) {
+        if let Some(handle) = self.loopback.take() {
+            self.loopback_final = Some(handle.report());
+            handle.shutdown();
+        }
     }
 
     /// Copy the run's raw wire into the spec's `retain_dir`, if one was named.

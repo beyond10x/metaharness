@@ -23,14 +23,19 @@ pinned versions, rollout/transcript reader, capabilities with undriven claims la
 proof last): **pi** and **opencode**. Sequence after the codex spawn (CX-M2) lands, so the
 builder's kind-dispatch has two real implementations before it grows a third.
 
-## 3. metaharness usage ≡ flux usage
+## 3. metaharness usage ≡ flux usage — **narrowed by the operator, 2026-08-23**
+
+> Operator, 2026-08-23, verbatim: *"i dont want to embed any flux related"* — said while
+> refusing a proposed `metaharness-flux` adapter.
 
 Driving metaharness should feel the same as driving flux (`~/projects/flux`, the NDJSON-protocol
-agent runner). Two readings, both probably wanted, to be split in a design page:
+agent runner). The item's two readings now stand differently:
 - **UX parity**: `metaharness run …` streams and steering behave like `flux run --stream-json`
-  (failure classification, bounded resume, ground-truth rules for unattended runs);
-- **flux as an inner harness**: a `metaharness-flux` adapter, since flux already speaks a clean
-  machine protocol — likely the cheapest adapter of all and a good contract-test subject for #1.
+  (failure classification, bounded resume, ground-truth rules for unattended runs). Parity is
+  behavioural and embeds nothing; whether the operator's refusal reaches it too is **unclear —
+  ask before starting it**.
+- **flux as an inner harness**: ~~a `metaharness-flux` adapter~~ — **refused** by the statement
+  above. Nothing flux-related is embedded in this repository.
 
 ## 4. Sandbox inversion
 

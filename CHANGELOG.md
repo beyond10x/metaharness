@@ -190,6 +190,21 @@ was amended and the amendment is named here.
   `METAHARNESS_LIVE=1`.
 
 ### Fixed
+- **The loopback wind-up vector stopped failing on somebody else's socket.**
+  `a_loopback_run_proxies_the_childs_request_with_custody_and_closes_the_port_after` asked
+  `!port_accepts(port)` once, immediately after `drain()`, and failed 2 of 5 full-gate runs on it.
+  The shutdown was never the problem and is not what changed: `LoopbackHandle::shutdown` joins the
+  accept thread, that thread *owns* the `TcpListener`, so the listening socket is closed before
+  `drain` returns — 27,000 shutdowns, in isolation and under load, never once left this proxy's own
+  listener up. What the assertion actually asked about was a **port number**, which is machine-wide:
+  the ephemeral number a run has just released is immediately bindable by any process on the box.
+  Under a synthetic bind/close load the vector failed 3 of 25 runs, and every failing probe was
+  answered by a socket that closed the connection at once (42µs–872µs, never this proxy's own 401)
+  and had left `ss -ltn` by the next millisecond — a stranger holding the number, not a proxy
+  outliving its run. The check now polls for up to 2s, which distinguishes the two: a stranger is
+  transient, a proxy that really outlived its run accepts for the whole bound. 30/30 and 25/25 green
+  under the load that produced the failures, and both `shutdown` and the poll now carry the
+  measurement in their doc comments so nobody re-tightens it back into a flake.
 - **The hermetic floor failed its own first live run, twice, and both were its fault**
   (design amendment a4). `H4` looked for the word the spec used in `apiKeySource`, a field that
   says `"none"` under an operator login — so every hermetic operator-login run reported a gap on

@@ -311,6 +311,9 @@ fn base_context() -> LaunchContext {
         .collect(),
         memory_ancestors: Vec::new(),
         inputs_digest: Some(Digest::of(b"the copied input tree")),
+        // No proxy: every launch vector here is a pure plan against a synthetic world, and a
+        // loopback endpoint is by construction a port something really bound.
+        loopback: None,
     }
 }
 

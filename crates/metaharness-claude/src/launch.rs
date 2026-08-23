@@ -126,7 +126,21 @@ pub struct LaunchContext {
     /// [`CredentialSource::OperatorLogin`]. Ignored under any other credential source: there is
     /// then no login to copy, and copying one anyway would put a second credential in a home
     /// H6 says holds exactly one.
+    ///
+    /// Under [`CredentialSource::Loopback`] the operator's file is metaharness's own custody and
+    /// **never travels**: the caller opens it on its side of the socket, and this plan's copy
+    /// list stays empty whatever this field says.
     pub credentials_file: Option<PathBuf>,
+    /// The running loopback proxy's endpoint and placeholder, under
+    /// [`CredentialSource::Loopback`].
+    ///
+    /// The one value in this context that **cannot** be known before the run's own machinery
+    /// starts: the proxy binds an ephemeral port, so unlike the static `--model-endpoint` there
+    /// is nothing for a pure function to compute. The caller starts the proxy, fills this, and
+    /// only then plans — and a `credentials: loopback` run that arrives here without it is
+    /// [`LaunchRefusal::LoopbackNotStarted`] rather than a child launched at no endpoint with no
+    /// credential.
+    pub loopback: Option<LoopbackParams>,
     /// The caller's own environment. Read here and **not** inherited: the child's environment is
     /// constructed from [`INHERITED_KEYS`], so a variable absent from that list cannot reach the
     /// child however it got into this map (design § 8.1 H3).
@@ -140,6 +154,23 @@ pub struct LaunchContext {
     /// evidence for H10. `None` means the caller pinned nothing, and the attestation says so
     /// rather than leaving the row silent.
     pub inputs_digest: Option<Digest>,
+}
+
+/// What a started loopback proxy tells the launch, and the whole of it.
+///
+/// Two strings and no handle: this crate plans launches and owns no threads, so the proxy itself
+/// stays on the library side and only its two addressable facts cross the seam. Both are
+/// per-run — an ephemeral port and a nonce-bearing placeholder — which is what stops one run
+/// reaching another's endpoint by accident.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct LoopbackParams {
+    /// What the child's `ANTHROPIC_BASE_URL` is set to: `http://127.0.0.1:<port>`.
+    pub base_url: String,
+    /// The placeholder the child authenticates with, `mh-run-<id>-<nonce>`.
+    ///
+    /// Worthless anywhere but that port, which is the point of putting it in the child instead
+    /// of the operator's token.
+    pub placeholder: String,
 }
 
 /// One file to copy into the scratch config home, and the only one.
@@ -258,6 +289,22 @@ pub enum LaunchRefusal {
         /// The endpoint that was declared.
         endpoint: String,
     },
+    /// The run declared `credentials: loopback` and no proxy was started for it.
+    ///
+    /// Refused rather than planned, because the alternative is the worst of both worlds: a child
+    /// with no credential *and* no endpoint, which fails at its first request with a vendor error
+    /// about authentication and tells nobody that metaharness never started the thing that was
+    /// supposed to hold the credential.
+    LoopbackNotStarted,
+    /// A loopback proxy was started for a run that did not declare `credentials: loopback`.
+    ///
+    /// The mirror of the row above, and the dangerous direction: an api-key run whose base URL
+    /// pointed at a local proxy would send the operator's real key to it. Refused rather than
+    /// resolved by precedence.
+    LoopbackProxyUndeclared {
+        /// The endpoint that would have been imposed on the child.
+        base_url: String,
+    },
     /// The constructed argv carries an argument the denylist forbids (H8).
     DeniedArgument {
         /// Which one.
@@ -322,8 +369,9 @@ impl fmt::Display for LaunchRefusal {
                 join_paths(found)
             ),
             LaunchRefusal::CredentialFileMissing => f.write_str(
-                "the run declared an operator login and named no credential file, so the scratch \
-                 home would hold no credential at all",
+                "the run's credential source needs the operator's credential file and none was \
+                 named: an operator login has nothing to copy into the scratch home, and a \
+                 credentials: loopback run has nothing to put in custody behind the proxy",
             ),
             LaunchRefusal::ApiKeyMissing => f.write_str(
                 "the run declared credentials: api-key and ANTHROPIC_API_KEY was not in the \
@@ -333,7 +381,20 @@ impl fmt::Display for LaunchRefusal {
                 f,
                 "the run declared a model endpoint ({endpoint}) together with a real credential \
                  source; a child pointed at a foreign endpoint must hold no operator credential, \
-                 so declare credentials: none — the child gets a placeholder key instead"
+                 so declare credentials: none — the child gets a placeholder key instead — or \
+                 credentials: loopback, where the endpoint becomes the proxy's upstream and the \
+                 child still holds nothing"
+            ),
+            LaunchRefusal::LoopbackNotStarted => f.write_str(
+                "the run declared credentials: loopback and the launch context carries no proxy; \
+                 the base URL is an ephemeral port and is therefore only known after the proxy \
+                 starts, so the caller starts it and fills LaunchContext.loopback before planning",
+            ),
+            LaunchRefusal::LoopbackProxyUndeclared { base_url } => write!(
+                f,
+                "a loopback proxy at {base_url} was started for a run that did not declare \
+                 credentials: loopback; pointing a credentialed child at a local proxy would send \
+                 the operator's own key to it, so the two are refused rather than composed"
             ),
             LaunchRefusal::DeniedArgument { argument } => write!(
                 f,
@@ -407,13 +468,21 @@ pub fn plan_launch(spec: &RunSpec, context: &LaunchContext) -> Result<LaunchPlan
         }
     }
 
+    // `loopback` is exempt: under it the declared endpoint is not the child's base URL at all —
+    // it is the **proxy's upstream**, one hop further out — and the child holds a placeholder
+    // either way. The row exists to stop an operator credential travelling to a foreign host, and
+    // a loopback run has no credential in the child to travel.
     if let Some(endpoint) = &spec.model_endpoint
-        && spec.credentials != CredentialSource::None
+        && !matches!(
+            spec.credentials,
+            CredentialSource::None | CredentialSource::Loopback
+        )
     {
         return Err(LaunchRefusal::EndpointWithCredential {
             endpoint: endpoint.clone(),
         });
     }
+    guard_loopback(spec, context)?;
 
     let config_home = context.scratch_root.join(CONFIG_HOME);
     let credential_copies = credential_copies(spec, context, &config_home)?;
@@ -434,6 +503,24 @@ pub fn plan_launch(spec: &RunSpec, context: &LaunchContext) -> Result<LaunchPlan
         hook,
         attestation: attest(spec, context, &config_home),
     })
+}
+
+/// The declaration and the started proxy must agree, in both directions.
+///
+/// Two failures rather than one, because they fail in opposite ways: without a proxy the child
+/// reaches nothing, and with an undeclared proxy a credentialed child reaches a local socket
+/// holding the operator's own key. Neither is a warning — a control that reports and proceeds has
+/// already stopped controlling (design § 7.1).
+fn guard_loopback(spec: &RunSpec, context: &LaunchContext) -> Result<(), LaunchRefusal> {
+    let declared = spec.credentials == CredentialSource::Loopback;
+    match (declared, &context.loopback) {
+        (true, None) => Err(LaunchRefusal::LoopbackNotStarted),
+        (false, Some(params)) => Err(LaunchRefusal::LoopbackProxyUndeclared {
+            base_url: params.base_url.clone(),
+        }),
+        // Both present or both absent: the two halves agree, which is the whole of the check.
+        (true, Some(_)) | (false, None) => Ok(()),
+    }
 }
 
 /// The copy list, which is one file or none.
@@ -459,7 +546,10 @@ fn credential_copies(
                 Err(LaunchRefusal::ApiKeyMissing)
             }
         }
-        CredentialSource::None => Ok(Vec::new()),
+        // Nothing travels under either. `Loopback` is the stronger of the two and says so in H6:
+        // the operator's file is real and is held by metaharness's own custody, on this side of
+        // the socket, so the copy list being empty is the whole claim.
+        CredentialSource::Loopback | CredentialSource::None => Ok(Vec::new()),
     }
 }
 
@@ -541,7 +631,9 @@ fn build_env(
     {
         env.insert("ANTHROPIC_API_KEY".to_string(), key.clone());
     }
-    if let Some(endpoint) = &spec.model_endpoint {
+    if let Some(loopback) = &context.loopback {
+        loopback_env(&mut env, loopback);
+    } else if let Some(endpoint) = &spec.model_endpoint {
         env.insert(
             "ANTHROPIC_BASE_URL".to_string(),
             endpoint.trim_end_matches('/').to_string(),
@@ -559,8 +651,39 @@ fn build_env(
     Ok(env)
 }
 
+/// The three variables a loopback child runs on, and the one it must not have.
+///
+/// Each line is a spike finding rather than a preference, and each would fail silently:
+///
+/// | variable | why exactly this |
+/// |---|---|
+/// | `ANTHROPIC_BASE_URL` | the proxy's own ephemeral port; plain HTTP and loopback-only, because the hop the operator wants to inspect must not be encrypted and never leaves the machine |
+/// | `ANTHROPIC_AUTH_TOKEN` | the placeholder, delivered in **this spelling only**, which the binary sends as `Authorization: Bearer`. `ANTHROPIC_API_KEY` is deliberately **not** also set: two credential variables mean two spellings on the wire and a precedence rule nobody here owns |
+/// | `CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC` | **without it Claude Code opens `api.anthropic.com:443` for first-party analytics whatever the base URL says** — a channel the proxy cannot see, which makes *"the proxy sees every request"* false. Verified: this variable removes it |
+///
+/// The absent `ANTHROPIC_API_KEY` is not merely omitted here: [`is_scrubbed`] keeps it scrubbed
+/// under `loopback`, so an operator's exported key cannot arrive by the inheritance route either.
+fn loopback_env(env: &mut BTreeMap<String, String>, loopback: &LoopbackParams) {
+    env.insert(
+        "ANTHROPIC_BASE_URL".to_string(),
+        loopback.base_url.trim_end_matches('/').to_string(),
+    );
+    env.insert(
+        "ANTHROPIC_AUTH_TOKEN".to_string(),
+        loopback.placeholder.clone(),
+    );
+    env.insert(DISABLE_NONESSENTIAL_TRAFFIC.to_string(), "1".to_string());
+}
+
 /// What the child authenticates with under a declared model endpoint: a marker, not a secret.
 const ENDPOINT_PLACEHOLDER_KEY: &str = "metaharness-model-endpoint";
+
+/// The variable that closes Claude Code's first-party analytics channel.
+///
+/// Named as a constant because the whole inspection claim of the loopback provider rests on it:
+/// the binary otherwise talks to `api.anthropic.com` directly, past a base URL that redirected
+/// everything else, and nothing in the run's record would say so.
+const DISABLE_NONESSENTIAL_TRAFFIC: &str = "CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC";
 
 /// The stated `PATH`, and why it is not shorter.
 ///
@@ -627,13 +750,26 @@ fn guard_environment(env: &BTreeMap<String, String>, spec: &RunSpec) -> Result<(
 /// endpoint is declared, in which case the key is this plan's own placeholder and never the
 /// operator's. `ANTHROPIC_BASE_URL` is the other: an ambient one silently redirects the model
 /// API and stays refused; a **declared** one is the whole point of `--model-endpoint`.
+///
+/// `loopback` relaxes exactly three keys and tightens one. The three
+/// ([`loopback_env`]) are the run's own values and cannot arrive from the operator's environment,
+/// because that environment is read through the [`INHERITED_KEYS`] allowlist and none of them is
+/// on it. The tightened one is `ANTHROPIC_API_KEY`: under `loopback` it is scrubbed
+/// *unconditionally*, including beside a declared model endpoint, because the endpoint under
+/// `loopback` is the **proxy's upstream** and the child authenticates with the placeholder bearer
+/// alone — a second credential variable would put a second spelling on the wire for no reason.
 fn is_scrubbed(key: &str, spec: &RunSpec) -> bool {
     let credentials = spec.credentials;
+    let loopback = credentials == CredentialSource::Loopback;
     if key == "ANTHROPIC_API_KEY" {
-        return credentials != CredentialSource::ApiKey && spec.model_endpoint.is_none();
+        return loopback
+            || (credentials != CredentialSource::ApiKey && spec.model_endpoint.is_none());
     }
     if key == "ANTHROPIC_BASE_URL" {
-        return spec.model_endpoint.is_none();
+        return !loopback && spec.model_endpoint.is_none();
+    }
+    if key == "ANTHROPIC_AUTH_TOKEN" || key == DISABLE_NONESSENTIAL_TRAFFIC {
+        return !loopback;
     }
     key.starts_with("ANTHROPIC_")
         || key.starts_with("CLAUDE_CODE_")
@@ -804,17 +940,24 @@ fn attest(spec: &RunSpec, context: &LaunchContext, config_home: &Path) -> Hermet
         ));
     }
 
-    if spec.credentials == CredentialSource::OperatorLogin {
-        imposed.push(control_imposed(
+    match spec.credentials {
+        CredentialSource::OperatorLogin => imposed.push(control_imposed(
             HermeticRow::H6,
             "one credential file copied into the scratch home immediately before every spawn, \
              and nothing else (Q13)",
-        ));
-    } else {
-        unavailable.push(control_unavailable(
+        )),
+        // The upgrade LP-3 exists for. H6's copy row is advisory — it claims something about a
+        // file this plan hands to a runner — whereas this claim is readable off the launch values
+        // themselves: no entry in `credential_copies`, and an `ANTHROPIC_AUTH_TOKEN` that is
+        // worth nothing anywhere but one ephemeral loopback port.
+        CredentialSource::Loopback => imposed.push(control_imposed(
+            HermeticRow::H6,
+            format!("the scratch home holds no credential file at all: {LOOPBACK_POSTURE}"),
+        )),
+        CredentialSource::ApiKey | CredentialSource::None => unavailable.push(control_unavailable(
             HermeticRow::H6,
             "the run declared no operator login, so there is no credential file to copy",
-        ));
+        )),
     }
     match &context.inputs_digest {
         Some(digest) => imposed.push(control_imposed(
@@ -837,15 +980,29 @@ fn attest(spec: &RunSpec, context: &LaunchContext, config_home: &Path) -> Hermet
     }
 }
 
-fn api_key_posture(spec: &RunSpec) -> &'static str {
-    if spec.model_endpoint.is_some() {
+/// The one sentence that says what a loopback run's credential posture is.
+///
+/// Written once and used by both H4 and H6, because the two rows are two views of the same fact
+/// and a reader who found them worded differently would have to work out whether they meant
+/// different things.
+const LOOPBACK_POSTURE: &str = "no operator credential in the child; a placeholder authenticates \
+                                to metaharness's loopback proxy, which holds custody";
+
+fn api_key_posture(spec: &RunSpec) -> String {
+    if spec.credentials == CredentialSource::Loopback {
+        // Checked before the endpoint row: under loopback a declared endpoint is the proxy's
+        // upstream, and saying the child holds a placeholder *key* would name the wrong variable.
+        format!("ANTHROPIC_API_KEY is absent from the child environment — {LOOPBACK_POSTURE}")
+    } else if spec.model_endpoint.is_some() {
         "ANTHROPIC_API_KEY carries this plan's own placeholder for the declared model endpoint; \
          no operator credential is in the child at all"
+            .to_string()
     } else if spec.credentials == CredentialSource::ApiKey {
         "ANTHROPIC_API_KEY is in the child environment because the run declared credentials: \
          api-key"
+            .to_string()
     } else {
-        "ANTHROPIC_API_KEY is absent from the child environment"
+        "ANTHROPIC_API_KEY is absent from the child environment".to_string()
     }
 }
 
@@ -905,7 +1062,20 @@ mod tests {
             .collect(),
             memory_ancestors: Vec::new(),
             inputs_digest: Some(Digest::of(b"inputs")),
+            loopback: None,
         }
+    }
+
+    /// A spec and a context that agree on a started proxy, as the builder produces them.
+    fn loopback_world() -> (RunSpec, LaunchContext) {
+        let mut spec = spec();
+        spec.credentials = CredentialSource::Loopback;
+        let mut context = context();
+        context.loopback = Some(LoopbackParams {
+            base_url: "http://127.0.0.1:44321".to_string(),
+            placeholder: "mh-run-claude-7-0f1e2d".to_string(),
+        });
+        (spec, context)
     }
 
     fn spec() -> RunSpec {
@@ -1123,6 +1293,154 @@ mod tests {
             LaunchRefusal::EndpointWithCredential {
                 endpoint: "https://llmgw.example".to_string()
             }
+        );
+    }
+
+    // ------------------------------------------------------------ the loopback provider (LP-3)
+
+    /// Vector 1. The whole of what a loopback child is given, and the two things it is not.
+    ///
+    /// Both absences are spike findings and both fail **silently** if they regress: a second
+    /// credential variable puts a second spelling on the wire, and a missing
+    /// `CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC` lets the binary reach `api.anthropic.com`
+    /// directly for first-party analytics — past the base URL, out of the proxy's sight, and with
+    /// nothing in the run's record to say it happened.
+    #[test]
+    fn a_loopback_child_gets_the_proxy_a_placeholder_bearer_and_no_api_key() {
+        let (spec, context) = loopback_world();
+        let plan = plan_launch(&spec, &context).expect("the loopback launch plans");
+
+        assert_eq!(
+            plan.env.get("ANTHROPIC_BASE_URL").map(String::as_str),
+            Some("http://127.0.0.1:44321"),
+            "the child must be pointed at this run's own proxy port"
+        );
+        assert_eq!(
+            plan.env.get("ANTHROPIC_AUTH_TOKEN").map(String::as_str),
+            Some("mh-run-claude-7-0f1e2d"),
+            "the placeholder is delivered in the spelling the binary sends as a bearer"
+        );
+        assert_eq!(
+            plan.env
+                .get(DISABLE_NONESSENTIAL_TRAFFIC)
+                .map(String::as_str),
+            Some("1"),
+            "without this the binary opens api.anthropic.com for analytics whatever the base URL \
+             says, and \"the proxy sees every request\" stops being true"
+        );
+        assert!(
+            !plan.env.contains_key("ANTHROPIC_API_KEY"),
+            "ANTHROPIC_API_KEY must not be set beside the auth token: two credential variables \
+             are two spellings on the wire and a precedence rule nobody here owns"
+        );
+        assert!(
+            plan.credential_copies.is_empty(),
+            "no credential file travels under loopback; that is the whole of the H6 upgrade"
+        );
+
+        let posture = |rows: &[String]| {
+            rows.iter().any(|why| {
+                why.contains("no operator credential in the child")
+                    && why.contains("loopback proxy, which holds custody")
+            })
+        };
+        let h4: Vec<String> = plan
+            .attestation
+            .imposed
+            .iter()
+            .filter(|control| control.row == HermeticRow::H4)
+            .map(|control| control.how.clone())
+            .collect();
+        let h6: Vec<String> = plan
+            .attestation
+            .imposed
+            .iter()
+            .filter(|control| control.row == HermeticRow::H6)
+            .map(|control| control.how.clone())
+            .collect();
+        assert!(
+            posture(&h4),
+            "H4 does not state the loopback posture: {h4:?}"
+        );
+        assert!(
+            posture(&h6),
+            "H6 does not state the loopback posture: {h6:?}"
+        );
+        assert!(
+            plan.attestation.claims(HermeticRow::H6),
+            "H6 is an imposition under loopback, not an unavailable row: the claim is stronger \
+             than the copy row it replaces and is readable off the launch values"
+        );
+    }
+
+    /// Vector 2. `loopback` is not `api-key`, so H3's scrub still deletes an exported key — the
+    /// one that *"takes precedence over the claude.ai login"* and would send the operator's own
+    /// account through a proxy that was about to attach a bearer anyway.
+    #[test]
+    fn an_inherited_api_key_does_not_survive_into_a_loopback_child() {
+        let (spec, mut context) = loopback_world();
+        context.inherited_env.insert(
+            "ANTHROPIC_API_KEY".to_string(),
+            "sk-operators-own".to_string(),
+        );
+        let plan = plan_launch(&spec, &context).expect("the loopback launch plans");
+        assert!(
+            !plan.env.contains_key("ANTHROPIC_API_KEY"),
+            "an exported key reached a loopback child: {:?}",
+            plan.env
+        );
+        assert!(
+            is_scrubbed("ANTHROPIC_API_KEY", &spec),
+            "the scrub must still name ANTHROPIC_API_KEY under loopback, or a later widening of \
+             the inherited allowlist would let it through unnoticed"
+        );
+    }
+
+    /// The base URL is an ephemeral port, so it cannot exist before the proxy does. A plan
+    /// without one would be a child with no endpoint *and* no credential, failing at its first
+    /// request with a vendor error that names nothing about metaharness.
+    #[test]
+    fn a_loopback_run_with_no_started_proxy_is_refused_by_name() {
+        let mut spec = spec();
+        spec.credentials = CredentialSource::Loopback;
+        assert_eq!(
+            plan_launch(&spec, &context()),
+            Err(LaunchRefusal::LoopbackNotStarted)
+        );
+    }
+
+    /// The dangerous direction: a proxy started for a run that declared a real credential would
+    /// point a credentialed child at a local socket.
+    #[test]
+    fn a_started_proxy_without_the_loopback_declaration_is_refused_by_name() {
+        let (_, context) = loopback_world();
+        let mut spec = spec();
+        spec.credentials = CredentialSource::ApiKey;
+        assert_eq!(
+            plan_launch(&spec, &context),
+            Err(LaunchRefusal::LoopbackProxyUndeclared {
+                base_url: "http://127.0.0.1:44321".to_string()
+            })
+        );
+    }
+
+    /// Loopback in front of a gateway: the declared endpoint is the **proxy's** upstream, one hop
+    /// further out, so the child's base URL is still the loopback port and the composition that
+    /// is refused beside a real credential is allowed here.
+    #[test]
+    fn a_model_endpoint_under_loopback_does_not_reach_the_child_and_is_not_refused() {
+        let (mut spec, context) = loopback_world();
+        spec.model_endpoint = Some("https://llmgw.example/".to_string());
+        let plan = plan_launch(&spec, &context).expect("loopback in front of a gateway plans");
+        assert_eq!(
+            plan.env.get("ANTHROPIC_BASE_URL").map(String::as_str),
+            Some("http://127.0.0.1:44321"),
+            "the child talks to the proxy; the gateway is the proxy's business"
+        );
+        assert!(
+            !plan.env.contains_key("ANTHROPIC_API_KEY"),
+            "the endpoint placeholder key must not appear under loopback: the child already \
+             authenticates with the bearer placeholder"
         );
     }
 
@@ -1359,6 +1677,10 @@ mod tests {
             },
             LaunchRefusal::CredentialFileMissing,
             LaunchRefusal::ApiKeyMissing,
+            LaunchRefusal::LoopbackNotStarted,
+            LaunchRefusal::LoopbackProxyUndeclared {
+                base_url: "http://127.0.0.1:44321".to_string(),
+            },
             LaunchRefusal::DeniedArgument {
                 argument: "--bare".to_string(),
             },
