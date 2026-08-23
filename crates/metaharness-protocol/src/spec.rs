@@ -245,6 +245,12 @@ pub struct RunSpec {
     /// this directory. `--hermetic strict` therefore refuses such a run, `--hermetic` reports
     /// it honestly, and the embedder that wants a governed run over a real repository — the
     /// driven case — accepts exactly that trade. `--add-dir` stays denied either way.
+    ///
+    /// **The child can write to that tree** (amendment a6.1): the adapter widens the vendor's own
+    /// sandbox over the named directory, because a trade that hands back two hermetic rows for a
+    /// repository the child may only read hands back nothing — which is what a paid codex run
+    /// found on 2026-08-23. The grant is stated in the H7 attestation row, so it is readable off
+    /// the run's own record rather than off a scratch config file that no longer exists.
     #[cfg_attr(feature = "clap", arg(long, value_name = "DIR"))]
     pub cwd: Option<PathBuf>,
 

@@ -239,7 +239,7 @@ fn plugin_injection_vector() -> VectorOutcome {
 /// bytes are a fact about the binary that wrote them and are never edited to match a pin — this
 /// vector is the one place the two are related, so moving the pin either reconciles the pair or
 /// leaves a named warning standing until a real re-capture. Claude's pair reconciled that way on
-/// 2026-08-23 (amendment a10): the capture was already 2.1.240 and the pin came to it.
+/// 2026-08-23 (amendment a11): the capture was already 2.1.240 and the pin came to it.
 fn golden_version_pair_vector(transcript: &str) -> VectorOutcome {
     let recorded = transcript
         .lines()
@@ -752,7 +752,7 @@ mod tests {
     }
 
     /// The pair is reconciled: the committed golden sample was captured from 2.1.240, the pin
-    /// moved to 2.1.240 on 2026-08-23 (amendment a10), and the two now agree.
+    /// moved to 2.1.240 on 2026-08-23 (amendment a11), and the two now agree.
     ///
     /// The sample's bytes did not move to make this true — the pin did. This test reads the
     /// **committed capture**, never the machine's installed binary, so it says the same thing on

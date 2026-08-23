@@ -6,7 +6,7 @@
 //!
 //! The rows below name **2.1.239** where that is the binary the observation was read from: the
 //! seam's own tables are the § 2.7 verification rows of 2026-08-22, and the pin moved a day later
-//! (amendment a10, [`crate::PINNED_VERSIONS`]). The seam itself is not among the unverified — the
+//! (amendment a11, [`crate::PINNED_VERSIONS`]). The seam itself is not among the unverified — the
 //! 2.1.240 run whose bytes are `fixtures/golden/` reached this hook and was answered through it.
 //!
 //! # What is not built here, and the row that would close each one
