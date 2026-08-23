@@ -249,6 +249,15 @@ pub enum LaunchRefusal {
     /// The run declared `credentials: api-key` and no `ANTHROPIC_API_KEY` was in the caller's
     /// environment, so the child would have started with neither credential.
     ApiKeyMissing,
+    /// The run declared a model endpoint together with a real credential source.
+    ///
+    /// Refused rather than composed, because the binary prefers a login over an exported key
+    /// where both are present — so an operator credential in the scratch home beside a foreign
+    /// base URL is the operator's token travelling to a host that is not the vendor's.
+    EndpointWithCredential {
+        /// The endpoint that was declared.
+        endpoint: String,
+    },
     /// The constructed argv carries an argument the denylist forbids (H8).
     DeniedArgument {
         /// Which one.
@@ -320,6 +329,12 @@ impl fmt::Display for LaunchRefusal {
                 "the run declared credentials: api-key and ANTHROPIC_API_KEY was not in the \
                  caller's environment",
             ),
+            LaunchRefusal::EndpointWithCredential { endpoint } => write!(
+                f,
+                "the run declared a model endpoint ({endpoint}) together with a real credential \
+                 source; a child pointed at a foreign endpoint must hold no operator credential, \
+                 so declare credentials: none — the child gets a placeholder key instead"
+            ),
             LaunchRefusal::DeniedArgument { argument } => write!(
                 f,
                 "H8: the constructed argv carries {argument}, which deletes the control seam"
@@ -390,6 +405,14 @@ pub fn plan_launch(spec: &RunSpec, context: &LaunchContext) -> Result<LaunchPlan
                 found: context.memory_ancestors.clone(),
             });
         }
+    }
+
+    if let Some(endpoint) = &spec.model_endpoint
+        && spec.credentials != CredentialSource::None
+    {
+        return Err(LaunchRefusal::EndpointWithCredential {
+            endpoint: endpoint.clone(),
+        });
     }
 
     let config_home = context.scratch_root.join(CONFIG_HOME);
@@ -467,6 +490,10 @@ fn build_args(spec: &RunSpec, prompt: &str, settings_path: &Path) -> Vec<String>
         args.push("--model".to_string());
         args.push(model.clone());
     }
+    if let Some(effort) = &spec.effort {
+        args.push("--effort".to_string());
+        args.push(effort.clone());
+    }
     if let Some(max_turns) = spec.max_turns {
         args.push("--max-turns".to_string());
         args.push(max_turns.to_string());
@@ -514,9 +541,26 @@ fn build_env(
     {
         env.insert("ANTHROPIC_API_KEY".to_string(), key.clone());
     }
-    guard_environment(&env, spec.credentials)?;
+    if let Some(endpoint) = &spec.model_endpoint {
+        env.insert(
+            "ANTHROPIC_BASE_URL".to_string(),
+            endpoint.trim_end_matches('/').to_string(),
+        );
+        // The placeholder, never a real credential (the loopback design's custody rule): the
+        // binary wants *something* to authenticate with, sends it as `x-api-key`, and what the
+        // endpoint does with it is the endpoint's business. Verified against 2.1.240 (MA-V1):
+        // with a base URL and this key set, every API request goes to the base.
+        env.insert(
+            "ANTHROPIC_API_KEY".to_string(),
+            ENDPOINT_PLACEHOLDER_KEY.to_string(),
+        );
+    }
+    guard_environment(&env, spec)?;
     Ok(env)
 }
+
+/// What the child authenticates with under a declared model endpoint: a marker, not a secret.
+const ENDPOINT_PLACEHOLDER_KEY: &str = "metaharness-model-endpoint";
 
 /// The stated `PATH`, and why it is not shorter.
 ///
@@ -557,10 +601,7 @@ fn guard_arguments(args: &[String]) -> Result<(), LaunchRefusal> {
 ///
 /// The scrub can only fire if a key were added to [`INHERITED_KEYS`], which is precisely the
 /// silent widening it exists to catch: an allowlist that grew is an allowlist nobody re-read.
-fn guard_environment(
-    env: &BTreeMap<String, String>,
-    credentials: CredentialSource,
-) -> Result<(), LaunchRefusal> {
+fn guard_environment(env: &BTreeMap<String, String>, spec: &RunSpec) -> Result<(), LaunchRefusal> {
     for key in env.keys() {
         if DENIED_ENVIRONMENT.contains(&key.as_str()) {
             return Err(LaunchRefusal::DeniedEnvironment {
@@ -568,7 +609,7 @@ fn guard_environment(
                 row: HermeticRow::H8,
             });
         }
-        if is_scrubbed(key, credentials) {
+        if is_scrubbed(key, spec) {
             return Err(LaunchRefusal::DeniedEnvironment {
                 key: key.clone(),
                 row: HermeticRow::H3,
@@ -580,12 +621,19 @@ fn guard_environment(
 
 /// Whether this key must be absent from the child, given what the run declared.
 ///
-/// `ANTHROPIC_API_KEY` is the one conditional row: absent unless the run declared
+/// `ANTHROPIC_API_KEY` is one conditional row: absent unless the run declared
 /// `credentials: api-key`, because an exported key *"takes precedence over the claude.ai login
-/// and may point at an account with no credits"* (design § 2.1, H4).
-fn is_scrubbed(key: &str, credentials: CredentialSource) -> bool {
+/// and may point at an account with no credits"* (design § 2.1, H4) — or unless a model
+/// endpoint is declared, in which case the key is this plan's own placeholder and never the
+/// operator's. `ANTHROPIC_BASE_URL` is the other: an ambient one silently redirects the model
+/// API and stays refused; a **declared** one is the whole point of `--model-endpoint`.
+fn is_scrubbed(key: &str, spec: &RunSpec) -> bool {
+    let credentials = spec.credentials;
     if key == "ANTHROPIC_API_KEY" {
-        return credentials != CredentialSource::ApiKey;
+        return credentials != CredentialSource::ApiKey && spec.model_endpoint.is_none();
+    }
+    if key == "ANTHROPIC_BASE_URL" {
+        return spec.model_endpoint.is_none();
     }
     key.starts_with("ANTHROPIC_")
         || key.starts_with("CLAUDE_CODE_")
@@ -704,7 +752,7 @@ fn attest(spec: &RunSpec, context: &LaunchContext, config_home: &Path) -> Hermet
                 INHERITED_KEYS.len()
             ),
         ),
-        control_imposed(HermeticRow::H4, api_key_posture(spec.credentials)),
+        control_imposed(HermeticRow::H4, api_key_posture(spec)),
         control_imposed(HermeticRow::H5, "--strict-mcp-config"),
         control_imposed(
             HermeticRow::H8,
@@ -789,8 +837,11 @@ fn attest(spec: &RunSpec, context: &LaunchContext, config_home: &Path) -> Hermet
     }
 }
 
-fn api_key_posture(credentials: CredentialSource) -> &'static str {
-    if credentials == CredentialSource::ApiKey {
+fn api_key_posture(spec: &RunSpec) -> &'static str {
+    if spec.model_endpoint.is_some() {
+        "ANTHROPIC_API_KEY carries this plan's own placeholder for the declared model endpoint; \
+         no operator credential is in the child at all"
+    } else if spec.credentials == CredentialSource::ApiKey {
         "ANTHROPIC_API_KEY is in the child environment because the run declared credentials: \
          api-key"
     } else {
@@ -1020,11 +1071,58 @@ mod tests {
     fn a_widened_allowlist_is_caught_by_the_scrub_rather_than_reaching_the_child() {
         let env = BTreeMap::from([("ANTHROPIC_BASE_URL".to_string(), "x".to_string())]);
         assert_eq!(
-            guard_environment(&env, CredentialSource::OperatorLogin),
+            guard_environment(&env, &spec()),
             Err(LaunchRefusal::DeniedEnvironment {
                 key: "ANTHROPIC_BASE_URL".to_string(),
                 row: HermeticRow::H3,
             })
+        );
+    }
+
+    /// The model-adapter door (MA-1): a **declared** endpoint reaches the child as
+    /// `ANTHROPIC_BASE_URL` plus the placeholder key — and only a declared one; the ambient
+    /// variable stays scrubbed by the test above, which is the difference between an option
+    /// and a leak.
+    #[test]
+    fn a_declared_model_endpoint_reaches_the_child_with_a_placeholder_and_no_credential() {
+        let mut spec = spec();
+        spec.credentials = CredentialSource::None;
+        spec.model_endpoint = Some("https://llmgw.example/".to_string());
+        spec.effort = Some("medium".to_string());
+        let plan = plan_launch(&spec, &context()).expect("the endpoint launch plans");
+        assert_eq!(
+            plan.env.get("ANTHROPIC_BASE_URL").map(String::as_str),
+            Some("https://llmgw.example"),
+            "the root travels, with the trailing slash gone"
+        );
+        assert_eq!(
+            plan.env.get("ANTHROPIC_API_KEY").map(String::as_str),
+            Some(ENDPOINT_PLACEHOLDER_KEY)
+        );
+        assert!(
+            plan.credential_copies.is_empty(),
+            "no credential file travels"
+        );
+        let effort = plan.args.iter().position(|arg| arg == "--effort");
+        assert!(
+            effort.is_some_and(|at| plan.args.get(at + 1).map(String::as_str) == Some("medium")),
+            "{:?}",
+            plan.args
+        );
+    }
+
+    /// An endpoint beside an operator credential is refused by name: the binary prefers a
+    /// login over an exported key, so composing them would send the operator's token to a
+    /// host that is not the vendor's.
+    #[test]
+    fn a_model_endpoint_with_an_operator_credential_is_refused_by_name() {
+        let mut spec = spec();
+        spec.model_endpoint = Some("https://llmgw.example".to_string());
+        assert_eq!(
+            plan_launch(&spec, &context()).expect_err("the composition is refused"),
+            LaunchRefusal::EndpointWithCredential {
+                endpoint: "https://llmgw.example".to_string()
+            }
         );
     }
 

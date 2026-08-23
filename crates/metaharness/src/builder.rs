@@ -125,6 +125,24 @@ impl Metaharness {
         self
     }
 
+    /// A model gateway to point the harness at, as the gateway's root URL (no `/v1`).
+    ///
+    /// The generic model adapter: Claude Code reaches `{root}/v1/messages`, codex
+    /// `{root}/v1/responses`. Requires `credentials: none` — the adapters refuse the
+    /// combination with an operator credential by name.
+    #[must_use]
+    pub fn with_model_endpoint(mut self, base_url: impl Into<String>) -> Self {
+        self.spec.model_endpoint = Some(base_url.into());
+        self
+    }
+
+    /// The reasoning effort to ask of the model, in the vendor's own vocabulary.
+    #[must_use]
+    pub fn with_effort(mut self, level: impl Into<String>) -> Self {
+        self.spec.effort = Some(level.into());
+        self
+    }
+
     /// A ceiling on turns.
     #[must_use]
     pub fn with_max_turns(mut self, turns: u32) -> Self {

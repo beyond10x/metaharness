@@ -261,6 +261,8 @@ fn every_builder_method_sets_one_field_of_the_one_options_type() {
         .with_tool_surface(ToolSurface::Owned)
         .with_credentials(CredentialSource::ApiKey)
         .with_model("sonnet")
+        .with_model_endpoint("https://llmgw.example")
+        .with_effort("medium")
         .with_max_turns(30)
         .with_plugin_dir("plugins/one")
         .with_cwd("/operator/repo")
@@ -281,6 +283,8 @@ fn every_builder_method_sets_one_field_of_the_one_options_type() {
         tool_surface: ToolSurface::Owned,
         credentials: CredentialSource::ApiKey,
         model: Some("sonnet".to_string()),
+        model_endpoint: Some("https://llmgw.example".to_string()),
+        effort: Some("medium".to_string()),
         max_turns: Some(30),
         plugin_dir: vec!["plugins/one".into()],
         cwd: Some("/operator/repo".into()),

@@ -137,6 +137,28 @@ pub struct RunSpec {
     #[cfg_attr(feature = "clap", arg(long))]
     pub model: Option<String>,
 
+    /// A model gateway to point the harness at, as the gateway's **root** URL (no `/v1`).
+    ///
+    /// The generic model adapter (design `model-adapter-v0.1.md`): each harness reaches its own
+    /// native dialect under this root — Claude Code speaks Anthropic messages at
+    /// `{root}/v1/messages`, codex the `OpenAI` Responses wire at `{root}/v1/responses`. Requires
+    /// `--credentials none`, because a child pointed at a foreign endpoint must hold no operator
+    /// credential: Claude Code is given a placeholder key (the gateway sees `x-api-key:` with
+    /// the placeholder), and codex sends no auth header at all for a provider that names no
+    /// `env_key` — both verified against the pins (MA-V1, MA-V2).
+    #[cfg_attr(feature = "clap", arg(long, value_name = "BASE_URL"))]
+    pub model_endpoint: Option<String>,
+
+    /// The reasoning effort to ask of the model, in the vendor's own vocabulary.
+    ///
+    /// Claude Code takes it as `--effort`; codex reads `model_reasoning_effort` from the
+    /// scratch config. The value is passed through and validated by whoever serves the model —
+    /// a run option rather than a hardcoded default, because an endpoint may support a
+    /// different vocabulary than the vendor's own service (one gateway was observed refusing
+    /// Claude Code's default `high` while accepting `medium`, `low` and `xhigh`).
+    #[cfg_attr(feature = "clap", arg(long, value_name = "LEVEL"))]
+    pub effort: Option<String>,
+
     /// A ceiling on turns.
     #[cfg_attr(feature = "clap", arg(long))]
     pub max_turns: Option<u32>,
@@ -205,6 +227,8 @@ impl RunSpec {
             tool_surface: ToolSurface::Native,
             credentials: CredentialSource::OperatorLogin,
             model: None,
+            model_endpoint: None,
+            effort: None,
             max_turns: None,
             plugin_dir: Vec::new(),
             cwd: None,

@@ -253,6 +253,15 @@ pub enum LaunchRefusal {
     CredentialFileMissing,
     /// The run declared `credentials: api-key` and no key was in the caller's environment.
     ApiKeyMissing,
+    /// The run declared a model endpoint together with a real credential source.
+    ///
+    /// Refused rather than composed: an operator credential in the scratch home beside a
+    /// foreign provider is the operator's token sitting where a run that never needs it runs —
+    /// the endpoint provider names no `env_key` and sends no auth header at all (MA-V2).
+    EndpointWithCredential {
+        /// The endpoint that was declared.
+        endpoint: String,
+    },
     /// The constructed argv carries an argument the denylist forbids.
     DeniedArgument {
         /// Which one.
@@ -322,6 +331,13 @@ impl fmt::Display for LaunchRefusal {
                 "the run declared credentials: api-key and neither OPENAI_API_KEY nor \
                  CODEX_API_KEY was in the caller's environment",
             ),
+            LaunchRefusal::EndpointWithCredential { endpoint } => write!(
+                f,
+                "the run declared a model endpoint ({endpoint}) together with a real credential \
+                 source; the endpoint provider authenticates with nothing, so declare \
+                 credentials: none rather than parking an operator credential in a scratch home \
+                 no request will read it from"
+            ),
             LaunchRefusal::DeniedArgument { argument } => write!(
                 f,
                 "H8: the constructed argv carries {argument}, which deletes something this run \
@@ -388,6 +404,14 @@ pub fn plan_launch(spec: &RunSpec, context: &LaunchContext) -> Result<LaunchPlan
         }
     }
 
+    if let Some(endpoint) = &spec.model_endpoint
+        && spec.credentials != CredentialSource::None
+    {
+        return Err(LaunchRefusal::EndpointWithCredential {
+            endpoint: endpoint.clone(),
+        });
+    }
+
     let config_home = context.scratch_root.join(CONFIG_HOME);
     let credential_copies = credential_copies(spec, context, &config_home)?;
     let args = build_args(spec, prompt);
@@ -402,7 +426,7 @@ pub fn plan_launch(spec: &RunSpec, context: &LaunchContext) -> Result<LaunchPlan
         cwd: context.cwd.clone(),
         config_home: config_home.clone(),
         credential_copies,
-        config: build_config(&hook),
+        config: build_config(spec, &hook),
         hook,
         attestation: attest(spec, context, &config_home),
     })
@@ -655,7 +679,7 @@ fn build_hook(hook_path: &Path) -> Value {
 /// recognises — `[[hooks.PreToolUse]]`, `[[hooks.PreToolUse.hooks]]`, `type`, `command`,
 /// `timeout` — and an unrecognised one would be **ignored in silence**, which is why the seam is
 /// asserted from a hook request that arrived and never from this text.
-fn build_config(hook: &Value) -> String {
+fn build_config(spec: &RunSpec, hook: &Value) -> String {
     let mut document = String::from(
         "# metaharness scratch CODEX_HOME. Generated per run; edited by nobody.\n\n\
          # The seam is the only thing that may refuse a call. `codex exec` on 0.145.0 has no\n\
@@ -667,11 +691,35 @@ fn build_config(hook: &Value) -> String {
          # The vendor\'s own floor beneath the seam, and Claude Code has no counterpart for it\n\
          # (design § 7.4, V17): the child cannot write outside its workspace or reach the network,\n\
          # whatever the seam allows. Named here so the attestation can claim it.\n\
-         sandbox_mode = \"read-only\"\n\n\
-         # H5: the MCP surface is exactly what this launch gave, which is nothing.\n\
+         sandbox_mode = \"read-only\"\n",
+    );
+    // Top-level keys must precede the first table header, or TOML files them under it.
+    if let Some(effort) = &spec.effort {
+        let _ = writeln!(document, "\nmodel_reasoning_effort = {}", quote(effort));
+    }
+    if let Some(endpoint) = &spec.model_endpoint {
+        // The generic model adapter (MA-1): the run's brain is this gateway's, reached on the
+        // Responses wire at {root}/v1/responses. No `env_key`, and therefore no auth header at
+        // all — verified against the pin (MA-V2): a provider that names no env_key spawns and
+        // runs with no auth.json in the scratch home and no Authorization on the wire.
+        let base = format!("{}/v1", endpoint.trim_end_matches('/'));
+        let _ = writeln!(
+            document,
+            "\n# The declared model endpoint. Everything about it is this launch's choice;\n\
+             # the operator's own provider list never enters a scratch home.\n\
+             model_provider = \"metaharness_endpoint\"\n\n\
+             [model_providers.metaharness_endpoint]\n\
+             name = \"metaharness_endpoint\"\n\
+             base_url = {}\n\
+             wire_api = \"responses\"",
+            quote(&base)
+        );
+    }
+    document.push_str(
+        "\n# H5: the MCP surface is exactly what this launch gave, which is nothing.\n\
          [mcp_servers]\n\n\
          # The control seam (design § 7.1, call tier). 0.145.0 reads its hooks from this table\n\
-         # and not from a hooks.json, which is a plugin manifest\'s file.\n",
+         # and not from a hooks.json, which is a plugin manifest's file.\n",
     );
     if let Some(matcher) = hook.get("matcher").and_then(Value::as_str) {
         let _ = writeln!(
@@ -913,6 +961,52 @@ mod tests {
 
     fn plan() -> LaunchPlan {
         plan_launch(&spec(), &context()).expect("the run plans")
+    }
+
+    /// The model-adapter door (MA-1): a declared endpoint becomes a provider entry in the
+    /// scratch config — `{root}/v1` on the Responses wire, no `env_key` — and the top-level
+    /// keys land **above** the first table header, because a TOML key written below one is
+    /// silently a different key.
+    #[test]
+    fn a_declared_model_endpoint_becomes_a_no_credential_provider_entry() {
+        let mut spec = spec();
+        spec.credentials = CredentialSource::None;
+        spec.model_endpoint = Some("https://llmgw.example/".to_string());
+        spec.effort = Some("medium".to_string());
+        let plan = plan_launch(&spec, &context()).expect("the endpoint launch plans");
+        assert!(plan.credential_copies.is_empty(), "no auth.json travels");
+        let config = &plan.config;
+        for line in [
+            "model_provider = \"metaharness_endpoint\"",
+            "base_url = \"https://llmgw.example/v1\"",
+            "wire_api = \"responses\"",
+            "model_reasoning_effort = \"medium\"",
+        ] {
+            assert!(config.contains(line), "missing {line} in:\n{config}");
+        }
+        let first_table = config.find('[').expect("a table header exists");
+        for key in ["model_provider = ", "model_reasoning_effort = "] {
+            let at = config.find(key).expect("the key exists");
+            assert!(
+                at < first_table,
+                "{key} sits below a table header:\n{config}"
+            );
+        }
+        assert!(!config.contains("env_key"), "no auth variable is named");
+    }
+
+    /// An endpoint beside an operator credential is refused by name: the provider never reads
+    /// it, so a copied auth.json would sit in the scratch home for nothing.
+    #[test]
+    fn a_model_endpoint_with_an_operator_credential_is_refused_by_name() {
+        let mut spec = spec();
+        spec.model_endpoint = Some("https://llmgw.example".to_string());
+        assert_eq!(
+            plan_launch(&spec, &context()).expect_err("the composition is refused"),
+            LaunchRefusal::EndpointWithCredential {
+                endpoint: "https://llmgw.example".to_string()
+            }
+        );
     }
 
     #[test]

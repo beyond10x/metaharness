@@ -1,6 +1,22 @@
-# Model adapters — v0.1 (proposed)
+# Model adapters — v0.1 (proposed; MA-0 verified, the endpoint slice built)
 
-Status: **proposed**, unbuilt. Companion to `metaharness-protocol-v0.1.md`; nothing here changes
+Status: **proposed**; **MA-0 is done and the endpoint slice of MA-1 is built** (2026-08-23,
+operator-directed: "how can we configure so metaharness → codex|claude → the gateway").
+MA-V1–V4 all verified — first against a local recording stub, then live against a real
+vLLM-class gateway (`llm.dev.former organization.com`, one model `qwen3.8-27b`, both dialect doors, no
+auth) — and `--model-endpoint <root>` + `--effort <level>` are `RunSpec` options: claude gets
+`ANTHROPIC_BASE_URL` plus a **placeholder** key (never a credential), codex a
+`model_providers.metaharness_endpoint` entry (`{root}/v1`, `wire_api = "responses"`, no
+`env_key`), both **requiring `credentials: none`** and refusing an operator credential by name.
+Proven end to end: `metaharness run <kind> --model-endpoint … --model qwen3.8-27b` exits 0 with
+the model's answer in the event stream, both vendors. What stays proposed of MA-1/MA-2: the
+`ModelAdapter` type with alias tables, `models()`, and the `model_endpoint`/`model_list` events
+of § 6. Verified facts worth keeping: Claude Code authenticates to a base URL with **`x-api-key`**
+(not a bearer); codex sends **no auth header** for a provider without `env_key`; the gateway's
+effort vocabulary was `xhigh|medium|low` and refused Claude Code's default `high` (HTTP 500) —
+which is why `--effort` is a run option; codex's streaming SSE off `{root}/v1/responses` works.
+
+Companion to `metaharness-protocol-v0.1.md`; nothing here changes
 the event/command wire except the two events named in § 6.
 
 ## The requirement, in the owner's words

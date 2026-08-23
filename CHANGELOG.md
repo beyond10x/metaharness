@@ -7,6 +7,22 @@ was amended and the amendment is named here.
 
 ### Added
 
+- **A run can be pointed at a model gateway: `--model-endpoint <root>` and `--effort <level>`
+  (the model-adapter design's endpoint slice; MA-V1–V4 verified).** Each harness reaches its own
+  dialect under the declared root — Claude Code speaks Anthropic messages at `{root}/v1/messages`
+  (`ANTHROPIC_BASE_URL` plus a placeholder `x-api-key`, never a credential), codex the Responses
+  wire at `{root}/v1/responses` (a `model_providers.metaharness_endpoint` entry with no
+  `env_key`, and therefore no auth header at all). The composition with a real credential source
+  is refused by name on both adapters: a child pointed at a foreign endpoint holds no operator
+  credential, so `--credentials none` is required — H4's attestation row says the placeholder is
+  what the child carries. A **declared** endpoint is the difference from the ambient
+  `ANTHROPIC_BASE_URL`/`OPENAI_BASE_URL` H3 scrubs, which stay refused. `--effort` exists because
+  an endpoint may hold a different vocabulary than the vendor's service: the gateway this was
+  verified against accepted `xhigh|medium|low` and refused Claude Code's default `high`. Proven
+  live end to end against a vLLM-class gateway serving `qwen3.8-27b`: both
+  `metaharness run <kind> --model-endpoint …` chains exit 0 with the model's answer in the event
+  stream (claude 25,546 in / 89 out; codex 10,508 in / 2 out).
+
 - **`doctor` now answers about the binary the run will execute, and the contract names a version
   pair that disagrees (CT-3; Q18 closed as amendment a8).** Q18's cause was two binaries, not one
   binary lying: the operator's shell resolves pacman codex 0.145.0 at `/usr/bin` while the launch
