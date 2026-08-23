@@ -7,6 +7,39 @@ was amended and the amendment is named here.
 
 ### Added
 
+- **The contract record is a golden, and a new adapter's contract is now a checklist (CT-4; the
+  adapter-contract milestone table closes).** `engineering-protocols` reads
+  `metaharness conformance <kind> --contract` as evidence, and the two repositories share the
+  `contract_result` vocabulary and no code — the same gap the frame document has, closed the same
+  way. Each adapter's record is committed as the **exact stdout** of a live run
+  (`crates/metaharness/fixtures/golden/contract-result-claude.json`, `…-codex.json`, recorded
+  2026-08-23 from a CT-1..3 + a9 tree, both exit `0`, provenance in `fixtures/golden/README.md`),
+  and `tests/contract_golden.rs` rebuilds it through the real
+  `contract_result(kind, &conformance_vectors(kind))` and compares **byte for byte**. Key order is
+  pinned with the values, because a consumer reads bytes and nothing in the code asks `serde_json`
+  for sorted keys — `preserve_order` turned on anywhere in the workspace would re-order every
+  record this binary prints. A failure names the field that moved (`checked: was 11, is now 10`)
+  and says the golden is regenerated **deliberately**, through the `#[ignore]`d
+  `regenerate_the_contract_records`, never to restore green.
+  CT-4 is the other half: `ContractObligations` in `metaharness-protocol` is the one authoring
+  shape every adapter fills — a launch vector, a recorded transcript/rollout vector, a recorded
+  hook-input vector, a version pair, each answered `Filled(&[ids])` or `Gap(reason)` — with no
+  `Default` and no optional field, so a declaration cannot be written without answering every row,
+  and `contract_obligations(kind)` does not compile for a third adapter until it has one. Both
+  adapters declare through it (`CONTRACT_OBLIGATIONS` per crate) and `tests/contract_symmetry.rs`
+  checks each declaration against that adapter's own vectors and its own `provider` string: a named
+  vector the run does not produce, produces in another tier or produces red is an unmet obligation,
+  and so is a gap with no reason. It found what it exists to find on its first run — **the codex
+  adapter has no launch vector at all**, no `fixtures/c1/`, its argv and child environment pinned
+  by unit tests and by nothing a consumer can read, while its record said `checked: 10`,
+  `failed: 0` and nothing about the face it never tested. That is now a named gap rather than an
+  absence, on CT-3's rule that a known gap is never a silent pass. Nothing moved to make room for
+  any of this: **no vector was added, no count changed, no emitted byte changed** — 20 claude /
+  10 codex, `checked: 20` / `checked: 10`, 0 failed, 0 breaking, as the consumer is reading them
+  today. The acceptance clause that named pi/opencode/**flux** is inherited by whichever adapter
+  comes next; flux is struck (`docs/ROADMAP.md` § 3, operator: *"i dont want to embed any flux
+  related"*).
+
 - **The frame seam is now golden-pinned on both sides of it.** `engineering-protocols` mints the
   `metaharness.frame/1` documents this workspace reads, cannot depend on it (it is public, this is
   not), and therefore tests its minter against a **transcription** of `frame.rs` — a second

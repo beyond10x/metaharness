@@ -16,12 +16,24 @@ and per-adapter-symmetrical. **Open question:** reuse engineering-protocols' con
 inventing a second harness-contract shape — the operator suspects yes; needs a short design
 page mapping "adapter contract" onto that tooling's vocabulary.
 
+**Answered and built, 2026-08-23.** `docs/design/adapter-contract-v0.1.md` is that page and its
+four milestones are all built: the record (CT-1), recorded real wire on both faces (CT-2), the
+version pair (CT-3) and the per-adapter authoring shape (CT-4). The reuse is the vocabulary and
+not a dependency — `engineering-protocols` never appears in a `Cargo.toml` here. What the last
+milestone surfaced is carried in that page: the two adapters are not yet symmetrical, because
+codex tests no launch face, and the checklist now says so out loud instead of leaving it absent.
+
 ## 2. More harnesses: pi, opencode
 
 Two further adapter crates on the same pattern as `metaharness-codex` (research record first,
 pinned versions, rollout/transcript reader, capabilities with undriven claims labelled, live
 proof last): **pi** and **opencode**. Sequence after the codex spawn (CX-M2) lands, so the
 builder's kind-dispatch has two real implementations before it grows a third.
+
+Whichever of the two comes first inherits CT-4's acceptance clause: it declares its contract by
+filling `ContractObligations` — a launch vector, a recorded transcript/rollout vector, a recorded
+hook-input vector, a version pair — and `contract_obligations(kind)` will not compile until it
+does. The clause originally named flux as a third; § 3 struck it.
 
 ## 3. metaharness usage ≡ flux usage — **narrowed by the operator, 2026-08-23**
 

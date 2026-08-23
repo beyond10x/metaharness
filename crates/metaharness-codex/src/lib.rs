@@ -64,7 +64,7 @@ pub use launch::{
 };
 pub use rollout::RolloutReader;
 pub use seam::{HookInput, capabilities, parse_hook_input, render_hook_response, render_operation};
-pub use vectors::conformance_vectors;
+pub use vectors::{CONTRACT_OBLIGATIONS, conformance_vectors};
 
 /// This adapter's id, as it appears in `session.started` and on the command line.
 pub const ADAPTER_ID: &str = "codex";

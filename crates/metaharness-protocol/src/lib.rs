@@ -41,7 +41,7 @@ pub use capability::{
     AdapterClass, AdapterId, Capabilities, CommandSupport, Tier, TierStatus, required_commands,
 };
 pub use command::{Command, CommandOutcome, Decision, RefusalCode, Refused};
-pub use conformance::{ConformanceTier, VectorOutcome};
+pub use conformance::{ConformanceTier, ContractObligations, Obligation, VectorOutcome};
 pub use event::{
     DecidedBy, DecisionCensus, Emission, Event, McpServerRef, PermissionDenial, PluginRef,
     RateLimitInfo, Seam, StepOutcome, TranscriptRef, Usage, warning_code,

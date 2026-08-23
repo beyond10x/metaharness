@@ -113,3 +113,137 @@ impl VectorOutcome {
         self.passed && !self.detail.is_empty()
     }
 }
+
+/// How one row of the contract's authoring shape is answered.
+///
+/// Two variants and no third, because the only two honest answers are "these vectors fill it" and
+/// "nothing fills it, and here is why". A row left silently empty would make the checklist read
+/// green on an adapter that owes the same thing as every other one and does not deliver it — the
+/// same reason [`VectorOutcome::passed_with_warning`] exists.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum Obligation {
+    /// Filled by these vector ids. Every one must appear in that adapter's own conformance run,
+    /// in the row's tier, passing.
+    Filled(&'static [&'static str]),
+    /// Not filled, in the words that say what stands in for it and what a consumer therefore
+    /// cannot read off the contract record.
+    Gap(&'static str),
+}
+
+/// One adapter's contract obligations, in the one shape every adapter fills (CT-4, design
+/// `adapter-contract-v0.1.md`).
+///
+/// The point is that a new adapter's contract is a **checklist rather than a fresh invention**:
+/// the struct has no `Default` and no optional field, so an adapter cannot be declared without
+/// answering every row — and [`ContractObligations::unmet`] then checks the answers against what
+/// that adapter's `conformance_vectors()` really produced, which is what makes the checklist
+/// enforced rather than documentation.
+///
+/// It is deliberately not a framework. It mints no vector, runs nothing and knows no adapter; it
+/// is a declaration and a comparison against the outcomes somebody else produced.
+#[derive(Debug, Clone, Copy)]
+pub struct ContractObligations {
+    /// The adapter id — the word the `contract_result` record's `provider` begins with.
+    pub adapter: &'static str,
+    /// The launch face: what argv and child environment this adapter would construct, against a
+    /// recorded expectation (C1).
+    pub launch: Obligation,
+    /// The recorded transcript or rollout face: the vendor's own record, replayed byte-exact
+    /// against a committed event stream (C2).
+    pub recorded_wire: Obligation,
+    /// The recorded hook-input face: the raw vendor stdin the seam reads, pinned field by field
+    /// and checked against the rendering table (C2).
+    pub recorded_hook_input: Obligation,
+    /// The version pair: the recorded sample's own version claim against the adapter's pin (C2,
+    /// CT-3).
+    pub version_pair: Obligation,
+}
+
+impl ContractObligations {
+    /// The rows, in the order a reader checks them: what the row owes, the tier its vectors
+    /// belong to, and how this adapter answered it.
+    #[must_use]
+    pub fn rows(&self) -> [(&'static str, ConformanceTier, Obligation); 4] {
+        [
+            (
+                "at least one launch vector",
+                ConformanceTier::C1,
+                self.launch,
+            ),
+            (
+                "a recorded transcript/rollout vector",
+                ConformanceTier::C2,
+                self.recorded_wire,
+            ),
+            (
+                "a recorded hook-input vector",
+                ConformanceTier::C2,
+                self.recorded_hook_input,
+            ),
+            (
+                "a golden-version-pair vector",
+                ConformanceTier::C2,
+                self.version_pair,
+            ),
+        ]
+    }
+
+    /// What this declaration promised and the run did not deliver. Empty is the checklist met.
+    ///
+    /// `vectors` is the adapter's own conformance outcomes and `provider` the string the
+    /// `contract_result` record carries, because two of the obligations are about the record
+    /// rather than about any one vector: `checked > 0` (a run that checked nothing also has zero
+    /// failures) and a `provider` that names the vendor **and** its pin (the field a consumer
+    /// reads to know which binary the contract is about).
+    #[must_use]
+    pub fn unmet(&self, vectors: &[VectorOutcome], provider: &str) -> Vec<String> {
+        let mut gaps = Vec::new();
+        if vectors.is_empty() {
+            gaps.push(
+                "checked is 0: a run that checked nothing also has zero failures, so it asserts \
+                 nothing"
+                    .to_string(),
+            );
+        }
+        for (owed, tier, obligation) in self.rows() {
+            match obligation {
+                Obligation::Gap(reason) => {
+                    if reason.trim().is_empty() {
+                        gaps.push(format!("{owed}: declared unfilled without saying why"));
+                    }
+                }
+                Obligation::Filled([]) => {
+                    gaps.push(format!("{owed}: declared filled by no vector at all"));
+                }
+                Obligation::Filled(ids) => {
+                    for id in ids {
+                        match vectors.iter().find(|vector| vector.id == *id) {
+                            None => gaps.push(format!(
+                                "{owed}: the declaration names `{id}`, and the run has no such \
+                                 vector"
+                            )),
+                            Some(vector) if vector.tier != tier => gaps.push(format!(
+                                "{owed}: `{id}` is declared as {} and the run reports it as {}",
+                                tier.as_str(),
+                                vector.tier.as_str()
+                            )),
+                            Some(vector) if !vector.passed => {
+                                gaps.push(format!("{owed}: `{id}` failed — {}", vector.detail));
+                            }
+                            Some(_) => {}
+                        }
+                    }
+                }
+            }
+        }
+        match provider.split_once(' ') {
+            Some((named, pin)) if named == self.adapter && !pin.trim().is_empty() => {}
+            _ => gaps.push(format!(
+                "provider is {provider:?}; the record must carry `{} <pinned version>`, or a \
+                 consumer cannot tell which binary the contract is about",
+                self.adapter
+            )),
+        }
+        gaps
+    }
+}

@@ -29,10 +29,29 @@ use std::fmt::Write as _;
 use std::path::PathBuf;
 
 use metaharness_protocol::{
-    ConformanceTier, CredentialSource, DecisionMode, Digest, EventStream, HermeticAttestation,
-    HermeticMode, Kind, RunId, RunSpec, Seam, ToolSurface, TranscriptRef, VectorOutcome,
+    ConformanceTier, ContractObligations, CredentialSource, DecisionMode, Digest, EventStream,
+    HermeticAttestation, HermeticMode, Kind, Obligation, RunId, RunSpec, Seam, ToolSurface,
+    TranscriptRef, VectorOutcome,
 };
 use serde_json::{Value, json};
+
+/// What this adapter's contract owes, in the one shape every adapter fills (CT-4).
+///
+/// The rows are not a summary of the vectors below — they are the declaration the vectors are
+/// checked **against**, so this constant going stale is a red test rather than a stale comment
+/// (`metaharness::contract_obligations`, and the per-adapter test that reads it).
+pub const CONTRACT_OBLIGATIONS: ContractObligations = ContractObligations {
+    adapter: crate::ADAPTER_ID,
+    launch: Obligation::Filled(&[
+        "c1-strict-hermetic",
+        "c1-api-key",
+        "c1-shadow-refusal",
+        "c1-memory-ancestor-refusal",
+    ]),
+    recorded_wire: Obligation::Filled(&["golden-transcript"]),
+    recorded_hook_input: Obligation::Filled(&["golden-hook-input"]),
+    version_pair: Obligation::Filled(&["golden-version-pair"]),
+};
 
 use crate::launch::{LaunchContext, LaunchPlan, LaunchRefusal, plan_launch};
 use crate::transcript::TranscriptReader;

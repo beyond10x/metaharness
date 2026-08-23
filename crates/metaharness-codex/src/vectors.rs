@@ -8,18 +8,39 @@
 //! with the difference in the detail.
 
 use metaharness_protocol::{
-    ConformanceTier, Emission, Event, EventStream, HermeticAttestation, HermeticMode, RunId,
-    TranscriptRef, VectorOutcome,
+    ConformanceTier, ContractObligations, Emission, Event, EventStream, HermeticAttestation,
+    HermeticMode, Obligation, RunId, TranscriptRef, VectorOutcome,
 };
 
 use crate::rollout::RolloutReader;
+
+/// What this adapter's contract owes, in the one shape every adapter fills (CT-4).
+///
+/// Three rows are filled and the first is not, which is the finding the shape exists to produce:
+/// this adapter has no `fixtures/c1/` and therefore no launch vector, so the one face of the
+/// mapping a consumer cannot read off its `contract_result` record is the argv and child
+/// environment. That is stated here rather than left as an absence, because an absence looks
+/// identical to a green row.
+pub const CONTRACT_OBLIGATIONS: ContractObligations = ContractObligations {
+    adapter: crate::ADAPTER_ID,
+    launch: Obligation::Gap(
+        "no C1 vector: this adapter's launch plan is pinned by the unit tests in `src/launch.rs` \
+         and by no recorded expectation under `fixtures/c1/`, so a launch drift reddens this \
+         crate's own suite and never the contract record a consumer reads. The claude adapter \
+         fills the row with four; filling it here means recording the same expectations and \
+         moving every vector-count pin deliberately",
+    ),
+    recorded_wire: Obligation::Filled(&["golden-rollout"]),
+    recorded_hook_input: Obligation::Filled(&["golden-hook-input"]),
+    version_pair: Obligation::Filled(&["golden-version-pair"]),
+};
 
 const META: &str = r#"{"timestamp":"2026-08-22T10:00:00.000Z","type":"session_meta","payload":{"id":"01a0-fixture","session_id":"01a0-fixture","cli_version":"0.145.0","cwd":"/scratch/work","originator":"codex_exec","model_provider":"openai"}}"#;
 const META_UNPINNED: &str = r#"{"timestamp":"2026-08-22T10:00:00.000Z","type":"session_meta","payload":{"id":"01a0-fixture","cli_version":"0.999.0","cwd":"/scratch/work"}}"#;
 const TASK_STARTED: &str = r#"{"timestamp":"2026-08-22T10:00:01.000Z","type":"event_msg","payload":{"type":"task_started","turn_id":"t1"}}"#;
 const CALL: &str = r#"{"timestamp":"2026-08-22T10:00:02.000Z","type":"response_item","payload":{"type":"function_call","call_id":"call-1","name":"exec","arguments":"{\"command\":\"ls\"}"}}"#;
 const OUTPUT: &str = r#"{"timestamp":"2026-08-22T10:00:03.000Z","type":"response_item","payload":{"type":"function_call_output","call_id":"call-1","output":"src\ndocs\n"}}"#;
-const TOKENS: &str = r#"{"timestamp":"2026-08-22T10:00:04.000Z","type":"event_msg","payload":{"type":"token_count","info":{"total_token_usage":{"input_tokens":100,"cached_input_tokens":40,"cache_write_input_tokens":10,"output_tokens":20,"total_tokens":120}},"rate_limits":{"limit_name":"weekly","plan_type":"pro","primary":{"used_percent":12.5}}}}"#;
+const TOKENS: &str = r#"{"timestamp":"2026-08-22T10:00:04.000Z","type":"event_msg","payload":{"type":"token_count","info":{"total_token_usage":{"input_tokens":100,"cached_input_tokens":40,"cache_write_input_tokens":10,"output_tokens":20,"reasoning_output_tokens":6,"total_tokens":120}},"rate_limits":{"limit_name":"weekly","plan_type":"pro","primary":{"used_percent":12.5}}}}"#;
 const COMPLETE: &str = r#"{"timestamp":"2026-08-22T10:00:05.000Z","type":"event_msg","payload":{"type":"task_complete","turn_id":"t1","duration_ms":4200,"time_to_first_token_ms":800}}"#;
 const APRIL_SHAPE: &str = r#"{"timestamp":"2026-04-01T10:00:02.000Z","type":"response_item","payload":{"type":"exec_command_begin","call_id":"call-9","command":["ls"]}}"#;
 

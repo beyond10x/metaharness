@@ -16,8 +16,8 @@
 //! claim rather than a paragraph in a document.
 
 use metaharness_protocol::{
-    Command, CommandOutcome, ConformanceTier, Decision, DecisionMode, Event, Kind, RefusalCode,
-    VectorOutcome,
+    Command, CommandOutcome, ConformanceTier, ContractObligations, Decision, DecisionMode, Event,
+    Kind, RefusalCode, VectorOutcome,
 };
 
 use crate::builder::{Input, Metaharness};
@@ -468,6 +468,23 @@ pub fn capabilities(kind: Kind) -> Result<metaharness_protocol::Capabilities, Re
     match kind {
         Kind::Claude => Ok(metaharness_claude::capabilities()),
         Kind::Codex => Ok(metaharness_codex::capabilities()),
+    }
+}
+
+/// What the adapter for this kind declares its contract owes (CT-4).
+///
+/// The dispatch is the enforcement: a new [`Kind`] does not compile until it names a declaration,
+/// so "fill the checklist" is the first thing a third adapter is told by the compiler rather than
+/// the last thing a reviewer remembers to ask for.
+///
+/// # Errors
+///
+/// None today — both kinds have adapters — and the `Result` stays for the same reason
+/// [`capabilities`]'s does.
+pub fn contract_obligations(kind: Kind) -> Result<ContractObligations, Refusal> {
+    match kind {
+        Kind::Claude => Ok(metaharness_claude::CONTRACT_OBLIGATIONS),
+        Kind::Codex => Ok(metaharness_codex::CONTRACT_OBLIGATIONS),
     }
 }
 
