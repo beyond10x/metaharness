@@ -50,6 +50,17 @@
 > reported pin, not the binary that ran. `doctor` now resolves on the child's `PATH` and prints
 > the resolved absolute path, and the adapter contract carries a `golden-version-pair` vector
 > whose off-pin answer is a named warning (Q18's row carries the record).
+> **Amendment a9, 2026-08-23**, from a consumer's gap register rather than from a build: **four
+> payload fields, all additive and all optional.** `engineering-protocols` reads this wire as a
+> transcript, and its register records *"Four expectation kinds cannot be decided about a driven
+> run, because the seam's wire does not carry what they read"* — `skill.completed`, which reads the
+> vendor's per-tool result record; `tokens.thinking`, `iterations` and `speed`, which had no key in
+> `usage`; and a `cost.total` scoped to one model, which had none in the per-model record. That row
+> closes with *"not this repository's to close: it is four fields at the seam"*, and this is the
+> amendment that adds them: `tool.result` gains `tool_use_result`, and `Usage` gains
+> `thinking_tokens`, `iterations`, `speed` and `cost_usd`. Every one is read from what the vendor
+> wrote and none is computed — § 4.1's rule is unchanged and is the reason the aggregate `usage`
+> carries no cost. Marked at each point of change, on the same rule as the review's corrections.
 > **Audience:** whoever reviews this for acceptance, and whoever builds it afterwards.
 > **Sources studied:** `former organization/engineering-protocols` (public, read-only), and a private
 > agent runtime whose patterns are described here generically and whose names, records and
@@ -367,7 +378,7 @@ becomes a per-session one.
 |---|---|---|---|
 | `tool.requested` | `call_id`, name, input, `decision_required: bool`, `deadline_ms`, `seam` | emitted **before** the decision and before any effect. When `decision_required` is true the run is blocked here | `tool_call` |
 | `tool.decided` | `call_id`, `decision` (`allow` / `deny{reason}` / `replace{input}`), `decided_by` (`embedder` / `frame` / `deadline` / `adapter`), `seam`, `latency_ms` | **the denial record.** It is a first-class event and not a log file, which is the correction of the one gap § 2.2 names | — (control plane) |
-| `tool.result` | `call_id`, `is_error`, content, per-tool fields, byte counts | | `tool_result` |
+| `tool.result` | `call_id`, `is_error`, content, byte counts, and **`tool_use_result` — the vendor's own per-tool result record, verbatim (amendment a9)** | the per-tool fields this row always promised, now carried as the vendor's JSON rather than enumerated here: the shape belongs to the *tool*, and a fixed field set would mean a tool nobody has heard of yet reports into a record with no room for it | `tool_result` |
 
 Three events rather than two because a denial has no result and a decision is not a result. A
 protocol that folded the decision into the result could not express *"this was refused and nothing
@@ -377,7 +388,7 @@ ran"* without inventing a fake result, which is fabricating an observation.
 
 | event | payload | why | → |
 |---|---|---|---|
-| `usage` | per-request or per-turn tokens, cache reads and creations, per-model split | costs are read from what the vendor reported, never computed | folded into `run_outcome.usage` / `requests` |
+| `usage` | per-request or per-turn tokens, cache reads and creations, per-model split, and since amendment a9 **`thinking_tokens`, `iterations`, `speed` and `cost_usd`** | costs are read from what the vendor reported, never computed | folded into `run_outcome.usage` / `requests` |
 | `rate_limit` | status, window, utilization, overage flag | a billing guard: *this run must not have been paid for out of overage* is a fact about money nothing else carries | `rate_limit` |
 | `command.result` | `id`, `ok` or `refused { code, reason }` | § 5.4 | — |
 | `warning` | code, message | metaharness has something to say. Distinct from `opaque`, which means *the vendor said something we could not read* | — |
@@ -404,6 +415,32 @@ refresh-and-retry: the one condition where re-running the identical spec is the 
 Its detection is the weak half — it reads the vendor's own error text, which no row of § 2.7
 verifies — so it is emitted beside the record it was read from and never as the only evidence a
 run's outcome rests on. **Q13.**
+
+**Amendment a9 — four payload fields, because four expectation kinds were undecidable without
+them.** No new event: the vocabulary stays at nineteen. What changed is that `tool.result` and
+`Usage` were each missing a key a reader needed, and a reader with no key does not get a wrong
+answer — it gets `unk`, forever, for a question the vendor had already answered in its own record.
+The motivation is a consumer's, recorded in `engineering-protocols`' gap register: *"Four
+expectation kinds cannot be decided about a driven run, because the seam's wire does not carry what
+they read … not this repository's to close: it is four fields at the seam."*
+
+| field | rides on | type | present when |
+|---|---|---|---|
+| `tool_use_result` | `tool.result` | the vendor's own JSON, verbatim | the vendor writes a per-tool result record beside the content. Claude Code does — `Skill` records `commandName` and `success`, `Bash` its `stdout`, `stderr` and `interrupted` — and a Codex rollout does not |
+| `usage.thinking_tokens` | `usage`, `session.ended.usage`, each `model_usage` entry | `u64` | the vendor breaks billed thinking out of the output figure: Claude Code's `output_tokens_details.thinking_tokens`, Codex's `reasoning_output_tokens` |
+| `usage.iterations` | the same three | `u64` | the vendor keeps a per-iteration usage list. **A length read off that list**, never a counter metaharness kept |
+| `usage.speed` | the same three | `String` | the vendor names a speed tier, beside and distinct from `service_tier` |
+| `usage.cost_usd` | the same three | `f64` | the vendor **prices** that slice. Claude Code prices its per-model split (`modelUsage[…].costUSD`) and nothing else, so this is filled under `model_usage` and absent in the aggregate and in every per-request `usage` |
+
+**Additive and optional, and the two rules that already governed this wire decide the rest.** An
+absent field is an explicit `null` and never a missing key (§ 2.1), so a build that predates this
+amendment and a vendor that reports nothing stay distinguishable. And **nothing here is computed**:
+the aggregate `usage` carries no cost not because a total was hard to reach but because multiplying
+tokens by a rate card would produce a second figure that can disagree with the invoice — the run's
+own number is `session.ended.total_cost_usd` and it stays the vendor's. An adapter that filled
+`thinking_tokens` from `thinking.estimate`, or `tool_use_result` from the result content, would be
+answering a question with a different question's evidence; both are refused by name in the adapters
+that could have done it.
 
 ### 4.2 Decision modes
 

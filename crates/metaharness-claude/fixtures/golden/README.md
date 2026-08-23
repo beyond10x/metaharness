@@ -30,5 +30,9 @@ than against this crate's own assumptions about it (design
 2. Review `<dir>/transcript.jsonl` and `<dir>/requests/*.json` line by line before they enter
    the tree; then copy them over `transcript.jsonl` and `hook-input.json`.
 3. `cargo test -p metaharness-claude --lib regenerate -- --ignored` rewrites
-   `transcript.expected.jsonl`; review that diff — it is the mapping's changelog.
+   `transcript.expected.jsonl` **and the three synthesised `../c2/*.expected.jsonl`**, all from
+   committed inputs and all offline; review that diff — it is the mapping's changelog. The same
+   command is what a *protocol* change is regenerated with, since a field added to an event moves
+   every expectation at once and hand-editing JSONL to match a serde field order is how a fixture
+   stops describing what the reader does.
 4. Update the recorded values pinned in `golden_hook_vector` and this table.

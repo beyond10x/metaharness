@@ -138,8 +138,20 @@ fn session_events() -> Vec<Event> {
                 cache_read_input_tokens: Some(0),
                 cache_creation_input_tokens: Some(0),
                 service_tier: Some("standard".into()),
+                thinking_tokens: Some(64),
+                iterations: Some(3),
+                speed: Some("standard".into()),
+                // The aggregate carries no cost: the run's own figure is `total_cost_usd` above
+                // and the priced slice is the per-model record below (amendment a9).
+                cost_usd: None,
             }),
-            model_usage: Some(BTreeMap::from([("a-model".to_string(), Usage::default())])),
+            model_usage: Some(BTreeMap::from([(
+                "a-model".to_string(),
+                Usage {
+                    cost_usd: Some(0.12),
+                    ..Usage::default()
+                },
+            )])),
             census: DecisionCensus {
                 allowed: 3,
                 denied: 1,
@@ -217,6 +229,7 @@ fn tool_and_accounting_events() -> Vec<Event> {
             is_error: Some(false),
             content: Some(json!("ok")),
             bytes: Some(2),
+            tool_use_result: Some(json!({"commandName": "verify", "success": true})),
         },
         Event::Usage {
             request_id: Some("req-1".into()),
@@ -426,10 +439,65 @@ fn an_absent_payload_field_is_null_and_not_missing() {
         is_error: None,
         content: None,
         bytes: None,
+        tool_use_result: None,
     }));
     let written = serde_json::to_string(&line).expect("serializes");
     assert!(written.contains(r#""is_error":null"#), "{written}");
     assert!(written.contains(r#""content":null"#), "{written}");
+    // Amendment a9's field obeys the same rule as the fields it was added beside. A vendor that
+    // writes no per-tool result record and a metaharness build that predates the amendment are
+    // two different facts, and only an explicit `null` keeps them apart.
+    assert!(written.contains(r#""tool_use_result":null"#), "{written}");
+}
+
+/// Amendment a9's four fields, from the seam's side: each is carried where the vendor reported it
+/// and each survives the round trip under the key a reader looks for.
+///
+/// The four exist because `engineering-protocols`' gap register recorded four expectation kinds
+/// that could not be decided about a driven run — `skill.completed`, `tokens.thinking`,
+/// `iterations` and a `cost.total` scoped to one model — with the entry *"not this repository's to
+/// close: it is four fields at the seam"*. This is the test that says the seam carries them.
+#[test]
+fn the_four_fields_amendment_a9_added_survive_the_round_trip() {
+    let mut stream = EventStream::new(RunId::new("r-1"));
+
+    let line = stream.stamp(Emission::untimed(Event::ToolResult {
+        call_id: "call-1".into(),
+        is_error: Some(false),
+        content: Some(json!("Skill ran")),
+        bytes: Some(9),
+        tool_use_result: Some(json!({"commandName": "verify", "success": true})),
+    }));
+    let written = serde_json::to_string(&line).expect("serializes");
+    let Event::ToolResult {
+        tool_use_result, ..
+    } = parse_event_line(&written).expect("parses").event
+    else {
+        panic!("expected tool.result");
+    };
+    let recorded = tool_use_result.expect("the vendor's sibling is carried");
+    assert_eq!(recorded["commandName"], json!("verify"));
+    assert_eq!(recorded["success"], json!(true));
+
+    let line = stream.stamp(Emission::untimed(Event::Usage {
+        request_id: None,
+        model: Some("a-model".into()),
+        usage: Usage {
+            thinking_tokens: Some(64),
+            iterations: Some(3),
+            speed: Some("standard".into()),
+            cost_usd: Some(0.5),
+            ..Usage::default()
+        },
+    }));
+    let written = serde_json::to_string(&line).expect("serializes");
+    let Event::Usage { usage, .. } = parse_event_line(&written).expect("parses").event else {
+        panic!("expected usage");
+    };
+    assert_eq!(usage.thinking_tokens, Some(64));
+    assert_eq!(usage.iterations, Some(3));
+    assert_eq!(usage.speed.as_deref(), Some("standard"));
+    assert_eq!(usage.cost_usd, Some(0.5));
 }
 
 /// The projection is total: every event lands in exactly one family or on the control-plane

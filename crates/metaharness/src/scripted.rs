@@ -384,6 +384,11 @@ impl HarnessSeam for ScriptedSeam {
                 is_error: value.get("is_error").and_then(Value::as_bool),
                 content: value.get("content").cloned(),
                 bytes: None,
+                // Scripted verbatim where a script names one, absent where it does not. The fake
+                // must be able to produce the vendor's per-tool result record, because a decision
+                // policy tested only against streams that never carry one is a policy tested
+                // against half the wire (amendment a9).
+                tool_use_result: value.get("tool_use_result").cloned(),
             },
             "text" => Event::Text {
                 text: text_of(&value, "text").unwrap_or_default(),

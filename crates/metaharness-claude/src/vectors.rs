@@ -550,4 +550,24 @@ mod tests {
         std::fs::write(path, replay_as(GOLDEN_RUN, GOLDEN_TRANSCRIPT))
             .expect("the expectation is written");
     }
+
+    /// The same operation for the three synthesised C2 expectations, whose inputs are committed
+    /// beside them. `#[ignore]`d for the same reason: it writes into the source tree.
+    ///
+    /// It exists because a protocol amendment moves every expectation at once — a field added to
+    /// an event changes seven fixture files, and hand-editing JSONL to match a serde field order
+    /// is how a fixture stops describing what the reader does. Regenerating and **reading the
+    /// diff** is the mapping's changelog; the diff is the review, not the write.
+    #[test]
+    #[ignore = "writes fixtures/c2/*.expected.jsonl from the committed inputs; run after a protocol change, then read the diff"]
+    fn regenerate_the_replay_expectations() {
+        for (id, input, _) in REPLAY_FIXTURES {
+            let name = id.strip_prefix("c2-").unwrap_or(id);
+            let path = format!(
+                "{}/fixtures/c2/{name}.expected.jsonl",
+                env!("CARGO_MANIFEST_DIR")
+            );
+            std::fs::write(&path, replay(input)).expect("the expectation is written");
+        }
+    }
 }

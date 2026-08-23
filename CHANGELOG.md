@@ -7,6 +7,31 @@ was amended and the amendment is named here.
 
 ### Added
 
+- **Four payload fields at the seam, so four expectation kinds stop being undecidable about a
+  driven run (design amendment a9).** The motivation is a consumer's, not ours:
+  `engineering-protocols` reads `metaharness.event/1` as a transcript and its gap register
+  recorded *"Four expectation kinds cannot be decided about a driven run, because the seam's wire
+  does not carry what they read … not this repository's to close: it is four fields at the seam."*
+  They are now carried. `tool.result` gains **`tool_use_result`** — the vendor's own per-tool
+  result record, verbatim, which is where Claude Code's `Skill` writes `commandName` and `success`
+  and its `Bash` writes `stdout`, `stderr` and `interrupted`; `usage` gains **`thinking_tokens`**
+  (Claude Code's `output_tokens_details.thinking_tokens`, codex's `reasoning_output_tokens` — the
+  billed figure, never `thinking.estimate`'s guess), **`iterations`** (the *length* of the vendor's
+  own per-iteration list, never a counter of ours), **`speed`** and **`cost_usd`** (Claude Code's
+  `modelUsage[…].costUSD`, so a cost scoped to one model is answerable; the aggregate carries none
+  because the vendor prices no aggregate and multiplying tokens out would be a number nobody
+  billed). All additive and all optional: an absent field is an explicit `null` as every other
+  payload field is, so a stream from a build that predates the amendment parses identically.
+  What codex honestly has is one of the four, and its reader's own documentation carries the table
+  of what it does not: no per-iteration list, no speed tier, no cost anywhere, and no per-tool
+  result record beside a tool's output — each an `unk` in a verdict and never filled from a
+  neighbouring field. The golden expected streams are regenerated from the **committed** recorded
+  wire, which is where the new values come from: the recorded Claude run really did carry a
+  `tool_use_result`, `iterations: 1`, `speed: "standard"` and two priced models. Vector counts are
+  unchanged (20 claude / 10 codex); `cargo test -p metaharness-claude --lib regenerate --
+  --ignored` now also regenerates the three synthesised C2 expectations, because a protocol
+  amendment moves every expectation at once.
+
 - **A run can be pointed at a model gateway: `--model-endpoint <root>` and `--effort <level>`
   (the model-adapter design's endpoint slice; MA-V1–V4 verified).** Each harness reaches its own
   dialect under the declared root — Claude Code speaks Anthropic messages at `{root}/v1/messages`

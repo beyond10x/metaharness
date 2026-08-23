@@ -125,11 +125,15 @@ pub struct TranscriptRef {
     pub bytes: Option<u64>,
 }
 
-/// Tokens, as the vendor reported them.
+/// Tokens, as the vendor reported them — and, where the vendor priced them, what they cost.
 ///
 /// Never computed here: costs are read from what the vendor said, and a number metaharness
 /// derived would be a second figure that can disagree with the invoice (design § 4.1).
-#[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize)]
+///
+/// `Eq` is deliberately not derived, on the same rule [`RateLimitInfo`] carries: `cost_usd` is the
+/// vendor's own float, and two runs are compared by what they recorded rather than by an equality
+/// this crate invented for a fraction.
+#[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize)]
 pub struct Usage {
     /// Input tokens.
     pub input_tokens: Option<u64>,
@@ -141,6 +145,36 @@ pub struct Usage {
     pub cache_creation_input_tokens: Option<u64>,
     /// The service tier the vendor billed at.
     pub service_tier: Option<String>,
+    /// The **billed** thinking tokens, where the vendor breaks them out of the output figure
+    /// (amendment a9).
+    ///
+    /// The invoice's number, never [`Event::ThinkingEstimate`]'s, which is a mid-stream guess
+    /// wearing a similar name: an adapter that filled this from the estimate would be reporting a
+    /// guess where a reader expects a charge.
+    pub thinking_tokens: Option<u64>,
+    /// How many per-iteration usage records the vendor's own record held (amendment a9).
+    ///
+    /// A **length read off the vendor's list**, not a counter metaharness kept — and the one
+    /// number in this struct nobody billed, which is why it is carried as a count rather than as
+    /// an array whose per-iteration figures would be a second copy of the totals beside it.
+    /// `Some(0)` is the vendor saying *none*; [`None`] is the vendor not saying.
+    pub iterations: Option<u64>,
+    /// The speed tier the account was served at, in the vendor's own word (amendment a9).
+    ///
+    /// Beside `service_tier` rather than folded into it: a vendor that reports both reports two
+    /// different facts, and a reader asserting on one must not be answered with the other.
+    pub speed: Option<String>,
+    /// What these tokens cost in US dollars, **as the vendor priced them** (amendment a9).
+    ///
+    /// Filled only where the vendor prices this slice of a run. Claude Code prices its per-model
+    /// split and nothing else, so this is present under `session.ended`'s `model_usage` and absent
+    /// in the aggregate and in every per-request `usage` event — the run's own figure is
+    /// `session.ended.total_cost_usd` and stays there.
+    ///
+    /// Never derived from the token counts beside it. A cost metaharness multiplied out is a
+    /// number nobody billed, and it would disagree with the invoice the first time a rate moved
+    /// (design § 4.1, D4).
+    pub cost_usd: Option<f64>,
 }
 
 /// One entry of the vendor's own terminal denial list, passed through unchanged.
@@ -421,6 +455,21 @@ pub enum Event {
         content: Option<Value>,
         /// How many bytes of content there were.
         bytes: Option<u64>,
+        /// The vendor's own per-tool result record, verbatim, where the vendor writes one beside
+        /// the content (amendment a9).
+        ///
+        /// Claude Code's `tool_use_result` sibling is the case this exists for: `Skill` records
+        /// `commandName` and `success`, `Bash` records `stdout`, `stderr` and `interrupted`,
+        /// `Edit` records `filePath` and `userModified`. Carried as the vendor's own JSON rather
+        /// than as a field set of ours, because the shape belongs to the *tool* — enumerating it
+        /// here would mean a tool nobody has heard of yet reports into a record with no room for
+        /// it, which is § 4.1's failure in miniature.
+        ///
+        /// [`None`] where the vendor writes no such sibling; a Codex rollout's tool output has
+        /// none. Never synthesised from `content`, which is what the model was told and a
+        /// different record answering a different question — an adapter that filled one from the
+        /// other would let `skill.completed` pass on evidence nobody produced.
+        tool_use_result: Option<Value>,
     },
 
     /// Tokens for one request or turn.

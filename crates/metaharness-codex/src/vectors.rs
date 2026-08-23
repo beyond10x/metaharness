@@ -273,11 +273,38 @@ fn vector_full_session() -> VectorOutcome {
                 if usage.input_tokens == Some(100) && usage.cache_read_input_tokens == Some(40)
         )
     });
-    if !call_ok || !end_ok {
+    // Amendment a9, from this vendor's side: the one figure the rollout really carries is
+    // carried, under the vendor's own name for it, and the three it does not are absent rather
+    // than filled from a neighbour. A record that reported `iterations: 0` or a cost of zero for
+    // a vendor that reports neither would read as a quiet run instead of an unanswered question.
+    let a9_ok = emitted.iter().any(|line| {
+        matches!(
+            &line.event,
+            Event::Usage { usage, .. }
+                if usage.thinking_tokens == Some(6)
+                    && usage.iterations.is_none()
+                    && usage.speed.is_none()
+                    && usage.cost_usd.is_none()
+        )
+    });
+    // …and no `tool.result` this vendor writes carries a per-tool result record, because no
+    // `*_call_output` payload has one.
+    let sibling_absent = emitted.iter().all(|line| {
+        !matches!(
+            &line.event,
+            Event::ToolResult {
+                tool_use_result: Some(_),
+                ..
+            }
+        )
+    });
+    if !call_ok || !end_ok || !a9_ok || !sibling_absent {
         return VectorOutcome::failed(
             id,
             ConformanceTier::C2,
-            format!("call_ok={call_ok} end_ok={end_ok}"),
+            format!(
+                "call_ok={call_ok} end_ok={end_ok} a9_ok={a9_ok} sibling_absent={sibling_absent}"
+            ),
         );
     }
     VectorOutcome::passed(id, ConformanceTier::C2)

@@ -27,6 +27,12 @@
 //! * **What is still not claimed:** the `allow` half of the decision wire (only `deny` has been
 //!   driven), the turn tier, the registration tier, and the `apply_patch` rendering — the hook's
 //!   word for a patch call is the vendor's documentation and not a driven observation.
+//! * **What this vendor's record does not contain:** three of amendment a9's four payload fields.
+//!   The rollout reports reasoning tokens and so `usage.thinking_tokens` is carried; it reports no
+//!   per-iteration list, no speed tier, no cost anywhere, and no per-tool result record beside a
+//!   tool's output. [`RolloutReader`]'s own documentation carries the table and the vendor keys it
+//!   was read from. Those fields are absent on a driven Codex run, an absence is `unk` and never a
+//!   pass, and nothing here is filled from a neighbouring field to make it look answered.
 //!
 //! # The three things about this vendor that cost the most to learn
 //!

@@ -152,7 +152,10 @@ pub fn required_ir_fields(family: IrFamily) -> &'static [&'static str] {
         IrFamily::ThinkingEstimate => &["estimate", "delta"],
         IrFamily::SyntheticInjection => &["text", "origin"],
         IrFamily::ToolCall => &["call_id", "name", "input"],
-        IrFamily::ToolResult => &["call_id", "is_error", "content"],
+        // `tool_use_result` since amendment a9: the IR's per-tool result fields are read out of
+        // it, and while it was missing the strongest single claim a checker can make about a
+        // step — that the skill it invoked also *completed* — was undecidable for a driven run.
+        IrFamily::ToolResult => &["call_id", "is_error", "content", "tool_use_result"],
         IrFamily::RateLimit => &["info"],
         IrFamily::Opaque => &["vendor_type", "vendor_subtype", "digest", "source_line"],
     }

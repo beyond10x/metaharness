@@ -13,6 +13,25 @@
 //! outside the pin is a `warning`, never a refusal mid-read — and every record it cannot map
 //! becomes [`Event::Opaque`] with the vendor's own type words, a digest and its 1-based line.
 //! Nothing is dropped (design D4).
+//!
+//! # What the rollout has, of amendment a9's four fields
+//!
+//! One of the four is really in this vendor's record and three are not. Named here rather than
+//! left to be discovered by a reader wondering why a driven Codex run answers `unk` where a
+//! driven Claude run answers:
+//!
+//! | field | this vendor |
+//! |---|---|
+//! | `usage.thinking_tokens` | **carried** — `token_count.info.total_token_usage.reasoning_output_tokens`, the same quantity under the vendor's own name |
+//! | `usage.iterations` | **absent.** A `token_count` payload has no per-iteration list to take a length of |
+//! | `usage.speed` | **absent.** No speed tier is reported, as no service tier is |
+//! | `usage.cost_usd` | **absent.** The rollout prices nothing, and there is no per-model split to price; `session.ended.total_cost_usd` is absent for the same reason |
+//! | `tool.result.tool_use_result` | **absent.** A `*_call_output` payload carries `call_id`, `output` and turn metadata, and nothing that answers what a per-tool result record answers |
+//!
+//! Each absence is an `unk` in a checker's verdict and never a pass. Filling one of them from a
+//! neighbouring field — the `output` array as a result record, a cost multiplied out of tokens —
+//! would turn *this vendor does not say* into *this vendor says fine*, which is the failure the
+//! whole protocol is arranged against.
 
 use metaharness_protocol::{
     Digest, Emission, Event, HermeticAttestation, RateLimitInfo, TranscriptRef, Usage,
@@ -225,6 +244,14 @@ impl RolloutReader {
                     is_error: None,
                     content: Some(content),
                     bytes,
+                    // **This vendor writes no per-tool result record** (amendment a9). A
+                    // `*_call_output` payload carries `call_id`, `output` and the turn metadata
+                    // passthrough, and nothing that answers the question Claude Code's
+                    // `tool_use_result` answers — no per-tool `success`, no `commandName`. So an
+                    // expectation reading those fields is `unk` against a driven Codex run, which
+                    // is the honest answer; folding the `output` array in here to fill the field
+                    // would make it a pass.
+                    tool_use_result: None,
                 }]
             }
             "message" => match payload["role"].as_str() {
@@ -270,6 +297,22 @@ impl RolloutReader {
                         cache_read_input_tokens: totals["cached_input_tokens"].as_u64(),
                         cache_creation_input_tokens: totals["cache_write_input_tokens"].as_u64(),
                         service_tier: None,
+                        // The vendor's own name for the same quantity: reasoning tokens billed
+                        // out of the output figure. Mapped rather than left absent, because a
+                        // different spelling of a fact the record really carries is exactly what
+                        // an adapter is for (amendment a9).
+                        thinking_tokens: totals["reasoning_output_tokens"].as_u64(),
+                        // **Three figures this vendor does not report** (amendment a9). A
+                        // `token_count` payload carries `total_token_usage`, `last_token_usage`
+                        // and `model_context_window`: no per-iteration list to take a length of,
+                        // and no speed tier. `service_tier` was already absent for the same
+                        // reason. Absent is the record's answer; a zero would be ours.
+                        iterations: None,
+                        speed: None,
+                        // The rollout prices nothing — zero cost keys across 2,437 local files,
+                        // and no per-model split to hang a cost on. `session.ended` carries the
+                        // same absence for `total_cost_usd` and for the same reason.
+                        cost_usd: None,
                     };
                     self.last_usage = Some(usage.clone());
                     events.push(Event::Usage {

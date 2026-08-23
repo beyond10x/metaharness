@@ -352,6 +352,14 @@ fn user(record: &Record, source_line: u64) -> Vec<Event> {
     } else {
         "user"
     };
+    // The per-tool result record is a sibling of the *record*, not of the block, so it is read
+    // here and handed down. Claude Code at 2.1.240 writes one `tool_result` block per user
+    // record; where a record carried more, the sibling is carried onto each rather than dropped,
+    // which is what the `stream-json` reader in `engineering-protocols` does with the same bytes.
+    // Two readers of one run disagreeing about it would be worse than either answer.
+    let tool_use_result = record
+        .get("tool_use_result")
+        .filter(|value| !value.is_null());
     match message.get("content") {
         Some(Value::String(text)) => vec![Event::Injection {
             text: text.clone(),
@@ -359,13 +367,18 @@ fn user(record: &Record, source_line: u64) -> Vec<Event> {
         }],
         Some(Value::Array(items)) => items
             .iter()
-            .map(|block| user_block(block, origin, source_line))
+            .map(|block| user_block(block, origin, tool_use_result, source_line))
             .collect(),
         _ => Vec::new(),
     }
 }
 
-fn user_block(block: &Value, origin: &str, source_line: u64) -> Event {
+fn user_block(
+    block: &Value,
+    origin: &str,
+    tool_use_result: Option<&Value>,
+    source_line: u64,
+) -> Event {
     let kind = block
         .get("type")
         .and_then(Value::as_str)
@@ -382,6 +395,7 @@ fn user_block(block: &Value, origin: &str, source_line: u64) -> Event {
                 is_error: block.get("is_error").and_then(Value::as_bool),
                 bytes: content.as_ref().map(byte_count),
                 content,
+                tool_use_result: tool_use_result.cloned(),
             }
         }
         "text" => Event::Injection {
@@ -427,6 +441,11 @@ fn permission_denials(record: &Record) -> Option<Vec<PermissionDenial>> {
 }
 
 /// Tokens, as the vendor reported them, never computed.
+///
+/// Three of the figures arrive only on the terminal record's `usage` and not on a per-request one
+/// — 2.1.240 writes `output_tokens_details`, `iterations` and `speed` in `result.usage` and none
+/// of them in an assistant message's — so a `usage` event carries them absent. That is the record
+/// being honest about which question it can answer, not a gap in this reader (amendment a9).
 fn usage(value: &Value) -> Usage {
     Usage {
         input_tokens: value.get("input_tokens").and_then(Value::as_u64),
@@ -439,13 +458,41 @@ fn usage(value: &Value) -> Usage {
             .get("service_tier")
             .and_then(Value::as_str)
             .map(ToString::to_string),
+        // The API's own breakdown, which is the billed figure. The `system`/`thinking_tokens`
+        // record this adapter also reads is an *estimate* and goes to `thinking.estimate`; the
+        // two must never be filled from each other.
+        thinking_tokens: value
+            .get("output_tokens_details")
+            .and_then(|details| details.get("thinking_tokens"))
+            .and_then(Value::as_u64),
+        // The length of the vendor's own array. An absent array is `None` and an empty one is
+        // `Some(0)`, because *the record did not say* and *the record says none* are different
+        // answers all the way to a verdict.
+        iterations: value
+            .get("iterations")
+            .and_then(Value::as_array)
+            .map(|records| records.len() as u64),
+        speed: value
+            .get("speed")
+            .and_then(Value::as_str)
+            .map(ToString::to_string),
+        // The vendor prices a model, not a `usage` block: `total_cost_usd` is the run's and
+        // `modelUsage[…].costUSD` is the model's. Neither belongs here, and multiplying the
+        // tokens out would invent a third figure that can disagree with both.
+        cost_usd: None,
     }
 }
 
 /// The per-model split, whose keys the vendor spells differently from the per-request ones.
 ///
-/// `service_tier` has no counterpart here, so it stays `None` rather than being filled from the
-/// aggregate — a figure carried over from another record is a figure this model never reported.
+/// `service_tier`, `thinking_tokens`, `iterations` and `speed` have no counterpart here, so they
+/// stay `None` rather than being filled from the aggregate — a figure carried over from another
+/// record is a figure this model never reported.
+///
+/// `costUSD` is the one place Claude Code prices a slice of a run smaller than the whole, and it
+/// is the reason a cost scoped to one model can be asserted at all (amendment a9). It is read,
+/// never derived: a per-model cost this reader multiplied out of tokens and a rate card would be
+/// a number nobody billed.
 fn model_usage(record: &Record) -> Option<std::collections::BTreeMap<String, Usage>> {
     let entries = record.get("modelUsage")?.as_object()?;
     Some(
@@ -464,6 +511,10 @@ fn model_usage(record: &Record) -> Option<std::collections::BTreeMap<String, Usa
                             .get("cacheCreationInputTokens")
                             .and_then(Value::as_u64),
                         service_tier: None,
+                        thinking_tokens: None,
+                        iterations: None,
+                        speed: None,
+                        cost_usd: value.get("costUSD").and_then(Value::as_f64),
                     },
                 )
             })
@@ -834,8 +885,52 @@ mod tests {
                 is_error: Some(false),
                 content: Some(Value::String("four".to_string())),
                 bytes: Some(4),
+                tool_use_result: None,
             }
         );
+    }
+
+    /// The vendor's per-tool result record is a sibling of the record and is carried verbatim.
+    ///
+    /// This is the field `skill.completed` reads: `commandName` names the skill and `success`
+    /// says whether it finished, and while the seam dropped the sibling the strongest single
+    /// claim a checker can make about a step was undecidable for a driven run (amendment a9).
+    #[test]
+    fn the_vendors_per_tool_result_record_rides_on_the_result_verbatim() {
+        let mut reader = new_reader();
+        let event = only(reader.push_line(
+            r#"{"type":"user","tool_use_result":{"commandName":"verify","success":true},
+                "message":{"role":"user","content":[
+                  {"type":"tool_result","tool_use_id":"call-1","content":"ran","is_error":false}]}}"#,
+        ));
+        let Event::ToolResult {
+            tool_use_result, ..
+        } = event
+        else {
+            panic!("expected tool.result");
+        };
+        let recorded = tool_use_result.expect("the sibling is carried");
+        assert_eq!(recorded["commandName"], Value::String("verify".to_string()));
+        assert_eq!(recorded["success"], Value::Bool(true));
+    }
+
+    /// A record without the sibling leaves the field absent, and a `null` one is absence too. A
+    /// reader that turned either into an empty object would be offering a result record the
+    /// vendor never wrote.
+    #[test]
+    fn a_result_with_no_sibling_carries_none_and_a_null_sibling_is_absence() {
+        let mut reader = new_reader();
+        let event = only(reader.push_line(
+            r#"{"type":"user","tool_use_result":null,"message":{"role":"user","content":[
+                {"type":"tool_result","tool_use_id":"call-1","content":"ran"}]}}"#,
+        ));
+        let Event::ToolResult {
+            tool_use_result, ..
+        } = event
+        else {
+            panic!("expected tool.result");
+        };
+        assert_eq!(tool_use_result, None);
     }
 
     /// Text the *harness* put in the conversation is `injection` and not `text`: an assertion
@@ -909,6 +1004,88 @@ mod tests {
             Some(10)
         );
         assert!(reader.saw_terminal_record());
+    }
+
+    /// The terminal record's three extra usage figures and the per-model price, all read and none
+    /// derived (amendment a9).
+    ///
+    /// `iterations` is the **length** of the vendor's array, `thinking_tokens` comes from the
+    /// API's `output_tokens_details` breakdown and never from the mid-stream estimate, and the
+    /// dollar figure sits on the model the vendor priced — not on the aggregate, where the vendor
+    /// prices nothing.
+    #[test]
+    fn the_terminal_record_carries_the_billed_thinking_tokens_the_iteration_count_and_the_speed() {
+        let mut reader = new_reader();
+        let event = only(reader.push_line(
+            r#"{"type":"result","subtype":"success","is_error":false,"total_cost_usd":0.24,
+                "usage":{"input_tokens":4,"output_tokens":96,"cache_read_input_tokens":22308,
+                  "cache_creation_input_tokens":22421,"service_tier":"standard","speed":"standard",
+                  "output_tokens_details":{"thinking_tokens":48},
+                  "iterations":[{"input_tokens":2},{"input_tokens":2}]},
+                "modelUsage":{"a-model":{"inputTokens":4,"outputTokens":96,"costUSD":0.237784}}}"#,
+        ));
+        let Event::SessionEnded {
+            usage, model_usage, ..
+        } = event
+        else {
+            panic!("expected session.ended");
+        };
+        let usage = usage.expect("the aggregate");
+        assert_eq!(usage.thinking_tokens, Some(48));
+        assert_eq!(usage.iterations, Some(2));
+        assert_eq!(usage.speed.as_deref(), Some("standard"));
+        assert_eq!(
+            usage.cost_usd, None,
+            "the vendor prices a model and a run, never a usage block"
+        );
+        let per_model = model_usage.expect("the per-model split");
+        assert_eq!(per_model["a-model"].cost_usd, Some(0.237_784));
+        assert_eq!(
+            per_model["a-model"].thinking_tokens, None,
+            "a figure carried over from another record is one this model never reported"
+        );
+    }
+
+    /// A per-request `usage` event answers what the vendor wrote on that message, which at 2.1.240
+    /// is four token figures and a tier. The three terminal-only figures stay absent rather than
+    /// being back-filled from the run's own record.
+    #[test]
+    fn a_per_request_usage_event_leaves_the_terminal_only_figures_absent() {
+        let mut reader = new_reader();
+        let events = reader.push_line(
+            r#"{"type":"assistant","request_id":"req-1","message":{"model":"a-model",
+                "content":[{"type":"text","text":"hi"}],
+                "usage":{"input_tokens":2,"output_tokens":20,"service_tier":"standard"}}}"#,
+        );
+        let Event::Usage { usage, .. } = &events[1].event else {
+            panic!("expected usage");
+        };
+        assert_eq!(usage.service_tier.as_deref(), Some("standard"));
+        assert_eq!(
+            (usage.thinking_tokens, usage.iterations, usage.speed.clone()),
+            (None, None, None)
+        );
+    }
+
+    /// An empty iteration list is the vendor saying *none*; a missing one is the vendor not
+    /// saying. Collapsing the two would make a blind record indistinguishable from a quiet run.
+    #[test]
+    fn an_empty_iteration_list_is_zero_and_a_missing_one_is_absence() {
+        let mut reader = new_reader();
+        let event = only(
+            reader.push_line(r#"{"type":"result","subtype":"success","usage":{"iterations":[]}}"#),
+        );
+        let Event::SessionEnded { usage, .. } = event else {
+            panic!("expected session.ended");
+        };
+        assert_eq!(usage.expect("the aggregate").iterations, Some(0));
+
+        let mut reader = new_reader();
+        let event = only(reader.push_line(r#"{"type":"result","subtype":"success","usage":{}}"#));
+        let Event::SessionEnded { usage, .. } = event else {
+            panic!("expected session.ended");
+        };
+        assert_eq!(usage.expect("the aggregate").iterations, None);
     }
 
     /// The census must be set before the terminal record arrives, and a run that never reached
