@@ -24,14 +24,14 @@
 //! the vendor actually wrote, which is the difference between a green test of a stale
 //! assumption and a red replay when the vendor moves.
 
-use std::collections::BTreeSet;
+use std::collections::{BTreeMap, BTreeSet};
 use std::fmt::Write as _;
 use std::path::PathBuf;
 
 use metaharness_protocol::{
     ConformanceTier, ContractObligations, CredentialSource, DecisionMode, Digest, EventStream,
-    HermeticAttestation, HermeticMode, Kind, Obligation, RunId, RunSpec, Seam, ToolSurface,
-    TranscriptRef, VectorOutcome,
+    HermeticAttestation, HermeticMode, Kind, Obligation, PluginContent, PluginTree, RunId, RunSpec,
+    Seam, ToolSurface, TranscriptRef, VectorOutcome, tree_digest,
 };
 use serde_json::{Value, json};
 
@@ -47,6 +47,9 @@ pub const CONTRACT_OBLIGATIONS: ContractObligations = ContractObligations {
         "c1-api-key",
         "c1-shadow-refusal",
         "c1-memory-ancestor-refusal",
+        "c1-plugin-empty-refusal",
+        "c1-observe-mode",
+        "c1-plugin-injection",
     ]),
     recorded_wire: Obligation::Filled(&["golden-transcript"]),
     recorded_hook_input: Obligation::Filled(&["golden-hook-input"]),
@@ -63,11 +66,165 @@ use crate::transcript::TranscriptReader;
 #[must_use]
 pub fn conformance_vectors() -> Vec<VectorOutcome> {
     let mut outcomes = launch_vectors();
+    outcomes.push(observe_mode_vector());
+    outcomes.push(plugin_injection_vector());
     outcomes.extend(replay_vectors());
     outcomes.push(golden_transcript_vector(GOLDEN_TRANSCRIPT));
     outcomes.push(golden_hook_vector(GOLDEN_HOOK_INPUT));
     outcomes.push(golden_version_pair_vector(GOLDEN_TRANSCRIPT));
     outcomes
+}
+
+/// C1 — observe mode is attested, and **a run that did not ask for it never gets it**.
+///
+/// Both halves in one vector, because the second is the one that matters: a mode that allows every
+/// call must be reachable only by asking for it, so the polarity is asserted rather than assumed.
+/// The vector plans three launches from the same synthetic world and reads the mode off each
+/// attestation — the block that reaches `session.started`, which is where a reader of the record
+/// finds out what decided the calls.
+fn observe_mode_vector() -> VectorOutcome {
+    let id = "c1-observe-mode";
+    let mut differences = Vec::new();
+    for mode in DecisionMode::ALL {
+        let mut spec = base_spec();
+        spec.decisions = mode;
+        let plan = match plan_launch(&spec, &base_context()) {
+            Ok(plan) => plan,
+            Err(refusal) => {
+                differences.push(format!(
+                    "--decisions {} was refused: {refusal}",
+                    mode.as_str()
+                ));
+                continue;
+            }
+        };
+        if plan.attestation.decisions != mode {
+            differences.push(format!(
+                "--decisions {} is attested as {}",
+                mode.as_str(),
+                plan.attestation.decisions.as_str()
+            ));
+        }
+        let observing = plan.attestation.is_observing();
+        if observing != (mode == DecisionMode::Observe) {
+            differences.push(format!(
+                "--decisions {} reads back as observing={observing}",
+                mode.as_str()
+            ));
+        }
+        // The price of the mode is stated in the record, not only in a document: an allow on this
+        // wire grants, so an observe run is not a run with the seam switched off.
+        let says_grant = plan
+            .attestation
+            .ambient_inputs
+            .iter()
+            .any(|input| input.contains("observe mode") && input.contains("grants"));
+        if says_grant != (mode == DecisionMode::Observe) {
+            differences.push(format!(
+                "--decisions {} reports the grant caveat={says_grant}",
+                mode.as_str()
+            ));
+        }
+    }
+    if differences.is_empty() {
+        VectorOutcome::passed(id, ConformanceTier::C1)
+    } else {
+        VectorOutcome::failed(id, ConformanceTier::C1, differences.join("; "))
+    }
+}
+
+/// C1 — **the plan is a value**: the copy list and the digest are readable before any process
+/// exists, and the argv names the copy rather than the operator's own directory.
+///
+/// The mutation half lives in this crate's own tests (`a_mutated_plugin_file_changes_the_digest`);
+/// what a *contract* consumer needs from this row is that the two facts are on the plan at all,
+/// because an injection whose digest only appeared after the spawn could not be pinned by anybody.
+fn plugin_injection_vector() -> VectorOutcome {
+    let id = "c1-plugin-injection";
+    let (source, tree) = synthetic_plugin();
+    let PluginContent::Files { digest, .. } = tree.content.clone() else {
+        return VectorOutcome::failed(id, ConformanceTier::C1, "the synthetic tree is not files");
+    };
+
+    let mut spec = base_spec();
+    spec.plugin_dir.push(source.clone());
+    let mut context = base_context();
+    context.plugins.push(tree);
+    let plan = match plan_launch(&spec, &context) {
+        Ok(plan) => plan,
+        Err(refusal) => {
+            return VectorOutcome::failed(
+                id,
+                ConformanceTier::C1,
+                format!("the injection was refused: {refusal}"),
+            );
+        }
+    };
+
+    let mut differences = Vec::new();
+    let installed = PathBuf::from("/scratch/run-1/plugins/claude-code");
+    match plan.plugin_installs.as_slice() {
+        [install]
+            if install.from == source && install.to == installed && install.digest == digest => {}
+        other => differences.push(format!("the copy list is {other:?}")),
+    }
+    let named = plan
+        .args
+        .windows(2)
+        .any(|pair| pair[0] == "--plugin-dir" && pair[1] == installed.display().to_string());
+    if !named {
+        differences.push(format!(
+            "the argv does not name the copy at {}: {:?}",
+            installed.display(),
+            plan.args
+        ));
+    }
+    if plan
+        .args
+        .iter()
+        .any(|argument| *argument == source.display().to_string())
+    {
+        differences.push("the argv still names the operator's own directory".to_string());
+    }
+    match plan.attestation.installed_plugins.as_slice() {
+        [attested]
+            if attested.name == "claude-code"
+                && attested.digest == digest
+                && attested.source == source.display().to_string() => {}
+        other => differences.push(format!("the attestation says {other:?}")),
+    }
+
+    // The explicit absence: a run with no plugin carries the key with an empty list, never no key.
+    let uninjected = match plan_launch(&base_spec(), &base_context()) {
+        Ok(plan) => plan,
+        Err(refusal) => {
+            return VectorOutcome::failed(
+                id,
+                ConformanceTier::C1,
+                format!("the plugin-less launch was refused: {refusal}"),
+            );
+        }
+    };
+    if !uninjected.attestation.installed_plugins.is_empty()
+        || !uninjected.plugin_installs.is_empty()
+    {
+        differences.push("a run that declared no plugin planned one".to_string());
+    }
+    if !serde_json::to_string(&uninjected.attestation)
+        .unwrap_or_default()
+        .contains("\"installed_plugins\":[]")
+    {
+        differences.push(
+            "a plugin-less attestation drops the installed_plugins key instead of saying []"
+                .to_string(),
+        );
+    }
+
+    if differences.is_empty() {
+        VectorOutcome::passed(id, ConformanceTier::C1)
+    } else {
+        VectorOutcome::failed(id, ConformanceTier::C1, differences.join("; "))
+    }
 }
 
 /// The version pair (CT-3, Q18): the recorded sample's own version claim against the pin.
@@ -77,6 +234,12 @@ pub fn conformance_vectors() -> Vec<VectorOutcome> {
 /// agree **or names the gap**: a disagreement is a warning the reader must see, never a silent
 /// pass, and never a failure either, because the recorded fact is known and reddening the
 /// contract over it teaches operators to ignore red.
+///
+/// **A golden carries its own capture version, and the pin is free to move without it.** The
+/// bytes are a fact about the binary that wrote them and are never edited to match a pin — this
+/// vector is the one place the two are related, so moving the pin either reconciles the pair or
+/// leaves a named warning standing until a real re-capture. Claude's pair reconciled that way on
+/// 2026-08-23 (amendment a10): the capture was already 2.1.240 and the pin came to it.
 fn golden_version_pair_vector(transcript: &str) -> VectorOutcome {
     let recorded = transcript
         .lines()
@@ -116,7 +279,8 @@ fn version_pair_outcome(recorded: Option<&str>) -> VectorOutcome {
 
 /// Recorded real wire (adapter contract CT-2): one hermetic run's `stream-json` transcript and
 /// the raw `PreToolUse` stdin its one tool call produced, byte for byte as the vendor wrote
-/// them. Capture provenance is `fixtures/golden/README.md`; re-capture per pin with
+/// them — **2.1.240's own bytes, captured 2026-08-23**, which is the version the adapter pins.
+/// Capture provenance is `fixtures/golden/README.md`; re-capture per pin with
 /// `metaharness run claude --hermetic --retain-dir …`.
 const GOLDEN_HOOK_INPUT: &str = include_str!("../fixtures/golden/hook-input.json");
 const GOLDEN_TRANSCRIPT: &str = include_str!("../fixtures/golden/transcript.jsonl");
@@ -196,7 +360,7 @@ fn golden_hook_vector(input: &str) -> VectorOutcome {
 }
 
 /// The recorded expectations, paired with the case that produces them.
-const LAUNCH_FIXTURES: [(&str, &str); 4] = [
+const LAUNCH_FIXTURES: [(&str, &str); 5] = [
     (
         "c1-strict-hermetic",
         include_str!("../fixtures/c1/strict-hermetic.json"),
@@ -209,6 +373,10 @@ const LAUNCH_FIXTURES: [(&str, &str); 4] = [
     (
         "c1-memory-ancestor-refusal",
         include_str!("../fixtures/c1/memory-ancestor-refusal.json"),
+    ),
+    (
+        "c1-plugin-empty-refusal",
+        include_str!("../fixtures/c1/plugin-empty-refusal.json"),
     ),
 ];
 
@@ -290,6 +458,17 @@ fn launch_case(id: &str) -> Option<(RunSpec, LaunchContext)> {
         "c1-memory-ancestor-refusal" => {
             context.memory_ancestors = vec![PathBuf::from("/scratch/CLAUDE.md")];
         }
+        // A directory that exists and holds nothing: what a mistyped `--plugin-dir` looks like
+        // after somebody "fixed" the error by creating the directory. The run would spawn, cost
+        // money, install nothing, and report an injected plugin.
+        "c1-plugin-empty-refusal" => {
+            let (source, _) = synthetic_plugin();
+            spec.plugin_dir.push(source.clone());
+            context.plugins.push(PluginTree {
+                source,
+                content: PluginContent::Empty,
+            });
+        }
         _ => return None,
     }
     Some((spec, context))
@@ -330,10 +509,41 @@ fn base_context() -> LaunchContext {
         .collect(),
         memory_ancestors: Vec::new(),
         inputs_digest: Some(Digest::of(b"the copied input tree")),
+        // No plugin unless a case says so. A synthetic tree, like everything else here: the
+        // digest below is over invented file names and invented bytes, and no directory on any
+        // machine was read to produce it.
+        plugins: Vec::new(),
         // No proxy: every launch vector here is a pure plan against a synthetic world, and a
         // loopback endpoint is by construction a port something really bound.
         loopback: None,
     }
+}
+
+/// The plugin directory the injection vectors declare, and the tree a caller "read" in it.
+///
+/// Two files, so the digest is over more than one entry and the ordering rule is exercised.
+fn synthetic_plugin() -> (PathBuf, PluginTree) {
+    let source = PathBuf::from("/operator/integrations/claude-code");
+    let files: BTreeMap<String, Digest> = [
+        (
+            ".claude-plugin/plugin.json".to_string(),
+            Digest::of(b"{\"name\":\"claude-code\"}"),
+        ),
+        (
+            "skills/planning/SKILL.md".to_string(),
+            Digest::of(b"classify the request, then route it"),
+        ),
+    ]
+    .into_iter()
+    .collect();
+    let tree = PluginTree {
+        source: source.clone(),
+        content: PluginContent::Files {
+            count: files.len(),
+            digest: tree_digest(&files),
+        },
+    };
+    (source, tree)
 }
 
 fn replay_vectors() -> Vec<VectorOutcome> {
@@ -532,23 +742,29 @@ mod tests {
         let outcome = version_pair_outcome(Some("9.9.9"));
         assert!(outcome.is_warning(), "{outcome:?}");
         assert!(outcome.detail.contains("9.9.9"), "{}", outcome.detail);
-        assert!(outcome.detail.contains("2.1.239"), "{}", outcome.detail);
+        assert!(outcome.detail.contains("2.1.240"), "{}", outcome.detail);
     }
 
     #[test]
     fn a_recorded_version_on_the_pin_passes_with_nothing_to_say() {
-        let outcome = version_pair_outcome(Some("2.1.239"));
+        let outcome = version_pair_outcome(Some("2.1.240"));
         assert!(outcome.passed && outcome.detail.is_empty(), "{outcome:?}");
     }
 
-    /// The committed golden sample was captured from 2.1.240 against the 2.1.239 pin, so the
-    /// shipped contract carries this warning today. A re-capture from an on-pin binary flips
-    /// this expectation deliberately — that is the pair being reconciled.
+    /// The pair is reconciled: the committed golden sample was captured from 2.1.240, the pin
+    /// moved to 2.1.240 on 2026-08-23 (amendment a10), and the two now agree.
+    ///
+    /// The sample's bytes did not move to make this true — the pin did. This test reads the
+    /// **committed capture**, never the machine's installed binary, so it says the same thing on
+    /// a machine with no `claude` on it at all; that is why the whole C2 tier is free.
     #[test]
-    fn the_committed_golden_sample_carries_the_version_pair_warning() {
+    fn the_committed_golden_sample_now_agrees_with_the_pin_and_has_nothing_to_warn_about() {
         let outcome = golden_version_pair_vector(GOLDEN_TRANSCRIPT);
-        assert!(outcome.is_warning(), "{outcome:?}");
-        assert!(outcome.detail.contains("2.1.240"), "{}", outcome.detail);
+        assert!(
+            outcome.passed && !outcome.is_warning(),
+            "the recorded capture and the pin disagree again: {outcome:?}"
+        );
+        assert!(outcome.detail.is_empty(), "{}", outcome.detail);
     }
 
     /// Regenerate the golden expectation from the committed recorded wire. `#[ignore]`d because

@@ -50,6 +50,13 @@ pub enum Refusal {
         /// The file that competed with the in-memory frame.
         path: PathBuf,
     },
+    /// `--decisions observe` was given together with a frame.
+    ///
+    /// Refused rather than composed, on finding F9's rule: a frame whose text reaches the model
+    /// while nothing enforces it tells the model *"strictly only these operations"* and makes it
+    /// false. Observe mode enforces nothing by construction, so the two together are a frame that
+    /// is advertised and not applied — which is worse than either alone.
+    ObserveWithFrame,
     /// `--tool-surface owned` was given.
     ///
     /// Strategy C means metaharness implements read, write, edit and shell itself, and per-step
@@ -140,7 +147,7 @@ impl Refusal {
     pub fn code(&self) -> Option<RefusalCode> {
         match self {
             Refusal::Control { refusals } => refusals.first().map(|(_, refused)| refused.code),
-            Refusal::NoAdapter { .. } | Refusal::ToolSurfaceOwned => {
+            Refusal::NoAdapter { .. } | Refusal::ToolSurfaceOwned | Refusal::ObserveWithFrame => {
                 Some(RefusalCode::UnsupportedControl)
             }
             _ => None,
@@ -171,6 +178,12 @@ impl fmt::Display for Refusal {
                 "both an in-memory frame and --frame {} were given, and whichever silently won, \
                  the other would be a frame the embedder believed was in force. Give exactly one",
                 path.display()
+            ),
+            Refusal::ObserveWithFrame => f.write_str(
+                "--decisions observe was given together with a frame: observe mode allows every \
+                 call, so the frame's text would reach the model as \"strictly only these \
+                 operations\" while nothing enforced it (finding F9). Observe a run with no frame, \
+                 or enforce the frame with --decisions frame",
             ),
             Refusal::ToolSurfaceOwned => f.write_str(
                 "--tool-surface owned is refused: it requires metaharness to implement read, \

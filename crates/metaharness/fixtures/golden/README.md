@@ -18,8 +18,9 @@ byte.
 |---|---|
 | captured | 2026-08-23 |
 | command | `./target/debug/metaharness conformance claude --contract` and `… codex --contract`, both exit `0` |
-| tree state | CT-1..CT-3 built, protocol amendment a9, the loopback wave in the working tree |
-| stdout only | the `golden-version-pair` warning both adapters carry today goes to **stderr** and is therefore not in these files — that is the CLI's contract, not an omission |
+| tree state | CT-1..CT-4 built, protocol amendments a9 and a10, the loopback wave in the working tree |
+| re-recorded | 2026-08-23, for the claude re-pin (amendment a10): `provider` moved `claude 2.1.239` → `claude 2.1.240` and nothing else did — `checked: 20`, `failed: 0`, `breaking_changes: 0`, and the codex record byte-identical. That is the one field the table below says a pin move touches |
+| stdout only | the `golden-version-pair` warning goes to **stderr** and is therefore not in these files — that is the CLI's contract, not an omission. **Codex still carries it** (0.144.0 vs 0.145.0); claude's stopped when the pin met the recorded capture at 2.1.240 |
 | reproducible | every vector in both runs is free: no model, no network, no credential, no clock |
 | reviewed | before commit: no path, no account identifier, no credential. Six keys, two integers, three constants and a pinned version each |
 

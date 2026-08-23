@@ -38,8 +38,11 @@ impl Kind {
 ///
 /// Two modes rather than one because a round trip per call costs latency, and an embedder that
 /// answers "yes" to everything the frame already admits has bought nothing (design D5). A run in
-/// `frame` mode is still fully audited: both modes emit `tool.decided` and the census counts
-/// both.
+/// `frame` mode is still fully audited: every mode emits `tool.decided` and the census counts
+/// them all.
+///
+/// The third mode is younger than D5 and is not a shortcut for the other two — see
+/// [`DecisionMode::Observe`].
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 #[cfg_attr(feature = "clap", derive(clap::ValueEnum))]
 #[serde(rename_all = "snake_case")]
@@ -48,6 +51,43 @@ pub enum DecisionMode {
     Frame,
     /// The embedder decides. The run blocks, one round trip per call.
     Ask,
+    /// **Allow every call and record every call** — the capture mode, and nothing else
+    /// (design amendment a10).
+    ///
+    /// It exists for one job: measuring how a harness behaves when metaharness is *not* steering
+    /// it, with the same instrument that measures a steered run. The recording seam is installed
+    /// exactly as it is in every other mode, every call arrives at it, and every call leaves it
+    /// with `tool.decided { decided_by: "observe" }` — so an unsteered run and a steered one
+    /// produce the same shape of transcript and can be compared. Nothing is bypassed: the hook
+    /// still fires, and what it answers is `allow`.
+    ///
+    /// **`allow` grants**, and that is the price of the mode rather than an oversight (design
+    /// § 6, finding F8): on Claude Code's hook wire an `allow` overrides a stricter rule in the
+    /// vendor's own settings. An observe run is therefore *more* permissive than a run with no
+    /// hook at all, and that is stated at every point of use rather than discovered.
+    ///
+    /// It is refused beside a frame: a frame whose text reaches the model while nothing enforces
+    /// it tells the model "strictly only these operations" and makes it false (finding F9).
+    Observe,
+}
+
+impl DecisionMode {
+    /// Every mode, in the order the design's own table lists them.
+    pub const ALL: [DecisionMode; 3] = [
+        DecisionMode::Frame,
+        DecisionMode::Ask,
+        DecisionMode::Observe,
+    ];
+
+    /// The mode's name, as the CLI spells it and as a record prints it.
+    #[must_use]
+    pub fn as_str(&self) -> &'static str {
+        match self {
+            DecisionMode::Frame => "frame",
+            DecisionMode::Ask => "ask",
+            DecisionMode::Observe => "observe",
+        }
+    }
 }
 
 /// Where the run's credential comes from.
@@ -136,7 +176,12 @@ pub struct RunSpec {
     #[cfg_attr(feature = "clap", arg(long, value_name = "FILE"))]
     pub frame: Option<PathBuf>,
 
-    /// Who decides a tool call.
+    /// Who decides a tool call: the frame, the embedder, or nobody (`observe` allows every call
+    /// and records it).
+    ///
+    /// The default is `frame` and stays `frame`. `observe` allows everything, so a run that
+    /// drifted into it by default would be a run whose control had been switched off by an
+    /// omission; it is reached by asking for it and by nothing else. See [`DecisionMode`].
     #[cfg_attr(feature = "clap", arg(long, value_enum, default_value = "frame"))]
     pub decisions: DecisionMode,
 
@@ -182,6 +227,13 @@ pub struct RunSpec {
     pub max_turns: Option<u32>,
 
     /// Plugin directories to load, and only these.
+    ///
+    /// Each one is **copied into the run's scratch tree before the child starts** and digested on
+    /// the way in, so the plugin the run had is a snapshot metaharness holds rather than a
+    /// directory the operator can edit mid-run — the same argument H10 makes for the copied input
+    /// tree. The copy list and the digest are values on the launch plan, readable before any
+    /// process exists, and the digest reaches `session.started` through the attestation. A
+    /// directory that is not there, or that holds no file, is refused by name at plan time.
     #[cfg_attr(feature = "clap", arg(long, value_name = "DIR"))]
     pub plugin_dir: Vec<PathBuf>,
 

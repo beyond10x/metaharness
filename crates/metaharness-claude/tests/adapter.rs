@@ -24,6 +24,7 @@ fn context() -> LaunchContext {
         inherited_env: BTreeMap::from([("HOME".to_string(), "/operator".to_string())]),
         memory_ancestors: Vec::new(),
         inputs_digest: Some(Digest::of(b"inputs")),
+        plugins: Vec::new(),
         loopback: None,
     }
 }
@@ -38,8 +39,8 @@ fn spec() -> RunSpec {
 #[test]
 fn the_adapter_names_itself_and_its_pin() {
     assert_eq!(ADAPTER_ID, "claude");
-    assert_eq!(PINNED_VERSIONS, ["2.1.239"]);
-    assert_eq!(capabilities().versions_pinned, vec!["2.1.239".to_string()]);
+    assert_eq!(PINNED_VERSIONS, ["2.1.240"]);
+    assert_eq!(capabilities().versions_pinned, vec!["2.1.240".to_string()]);
 }
 
 #[test]
@@ -115,9 +116,28 @@ fn a_shadowed_run_is_refused_with_the_protocols_own_code() {
 
 /// The attestation metaharness built at launch is the one the opening event carries, so a reader
 /// sees the intent beside the vendor's outcome (design § 8.3).
+///
+/// Driven with the two fields amendment a10 added set to **non-default values**, because a
+/// whole-struct comparison over a default-valued attestation would pass even if the mode and the
+/// installed plugins were dropped on the way to the record — and those two are exactly what an
+/// eval's arm column is read from.
 #[test]
 fn the_plans_attestation_reaches_the_opening_event() {
-    let plan = plan_launch(&spec(), &context()).expect("the run plans");
+    let mut spec = spec();
+    spec.decisions = DecisionMode::Observe;
+    spec.plugin_dir
+        .push(PathBuf::from("/operator/integrations/claude-code"));
+    let mut context = context();
+    context.plugins.push(metaharness_protocol::PluginTree {
+        source: PathBuf::from("/operator/integrations/claude-code"),
+        content: metaharness_protocol::PluginContent::Files {
+            count: 1,
+            digest: Digest::of(b"one file"),
+        },
+    });
+    let plan = plan_launch(&spec, &context).expect("the run plans");
+    assert_eq!(plan.attestation.decisions, DecisionMode::Observe);
+    assert_eq!(plan.attestation.installed_plugins.len(), 1);
     let mut reader = TranscriptReader::new(
         TranscriptRef {
             path: Some("/scratch/run-9/transcript.jsonl".to_string()),
@@ -129,7 +149,7 @@ fn the_plans_attestation_reaches_the_opening_event() {
     .with_seam(Seam::Hook);
     reader.set_census(DecisionCensus::default());
     let events = reader.push_line(
-        r#"{"type":"system","subtype":"init","claude_code_version":"2.1.239","tools":[],
+        r#"{"type":"system","subtype":"init","claude_code_version":"2.1.240","tools":[],
             "mcp_servers":[]}"#,
     );
     let Event::SessionStarted { hermetic, .. } = &events[0].event else {
@@ -142,9 +162,10 @@ fn the_plans_attestation_reaches_the_opening_event() {
 #[test]
 fn every_conformance_vector_passes_without_a_model_a_network_or_a_credential() {
     let outcomes = conformance_vectors();
-    // Four launch, three synthesised replays, the two golden recorded-wire vectors (CT-2) and
-    // the version pair (CT-3).
-    assert_eq!(outcomes.len(), 10);
+    // Five recorded launch expectations, the two computed launch vectors that carry observe mode
+    // and plugin injection (a10, crossing #4), three synthesised replays, the two golden
+    // recorded-wire vectors (CT-2) and the version pair (CT-3).
+    assert_eq!(outcomes.len(), 13);
     for outcome in &outcomes {
         assert!(outcome.passed, "{}: {}", outcome.id, outcome.detail);
         assert!(matches!(

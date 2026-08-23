@@ -1,8 +1,13 @@
 //! The control seam: what this adapter delivers, and what it refuses by name.
 //!
-//! Pinned to 2.1.239. The seam is the on-disk `PreToolUse` command hook, which is *"the default
+//! Pinned to 2.1.240. The seam is the on-disk `PreToolUse` command hook, which is *"the default
 //! seam"* of design § 7.3 and the only one whose blocking property was measured — 11 hook denies
 //! produced 11 `permission_denials` and the forbidden write did not land (design § 2.2).
+//!
+//! The rows below name **2.1.239** where that is the binary the observation was read from: the
+//! seam's own tables are the § 2.7 verification rows of 2026-08-22, and the pin moved a day later
+//! (amendment a10, [`crate::PINNED_VERSIONS`]). The seam itself is not among the unverified — the
+//! 2.1.240 run whose bytes are `fixtures/golden/` reached this hook and was answered through it.
 //!
 //! # What is not built here, and the row that would close each one
 //!
@@ -25,7 +30,7 @@ use std::collections::BTreeMap;
 
 use metaharness_protocol::{
     AdapterClass, AdapterId, COMMAND_NAMES, Capabilities, CommandSupport, Decision, Operation,
-    RefusalCode, Refused, Tier, TierStatus,
+    RefusalCode, Refused, Tier, TierStatus, decision_modes_all,
 };
 use serde_json::{Map, Value, json};
 
@@ -71,6 +76,14 @@ pub fn capabilities() -> Capabilities {
             (Tier::Kill, TierStatus::Delivered),
         ]),
         commands,
+        // All three, and the third one earns it on this vendor rather than inheriting it: observe
+        // mode is the `allow` half of the hook wire and nothing else, and the `allow` half here is
+        // the vendor's own documented behaviour — 2.1.239 carries *"Hook approved tool use for
+        // ${name}, bypassing permission prompt"* (§ 6, finding F8) — driven through the same
+        // channel every deny has been driven through, and asserted by this adapter's own C1 vector
+        // and the C3 observe vector beside it. Whether that grant beats every stricter rule in
+        // every direction is **Q12** and does not change what the mode does.
+        decision_modes: decision_modes_all(TierStatus::Delivered),
         rendering: rendering(),
     }
 }
@@ -263,7 +276,7 @@ mod tests {
         let capabilities = capabilities();
         assert_eq!(capabilities.adapter.id, ADAPTER_ID);
         assert_eq!(capabilities.adapter.class, AdapterClass::Harness);
-        assert_eq!(capabilities.versions_pinned, vec!["2.1.239".to_string()]);
+        assert_eq!(capabilities.versions_pinned, vec!["2.1.240".to_string()]);
     }
 
     /// A tier nobody drove is declared unverified, so an embedder that requires it is refused

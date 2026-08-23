@@ -52,6 +52,7 @@ fn good_record() -> Event {
 fn attestation_imposing(rows: &[HermeticRow]) -> HermeticAttestation {
     HermeticAttestation {
         mode: HermeticMode::Strict,
+        decisions: metaharness::protocol::DecisionMode::Frame,
         imposed: rows
             .iter()
             .map(|row| ImposedControl {
@@ -61,6 +62,7 @@ fn attestation_imposing(rows: &[HermeticRow]) -> HermeticAttestation {
             .collect(),
         unavailable: Vec::new(),
         ambient_inputs: vec!["git status is in the system prompt".to_string()],
+        installed_plugins: Vec::new(),
     }
 }
 
@@ -736,7 +738,7 @@ fn a_run_goes_from_spec_through_plan_and_transcript_to_a_judged_verdict() {
     let mut runner = ScriptedRunner::new(
         vec![
             ScriptStep::line(
-                r#"{"emit":"session.started","harness_version":"2.1.239","output_style":"default","plugins":[],"mcp_servers":[],"credential_source":"operator-login","inputs_digest":"tree"}"#,
+                r#"{"emit":"session.started","harness_version":"2.1.240","output_style":"default","plugins":[],"mcp_servers":[],"credential_source":"operator-login","inputs_digest":"tree"}"#,
             ),
             ScriptStep::line(
                 r#"{"emit":"tool.requested","call_id":"t1","name":"Bash","input":{"command":"ls"}}"#,

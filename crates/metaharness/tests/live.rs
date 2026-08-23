@@ -138,7 +138,17 @@ fn a_hermetic_run_passes_its_own_floor_against_the_real_binary() {
         "H4: the credential source is not what the run declared"
     );
     assert_eq!(output_style.as_deref(), Some("default"), "H1b");
-    assert_eq!(version.as_deref(), Some("2.1.239"), "H9: off the pin");
+    // H9 — the pin, read from the record and compared against the constant rather than against a
+    // literal typed here, because a literal is a second pin that drifts out of step with the first
+    // (this one did: it said 2.1.239 while the binary and the golden capture said 2.1.240).
+    assert!(
+        version
+            .as_deref()
+            .is_some_and(|version| metaharness_claude::PINNED_VERSIONS.contains(&version)),
+        "H9: the live binary's own record says {version:?} and the adapter pins {:?} — a missing \
+         version is unk and never a pass",
+        metaharness_claude::PINNED_VERSIONS
+    );
     assert!(cwd.is_some(), "H7: the record carries no cwd");
 
     let floor = run.hermetic_floor();

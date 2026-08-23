@@ -18,8 +18,9 @@ use std::path::{Path, PathBuf};
 use std::sync::Arc;
 
 use metaharness_protocol::{
-    Capabilities, CredentialSource, DecisionMode, EventStream, Frame, HermeticMode, Kind, Refused,
-    RunId, RunSpec, Seam, ToolSurface, TranscriptRef,
+    Capabilities, CredentialSource, DecisionMode, Digest, EventStream, Frame, HermeticMode, Kind,
+    PluginContent, PluginInstall, PluginTree, Refused, RunId, RunSpec, Seam, ToolSurface,
+    TranscriptRef, tree_digest,
 };
 
 use crate::clock::{Clock, SystemClock};
@@ -162,6 +163,10 @@ impl Metaharness {
     }
 
     /// One more plugin directory to load, and only these.
+    ///
+    /// The directory is read, digested and **copied into the run's scratch tree** at launch, so
+    /// the plugin the run had is a snapshot metaharness holds; a directory that is not there or
+    /// holds no file is refused by name before anything is spawned.
     #[must_use]
     pub fn with_plugin_dir(mut self, directory: impl Into<PathBuf>) -> Self {
         self.spec.plugin_dir.push(directory.into());
@@ -322,6 +327,11 @@ impl Metaharness {
         let spec = self.applied(input);
         check_spec(&spec)?;
         let frame = resolve_frame(frame, &spec)?;
+        // After the resolution and not before it, because there are two spellings of a frame —
+        // an in-memory value and a document path — and the combination has to be refused in both.
+        if frame.is_some() && spec.decisions == DecisionMode::Observe {
+            return Err(Refusal::ObserveWithFrame);
+        }
 
         // One `match` and no trait. The two adapters' launch plans are different types with
         // different fields — one carries a settings document and a `--settings` path, the other a
@@ -382,6 +392,7 @@ fn start_claude(
             inherited_env: std::env::vars().collect::<BTreeMap<String, String>>(),
             memory_ancestors: memory_ancestors(&cwd),
             inputs_digest: None,
+            plugins: plugin_trees(&spec),
             loopback: loopback_params(loopback.as_ref()),
         };
         let plan = metaharness_claude::plan_launch(&spec, &context).map_err(|refusal| {
@@ -429,15 +440,10 @@ fn start_claude(
 
         let launch = LaunchFacts {
             planned_cwd: Some(plan.cwd.display().to_string()),
-            declared_plugins: spec
-                .plugin_dir
-                .iter()
-                .filter_map(|directory| {
-                    directory
-                        .file_name()
-                        .map(|name| name.to_string_lossy().into_owned())
-                })
-                .collect(),
+            // Read off the **attestation** and not off the spec: H1a compares the vendor's own
+            // plugin list against what metaharness says it installed, and a declared set taken
+            // from the spec would still name a plugin whose copy never happened.
+            declared_plugins: declared_plugins(&plan.attestation),
             pinned_versions: metaharness_claude::PINNED_VERSIONS
                 .iter()
                 .map(ToString::to_string)
@@ -580,6 +586,7 @@ fn start_codex(
         inherited_env: std::env::vars().collect::<BTreeMap<String, String>>(),
         memory_ancestors: memory_ancestors(&cwd),
         inputs_digest: None,
+        plugins: plugin_trees(&spec),
     };
     let plan =
         metaharness_codex::plan_launch(&spec, &context).map_err(|refusal| Refusal::Launch {
@@ -620,9 +627,11 @@ fn start_codex(
 
     let launch = LaunchFacts {
         planned_cwd: Some(plan.cwd.display().to_string()),
-        // codex loads plugins from its own config and marketplace snapshots, and a scratch home
-        // has neither — the launch plan refuses `--plugin-dir` outright rather than pretending.
-        declared_plugins: Vec::new(),
+        // The same source as the claude path's, and the same reason. What differs on this vendor
+        // is how much the attestation's `loaded_by` claims: the placement is undriven here, so a
+        // plugin list the record does not carry leaves H1a `unk` — which is the honest verdict
+        // for an installation nobody has watched the vendor pick up.
+        declared_plugins: declared_plugins(&plan.attestation),
         pinned_versions: metaharness_codex::PINNED_VERSIONS
             .iter()
             .map(ToString::to_string)
@@ -668,6 +677,7 @@ fn materialise_codex(
     scratch_root: &std::path::Path,
     channel: &crate::spawn_codex::CodexHookChannel,
 ) -> Result<(), Refusal> {
+    install_plugins(&plan.plugin_installs)?;
     std::fs::create_dir_all(&plan.config_home)?;
     // Deliberately a subdirectory of the scratch root and not the operator's own: codex refuses
     // to create its helper shims when `CODEX_HOME` sits under the process's temporary directory,
@@ -709,6 +719,7 @@ fn materialise(
     scratch_root: &std::path::Path,
     channel: &crate::spawn::HookChannel,
 ) -> Result<(), Refusal> {
+    install_plugins(&plan.plugin_installs)?;
     std::fs::create_dir_all(&plan.config_home)?;
     std::fs::create_dir_all(scratch_root.join("tmp"))?;
 
@@ -731,6 +742,116 @@ fn materialise(
     std::fs::write(&program_path, program.as_bytes())?;
     make_executable(&program_path)?;
     Ok(())
+}
+
+/// Every declared plugin directory, **read**, so a pure `plan_launch` can decide about it.
+///
+/// The I/O half of crossing #4, on this side of § 8.4 O7's line for the same reason the ancestor
+/// walk and the inputs digest are: the adapter decides where a plugin goes and whether the run may
+/// proceed, and it does that from values rather than from a filesystem it went and looked at.
+///
+/// Nothing is refused here. A directory that is missing or empty comes back as
+/// [`PluginContent::Unreadable`] or [`PluginContent::Empty`] and is refused **by name, by the
+/// launch plan** — because a refusal raised here would be a refusal the adapter's own vectors
+/// could not reach.
+fn plugin_trees(spec: &RunSpec) -> Vec<PluginTree> {
+    spec.plugin_dir
+        .iter()
+        .map(|source| PluginTree {
+            source: source.clone(),
+            content: read_plugin_tree(source),
+        })
+        .collect()
+}
+
+/// What one plugin directory holds, as a digest over its files.
+fn read_plugin_tree(source: &Path) -> PluginContent {
+    let mut files = BTreeMap::new();
+    match walk_plugin_tree(source, source, &mut files) {
+        Err(error) => PluginContent::Unreadable {
+            detail: error.to_string(),
+        },
+        Ok(()) if files.is_empty() => PluginContent::Empty,
+        Ok(()) => PluginContent::Files {
+            count: files.len(),
+            digest: tree_digest(&files),
+        },
+    }
+}
+
+/// Every regular file under `directory`, keyed by its path relative to `root`.
+///
+/// **A symlink is neither a directory nor a file here** and is therefore skipped, because
+/// `DirEntry::file_type` does not follow one. That is deliberate and it is the same rule
+/// [`copy_tree`] uses: what is digested and what is copied must be the same set, or the
+/// attestation cites a digest of something other than what the run got. A plugin that needs a
+/// symlink is a plugin whose contents metaharness cannot pin, and it will digest and install
+/// without it rather than follow a link out of the tree it was pointed at.
+fn walk_plugin_tree(
+    root: &Path,
+    directory: &Path,
+    files: &mut BTreeMap<String, Digest>,
+) -> std::io::Result<()> {
+    for entry in std::fs::read_dir(directory)? {
+        let entry = entry?;
+        let kind = entry.file_type()?;
+        let path = entry.path();
+        if kind.is_dir() {
+            walk_plugin_tree(root, &path, files)?;
+        } else if kind.is_file() {
+            let relative = path
+                .strip_prefix(root)
+                .unwrap_or(&path)
+                .to_string_lossy()
+                .into_owned();
+            files.insert(relative, Digest::of(&std::fs::read(&path)?));
+        }
+    }
+    Ok(())
+}
+
+/// Copy each planned plugin into the run's scratch tree.
+///
+/// Performed **once**, here, before the child exists — unlike a credential copy, which happens
+/// immediately before every spawn because a token ages out (H6, Q13). A plugin does not age; what
+/// it must not do is change under a run that has already digested it, and a copy is what stops it.
+fn install_plugins(installs: &[PluginInstall]) -> Result<(), Refusal> {
+    for install in installs {
+        copy_tree(&install.from, &install.to).map_err(|error| Refusal::Io {
+            detail: format!(
+                "the plugin {} could not be installed at {}: {error}",
+                install.from.display(),
+                install.to.display()
+            ),
+        })?;
+    }
+    Ok(())
+}
+
+/// One directory into another, files and real subdirectories, skipping exactly what
+/// [`walk_plugin_tree`] skipped.
+fn copy_tree(from: &Path, to: &Path) -> std::io::Result<()> {
+    std::fs::create_dir_all(to)?;
+    for entry in std::fs::read_dir(from)? {
+        let entry = entry?;
+        let kind = entry.file_type()?;
+        let target = to.join(entry.file_name());
+        if kind.is_dir() {
+            copy_tree(&entry.path(), &target)?;
+        } else if kind.is_file() {
+            std::fs::copy(entry.path(), &target)?;
+        }
+    }
+    Ok(())
+}
+
+/// The plugin names metaharness says it installed, for H1a's comparison against the record.
+fn declared_plugins(attestation: &metaharness_protocol::HermeticAttestation) -> Vec<String> {
+    attestation
+        .installed_plugins
+        .iter()
+        .map(|plugin| plugin.name.clone())
+        .collect()
 }
 
 /// Give the hook program its executable bit.
@@ -1359,6 +1480,230 @@ mod tests {
             detail.contains("LP-4") && detail.contains("V-LP6"),
             "the refusal must name the milestone and its verification: {detail}"
         );
+        assert_eq!(log.spawns(), 0, "nothing was spawned");
+    }
+}
+
+#[cfg(test)]
+mod injection_tests {
+    //! Crossing #4 and the capture mode, as the library wires them (R2.5, R2.6).
+    //!
+    //! These drive **real directories** — the loopback module's vectors mock the world, and the
+    //! one thing that cannot be mocked here is the walk itself: the claim is that the digest
+    //! describes the bytes on disk and that the copy is the same set the digest was taken over.
+    //! No model, no network, no credential; the child is the scripted process.
+
+    use std::path::{Path, PathBuf};
+
+    use metaharness_protocol::{
+        DecisionMode, Digest, Frame, Handoff, Kind, NodeRef, Operation, OperationSet,
+        PluginContent, StepRef, WorkflowRef,
+    };
+
+    use super::{Input, Metaharness, read_plugin_tree};
+    use crate::clock::ManualClock;
+    use crate::refusal::Refusal;
+    use crate::scripted::{ScriptStep, ScriptedLog, ScriptedRunner, ScriptedSeams};
+
+    /// The one line the scripted child writes, so the run has a terminal record to end on.
+    const END: &str = r#"{"emit":"session.ended","is_error":false,"subtype":"success"}"#;
+
+    /// A plugin directory on disk: a manifest and a skill one directory down.
+    fn write_plugin(root: &Path, skill_body: &[u8]) -> PathBuf {
+        let plugin = root.join("claude-code");
+        std::fs::create_dir_all(plugin.join(".claude-plugin")).expect("the manifest directory");
+        std::fs::create_dir_all(plugin.join("skills").join("planning")).expect("the skill");
+        std::fs::write(
+            plugin.join(".claude-plugin").join("plugin.json"),
+            br#"{"name":"claude-code"}"#,
+        )
+        .expect("the manifest");
+        std::fs::write(
+            plugin.join("skills").join("planning").join("SKILL.md"),
+            skill_body,
+        )
+        .expect("the skill body");
+        plugin
+    }
+
+    fn digest_of(tree: &PluginContent) -> String {
+        match tree {
+            PluginContent::Files { digest, .. } => digest.to_string(),
+            other => panic!("expected files, got {other:?}"),
+        }
+    }
+
+    /// The mutation clause, against a real tree: **one edited byte in one plugin file is a
+    /// different digest**. A digest a mutation cannot move would pin nothing, and the arm-b
+    /// column of an eval matrix would be a plugin identifier that could not tell two plugins
+    /// apart.
+    #[test]
+    fn one_edited_byte_in_one_plugin_file_is_a_different_digest() {
+        let home = tempfile::TempDir::new().expect("a directory");
+        let plugin = write_plugin(home.path(), b"classify the request, then route it");
+        let before = read_plugin_tree(&plugin);
+
+        std::fs::write(
+            plugin.join("skills").join("planning").join("SKILL.md"),
+            b"classify the request, then route it.",
+        )
+        .expect("the edit");
+        let after = read_plugin_tree(&plugin);
+
+        assert_ne!(
+            digest_of(&before),
+            digest_of(&after),
+            "an edited plugin file must not digest to what it digested before"
+        );
+        assert_eq!(digest_of(&before).len(), 64);
+    }
+
+    /// The whole crossing, end to end and free: a declared plugin is digested, copied into the
+    /// run's own scratch tree, named to the vendor as **the copy**, and reported in the
+    /// attestation with the digest of what was read.
+    #[test]
+    fn a_declared_plugin_is_copied_into_the_scratch_and_the_child_is_pointed_at_the_copy() {
+        let home = tempfile::TempDir::new().expect("a directory");
+        let plugin = write_plugin(home.path(), b"classify the request, then route it");
+        let expected = digest_of(&read_plugin_tree(&plugin));
+
+        let log = ScriptedLog::new();
+        let mut runner = ScriptedRunner::new(vec![ScriptStep::line(END)], log.clone());
+        let mut seams = ScriptedSeams;
+        let mut run = Metaharness::new(Kind::Claude)
+            .with_plugin_dir(&plugin)
+            .start_with_clock(
+                Input::Prompt("inject".to_string()),
+                &mut runner,
+                &mut seams,
+                Box::new(ManualClock::new()),
+            )
+            .expect("the injected run starts");
+
+        let scratch = run
+            .scratch_root()
+            .expect("a scripted run owns a scratch")
+            .to_path_buf();
+        let installed = scratch.join("plugins").join("claude-code");
+        assert_eq!(
+            std::fs::read(installed.join(".claude-plugin").join("plugin.json"))
+                .expect("the manifest travelled"),
+            br#"{"name":"claude-code"}"#
+        );
+        assert_eq!(
+            std::fs::read(installed.join("skills").join("planning").join("SKILL.md"))
+                .expect("the skill travelled"),
+            b"classify the request, then route it"
+        );
+        assert_eq!(
+            digest_of(&read_plugin_tree(&installed)),
+            expected,
+            "the copy must digest to what the source digested, or the attestation cites a \
+             number that describes something else"
+        );
+        assert!(
+            !installed.starts_with(scratch.join("claude-home")),
+            "the copy stays out of the config home the vendor keeps its own plugin bookkeeping in"
+        );
+
+        let launched = log.launched();
+        let argv = launched.first().expect("the child was started");
+        let named = argv
+            .windows(2)
+            .find(|pair| pair[0] == "--plugin-dir")
+            .expect("--plugin-dir reached the child");
+        assert_eq!(named[1], installed.display().to_string());
+
+        let lines = run.drain().expect("the run drains");
+        assert!(
+            lines
+                .iter()
+                .any(|line| line.event.name() == "session.ended"),
+            "{lines:?}"
+        );
+    }
+
+    /// A `--plugin-dir` that is not there is refused **before any spawn**, by name — exit `2`,
+    /// and no money spent finding out.
+    #[test]
+    fn a_plugin_directory_that_is_not_there_is_refused_before_any_spawn() {
+        let home = tempfile::TempDir::new().expect("a directory");
+        let empty = home.path().join("built-by-nobody");
+        std::fs::create_dir_all(&empty).expect("an empty directory");
+
+        for (directory, expected) in [
+            (home.path().join("not-there"), "could not be read"),
+            (empty, "holds no file at all"),
+        ] {
+            let log = ScriptedLog::new();
+            let mut runner = ScriptedRunner::new(vec![ScriptStep::line(END)], log.clone());
+            let mut seams = ScriptedSeams;
+            let refusal = Metaharness::new(Kind::Claude)
+                .with_plugin_dir(&directory)
+                .start_with_clock(
+                    Input::Prompt("inject".to_string()),
+                    &mut runner,
+                    &mut seams,
+                    Box::new(ManualClock::new()),
+                )
+                .expect_err("an unusable plugin directory is refused");
+            let Refusal::Launch { detail } = &refusal else {
+                panic!("expected a launch refusal, got {refusal:?}");
+            };
+            assert!(
+                detail.contains("--plugin-dir") && detail.contains(expected),
+                "the refusal must name the flag and what was wrong: {detail}"
+            );
+            assert_eq!(log.spawns(), 0, "a refused injection must spawn nothing");
+        }
+    }
+
+    /// Observe mode beside a frame is refused by name: the frame's text would reach the model as
+    /// *"strictly only these operations"* while nothing enforced it (finding F9).
+    #[test]
+    fn observe_mode_beside_a_frame_is_refused_by_name() {
+        let log = ScriptedLog::new();
+        let mut runner = ScriptedRunner::new(vec![ScriptStep::line(END)], log.clone());
+        let mut seams = ScriptedSeams;
+        let frame = Frame {
+            workflow: WorkflowRef {
+                id: "development/default".into(),
+                version: "1".into(),
+            },
+            node: NodeRef {
+                id: "implement".into(),
+            },
+            step: StepRef {
+                workflow: "development/default".into(),
+                state: "implement".into(),
+                index: 1,
+                attempt: 1,
+            },
+            prior: Vec::new(),
+            obligations: Vec::new(),
+            reaching: Vec::new(),
+            next: Vec::new(),
+            handoff: Handoff::None,
+            operations: OperationSet::of([Operation::FileRead]),
+            entities: None,
+            digest: Digest::of(b""),
+        };
+
+        let refusal = Metaharness::new(Kind::Claude)
+            .with_decisions(DecisionMode::Observe)
+            .with_frame(frame)
+            .start_with_clock(
+                Input::Prompt("observe".to_string()),
+                &mut runner,
+                &mut seams,
+                Box::new(ManualClock::new()),
+            )
+            .expect_err("the composition is refused");
+        assert!(
+            matches!(refusal, Refusal::ObserveWithFrame),
+            "got {refusal:?}"
+        );
+        assert!(refusal.to_string().contains("F9"), "{refusal}");
         assert_eq!(log.spawns(), 0, "nothing was spawned");
     }
 }

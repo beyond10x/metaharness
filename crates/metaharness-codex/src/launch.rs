@@ -37,8 +37,9 @@ use std::fmt::Write as _;
 use std::path::{Path, PathBuf};
 
 use metaharness_protocol::{
-    CredentialSource, Digest, HermeticAttestation, HermeticRow, ImposedControl, Kind, RefusalCode,
-    RunSpec, ToolSurface, UnavailableControl, required_commands,
+    CredentialSource, DecisionMode, Digest, HermeticAttestation, HermeticRow, ImposedControl,
+    InstalledPlugin, Kind, PluginContent, PluginInstall, PluginTree, RefusalCode, RunSpec,
+    TierStatus, ToolSurface, UnavailableControl, required_commands,
 };
 use serde_json::{Value, json};
 
@@ -82,6 +83,31 @@ const CONFIG_FILE: &str = "config.toml";
 /// Under the scratch root and **not** under the config home: the home is the vendor's to read and
 /// a program sitting in it would be one more file for the vendor to have an opinion about.
 const HOOK_PROGRAM: &str = "hooks/pretooluse";
+
+/// Where an injected plugin is copied to: `$CODEX_HOME/plugins/<name>`.
+///
+/// **Inside the config home, unlike the claude adapter's placement, and for the opposite reason.**
+/// `codex exec` has no `--plugin-dir`: `codex plugin` installs from *marketplace snapshots*, so
+/// there is no flag with which to name a directory and the only candidate location is one the
+/// vendor itself looks at. This constant is the candidate.
+///
+/// **The placement is undriven, and that is a claim about this adapter, not about codex.** What is
+/// read — from strings in the 0.145.0 binary, which is weaker than a driven call and is labelled
+/// so at every other point in this crate:
+///
+/// * the binary resolves `plugins/cache` and `plugins/data` **under the Codex home**, so
+///   `$CODEX_HOME/plugins` is the vendor's own neighbourhood rather than an invention here;
+/// * a marketplace's plugin entries are `./plugins/<plugin-name>` relative to a marketplace root,
+///   which is the same shape this constant produces with the scratch home as that root.
+///
+/// What is **not** known: whether 0.145.0 loads a plugin from this path with no marketplace
+/// manifest and no `codex plugin add` behind it. This launch writes **no** `[marketplaces]` table
+/// to go with the copy, deliberately: an unrecognised key under a table this binary reads is
+/// dropped without failing the config load (see [`CONFIG_FILE`]), and a *malformed* one could fail
+/// it outright — which on this vendor is a run with no seam. So the copy is made, the attestation
+/// says in as many words that the load is unverified, and H1a's verdict is left to the run's own
+/// record. See `docs/design/metaharness-protocol-v0.1.md` **Q19**.
+const PLUGIN_HOME: &str = "plugins";
 
 /// The emitted hook declares **no matcher at all**, which is every tool.
 ///
@@ -167,6 +193,10 @@ pub struct LaunchContext {
     pub memory_ancestors: Vec<PathBuf>,
     /// The digest of the copied input tree, carried into `session.started.inputs_digest` (H10).
     pub inputs_digest: Option<Digest>,
+    /// Every directory `spec.plugin_dir` named, **as the caller read it** (crossing #4). The
+    /// caller does the walk and the per-file digests; this function only decides where the copy
+    /// goes and whether the run may proceed.
+    pub plugins: Vec<PluginTree>,
 }
 
 /// One file to copy into the scratch config home, and the only one.
@@ -199,6 +229,11 @@ pub struct LaunchPlan {
     /// What to copy into that home before **every** spawn. Exactly one entry under an operator
     /// login, and none otherwise; nothing else is ever copied (H6).
     pub credential_copies: Vec<CredentialCopy>,
+    /// What to copy into the scratch `CODEX_HOME` **once**, before the child starts: one entry per
+    /// declared plugin directory, each carrying the digest of what was read (crossing #4). A value
+    /// on the plan, so the copy list and the digest are readable before any process exists —
+    /// whatever this vendor then does with the directory (see [`PLUGIN_HOME`]).
+    pub plugin_installs: Vec<PluginInstall>,
     /// The whole `config.toml` the scratch home carries, as text — **the seam included**.
     ///
     /// One document rather than two, because 0.145.0 reads its hooks out of `[hooks]` in this
@@ -283,6 +318,28 @@ pub enum LaunchRefusal {
     /// and got a credential copied into the scratch home would be wrong in the direction that
     /// matters, and nothing in its record would say so.
     LoopbackUnsupported,
+    /// A declared plugin directory cannot be installed (crossing #4).
+    ///
+    /// The same two silent-nothing cases the claude adapter refuses, refused here for the same
+    /// reason: a run that installed no plugin and reported one is the untreated run wearing the
+    /// treated run's label.
+    PluginDirUnusable {
+        /// The directory the run named.
+        directory: PathBuf,
+        /// Which of the two, in the words that say what to do about it.
+        why: String,
+    },
+    /// The run asked for a decision mode this adapter has not driven.
+    ///
+    /// Design § 8.4 O4 over the mode table: `observe` is the `allow` half of this vendor's
+    /// decision wire and only the `deny` half has been driven, so it is refused by name rather
+    /// than served with a grant the vendor may discard.
+    DecisionModeUnverified {
+        /// The mode that was asked for.
+        mode: DecisionMode,
+        /// What the adapter declares about it.
+        status: TierStatus,
+    },
     /// The run asked for something `codex exec` has no way to express.
     ///
     /// A refusal and never a silent drop: an option the caller set and the adapter ignored is a
@@ -300,9 +357,9 @@ impl LaunchRefusal {
     #[must_use]
     pub fn code(&self) -> Option<RefusalCode> {
         match self {
-            LaunchRefusal::UnsupportedOption { .. } | LaunchRefusal::LoopbackUnsupported => {
-                Some(RefusalCode::UnsupportedControl)
-            }
+            LaunchRefusal::UnsupportedOption { .. }
+            | LaunchRefusal::LoopbackUnsupported
+            | LaunchRefusal::DecisionModeUnverified { .. } => Some(RefusalCode::UnsupportedControl),
             _ => None,
         }
     }
@@ -367,6 +424,29 @@ impl fmt::Display for LaunchRefusal {
                  no credential in the child and got one copied into its scratch home would be \
                  wrong in the direction that matters",
             ),
+            LaunchRefusal::PluginDirUnusable { directory, why } => write!(
+                f,
+                "--plugin-dir {} cannot be installed: {why}. It is refused rather than skipped, \
+                 because a run that installed no plugin and reported one would be the untreated \
+                 run wearing the treated run's label",
+                directory.display()
+            ),
+            LaunchRefusal::DecisionModeUnverified { mode, status } => write!(
+                f,
+                "the run asked for --decisions {} and the {ADAPTER_ID} adapter declares that mode \
+                 {}. Observe mode is the allow half of this vendor's PreToolUse wire and nothing \
+                 else, and only the deny half has been driven (CX-M2); the allow half is milestone \
+                 R2.4. It is refused by name rather than served with a grant this binary may \
+                 discard, because a discarded allow on a capture run looks exactly like a capture \
+                 that worked",
+                mode.as_str(),
+                match status {
+                    TierStatus::Unverified => "unverified",
+                    TierStatus::Absent => "absent",
+                    TierStatus::Delivered =>
+                        "delivered, which is not a refusal and is a defect here",
+                }
+            ),
             LaunchRefusal::UnsupportedOption { option, why } => write!(
                 f,
                 "the run asked for {option} and codex exec 0.145.0 has no way to express it: \
@@ -405,6 +485,7 @@ pub fn plan_launch(spec: &RunSpec, context: &LaunchContext) -> Result<LaunchPlan
     let Some(prompt) = &spec.prompt else {
         return Err(LaunchRefusal::NoPrompt);
     };
+    guard_decision_mode(spec)?;
     unsupported_options(spec)?;
     // An operator-named cwd (amendment a6) is a declaration, not a defect: the two refusals below
     // keep a *scratch* cwd honest, and a run the operator pointed at a real tree loses rows H7 and
@@ -433,6 +514,7 @@ pub fn plan_launch(spec: &RunSpec, context: &LaunchContext) -> Result<LaunchPlan
 
     let config_home = context.scratch_root.join(CONFIG_HOME);
     let credential_copies = credential_copies(spec, context, &config_home)?;
+    let plugin_installs = plugin_installs(spec, context, &config_home)?;
     let args = build_args(spec, prompt);
     guard_arguments(&args)?;
     let env = build_env(spec, context, &config_home)?;
@@ -447,7 +529,94 @@ pub fn plan_launch(spec: &RunSpec, context: &LaunchContext) -> Result<LaunchPlan
         credential_copies,
         config: build_config(spec, &hook),
         hook,
-        attestation: attest(spec, context, &config_home),
+        attestation: attest(spec, context, &config_home, &plugin_installs),
+        plugin_installs,
+    })
+}
+
+/// The plugin copy list, one entry per declared directory, or the refusal that says why not.
+///
+/// The digest is computed **before** the copy, over the operator's own directory: it is a claim
+/// about the plugin as it stood when the run took its snapshot.
+fn plugin_installs(
+    spec: &RunSpec,
+    context: &LaunchContext,
+    config_home: &Path,
+) -> Result<Vec<PluginInstall>, LaunchRefusal> {
+    let mut installs = Vec::new();
+    for directory in &spec.plugin_dir {
+        let tree = context
+            .plugins
+            .iter()
+            .find(|tree| tree.source == *directory)
+            .ok_or_else(|| LaunchRefusal::PluginDirUnusable {
+                directory: directory.clone(),
+                why: "the caller planned a launch without reading it, so nothing digested it and \
+                      there is nothing to copy"
+                    .to_string(),
+            })?;
+        let digest = match &tree.content {
+            PluginContent::Files { digest, .. } => digest.clone(),
+            PluginContent::Empty => {
+                return Err(LaunchRefusal::PluginDirUnusable {
+                    directory: directory.clone(),
+                    why: "it is a directory and it holds no file at all".to_string(),
+                });
+            }
+            PluginContent::Unreadable { detail } => {
+                return Err(LaunchRefusal::PluginDirUnusable {
+                    directory: directory.clone(),
+                    why: format!("it could not be read: {detail}"),
+                });
+            }
+        };
+        installs.push(PluginInstall {
+            from: directory.clone(),
+            to: config_home.join(PLUGIN_HOME).join(tree.name()),
+            digest,
+        });
+    }
+    Ok(installs)
+}
+
+/// What the attestation says about one installed plugin — and, on this vendor, what it refuses to
+/// say.
+///
+/// `loaded_by` is where the honesty lives. The claude adapter's names a flag the vendor documents;
+/// this one names a path read out of a binary and driven by nobody, in as many words, so a reader
+/// of the record can tell the two apart without leaving it (see [`PLUGIN_HOME`]).
+fn installed_plugins(installs: &[PluginInstall]) -> Vec<InstalledPlugin> {
+    installs
+        .iter()
+        .map(|install| InstalledPlugin {
+            name: install
+                .to
+                .file_name()
+                .map_or_else(String::new, |name| name.to_string_lossy().into_owned()),
+            source: install.from.display().to_string(),
+            installed_at: install.to.display().to_string(),
+            digest: install.digest.clone(),
+            loaded_by: format!(
+                "nothing names it to the vendor: codex exec has no --plugin-dir, and this launch \
+                 writes no marketplace entry. It is copied to {} because the 0.145.0 binary keeps \
+                 its own plugins under CODEX_HOME/plugins — a string read from a binary, not a \
+                 driven call. **Whether codex loads it from there is unverified (Q19).** The \
+                 opening record's plugin list is the only thing that can say, and H1a reads it",
+                install.to.display()
+            ),
+        })
+        .collect()
+}
+
+/// The mode this run asked for against the mode table this adapter publishes.
+fn guard_decision_mode(spec: &RunSpec) -> Result<(), LaunchRefusal> {
+    let status = crate::capabilities().decision_mode(spec.decisions);
+    if status == TierStatus::Delivered {
+        return Ok(());
+    }
+    Err(LaunchRefusal::DecisionModeUnverified {
+        mode: spec.decisions,
+        status,
     })
 }
 
@@ -466,13 +635,13 @@ fn unsupported_options(spec: &RunSpec) -> Result<(), LaunchRefusal> {
                   the same name",
         });
     }
-    if !spec.plugin_dir.is_empty() {
-        return Err(LaunchRefusal::UnsupportedOption {
-            option: "--plugin-dir",
-            why: "codex loads plugins from its own config and marketplace snapshots, not from a \
-                  directory named on the command line",
-        });
-    }
+    // `--plugin-dir` **was** refused here, on the grounds that codex loads plugins from its own
+    // config and marketplace snapshots rather than from a directory named on the command line.
+    // Both halves of that sentence are still true; what changed is that the refusal was hiding a
+    // mechanism this repository needs (crossing #4) behind a fact about a *flag*. The copy is now
+    // planned, its placement is a named constant, and what is not known is labelled where a reader
+    // meets it — `PLUGIN_HOME`, the attestation's `loaded_by`, and Q19 — instead of being refused
+    // as if it were impossible.
     if spec.tool_surface == ToolSurface::Owned {
         return Err(LaunchRefusal::UnsupportedOption {
             option: "--tool-surface owned",
@@ -784,10 +953,18 @@ fn quote(value: &str) -> String {
 }
 
 /// What metaharness claims it imposed, and what it says it could not.
-fn attest(spec: &RunSpec, context: &LaunchContext, config_home: &Path) -> HermeticAttestation {
+fn attest(
+    spec: &RunSpec,
+    context: &LaunchContext,
+    config_home: &Path,
+    plugin_installs: &[PluginInstall],
+) -> HermeticAttestation {
     let home = config_home.display();
     let mut imposed = vec![
-        control_imposed(HermeticRow::H1a, format!("CODEX_HOME={home}")),
+        control_imposed(
+            HermeticRow::H1a,
+            plugin_posture(&home.to_string(), plugin_installs),
+        ),
         control_imposed(HermeticRow::H1b, format!("CODEX_HOME={home}")),
         control_imposed(
             HermeticRow::H2,
@@ -858,10 +1035,36 @@ fn attest(spec: &RunSpec, context: &LaunchContext, config_home: &Path) -> Hermet
 
     HermeticAttestation {
         mode: spec.hermetic,
+        decisions: spec.decisions,
         imposed,
         unavailable,
         ambient_inputs: ambient_inputs(spec),
+        installed_plugins: installed_plugins(plugin_installs),
     }
+}
+
+/// H1a's `how`: the home is scratch, and what was put in it — with this vendor's caveat attached.
+fn plugin_posture(config_home: &str, installs: &[PluginInstall]) -> String {
+    if installs.is_empty() {
+        return format!(
+            "CODEX_HOME={config_home}, and no plugin was injected: the declared set is empty"
+        );
+    }
+    let names: Vec<String> = installs
+        .iter()
+        .map(|install| {
+            install
+                .to
+                .file_name()
+                .map_or_else(String::new, |name| name.to_string_lossy().into_owned())
+        })
+        .collect();
+    format!(
+        "CODEX_HOME={config_home}, and the declared set is {names:?} — each copied into the scratch \
+         home at launch and digested before the copy. **Nothing names them to the vendor**: this \
+         binary has no --plugin-dir and this launch writes no marketplace entry, so whether they \
+         are loaded is unverified (Q19) and the record is what answers it"
+    )
 }
 
 /// H7 and H11, which are impositions only over a scratch working directory.
@@ -978,7 +1181,31 @@ mod tests {
             .collect(),
             memory_ancestors: Vec::new(),
             inputs_digest: Some(Digest::of(b"inputs")),
+            plugins: Vec::new(),
         }
+    }
+
+    /// A spec and a context that agree on one declared plugin, as the builder produces them.
+    fn plugin_world() -> (RunSpec, LaunchContext, Digest) {
+        let source = PathBuf::from("/operator/integrations/codex");
+        let files: BTreeMap<String, Digest> = [
+            (".codex-plugin/plugin.json".to_string(), Digest::of(b"{}")),
+            ("hooks/hooks.json".to_string(), Digest::of(b"[]")),
+        ]
+        .into_iter()
+        .collect();
+        let digest = metaharness_protocol::tree_digest(&files);
+        let mut spec = spec();
+        spec.plugin_dir.push(source.clone());
+        let mut context = context();
+        context.plugins.push(PluginTree {
+            source,
+            content: PluginContent::Files {
+                count: files.len(),
+                digest: digest.clone(),
+            },
+        });
+        (spec, context, digest)
     }
 
     fn spec() -> RunSpec {
@@ -1368,20 +1595,132 @@ mod tests {
             })
         ));
 
-        let mut plugins = spec();
-        plugins.plugin_dir.push(PathBuf::from("/plugins/x"));
-        assert!(matches!(
-            plan_launch(&plugins, &context()),
-            Err(LaunchRefusal::UnsupportedOption {
-                option: "--plugin-dir",
-                ..
-            })
-        ));
-
         let mut owned = spec();
         owned.tool_surface = ToolSurface::Owned;
         let refusal = plan_launch(&owned, &context()).expect_err("refused");
         assert_eq!(refusal.code(), Some(RefusalCode::UnsupportedControl));
+    }
+
+    // ------------------------------------------------------------ observe mode (a10) and #4
+
+    /// Observe mode is the **allow** half of this vendor's decision wire, and only the deny half
+    /// has been driven. So it is refused by name — naming the milestone that would close it —
+    /// rather than served with a grant this binary may discard, which on a capture run would be
+    /// indistinguishable from a capture that worked.
+    #[test]
+    fn a_codex_observe_run_is_refused_by_name_because_the_allow_half_is_undriven() {
+        let mut spec = spec();
+        spec.decisions = DecisionMode::Observe;
+        let refusal = plan_launch(&spec, &context()).expect_err("observe is refused here");
+        assert_eq!(
+            refusal,
+            LaunchRefusal::DecisionModeUnverified {
+                mode: DecisionMode::Observe,
+                status: TierStatus::Unverified,
+            }
+        );
+        assert_eq!(refusal.code(), Some(RefusalCode::UnsupportedControl));
+        let sentence = refusal.to_string();
+        for named in ["allow half", "R2.4"] {
+            assert!(sentence.contains(named), "{sentence}");
+        }
+    }
+
+    /// The refusal and the published descriptor are one decision, not two: a mode the table calls
+    /// unverified is refused, and a mode it calls delivered plans. A drift between them would be a
+    /// capability an embedder queried and could not use, or a mode it was refused without warning.
+    #[test]
+    fn the_mode_table_and_the_plan_time_refusal_cannot_drift_apart() {
+        for mode in DecisionMode::ALL {
+            let mut spec = spec();
+            spec.decisions = mode;
+            let declared = crate::capabilities().decision_mode(mode);
+            let planned = plan_launch(&spec, &context()).is_ok();
+            assert_eq!(
+                planned,
+                declared == TierStatus::Delivered,
+                "--decisions {} plans={planned} and the descriptor says {declared:?}",
+                mode.as_str()
+            );
+        }
+    }
+
+    /// Crossing #4 on this vendor: the copy list and the digest are values on the plan, the
+    /// placement is the named constant, and the attestation says **in as many words** that
+    /// nothing names the plugin to the vendor.
+    #[test]
+    fn a_declared_plugin_is_copied_into_the_scratch_home_with_its_load_labelled_unverified() {
+        let (spec, context, digest) = plugin_world();
+        let plan = plan_launch(&spec, &context).expect("the injection plans");
+
+        assert_eq!(plan.plugin_installs.len(), 1);
+        let install = &plan.plugin_installs[0];
+        assert_eq!(install.from, PathBuf::from("/operator/integrations/codex"));
+        assert_eq!(
+            install.to,
+            PathBuf::from("/scratch/run-1/codex-home/plugins/codex"),
+            "the placement is inside the scratch CODEX_HOME"
+        );
+        assert!(install.to.starts_with(&plan.config_home));
+        assert_eq!(install.digest, digest, "the digest is over what was read");
+
+        let attested = &plan.attestation.installed_plugins;
+        assert_eq!(attested.len(), 1);
+        assert_eq!(attested[0].name, "codex");
+        assert_eq!(attested[0].digest, digest);
+        assert_eq!(attested[0].source, "/operator/integrations/codex");
+        assert!(
+            attested[0].loaded_by.contains("unverified") && attested[0].loaded_by.contains("Q19"),
+            "the record must say the load is undriven, not imply it: {}",
+            attested[0].loaded_by
+        );
+        // No argv and no config key were invented to go with the copy: an unrecognised key under
+        // a table this binary reads is dropped in silence, and a malformed one fails the config
+        // load — which on this vendor is a run with no seam.
+        assert!(!plan.args.iter().any(|argument| argument == "--plugin-dir"));
+        assert!(!plan.config.contains("marketplace"), "{}", plan.config);
+    }
+
+    /// A directory that is not there is refused before the spawn, by name, with the path in it.
+    #[test]
+    fn a_plugin_directory_that_cannot_be_read_is_refused_by_name() {
+        let source = PathBuf::from("/operator/integrations/codex");
+        for (content, expected) in [
+            (PluginContent::Empty, "holds no file"),
+            (
+                PluginContent::Unreadable {
+                    detail: "No such file or directory (os error 2)".to_string(),
+                },
+                "could not be read",
+            ),
+        ] {
+            let mut spec = spec();
+            spec.plugin_dir.push(source.clone());
+            let mut context = context();
+            context.plugins.push(PluginTree {
+                source: source.clone(),
+                content,
+            });
+            let refusal = plan_launch(&spec, &context).expect_err("refused");
+            let LaunchRefusal::PluginDirUnusable { directory, why } = &refusal else {
+                panic!("expected a plugin refusal, got {refusal:?}");
+            };
+            assert_eq!(*directory, source);
+            assert!(why.contains(expected), "{why}");
+        }
+    }
+
+    /// A run that declared no plugin says so with an empty list rather than by dropping the key:
+    /// "this run installed nothing" and "this build does not report installations" must not be
+    /// the same bytes.
+    #[test]
+    fn a_run_with_no_plugin_attests_an_empty_list_and_never_an_absent_key() {
+        let plan = plan();
+        assert!(plan.plugin_installs.is_empty());
+        assert!(plan.attestation.installed_plugins.is_empty());
+        let json = serde_json::to_string(&plan.attestation).expect("the attestation serializes");
+        assert!(json.contains(r#""installed_plugins":[]"#), "{json}");
+        assert!(json.contains(r#""decisions":"frame""#), "{json}");
     }
 
     /// LP-3 vector 3. The loopback provider is Claude-Code-only this milestone, and this vendor

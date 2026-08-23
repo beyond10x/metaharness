@@ -14,6 +14,20 @@ use crate::command::RefusalCode;
 use crate::frame::Operation;
 use crate::spec::{DecisionMode, RunSpec, ToolSurface};
 
+/// Which decision modes an adapter delivers, as the descriptor's own table would state them for
+/// an adapter that had driven all three.
+///
+/// A helper and not a default: [`Capabilities`] still has no `Default`, so a third adapter cannot
+/// be declared without answering the row. What this saves is an adapter that *has* driven all
+/// three writing the same three lines out by hand.
+#[must_use]
+pub fn decision_modes_all(status: TierStatus) -> BTreeMap<String, TierStatus> {
+    DecisionMode::ALL
+        .iter()
+        .map(|mode| (mode.as_str().to_string(), status))
+        .collect()
+}
+
 /// Which class of adapter this is.
 ///
 /// Named on every session, because neither class silently falls back to the other: a harness
@@ -103,6 +117,15 @@ pub struct Capabilities {
     pub tiers: BTreeMap<Tier, TierStatus>,
     /// What it will do with each command, keyed by the command's wire name.
     pub commands: BTreeMap<String, CommandSupport>,
+    /// What it delivers per **decision mode**, keyed by the mode's own name (amendment a10).
+    ///
+    /// Published for the reason O6 publishes the rendering: a posture that only exists inside a
+    /// run cannot be asserted on before one. The three modes are not equally cheap to deliver —
+    /// `observe` is the `allow` half of the decision wire and nothing else, and an adapter that
+    /// has only ever driven `deny` knows less about `observe` than it knows about `frame`. A mode
+    /// declared [`TierStatus::Unverified`] here is **refused at plan time**, on § 8.4 O4's rule:
+    /// an embedder that requires an unverified mechanism gets a refusal, never a silent no-op.
+    pub decision_modes: BTreeMap<String, TierStatus>,
     /// The neutral operation → vendor tool rendering. `None` means the vendor has no tool for
     /// that operation, which is a fact worth publishing rather than an omission.
     pub rendering: BTreeMap<String, Option<String>>,
@@ -119,6 +142,18 @@ impl Capabilities {
             .get(command_name)
             .copied()
             .unwrap_or(CommandSupport::Refused(RefusalCode::UnsupportedControl))
+    }
+
+    /// What this adapter delivers for one decision mode.
+    ///
+    /// A mode absent from the table is [`TierStatus::Absent`], for the same reason an unmentioned
+    /// command is refused: an adapter that never mentioned a mode cannot be assumed to serve it.
+    #[must_use]
+    pub fn decision_mode(&self, mode: DecisionMode) -> TierStatus {
+        self.decision_modes
+            .get(mode.as_str())
+            .copied()
+            .unwrap_or(TierStatus::Absent)
     }
 
     /// The vendor tool this operation renders to, when there is one.
@@ -153,6 +188,14 @@ impl Capabilities {
 pub fn required_commands(spec: &RunSpec) -> Vec<&'static str> {
     let mut needed = vec!["interrupt", "halt"];
     if spec.decisions == DecisionMode::Ask {
+        needed.push("tool.decide");
+    }
+    if spec.decisions == DecisionMode::Observe {
+        // Observe mode answers **every** call at the seam, in metaharness's own voice. It sends
+        // no `tool.decide` command — the adapter answers — but it needs the same channel a
+        // launch-time frame needs and for the same reason: the decision is written per call. An
+        // adapter that cannot honour `tool.decide` cannot observe either, and finding that out
+        // at the first call would be finding it out after the money was spent.
         needed.push("tool.decide");
     }
     if spec.frame.is_some() {

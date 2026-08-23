@@ -5,7 +5,7 @@
 //! Codex splits them, so this runner is a second implementation of the same trait rather than a
 //! flag on the first:
 //!
-//! | | Claude Code 2.1.239 | codex-cli 0.145.0 |
+//! | | Claude Code 2.1.240 | codex-cli 0.145.0 |
 //! |---|---|---|
 //! | the record metaharness reads | the child's **stdout** (`--output-format stream-json`) | a **file** the child writes: `$CODEX_HOME/sessions/…/rollout-*.jsonl` |
 //! | what stdout carries | everything | a thin thread/turn/item stream with **no timestamps, no durations, no cost** |

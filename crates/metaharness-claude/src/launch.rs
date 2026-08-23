@@ -23,8 +23,9 @@ use std::fmt;
 use std::path::{Path, PathBuf};
 
 use metaharness_protocol::{
-    CredentialSource, Digest, HermeticAttestation, HermeticRow, ImposedControl, Kind, RefusalCode,
-    RunSpec, ToolSurface, UnavailableControl, required_commands,
+    CredentialSource, DecisionMode, Digest, HermeticAttestation, HermeticRow, ImposedControl,
+    InstalledPlugin, Kind, PluginContent, PluginInstall, PluginTree, RefusalCode, RunSpec,
+    TierStatus, ToolSurface, UnavailableControl, required_commands,
 };
 use serde_json::{Value, json};
 
@@ -58,6 +59,23 @@ const SETTINGS_FILE: &str = "claude-settings.json";
 
 /// Where the caller must place the executable the `PreToolUse` hook runs.
 const HOOK_FILE: &str = "hooks/pretooluse";
+
+/// Where an injected plugin is copied to: `<scratch root>/plugins/<name>`.
+///
+/// **Deliberately outside [`CONFIG_HOME`]**, and the reason is the same one that puts the settings
+/// document outside it. Two facts, of two different strengths:
+///
+/// * **Verified** (`claude --help`, 2.1.240): *"`--plugin-dir <path>`  Load a plugin from a
+///   directory or .zip for this session only (repeatable…)"*. The vendor is told the path, so no
+///   particular location is required and metaharness may choose one it owns outright.
+/// * **Read from the binary, and therefore weaker than a driven call**: the 2.1.240 bundle
+///   resolves a `plugins` directory of its own under the config home — `join(…, "plugins")`,
+///   beside `known_marketplaces.json` and a `marketplaces` cache. A copy placed there would share
+///   a directory the vendor itself writes into, so *"the plugins are exactly the declared set"*
+///   (H1a) would depend on the vendor's own bookkeeping not adding to it.
+///
+/// Given a free choice, the launch takes the directory nobody else has an opinion about.
+const PLUGIN_HOME: &str = "plugins";
 
 /// Where the argv's `--settings` points, for a caller that has to write the document there.
 ///
@@ -154,6 +172,14 @@ pub struct LaunchContext {
     /// evidence for H10. `None` means the caller pinned nothing, and the attestation says so
     /// rather than leaving the row silent.
     pub inputs_digest: Option<Digest>,
+    /// Every directory `spec.plugin_dir` named, **as the caller read it** (crossing #4).
+    ///
+    /// The caller does the walk and the per-file digests, on the same division as
+    /// [`LaunchContext::memory_ancestors`]: this function decides where a plugin goes and whether
+    /// the run may proceed, from values, and reads no directory of its own. A declared directory
+    /// with no tree here is a caller that forgot to look, and it is refused rather than silently
+    /// planned without the plugin.
+    pub plugins: Vec<PluginTree>,
 }
 
 /// What a started loopback proxy tells the launch, and the whole of it.
@@ -217,6 +243,14 @@ pub struct LaunchPlan {
     /// What to copy into that home before **every** spawn — see [`CredentialCopy`]. Exactly one
     /// entry under an operator login, and none otherwise; nothing else is ever copied (H6).
     pub credential_copies: Vec<CredentialCopy>,
+    /// What to copy into the scratch tree **once**, before the child starts: one entry per
+    /// declared plugin directory, each carrying the digest of what was read (crossing #4).
+    ///
+    /// A value on the plan, like everything else here, so *"the copy list and the digest are
+    /// readable before any process exists"* is a property a test asserts rather than a sentence
+    /// in a document. The argv's `--plugin-dir` names each entry's `to`, never the operator's own
+    /// directory, so what the vendor loads is the snapshot this plan digested.
+    pub plugin_installs: Vec<PluginInstall>,
     /// The settings document the argv's `--settings` names. The caller writes it; this crate
     /// only decides what is in it.
     pub settings: Value,
@@ -326,6 +360,31 @@ pub enum LaunchRefusal {
         /// The bare entries that would have shadowed it.
         entries: Vec<String>,
     },
+    /// A declared plugin directory cannot be installed (crossing #4).
+    ///
+    /// Refused at plan time and never warned about, because the two cases it covers are the two
+    /// ways an injection silently does nothing: a path that is not there — a typo, a plugin that
+    /// was never built — and a directory that exists and holds no file, which is what a typo
+    /// looks like after somebody "fixed" it by creating the directory. Either way the run would
+    /// be the treatment-free arm wearing the treated arm's label.
+    PluginDirUnusable {
+        /// The directory the run named.
+        directory: PathBuf,
+        /// Which of the two, in the words that say what to do about it.
+        why: String,
+    },
+    /// The run asked for a decision mode this adapter has not driven.
+    ///
+    /// Design § 8.4 O4, applied to the mode table: an embedder that requires an unverified
+    /// mechanism gets a refusal rather than a silent no-op. A mode the descriptor declares
+    /// [`TierStatus::Unverified`] is refused here, so the descriptor and the behaviour cannot
+    /// drift apart.
+    DecisionModeUnverified {
+        /// The mode that was asked for.
+        mode: DecisionMode,
+        /// What the adapter declares about it.
+        status: TierStatus,
+    },
 }
 
 impl LaunchRefusal {
@@ -338,6 +397,7 @@ impl LaunchRefusal {
     pub fn code(&self) -> Option<RefusalCode> {
         match self {
             LaunchRefusal::Shadowed { .. } => Some(RefusalCode::Shadowed),
+            LaunchRefusal::DecisionModeUnverified { .. } => Some(RefusalCode::UnsupportedControl),
             _ => None,
         }
     }
@@ -411,6 +471,28 @@ impl fmt::Display for LaunchRefusal {
                  {}, which auto-approves the whole tool before the seam is consulted (V4)",
                 entries.join(", ")
             ),
+            LaunchRefusal::PluginDirUnusable { directory, why } => write!(
+                f,
+                "--plugin-dir {} cannot be installed: {why}. It is refused rather than skipped, \
+                 because a run that installed no plugin and reported one would be the untreated \
+                 run wearing the treated run's label",
+                directory.display()
+            ),
+            LaunchRefusal::DecisionModeUnverified { mode, status } => write!(
+                f,
+                "the run asked for --decisions {} and the {ADAPTER_ID} adapter declares that mode \
+                 {}; an embedder that requires a mechanism nobody drove is refused rather than \
+                 quietly served (design § 8.4 O4)",
+                mode.as_str(),
+                match status {
+                    TierStatus::Unverified =>
+                        "unverified — the mechanism is on the vendor's surface and no run here has \
+                         driven it",
+                    TierStatus::Absent => "absent — this vendor has no such mechanism",
+                    TierStatus::Delivered =>
+                        "delivered, which is not a refusal and is a defect here",
+                }
+            ),
         }
     }
 }
@@ -451,6 +533,7 @@ pub fn plan_launch(spec: &RunSpec, context: &LaunchContext) -> Result<LaunchPlan
     let Some(prompt) = &spec.prompt else {
         return Err(LaunchRefusal::NoPrompt);
     };
+    guard_decision_mode(spec)?;
     // An operator-named cwd (amendment a6) is a declaration, not a defect: the two refusals
     // below exist to keep a *scratch* cwd honest, and a run the operator pointed at a real tree
     // instead loses rows H7 and H11 in the attestation rather than being refused here.
@@ -486,7 +569,13 @@ pub fn plan_launch(spec: &RunSpec, context: &LaunchContext) -> Result<LaunchPlan
 
     let config_home = context.scratch_root.join(CONFIG_HOME);
     let credential_copies = credential_copies(spec, context, &config_home)?;
-    let args = build_args(spec, prompt, &context.scratch_root.join(SETTINGS_FILE));
+    let plugin_installs = plugin_installs(spec, context)?;
+    let args = build_args(
+        spec,
+        prompt,
+        &context.scratch_root.join(SETTINGS_FILE),
+        &plugin_installs,
+    );
     guard_arguments(&args)?;
     guard_shadowing(spec, &args)?;
     let env = build_env(spec, context, &config_home)?;
@@ -501,8 +590,92 @@ pub fn plan_launch(spec: &RunSpec, context: &LaunchContext) -> Result<LaunchPlan
         credential_copies,
         settings: build_settings(&hook),
         hook,
-        attestation: attest(spec, context, &config_home),
+        attestation: attest(spec, context, &config_home, &plugin_installs),
+        plugin_installs,
     })
+}
+
+/// The mode this run asked for against the mode table this adapter publishes.
+///
+/// One function, reading [`crate::capabilities`], so the descriptor an embedder queries and the
+/// behaviour it gets cannot disagree: a mode declared unverified there is refused here, and a mode
+/// declared delivered is planned.
+fn guard_decision_mode(spec: &RunSpec) -> Result<(), LaunchRefusal> {
+    let status = crate::capabilities().decision_mode(spec.decisions);
+    if status == TierStatus::Delivered {
+        return Ok(());
+    }
+    Err(LaunchRefusal::DecisionModeUnverified {
+        mode: spec.decisions,
+        status,
+    })
+}
+
+/// The plugin copy list, one entry per declared directory, or the refusal that says why not.
+///
+/// The digest is computed **before** the copy, over the operator's own directory, because that is
+/// what the attestation is a claim about: the plugin as it stood when the run took its snapshot.
+fn plugin_installs(
+    spec: &RunSpec,
+    context: &LaunchContext,
+) -> Result<Vec<PluginInstall>, LaunchRefusal> {
+    let mut installs = Vec::new();
+    for directory in &spec.plugin_dir {
+        let tree = context
+            .plugins
+            .iter()
+            .find(|tree| tree.source == *directory)
+            .ok_or_else(|| LaunchRefusal::PluginDirUnusable {
+                directory: directory.clone(),
+                why: "the caller planned a launch without reading it, so nothing digested it and \
+                      there is nothing to copy"
+                    .to_string(),
+            })?;
+        let digest = match &tree.content {
+            PluginContent::Files { digest, .. } => digest.clone(),
+            PluginContent::Empty => {
+                return Err(LaunchRefusal::PluginDirUnusable {
+                    directory: directory.clone(),
+                    why: "it is a directory and it holds no file at all".to_string(),
+                });
+            }
+            PluginContent::Unreadable { detail } => {
+                return Err(LaunchRefusal::PluginDirUnusable {
+                    directory: directory.clone(),
+                    why: format!("it could not be read: {detail}"),
+                });
+            }
+        };
+        installs.push(PluginInstall {
+            from: directory.clone(),
+            to: context.scratch_root.join(PLUGIN_HOME).join(tree.name()),
+            digest,
+        });
+    }
+    Ok(installs)
+}
+
+/// What the attestation says about one installed plugin, and how strong the claim is.
+fn installed_plugins(installs: &[PluginInstall]) -> Vec<InstalledPlugin> {
+    installs
+        .iter()
+        .map(|install| InstalledPlugin {
+            name: install
+                .to
+                .file_name()
+                .map_or_else(String::new, |name| name.to_string_lossy().into_owned()),
+            source: install.from.display().to_string(),
+            installed_at: install.to.display().to_string(),
+            digest: install.digest.clone(),
+            loaded_by: format!(
+                "--plugin-dir {} in the argv: the vendor's own flag, which loads a plugin from a \
+                 named directory for one session (verified, claude --help 2.1.240). Whether it \
+                 then appears in the session is asserted from the opening record's plugin list \
+                 (H1a), never from this row",
+                install.to.display()
+            ),
+        })
+        .collect()
 }
 
 /// The declaration and the started proxy must agree, in both directions.
@@ -559,7 +732,12 @@ fn credential_copies(
 /// *"Error: When using --print, --output-format=stream-json requires --verbose"*, read from the
 /// 2.1.239 binary. Without a stream there is no transcript, and without a transcript there is
 /// nothing for design § 9.4's auditor to read.
-fn build_args(spec: &RunSpec, prompt: &str, settings_path: &Path) -> Vec<String> {
+fn build_args(
+    spec: &RunSpec,
+    prompt: &str,
+    settings_path: &Path,
+    plugin_installs: &[PluginInstall],
+) -> Vec<String> {
     let mut args = vec![
         "-p".to_string(),
         prompt.to_string(),
@@ -588,9 +766,13 @@ fn build_args(spec: &RunSpec, prompt: &str, settings_path: &Path) -> Vec<String>
         args.push("--max-turns".to_string());
         args.push(max_turns.to_string());
     }
-    for dir in &spec.plugin_dir {
+    // The **copy**, never the operator's own directory: what the vendor loads has to be the tree
+    // this plan digested, and a directory outside the scratch can be edited while the run is in
+    // flight — which would leave the attestation citing a digest of something that is no longer
+    // there.
+    for install in plugin_installs {
         args.push("--plugin-dir".to_string());
-        args.push(dir.display().to_string());
+        args.push(install.to.display().to_string());
     }
     if spec.tool_surface == ToolSurface::Owned {
         // Strategy C (design § 7.5): `--tools ""` disables the whole built-in set (V11) and the
@@ -871,10 +1053,18 @@ fn build_settings(hook: &Value) -> Value {
 }
 
 /// What metaharness claims it imposed, and what it says it could not.
-fn attest(spec: &RunSpec, context: &LaunchContext, config_home: &Path) -> HermeticAttestation {
+fn attest(
+    spec: &RunSpec,
+    context: &LaunchContext,
+    config_home: &Path,
+    plugin_installs: &[PluginInstall],
+) -> HermeticAttestation {
     let home = config_home.display();
     let mut imposed = vec![
-        control_imposed(HermeticRow::H1a, format!("CLAUDE_CONFIG_DIR={home}")),
+        control_imposed(
+            HermeticRow::H1a,
+            plugin_posture(&home.to_string(), plugin_installs),
+        ),
         control_imposed(HermeticRow::H1b, format!("CLAUDE_CONFIG_DIR={home}")),
         control_imposed(
             HermeticRow::H2,
@@ -974,10 +1164,40 @@ fn attest(spec: &RunSpec, context: &LaunchContext, config_home: &Path) -> Hermet
 
     HermeticAttestation {
         mode: spec.hermetic,
+        decisions: spec.decisions,
         imposed,
         unavailable,
-        ambient_inputs: ambient_inputs(),
+        ambient_inputs: ambient_inputs(spec),
+        installed_plugins: installed_plugins(plugin_installs),
     }
+}
+
+/// H1a's `how`, which now has to say two things: the home is scratch, and what was put in it.
+///
+/// One sentence rather than two rows, because H1a is *"plugins are exactly the declared set"* and
+/// the declared set is only meaningful beside the home it is declared into. A plugin-less run says
+/// so out loud — an H1a row that went quiet when nothing was injected would read as a row that
+/// stopped checking.
+fn plugin_posture(config_home: &str, installs: &[PluginInstall]) -> String {
+    if installs.is_empty() {
+        return format!(
+            "CLAUDE_CONFIG_DIR={config_home}, and no plugin was injected: the declared set is empty"
+        );
+    }
+    let names: Vec<String> = installs
+        .iter()
+        .map(|install| {
+            install
+                .to
+                .file_name()
+                .map_or_else(String::new, |name| name.to_string_lossy().into_owned())
+        })
+        .collect();
+    format!(
+        "CLAUDE_CONFIG_DIR={config_home}, and the declared set is {names:?} — each copied into the \
+         scratch tree at launch, digested before the copy, and named to the vendor with its own \
+         --plugin-dir flag"
+    )
 }
 
 /// The one sentence that says what a loopback run's credential posture is.
@@ -1010,8 +1230,8 @@ fn api_key_posture(spec: &RunSpec) -> String {
 ///
 /// Both are named by the design rather than discovered here, and both would otherwise be read
 /// out of the attestation's silence as absences.
-fn ambient_inputs() -> Vec<String> {
-    vec![
+fn ambient_inputs(spec: &RunSpec) -> Vec<String> {
+    let mut inputs = vec![
         "git status: the vendor's own --exclude-dynamic-system-prompt-sections description says \
          cwd, env info, memory paths and git status are in the system prompt (design § 8.1, H11's \
          second half)"
@@ -1019,7 +1239,21 @@ fn ambient_inputs() -> Vec<String> {
         "network access: Claude Code's CLI carries no sandbox knob, so a hermetic run here is not \
          network-isolated (design § 8.2)"
             .to_string(),
-    ]
+    ];
+    if spec.decisions == DecisionMode::Observe {
+        // The price of the capture mode, stated where a reader of the record will meet it rather
+        // than left in a document. `allow` grants on this wire: the binary carries "Hook approved
+        // tool use for ${name}, bypassing permission prompt" (§ 6, finding F8), so a run that
+        // answers `allow` to everything is **more** permissive than a run with no hook at all.
+        inputs.push(
+            "observe mode: every call is allowed at the PreToolUse seam, and an allow on this \
+             wire grants — it bypasses the rest of the vendor's permission pipeline and overrides \
+             a stricter rule in the vendor's own settings (finding F8). This run is therefore not \
+             a run with the seam switched off; it is a run whose seam permits everything"
+                .to_string(),
+        );
+    }
+    inputs
 }
 
 fn control_imposed(row: HermeticRow, how: impl Into<String>) -> ImposedControl {
@@ -1062,8 +1296,42 @@ mod tests {
             .collect(),
             memory_ancestors: Vec::new(),
             inputs_digest: Some(Digest::of(b"inputs")),
+            plugins: Vec::new(),
             loopback: None,
         }
+    }
+
+    /// A plugin directory the caller has "read", with a digest over two invented files.
+    fn plugin_tree() -> (PathBuf, PluginTree, Digest) {
+        let source = PathBuf::from("/operator/integrations/claude-code");
+        let files: std::collections::BTreeMap<String, Digest> = [
+            (".claude-plugin/plugin.json".to_string(), Digest::of(b"{}")),
+            ("skills/one/SKILL.md".to_string(), Digest::of(b"body")),
+        ]
+        .into_iter()
+        .collect();
+        let digest = metaharness_protocol::tree_digest(&files);
+        (
+            source.clone(),
+            PluginTree {
+                source,
+                content: PluginContent::Files {
+                    count: files.len(),
+                    digest: digest.clone(),
+                },
+            },
+            digest,
+        )
+    }
+
+    /// A spec and a context that agree on one declared plugin, as the builder produces them.
+    fn plugin_world() -> (RunSpec, LaunchContext, Digest) {
+        let (source, tree, digest) = plugin_tree();
+        let mut spec = spec();
+        spec.plugin_dir.push(source);
+        let mut context = context();
+        context.plugins.push(tree);
+        (spec, context, digest)
     }
 
     /// A spec and a context that agree on a started proxy, as the builder produces them.
@@ -1294,6 +1562,232 @@ mod tests {
                 endpoint: "https://llmgw.example".to_string()
             }
         );
+    }
+
+    // ------------------------------------------------------------ observe mode (a10) and #4
+
+    /// Observe mode reaches the record: the attestation names it, and the price of the mode — an
+    /// `allow` on this wire **grants** (finding F8) — is stated there too, so a reader of a
+    /// captured run does not have to know the design to know what they are looking at.
+    #[test]
+    fn an_observe_run_attests_the_mode_and_says_what_an_allow_costs() {
+        let mut spec = spec();
+        spec.decisions = DecisionMode::Observe;
+        let plan = plan_launch(&spec, &context()).expect("observe plans");
+        assert_eq!(plan.attestation.decisions, DecisionMode::Observe);
+        assert!(plan.attestation.is_observing());
+        let caveat = plan
+            .attestation
+            .ambient_inputs
+            .iter()
+            .find(|input| input.contains("observe mode"))
+            .expect("the mode's price is reported");
+        assert!(
+            caveat.contains("grants") && caveat.contains("F8"),
+            "{caveat}"
+        );
+    }
+
+    /// **A run that did not ask for observe mode never gets it.** The polarity, asserted rather
+    /// than assumed: a mode that allows every call must be reachable by asking and by nothing
+    /// else, and an attestation that claimed it for a frame-mode run would be a record saying the
+    /// control was off when it was on.
+    #[test]
+    fn a_run_that_did_not_ask_for_observe_mode_never_gets_it() {
+        for mode in [DecisionMode::Frame, DecisionMode::Ask] {
+            let mut spec = spec();
+            spec.decisions = mode;
+            let plan = plan_launch(&spec, &context()).expect("plans");
+            assert_eq!(plan.attestation.decisions, mode);
+            assert!(
+                !plan.attestation.is_observing(),
+                "--decisions {} read back as observing",
+                mode.as_str()
+            );
+            assert!(
+                !plan
+                    .attestation
+                    .ambient_inputs
+                    .iter()
+                    .any(|input| input.contains("observe mode")),
+                "--decisions {} reports observe mode's caveat",
+                mode.as_str()
+            );
+        }
+        // And the default, which is what a spec nobody touched carries.
+        assert_eq!(
+            RunSpec::new(Kind::Claude).decisions,
+            DecisionMode::Frame,
+            "the default must not be the mode that allows everything"
+        );
+    }
+
+    /// Observe mode needs the same per-call channel a launch-time frame needs, because it writes
+    /// a decision per call. Declared through `required_commands` so an adapter that could not
+    /// honour it would be refused at run start rather than at the first call.
+    #[test]
+    fn observe_mode_needs_the_call_seam_like_every_other_deciding_mode() {
+        let mut spec = spec();
+        spec.decisions = DecisionMode::Observe;
+        assert!(required_commands(&spec).contains(&"tool.decide"));
+        assert!(needs_call_seam(&spec));
+    }
+
+    /// The mode table and the plan-time refusal are one decision. On this adapter all three modes
+    /// are delivered, so all three plan — and if the table ever said otherwise, this would fail
+    /// rather than let a published capability drift from what a run gets.
+    #[test]
+    fn the_mode_table_and_the_plan_time_refusal_cannot_drift_apart() {
+        for mode in DecisionMode::ALL {
+            let mut spec = spec();
+            spec.decisions = mode;
+            let declared = crate::capabilities().decision_mode(mode);
+            let planned = plan_launch(&spec, &context()).is_ok();
+            assert_eq!(
+                planned,
+                declared == TierStatus::Delivered,
+                "--decisions {} plans={planned} and the descriptor says {declared:?}",
+                mode.as_str()
+            );
+        }
+    }
+
+    /// Crossing #4: **the plan is a value.** The copy list and the digest are readable before any
+    /// process exists, the argv names the copy rather than the operator's own directory, and the
+    /// attestation carries the digest and the source.
+    #[test]
+    fn a_declared_plugin_is_a_copy_list_and_a_digest_before_anything_is_spawned() {
+        let (spec, context, digest) = plugin_world();
+        let plan = plan_launch(&spec, &context).expect("the injection plans");
+
+        assert_eq!(plan.plugin_installs.len(), 1);
+        let install = &plan.plugin_installs[0];
+        assert_eq!(
+            install.from,
+            PathBuf::from("/operator/integrations/claude-code")
+        );
+        assert_eq!(
+            install.to,
+            PathBuf::from("/scratch/run-1/plugins/claude-code")
+        );
+        assert_eq!(install.digest, digest);
+        assert!(
+            !install.to.starts_with(&plan.config_home),
+            "the copy stays out of the directory the vendor keeps its own plugin bookkeeping in"
+        );
+
+        let named = plan
+            .args
+            .windows(2)
+            .find(|pair| pair[0] == "--plugin-dir")
+            .expect("--plugin-dir is in the argv");
+        assert_eq!(named[1], "/scratch/run-1/plugins/claude-code");
+        assert!(
+            !plan
+                .args
+                .iter()
+                .any(|argument| argument == "/operator/integrations/claude-code"),
+            "the vendor must be pointed at the snapshot, not at a directory that can change \
+             under the run: {:?}",
+            plan.args
+        );
+
+        let attested = &plan.attestation.installed_plugins;
+        assert_eq!(attested.len(), 1);
+        assert_eq!(attested[0].name, "claude-code");
+        assert_eq!(attested[0].source, "/operator/integrations/claude-code");
+        assert_eq!(attested[0].digest, digest);
+        assert!(attested[0].loaded_by.contains("--plugin-dir"));
+        let h1a = plan
+            .attestation
+            .imposed
+            .iter()
+            .find(|control| control.row == HermeticRow::H1a)
+            .expect("H1a is imposed");
+        assert!(h1a.how.contains("claude-code"), "{}", h1a.how);
+    }
+
+    /// **One edited byte in one plugin file is a different digest.** The caller reads the tree, so
+    /// this asserts the plan carries what the caller computed — the mutation itself is proven
+    /// against a real directory in `metaharness`'s own suite and against the rule in
+    /// `metaharness-protocol`.
+    #[test]
+    fn an_edited_plugin_file_reaches_the_plan_as_a_different_digest() {
+        let (spec, context, digest) = plugin_world();
+        let before = plan_launch(&spec, &context).expect("plans");
+
+        let mut edited = context.clone();
+        let files: std::collections::BTreeMap<String, Digest> = [
+            (".claude-plugin/plugin.json".to_string(), Digest::of(b"{}")),
+            (
+                "skills/one/SKILL.md".to_string(),
+                Digest::of(b"bodz"), // one byte
+            ),
+        ]
+        .into_iter()
+        .collect();
+        let mutated = metaharness_protocol::tree_digest(&files);
+        edited.plugins[0].content = PluginContent::Files {
+            count: files.len(),
+            digest: mutated.clone(),
+        };
+        let after = plan_launch(&spec, &edited).expect("plans");
+
+        assert_ne!(digest, mutated, "the mutation found its byte");
+        assert_ne!(
+            before.attestation.installed_plugins[0].digest,
+            after.attestation.installed_plugins[0].digest
+        );
+        assert_eq!(after.plugin_installs[0].digest, mutated);
+    }
+
+    /// A directory that is not there, and one that is there and empty, are both refused before the
+    /// spawn — with the path and the reason in the sentence.
+    #[test]
+    fn a_plugin_directory_that_cannot_be_read_is_refused_by_name() {
+        let source = PathBuf::from("/operator/integrations/claude-code");
+        for (content, expected) in [
+            (PluginContent::Empty, "holds no file"),
+            (
+                PluginContent::Unreadable {
+                    detail: "No such file or directory (os error 2)".to_string(),
+                },
+                "could not be read",
+            ),
+        ] {
+            let mut spec = spec();
+            spec.plugin_dir.push(source.clone());
+            let mut context = context();
+            context.plugins.push(PluginTree {
+                source: source.clone(),
+                content,
+            });
+            let refusal = plan_launch(&spec, &context).expect_err("refused");
+            let LaunchRefusal::PluginDirUnusable { directory, why } = &refusal else {
+                panic!("expected a plugin refusal, got {refusal:?}");
+            };
+            assert_eq!(*directory, source);
+            assert!(why.contains(expected), "{why}");
+            assert!(refusal.to_string().contains("claude-code"));
+        }
+    }
+
+    /// A run with no plugin says so with an empty list rather than by dropping the key.
+    #[test]
+    fn a_run_with_no_plugin_attests_an_empty_list_and_never_an_absent_key() {
+        let plan = plan();
+        assert!(plan.plugin_installs.is_empty());
+        assert!(plan.attestation.installed_plugins.is_empty());
+        let json = serde_json::to_string(&plan.attestation).expect("the attestation serializes");
+        assert!(json.contains(r#""installed_plugins":[]"#), "{json}");
+        assert!(!plan.args.iter().any(|argument| argument == "--plugin-dir"));
+        let h1a = plan
+            .attestation
+            .imposed
+            .iter()
+            .find(|control| control.row == HermeticRow::H1a)
+            .expect("H1a is imposed");
+        assert!(h1a.how.contains("no plugin was injected"), "{}", h1a.how);
     }
 
     // ------------------------------------------------------------ the loopback provider (LP-3)

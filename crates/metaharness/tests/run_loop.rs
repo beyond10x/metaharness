@@ -23,7 +23,7 @@ use metaharness::{
     start_refusals, vendor_hook_timeout_ms, warning,
 };
 
-const INIT: &str = r#"{"emit":"session.started","harness_version":"2.1.239","output_style":"default","plugins":[],"mcp_servers":[],"credential_source":"operator-login","inputs_digest":"tree"}"#;
+const INIT: &str = r#"{"emit":"session.started","harness_version":"2.1.240","output_style":"default","plugins":[],"mcp_servers":[],"credential_source":"operator-login","inputs_digest":"tree"}"#;
 const END: &str = r#"{"emit":"session.ended","is_error":false,"subtype":"success"}"#;
 
 fn call(id: &str, tool: &str) -> String {
@@ -1021,7 +1021,7 @@ fn the_claude_seam_reads_the_vendors_own_stream_json_into_protocol_events() {
     let mut runner = ScriptedRunner::new(
         vec![
             ScriptStep::line(
-                r#"{"type":"system","subtype":"init","version":"2.1.239","cwd":"/w","tools":["Bash"]}"#,
+                r#"{"type":"system","subtype":"init","version":"2.1.240","cwd":"/w","tools":["Bash"]}"#,
             ),
             ScriptStep::line(
                 r#"{"type":"assistant","message":{"content":[{"type":"tool_use","id":"toolu_1","name":"Bash","input":{"command":"ls"}}]}}"#,

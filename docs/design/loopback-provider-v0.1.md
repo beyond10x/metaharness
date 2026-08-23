@@ -58,9 +58,9 @@ and it would still age there. The stronger shape, same mechanism:
 
 | id | question | method | cost |
 |---|---|---|---|
-| V-LP1 | Claude Code 2.1.239 sends **all** API traffic to `ANTHROPIC_BASE_URL` and authenticates with `ANTHROPIC_AUTH_TOKEN` as a bearer — including under a subscription login absent from the config home. Capture the exact paths and headers | point the child at a recording stub; no upstream, no spend | free |
-| V-LP2 | the upstream accepts the subscription OAuth bearer when replayed by the proxy with the captured headers | one minimal live session through the proxy | ~$0.05 |
-| V-LP3 | SSE streaming survives the pass-through byte-for-byte (ttft within noise) | same run as V-LP2 | — |
+| V-LP1 | Claude Code 2.1.240 (the pin since amendment a11; the row was written against 2.1.239 and LP-0 asks it **against the pins**, so it follows the pin rather than the day it was written) sends **all** API traffic to `ANTHROPIC_BASE_URL` and authenticates with `ANTHROPIC_AUTH_TOKEN` as a bearer — including under a subscription login absent from the config home. Capture the exact paths and headers | point the child at a recording stub; no upstream, no spend | free |
+| V-LP2 | **verified, 2026-08-23** (run `claude-1469713`): the upstream accepted the custody-attached OAuth bearer on a live `--credentials loopback` run — the child held only the placeholder (`credential_source: "none"`, H4/H6 imposed) and the model answered | one minimal live session through the proxy | $0.17 observed |
+| V-LP3 | **verified, same run**: the streamed reply arrived intact through the pass-through, ttft 2623 ms of 2667 ms total — within noise of the API's own `duration_api_ms` 2622 | same run as V-LP2 | — |
 | V-LP4 | the child never attempts its own OAuth refresh when it holds only a placeholder; proxy-side refresh-and-retry is invisible to it | forced 401 from the stub | free |
 | V-LP5 | does the vendor rotate refresh tokens on use? (the mutual-invalidation hypothesis) | two custodies refreshing the same stored token, watch the second | risks one login's session; do this **last**, deliberately |
 | V-LP6 | Codex 0.145.0: can subscription (ChatGPT-plan) traffic be routed through a `model_providers` entry at all, or only API-key providers? If not: which endpoint does subscription traffic pin to, and does `CODEX_HOME` isolation still allow a loopback base? | config injection against a recording stub, then one live turn | free + cents |

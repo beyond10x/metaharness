@@ -80,7 +80,7 @@ impl Fake {
         format!(
             r#"#!/bin/sh
 set -u
-printf '%s\n' '{{"type":"system","subtype":"init","session_id":"s-1","claude_code_version":"2.1.239","cwd":"{root}/work","apiKeySource":"none","output_style":"default","plugins":[],"mcp_servers":[],"tools":["Bash"]}}'
+printf '%s\n' '{{"type":"system","subtype":"init","session_id":"s-1","claude_code_version":"2.1.240","cwd":"{root}/work","apiKeySource":"none","output_style":"default","plugins":[],"mcp_servers":[],"tools":["Bash"]}}'
 printf '%s\n' '{{"type":"assistant","message":{{"id":"msg-1","role":"assistant","content":[{{"type":"tool_use","id":"{CALL_ID}","name":"Bash","input":{{"command":"rm -rf /"}}}}]}}}}'
 printf '%s\n' '{VENDOR_STDERR}' >&2
 printf '%s' '{{"hook_event_name":"PreToolUse","tool_name":"Bash","tool_input":{{"command":"rm -rf /"}},"session_id":"s-1","tool_use_id":"{CALL_ID}"}}' | '{root}/hooks/pretooluse' > '{root}/hook-stdout' 2>'{root}/hook-stderr'

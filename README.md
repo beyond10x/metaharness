@@ -44,11 +44,11 @@ Pre-v1, and the design in `docs/design/` is what is binding — where this code 
 disagree, the document is amended rather than the disagreement left in the code.
 
 **M2 is built: `metaharness run claude --hermetic -p "…"` drives the real binary end to end.**
-It spawns Claude Code 2.1.239 into a scratch config home, installs a blocking `PreToolUse` hook,
+It spawns Claude Code 2.1.240 into a scratch config home, installs a blocking `PreToolUse` hook,
 answers that hook's calls per call, streams the session out as protocol events on stdout, takes
 steering on stdin, retains the raw transcript, and exits on the hermetic floor's verdict.
 `capabilities`, `conformance` and `doctor` work with no model and no credential;
-`metaharness conformance claude` runs **17** vectors that way.
+`metaharness conformance claude` runs **24** vectors that way.
 
 **The seam is real, and it was verified against a paid run.** A frame that admitted no shell was
 given a prompt that asked for one: metaharness denied the call at the hook, the call did not run,
@@ -72,7 +72,7 @@ driver integrates through — it writes the frame as a file and never links this
 a blocking `PreToolUse` hook, tails the **session rollout** for events — the record that carries
 timestamps, durations and per-turn usage where `codex exec --json` stdout carries none — retains
 those bytes for the auditor, and answers the hook per call. `capabilities codex`, `conformance
-codex` (**7** vectors, including three that run a real process and the real hook program) and
+codex` (**10** vectors, including three that run a real process and the real hook program) and
 `doctor codex` all still work with no model and no credential.
 
 **The seam was verified against a paid run, on this vendor too.** A policy that admitted no shell

@@ -42,12 +42,34 @@ Read them with `metaharness capabilities <kind>`.
 |---|---|
 | `frame` *(default)* | The adapter decides from the [frame's](./frames.mdx) admitted set. No round trip. |
 | `ask` | The embedder decides. The run blocks — one round trip per call. |
+| `observe` | Nobody decides. Every call is allowed and recorded, through the same seam. |
 
 An embedder that answers "yes" to everything the frame already admits has bought nothing. That is
 why `frame` is the default and `ask` is opt-in.
 
-**A run in `frame` mode is still fully audited.** Both modes emit `tool.decided`, and the decision
-census counts both.
+**A run in `frame` mode is still fully audited.** Every mode emits `tool.decided`, and the decision
+census counts them all.
+
+### `observe` — measuring a harness nobody is steering
+
+It is **not** "run without a seam". The hook is installed exactly as it always is, every call
+arrives at it, and metaharness answers `allow` down the channel a `deny` would take. The point is
+comparability: a run that is not being steered produces the same events, in the same order, with
+the same correlation keys as one that is, so **one set of expectations can score both**.
+
+`tool.decided` carries `decided_by: "observe"` — its own decider, because an adapter allow is a
+judgement about one call and this is a run-wide posture that judged none.
+
+Three things it says out loud rather than leaving you to find out:
+
+- **An `allow` grants.** On Claude Code's hook wire it bypasses the rest of the vendor's permission
+  pipeline. An observe run is therefore *more* permissive than a run with no hook at all, and the
+  launch attestation says so in its `ambient_inputs`.
+- **A `--frame` beside it is refused by name.** A frame whose text reaches the model while nothing
+  enforces it tells the model "strictly only these operations" and makes that false.
+- **You have to ask for it.** The default is `frame`, and an adapter that has not driven the
+  `allow` half of its own decision wire declares the mode `unverified` and refuses it before the
+  run — which is where Codex stands today.
 
 ## Whose tools: `--tool-surface`
 

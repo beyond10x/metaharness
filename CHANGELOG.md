@@ -5,7 +5,141 @@ was amended and the amendment is named here.
 
 ## [Unreleased]
 
+### Changed
+
+- **The claude adapter is re-pinned 2.1.239 → 2.1.240 (protocol amendment a10).** The installed
+  binary had moved and the pin had not, so every run reported a disagreement it could do nothing
+  about: `doctor claude` read *"OFF the adapter's pin"*, the hermetic floor's **H9** row came back
+  `Gap`, and the contract carried a standing `warn C2 golden-version-pair` on stderr beside its
+  `--contract` record. The pin moves on evidence rather than on tidiness — a live run on
+  2026-08-23 drove 2.1.240 end to end through this adapter's own seam (the session opened,
+  streamed and ended, and its opening record reported `claude_code_version` **2.1.240**), and the
+  recorded wire the free tier already replays byte for byte,
+  `crates/metaharness-claude/fixtures/golden/`, is **that same binary's**. So the pin moved to the
+  bytes; **no recorded fixture's bytes moved to the pin.** That is the whole distinction CT-3
+  exists to hold: a golden carries its own capture version as a fact about the binary that wrote
+  it, the pin is what the adapter is tested against, and `golden-version-pair` is the one place
+  the two are compared — which is why claude's warning is gone (the capture was 2.1.240 all
+  along and the pin came to it) while codex's stands, since there the two versions are two
+  installs and no capture agrees with either pin. The version pair test now reads *"the committed
+  golden sample now agrees with the pin and has nothing to warn about"*, off the committed capture
+  and never off the machine's installed binary, so it says the same thing on a machine with no
+  `claude` on it at all. One emitted byte changed with the pin and it is the one the golden
+  record's own table predicts: `provider` `claude 2.1.239` → `claude 2.1.240` in
+  `crates/metaharness/fixtures/golden/contract-result-claude.json`, regenerated deliberately
+  through `regenerate_the_contract_records` — `checked: 20`, `failed: 0`, `breaking_changes: 0`,
+  codex byte-identical. The consumer building against those bytes is reading about a different
+  binary now, which is exactly what `provider` is for. **§ 2.7's verification rows are left naming
+  2.1.239**, on a8's rule for codex's a7 rows: a dated observation keeps the binary it was read
+  from, and what has not been re-read on 2.1.240 is unverified there rather than silently
+  inherited. `tests/live.rs` stopped typing the pin out as a literal — a second pin that drifts
+  out of step with the first, as this one had — and reads `PINNED_VERSIONS` instead. What is
+  **not** done and costs money: a re-capture of the golden wire on 2.1.240 is unnecessary today
+  because the committed capture already is 2.1.240; the next one is owed at the next pin move.
+  **And the vendor moved again while this was being written** — `2.1.241`, installed
+  2026-08-23T14:02, so `doctor claude` reads *"OFF the adapter's pin"* again. The pin deliberately
+  does not follow: 2.1.240 is the version this workspace holds bytes for, a pin ahead of its
+  evidence would make every row in the adapter a claim about a binary nobody read, and the next
+  move is a **capture with a price on it** rather than an edit. That is the pin working, not the
+  re-pin failing — `doctor` is supposed to say so, and `conformance claude` is green and silent
+  because it compares the committed capture with the pin and never the machine.
+
 ### Added
+
+- **A decision mode that steers nothing and records everything — `--decisions observe` (R2.5,
+  design amendment a10).** The three-arm evaluation program's first design constant is *"the
+  instrument is constant across arms; only the treatment varies"*: arms a and b measure a harness
+  nobody is steering, and they have to be measured by the same instrument that measures arm c, or
+  the comparison is between two tools rather than between three treatments. So observe mode is
+  **not** "run without a seam". The `PreToolUse` hook is installed exactly as it always is, every
+  call arrives at it, metaharness answers `allow` down the same channel a `deny` would go, and the
+  call leaves a `tool.decided { decision: "allow", decided_by: "observe" }` — a decider of its own
+  rather than `adapter`, because an adapter allow is a judgement about one call and this is a
+  run-wide posture that judged none. A census that folded them together would report a capture run
+  as a run whose policy happened to permit everything.
+  The mode is **named in three places a consumer reads**: `capabilities <kind>` publishes a
+  `decision_modes` table beside the tier table (§ 8.4 O6's rule — a posture that only exists inside
+  a run cannot be asserted on before one), the launch attestation carries `decisions`, and that
+  attestation is what reaches `session.started`. The attestation field is not redundant with the
+  events: a run whose model called no tool emits no `tool.decided` at all, and *"the model never
+  called a tool"* and *"metaharness would have allowed anything it called"* are not the same fact.
+  **What it costs is carried in the record, not only in the design.** `allow` *grants* on this wire
+  — the binary's own *"Hook approved tool use for ${name}, bypassing permission prompt"* (§ 6,
+  finding F8) — so an observe run is **more** permissive than a run with no hook at all, and an
+  `ambient_inputs` line says exactly that on every observe launch. Two things follow and both are
+  enforced rather than documented: a frame beside `observe` is refused by name (`ObserveWithFrame`,
+  finding F9 — a frame whose text reaches the model while nothing enforces it makes the model's
+  instructions false), and **a run that did not ask for observe mode never gets it** — the default
+  is and stays `frame`, and that polarity is asserted at both ends: the claude adapter's
+  `c1-observe-mode` vector plans all three modes and checks the attestation names each one, and
+  `only_a_run_that_asked_for_observe_mode_is_decided_by_it` drives the same scripted script under
+  all three and requires `by=observe` in exactly one.
+  **Codex refuses it by name.** Observe mode is the `allow` half of a vendor's decision wire and
+  nothing else, and on Codex only the `deny` half has been driven (CX-M2, a7) while the 0.145.0
+  binary carries a string suggesting some `permissionDecision` values are refused at `PreToolUse`.
+  An allow the vendor discards would be a hook response that decided nothing — indistinguishable,
+  on a capture run, from a capture that worked. So the descriptor declares the mode `unverified`
+  and `plan_launch` refuses it, naming the milestone that would close it (R2.4); one test drives
+  every mode through both adapters and requires the published capability and the plan-time answer
+  to agree, so the two cannot drift apart.
+
+- **`--plugin-dir` now installs a plugin and pins it — crossing #4 (R2.6).** The flag existed and
+  passed a path through to the vendor. What it did not do is make the plugin a *fact about the
+  run*: the eval matrix's arm-b column is a plugin identity, and a directory on the operator's disk
+  can change between the launch and the transcript that is supposed to describe it. Now each
+  declared directory is **read, digested, and copied into the run's own scratch tree** before the
+  child starts, and the vendor is pointed at the **copy** — the same argument H10 makes for the
+  copied input tree, and it is why the argv no longer names the operator's directory at all.
+  **The plan is a value.** The copy list (`plugin_installs`: `from`, `to`, `digest`) and the digest
+  are on the launch plan, readable before any process exists, exactly as the argv and the child
+  environment are (§ 8.4 O7) — asserted by the new `c1-plugin-injection` vector. The digest rule is
+  stated in full in `metaharness-protocol` so two processes can arrive at the same string: one line
+  per file, `<relative path> <sha256 of its bytes>`, in byte order of the path, digested. Paths are
+  in it because a digest over contents alone would not move when a file was renamed — and renaming
+  is how a plugin's `SKILL.md` stops being loaded while every byte in the tree stays the same. The
+  mutation clause runs against a **real directory**: edit one byte in one skill file and the tree
+  digests differently.
+  **The attestation row is never an omitted key.** `hermetic.installed_plugins` carries the name,
+  the source, where it landed, the digest, and `loaded_by` — and it is present and `[]` on a run
+  that injected nothing, because a key that vanished would make "this run installed nothing" and
+  "this build does not report installations" the same bytes.
+  **Where a plugin has to sit is a vendor fact, and the two adapters know it to different depths.**
+  Claude Code: `--plugin-dir <path>` *"Load a plugin from a directory or .zip for this session
+  only"* — verified from `claude --help` on the installed 2.1.240 — so the vendor is told the path
+  and the placement is metaharness's to choose. It chooses `<scratch>/plugins/<name>`, deliberately
+  **outside** `CLAUDE_CONFIG_DIR`, because the 2.1.240 bundle resolves a `plugins` directory of its
+  own under the config home (beside `known_marketplaces.json` and a `marketplaces` cache) and H1a's
+  *"exactly the declared set"* must not depend on the vendor's own bookkeeping not adding to it.
+  Codex: **there is no such flag**, `codex plugin` installs from marketplace snapshots, and the
+  placement `$CODEX_HOME/plugins/<name>` is read from strings in the binary rather than driven —
+  so it is a named constant, the attestation's `loaded_by` says *"nothing names it to the vendor …
+  whether codex loads it from there is unverified"*, and the open question is **Q19** with the
+  command that would close it. The launch deliberately writes **no** `[marketplaces]` table to go
+  with the copy: an unrecognised key under a table this binary reads is dropped in silence and a
+  malformed one can fail the config load, which on this vendor is a run with no seam. The previous
+  blanket refusal of `--plugin-dir` on codex is lifted — it was hiding a mechanism behind a fact
+  about a flag — and what is unknown is now labelled where a reader meets it instead.
+  **Refused by name, at plan time, exit 2**: a `--plugin-dir` that is not there, and one that is
+  there and holds no file — which is what a typo looks like after somebody "fixed" it by creating
+  the directory. Either would otherwise spawn, cost money, install nothing and report an injected
+  plugin: the untreated arm wearing the treated arm's label.
+
+- **Counts moved deliberately, and the golden record with them.** `conformance claude` is **24**
+  vectors (was 20): three new C1 launch vectors — `c1-observe-mode`, `c1-plugin-injection`,
+  `c1-plugin-empty-refusal` — and one new C3 control vector,
+  `c3/observe-allows-every-call-and-names-the-mode-that-did`, which asserts the three things any
+  one of which would pass while the mode was broken: the decision **reached the child**, the record
+  **names the mode**, and the census says **nothing was denied**. `conformance codex` is unchanged
+  at **10** — its plugin and decision-mode behaviour is pinned by its own unit tests, because
+  adding a C1 vector there would falsify the named `Obligation::Gap` that CT-4 exists to keep
+  honest (*"no C1 vector … no `fixtures/c1/`"*), and closing that gap is R2.1's story, not this
+  one. `fixtures/golden/contract-result-claude.json` moves `"checked":20` → `"checked":24` through
+  the `#[ignore]`d regenerator, and **`engineering-protocols`' committed copy of that record needs
+  the same refresh** — it is a consumer building against these bytes.
+  The `hermetic` block gaining two keys moved every committed event expectation that carries a
+  `session.started`: four fixtures regenerated through the two `#[ignore]`d regenerators, diff read
+  line by line, and the only change in any of them is `"decisions":"frame"` and
+  `"installed_plugins":[]` appearing inside `hermetic`. Nothing else in the stream moved.
 
 - **The contract record is a golden, and a new adapter's contract is now a checklist (CT-4; the
   adapter-contract milestone table closes).** `engineering-protocols` reads

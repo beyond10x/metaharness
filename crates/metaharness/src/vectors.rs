@@ -26,7 +26,7 @@ use crate::refusal::Refusal;
 use crate::run::{Run, deadline_reason, decider_name};
 use crate::scripted::{ScriptStep, ScriptedLog, ScriptedRunner, ScriptedSeams};
 
-const INIT: &str = r#"{"emit":"session.started","harness_version":"2.1.239","output_style":"default","plugins":[],"mcp_servers":[],"credential_source":"operator-login"}"#;
+const INIT: &str = r#"{"emit":"session.started","harness_version":"2.1.240","output_style":"default","plugins":[],"mcp_servers":[],"credential_source":"operator-login"}"#;
 const CALL: &str =
     r#"{"emit":"tool.requested","call_id":"t1","name":"Bash","input":{"command":"ls"}}"#;
 const RESULT: &str = r#"{"emit":"tool.result","call_id":"t1","is_error":false}"#;
@@ -46,6 +46,7 @@ pub fn control_vectors() -> Vec<VectorOutcome> {
         vector_cancel_instead_of_decide(),
         vector_unknown_call(),
         vector_too_late(),
+        vector_observe(),
     ]
 }
 
@@ -421,6 +422,45 @@ fn vector_too_late() -> VectorOutcome {
     )
 }
 
+/// The capture mode, end to end on a scripted stream (R2.5, amendment a10).
+///
+/// **Nothing is bypassed and nothing is silent.** The hook fires for the call exactly as it does
+/// in every other mode, an `allow` is written down the same channel a `deny` would be, and the
+/// call leaves a `tool.decided` naming the mode that made it — so an unsteered arm's transcript
+/// has the same shape as a steered arm's and the two can be compared expectation by expectation.
+///
+/// The three things this asserts together, because any one of them alone would pass while the
+/// mode was broken: the decision **reached the child** (the written line), the record **names the
+/// mode** (`by=observe`, not `by=adapter` or `by=frame`), and the census says **nothing was
+/// denied** — a capture run that quietly denied a call would be a treatment, not a measurement.
+fn vector_observe() -> VectorOutcome {
+    let id = "c3/observe-allows-every-call-and-names-the-mode-that-did";
+    let script = vec![
+        ScriptStep::line(INIT),
+        ScriptStep::line(CALL),
+        ScriptStep::line(RESULT),
+        ScriptStep::line(END),
+    ];
+    let Ok((run, log)) = started(script, DecisionMode::Observe) else {
+        return refused(id);
+    };
+    // No policy: the embedder is never asked, which is the point. `decision_required=false` on
+    // the request is how the stream says so.
+    let observed = observe(run, &log, |_, _| Ok(()));
+    outcome(
+        id,
+        observed,
+        &[
+            "session.started",
+            "tool.requested decision_required=false",
+            "tool.decided allow by=observe",
+            "tool.result",
+            "session.ended allowed=1 denied=0 replaced=0 abstained=0",
+        ],
+        &[r#"{"call_id":"t1","decision":{"decision":"allow"}}"#],
+    )
+}
+
 fn refused(id: &str) -> VectorOutcome {
     VectorOutcome::failed(
         id,
@@ -593,7 +633,44 @@ mod tests {
             .map(|vector| (vector.id.as_str(), vector.detail.as_str()))
             .collect();
         assert!(failures.is_empty(), "{failures:#?}");
-        assert_eq!(vectors.len(), 7);
+        assert_eq!(vectors.len(), 8);
+    }
+
+    /// **A run that did not ask for observe mode never gets it**, asserted at the seam rather than
+    /// at the launch: drive the *same* script under every mode and check that `by=observe` appears
+    /// in exactly one of them. The launch-side polarity is the claude adapter's own C1 vector;
+    /// this is the half that would catch a run loop that reached the observe branch by accident.
+    #[test]
+    fn only_a_run_that_asked_for_observe_mode_is_decided_by_it() {
+        for mode in DecisionMode::ALL {
+            let script = vec![
+                ScriptStep::line(INIT),
+                ScriptStep::line(CALL),
+                ScriptStep::awaiting("t1"),
+                ScriptStep::line(RESULT),
+                ScriptStep::line(END),
+            ];
+            let (run, log) = started(script, mode).expect("the run starts");
+            let observed = observe(run, &log, |run, call_id| {
+                run.send(Command::ToolDecide {
+                    call_id: call_id.to_string(),
+                    decision: Decision::Allow,
+                })
+                .map(|_| ())
+            })
+            .expect("the run drains");
+            let by_observe = observed
+                .trace
+                .iter()
+                .any(|note| note.contains("by=observe"));
+            assert_eq!(
+                by_observe,
+                mode == DecisionMode::Observe,
+                "--decisions {} produced {:?}",
+                mode.as_str(),
+                observed.trace
+            );
+        }
     }
 
     /// The C3 tier must not quietly become a list of C1 rows: every vector this crate publishes

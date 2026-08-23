@@ -33,12 +33,14 @@ mod event;
 mod frame;
 mod framing;
 mod hermetic;
+mod plugin;
 mod projection;
 mod seam;
 mod spec;
 
 pub use capability::{
-    AdapterClass, AdapterId, Capabilities, CommandSupport, Tier, TierStatus, required_commands,
+    AdapterClass, AdapterId, Capabilities, CommandSupport, Tier, TierStatus, decision_modes_all,
+    required_commands,
 };
 pub use command::{Command, CommandOutcome, Decision, RefusalCode, Refused};
 pub use conformance::{ConformanceTier, ContractObligations, Obligation, VectorOutcome};
@@ -58,6 +60,7 @@ pub use hermetic::{
     Assertion, HermeticAttestation, HermeticMode, HermeticRow, ImposedControl, RowVerdict,
     Severity, UnavailableControl, Verdict,
 };
+pub use plugin::{InstalledPlugin, PluginContent, PluginInstall, PluginTree, tree_digest};
 pub use projection::{
     CONTROL_PLANE_EVENTS, IrFamily, ProjectionReport, ir_family, project, required_ir_fields,
 };

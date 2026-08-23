@@ -13,9 +13,11 @@ disagree, **the document is amended** rather than the disagreement left in the c
 
 | | |
 |---|---|
-| **Claude Code, driven end to end** | `metaharness run claude --hermetic -p "…"` spawns 2.1.239 into a scratch config home, installs a blocking `PreToolUse` hook, answers it per call, streams protocol events on stdout, takes steering on stdin, retains the raw transcript, and exits on the hermetic floor's verdict. |
+| **Claude Code, driven end to end** | `metaharness run claude --hermetic -p "…"` spawns 2.1.240 into a scratch config home, installs a blocking `PreToolUse` hook, answers it per call, streams protocol events on stdout, takes steering on stdin, retains the raw transcript, and exits on the hermetic floor's verdict. |
 | **Codex, driven end to end (CX-M2)** | `metaharness run codex --hermetic -p "…"` starts a real `codex exec` into a scratch `CODEX_HOME`, copies `auth.json` per spawn, declares a blocking `PreToolUse` hook, and tails the **session rollout** for events. |
-| **Free verbs** | `capabilities`, `conformance` and `doctor` work with **no model and no credential**. `conformance claude` runs **17** vectors; `conformance codex` runs **7**, three of which drive a real process and the real hook program. |
+| **Free verbs** | `capabilities`, `conformance` and `doctor` work with **no model and no credential**. `conformance claude` runs **24** vectors; `conformance codex` runs **10**, three of which drive a real process and the real hook program. |
+| **Capture mode** | `--decisions observe` allows every call and records every call, through the same hook the enforcing modes use: the same events, the same correlation keys, `decided_by: "observe"`. It exists so an unsteered run and a steered one can be scored by one set of expectations. It is refused beside a `--frame`, and an `allow` on this wire *grants* — the attestation says so on every observe launch. |
+| **Plugin injection** | `--plugin-dir` copies the directory into the run's own scratch tree, digests it before the copy, and points the vendor at the copy. The copy list and the digest are readable off the launch plan before anything is spawned, and `session.started` carries the digest and the source — or an explicit empty list. A directory that is missing or empty is refused with exit `2`. |
 | **Frames across the process boundary (a5)** | `--frame step.frame.json` takes a sealed `metaharness.frame/1` document — digest-verified on load, refused by name when unreadable, untagged, misshapen or edited after sealing, enforced per call from the first turn. |
 | **The eval machinery** | Lives in `evals/`, migrated from `engineering-protocols`. Reads its denial census from `tool.decided` events in the run's own streams. **Nothing under `evals/` is part of `task check`.** |
 
@@ -47,7 +49,8 @@ Both refuse with **exit 2**, naming what they wait for.
 |---|---|
 | `--tool-surface owned` | Strategy C means metaharness implements the tools itself, and per-step re-listing is unverified vendor behaviour (**Q1**). |
 | `steer` on Claude Code | Claude Code headless has no mid-turn tier. |
-| The `allow` half of Codex's decision wire | Only the deny path has been driven. |
+| The `allow` half of Codex's decision wire | Only the deny path has been driven. `--decisions observe` on Codex is refused by name for the same reason: the capture mode *is* the allow half. |
+| Claiming Codex loads an injected plugin | Codex has no `--plugin-dir`; the copy lands at `$CODEX_HOME/plugins/<name>`, a placement read from the binary and driven by nobody. The attestation says so per plugin (**Q19**). |
 
 ## Open questions in flight
 
@@ -56,6 +59,7 @@ Both refuse with **exit 2**, naming what they wait for.
 | **Q1** | Per-step tool re-listing — is it a verifiable vendor behaviour? Gates `--tool-surface owned`. |
 | **Q9** | A reader for `trace-ir/1`. Gates `metaharness project`. |
 | **Q13** | Credential lifetime. Answered in part by the `auth.expired` event and the per-spawn copy. |
+| **Q19** | Does Codex load a plugin from a directory placed in its `CODEX_HOME`, with no marketplace manifest behind it? Gates the treated arm of an evaluation on Codex. |
 
 Q18 — the version pair disagreeing — left this table with CT-3 (amendment a8): doctor and the spawn
 were resolving **different installed binaries**, doctor now resolves on the child's own `PATH`, and a

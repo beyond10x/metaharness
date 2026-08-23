@@ -10,7 +10,7 @@ than against this crate's own assumptions about it (design
 | fact | value |
 |---|---|
 | captured | 2026-08-23 |
-| binary | `claude` 2.1.240 (`claude --version`) — **off the adapter's pin, 2.1.239**; the pin pair is CT-3's business |
+| binary | `claude` 2.1.240 (`claude --version`) — **the adapter's pin since 2026-08-23** (amendment a11). It was captured off-pin, against 2.1.239, and the pin moved to it rather than the other way round: these bytes are not re-labelled, ever. The pin pair is CT-3's business, and `golden-version-pair` now passes silently |
 | command | `metaharness run claude --hermetic --max-turns 2 --retain-dir <dir> -p "Run exactly one tool call: ls via the Bash tool. …"` |
 | run shape | scratch config home, scratch cwd, `--strict-mcp-config`, one `Bash(ls)` call, ~$0.24 on the operator's subscription |
 | reviewed | before commit, for credentials and account identifiers: none present. Paths are the run's own scratch (`~/.cache/claude-tmp/.tmp*`); ids are the session's own UUIDs |
@@ -22,6 +22,15 @@ than against this crate's own assumptions about it (design
 | `transcript.jsonl` | the `stream-json` record | `golden-transcript` vector (`src/vectors.rs`) |
 | `hook-input.json` | the raw `PreToolUse` stdin, exactly as published into the hook channel | `golden-hook-input` vector |
 | `transcript.expected.jsonl` | **generated** — the event stream the reader owes for `transcript.jsonl` | the same vector, byte-exact |
+
+## Capture version and pin are two different facts
+
+The `captured` and `binary` rows above are a **fact about these bytes** and are never edited: a
+golden that was re-labelled to match a moved pin would be a forged provenance, and the vector that
+reads it would be agreeing with a lie. The pin lives in `PINNED_VERSIONS`, the capture version lives
+here, and `golden-version-pair` (`src/vectors.rs`) is the one place the two are compared —
+agreement passes silently, a disagreement is a **named warning** that stands until somebody pays
+for a real re-capture. So a re-pin is free and honest; only a re-capture costs money.
 
 ## Re-capture (one-time cost per pin)
 

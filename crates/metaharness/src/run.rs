@@ -631,9 +631,13 @@ impl Run {
         }
 
         // `frame` mode: the adapter decides from the frame's admitted set, no round trip, and
-        // `tool.decided` is emitted all the same — the census counts both modes and a
-        // frame-mode run is fully audited (design D5).
-        let (decision, by, seam) = self.frame_verdict(&name);
+        // `tool.decided` is emitted all the same — the census counts every mode and a
+        // frame-mode run is fully audited (design D5). `observe` takes the same road with a
+        // verdict that reads no frame: it allows, and it says the mode did.
+        let (decision, by, seam) = match self.spec.decisions {
+            DecisionMode::Observe => (Decision::Allow, DecidedBy::Observe, self.seam),
+            DecisionMode::Frame | DecisionMode::Ask => self.frame_verdict(&name),
+        };
         self.outbox.push_back(Emission {
             at,
             event: Event::ToolRequested {
@@ -1107,6 +1111,7 @@ pub fn decider_name(by: DecidedBy) -> &'static str {
         DecidedBy::Frame => "frame",
         DecidedBy::Deadline => "deadline",
         DecidedBy::Adapter => "adapter",
+        DecidedBy::Observe => "observe",
     }
 }
 

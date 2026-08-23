@@ -65,6 +65,14 @@ pub enum DecidedBy {
     Deadline,
     /// The adapter refused for a reason of its own — an uncovered tool, a shadowed seam.
     Adapter,
+    /// **The run is in observe mode**, so the call was allowed because every call is
+    /// (amendment a10).
+    ///
+    /// Its own decider rather than [`DecidedBy::Adapter`] with an allow, because the two say
+    /// different things to anybody counting: an adapter allow is a judgement about this call, and
+    /// this is a run-wide posture that judged nothing. A census that folded them together would
+    /// report a capture run as a run whose policy happened to permit everything.
+    Observe,
 }
 
 /// How a step ended.

@@ -61,6 +61,44 @@
 > `thinking_tokens`, `iterations`, `speed` and `cost_usd`. Every one is read from what the vendor
 > wrote and none is computed — § 4.1's rule is unchanged and is the reason the aggregate `usage`
 > carries no cost. Marked at each point of change, on the same rule as the review's corrections.
+> **Amendment a10, 2026-08-23**, for the three-arm evaluation program (R2.5, R2.6): **a third
+> decision mode and one more thing a launch may install.** The program measures how well each
+> harness follows this repository's workflows under three treatments — raw instructions, the
+> shipped plugin, and metaharness enforcing — and *"the instrument is constant across arms; only
+> the treatment varies"*. Two things were missing for that. **`DecisionMode::Observe`** (§ 4.2) is
+> the capture mode: it allows every call and records every call, through the same seam and the
+> same `tool.decided` every other mode writes, so an unsteered run and a steered one produce the
+> same shape of transcript and are comparable. It is not a bypass — the hook fires and answers
+> `allow` — and because `allow` *grants* on this wire (§ 6, **F8**), an observe run is reported as
+> what it is: a run whose seam permits everything, not a run with no seam. It is refused beside a
+> frame, on **F9**'s rule. **Plugin injection** (§ 8.1 H1a, § 8.3) makes `--plugin-dir` a copy into
+> the run's own scratch tree with the plugin's digest on the launch plan and in the attestation, so
+> the treated arm's plugin is a pinned artifact rather than a directory that can change under the
+> run. Where a plugin has to sit for a vendor to load it is a **vendor fact**: verified on Claude
+> Code (its own `--plugin-dir` flag names the path) and **undriven on Codex**, which is
+> **Q19**, labelled at the point of use rather than assumed. Marked at each point of change, on the
+> same rule as the review's corrections.
+> **Amendment a11, 2026-08-23**, from the machine rather than from a build: **the claude adapter
+> is re-pinned 2.1.239 → 2.1.240.** The installed binary had moved and the pin had not, so every
+> run reported a version disagreement it could do nothing about — `doctor claude` read *"OFF the
+> adapter's pin"*, the hermetic floor's **H9** row came back `Gap`, and the contract carried a
+> standing `golden-version-pair` warning. What closes it is evidence, not bookkeeping: a live run
+> on 2026-08-23 drove 2.1.240 end to end through this adapter — the session opened, streamed and
+> ended in the stream dialect § 4 reads, and its opening record reported
+> `claude_code_version` **2.1.240** — and the
+> recorded wire this contract already replays byte for byte in the free tier
+> (`crates/metaharness-claude/fixtures/golden/`) is **that same binary's**, captured off-pin on
+> 2026-08-23 and never re-labelled. So the pin moved to the bytes; the bytes did not move to the
+> pin. **§ 2.7's rows are deliberately left naming 2.1.239**, on a8's rule for the codex a7 rows:
+> a dated observation keeps the binary it was read from, and what has not been re-read on 2.1.240
+> is unverified there rather than silently inherited. The version pair is now reconciled on
+> claude's side — `pass C2 golden-version-pair` — while codex still warns 0.144.0-vs-0.145.0,
+> which stays the operator's install to resolve. **And the vendor moved again the same afternoon**:
+> 2.1.241 installed at 14:02, so `doctor claude` reads *"OFF the adapter's pin"* about a machine
+> that is once more ahead of the evidence. **The pin does not follow it.** A pin is the version the
+> adapter holds bytes for, and chasing the installed binary with a search-and-replace is the one
+> move this row forbids — the next move costs a capture, which is a decision with a price on it
+> rather than an edit.
 > **Audience:** whoever reviews this for acceptance, and whoever builds it afterwards.
 > **Sources studied:** `former organization/engineering-protocols` (public, read-only), and a private
 > agent runtime whose patterns are described here generically and whose names, records and
@@ -261,6 +299,12 @@ still executes; the run then dies at the next read. § 7.6.
 Read on 2026-08-22 from `claude` 2.1.239 (`~/.local/share/claude/versions/2.1.239`) and
 `codex-cli` 0.145.0 (`/usr/bin/codex`). Method is stated per row because the strength differs.
 
+**The claude adapter has since been re-pinned to 2.1.240** (amendment a10, 2026-08-23) and these
+rows are deliberately left naming 2.1.239: each is a dated reading of a named binary, and editing
+the version on one would claim a reading nobody took. What 2.1.240 has driven is recorded where it
+was driven — the golden fixtures in `crates/metaharness-claude/fixtures/golden/` are that binary's
+own wire, replayed byte for byte in the free tier.
+
 **Where a row reports a count, the count is matching *lines* of `strings -n 6 <binary>`**, stated
 once here rather than left to the reader to guess. A count of occurrences is a different and
 larger number, and mixing the two silently is how a figure becomes unreproducible (review finding
@@ -445,19 +489,43 @@ that could have done it.
 ### 4.2 Decision modes
 
 **Decision D5 — the embedder chooses, per run and overridable per operation, between two modes.**
+**Amendment a10 adds a third, and it is not a shortcut for either of them.**
 
 | mode | who decides a call | cost | when |
 |---|---|---|---|
 | `frame` | the adapter, from the frame's allowed set. `tool.requested` is emitted with `decision_required: false`, followed immediately by `tool.decided { decided_by: "frame" }` | no round trip | the common case: the frame already says yes or no |
 | `ask` | the embedder. `decision_required: true`, and the run blocks | one round trip per call | argument-level judgement, or an embedder whose state must move at decision time (§ 10.1) |
+| `observe` **(a10)** | **nobody.** Every call is allowed and recorded: `decision_required: false`, then `tool.decided { decision: "allow", decided_by: "observe" }` | no round trip | **measuring a harness that is not being steered, with the instrument that measures one that is** |
 
 Two modes rather than one because a round trip per call costs latency, and an embedder that answers
 "yes" to everything the frame already admits has bought nothing. A per-operation override exists so
 `shell` can be `ask` while `read` is `frame`.
 
-Both modes emit `tool.decided`. The census in `session.ended` counts both. A run in `frame` mode is
-still fully audited; it is not less controlled, it is controlled by a policy stated in advance
-rather than by a callback.
+Every mode emits `tool.decided`. The census in `session.ended` counts them all. A run in `frame`
+mode is still fully audited; it is not less controlled, it is controlled by a policy stated in
+advance rather than by a callback.
+
+**Why `observe` is a decision mode and not the absence of one.** A run with no seam installed and a
+run whose seam allows everything are different runs, and only the second can be *compared* to a
+governed one: it produces the same events, in the same order, with the same correlation keys, so
+one set of expectations scores both. That is the whole requirement the evaluation program puts on
+this wire — the treatment varies, the instrument does not. `decided_by: "observe"` rather than
+`"adapter"` because the two say different things to anybody counting: an adapter allow is a
+judgement about one call, and this is a run-wide posture that judged none.
+
+**What it costs, said once and repeated at every point of use.** `allow` **grants** on this wire
+(§ 6, finding **F8**) — the harness honours it and bypasses the rest of its own permission
+pipeline. So an observe run is *more* permissive than a run with no hook at all, and it is reported
+as such: the launch attestation carries the mode, and an `ambient_inputs` line states the grant.
+Two consequences follow and both are enforced rather than documented:
+
+* **A frame beside `observe` is refused by name.** Finding **F9**: a frame whose text reaches the
+  model while nothing enforces it tells the model *"strictly only these operations"* and makes it
+  false. Observe enforces nothing by construction.
+* **`observe` is reached by asking for it and by nothing else.** The default is and stays `frame`,
+  and an adapter that has not driven the `allow` half of its own decision wire declares the mode
+  `unverified` in its capability descriptor and **refuses it at plan time** (§ 8.4 O4) — which is
+  where Codex stands today, since only its `deny` half has been driven (a7).
 
 ### 4.3 What is deliberately not an event
 
@@ -781,7 +849,9 @@ general.
 
 ### 7.3 Claude Code — the realization matrix
 
-Pinned to **2.1.239**.
+Pinned to **2.1.240** (amendment a10, 2026-08-23). The rows below name 2.1.239 where that is the
+binary the row was read from on 2026-08-22 — a dated observation keeps the version it was made
+against, and the pin names the binary the adapter is tested against today.
 
 | mechanism | tier | status | what it delivers |
 |---|---|---|---|
@@ -909,7 +979,7 @@ when its unobservability is a property of the mechanism rather than of the run.
 
 | # | control | imposed by | asserted how | unknown means | gating? |
 |---|---|---|---|---|---|
-| H1a | config home is scratch — **plugins** | `CLAUDE_CONFIG_DIR` / `CODEX_HOME` to a fresh directory | record: loaded plugins are **exactly** the declared set | no plugin list ⇒ `unk` | **gating** |
+| H1a | config home is scratch — **plugins** | `CLAUDE_CONFIG_DIR` / `CODEX_HOME` to a fresh directory. **a10: a declared `--plugin-dir` is copied into the run's own scratch tree and digested before the copy, so the declared set is a pinned artifact and not a directory that can change under the run** | record: loaded plugins are **exactly** the declared set | no plugin list ⇒ `unk` | **gating** |
 | H1b | …and **output style** | same | record: output style is the default | no output style ⇒ `unk`. Split from H1a because they fail independently and one unknown must not mask the other (**F11**) | **gating** |
 | H2 | settings sources excluded | `--setting-sources` with user/project/local omitted — the empty value, which V20 shows is the vendor's own defined no-sources case | launch: the flag is in the argv. The *absence of allow rules that would shadow the seam* is **not separately observable in any record** | — | **advisory.** The mechanism, not the run, is what cannot be observed; § 7.3 already refuses `can_use_tool` rather than trusting this row |
 | H3 | the environment is constructed, not inherited | an explicit allowlist; everything else dropped — including `ANTHROPIC_BASE_URL`, `ANTHROPIC_MODEL`, `HTTP(S)_PROXY`, `CLAUDE_CODE_*`, `DISABLE_*`, `SSH_AUTH_SOCK`, `GIT_*`, and `PATH` reduced to a stated set | **launch:** the constructed child environment, as a value, before spawning (§ 8.4 O7) | n/a — launch assertion | **gating** |
@@ -1012,6 +1082,23 @@ the MCP list, the credential source, the cwd, the version. The block exists so a
 intent beside the outcome and notice when they disagree — which is exactly the case H6 cannot cover
 any other way.
 
+**Amendment a10 gives it two more fields, and both are claims of exactly that kind.**
+
+| field | what it says | why it is a field and not prose in `imposed` |
+|---|---|---|
+| `decisions` | which mode decided every call in this run (§ 4.2) | a run whose model called no tool emits no `tool.decided` at all, and *"the model never called a tool"* and *"metaharness would have allowed anything it called"* are not the same fact. A reader must be able to tell them apart from the opening record alone |
+| `installed_plugins` | one entry per injected plugin: its name, the directory it came from, where it was put, its **digest**, and `loaded_by` — how this vendor is told it is there **and how strong that claim is** | the eval matrix's arm-b column is a plugin identity, so it has to be a value a consumer reads rather than a sentence somebody parses. `loaded_by` exists because the two adapters do not know it equally well (§ 8.4 O1's rule applied to placement): Claude Code's own `--plugin-dir` names the directory, and on Codex nothing names it at all — **Q19** |
+
+`installed_plugins` is **always present and empty when there is none**. A key that vanished on a
+plugin-less run would make *"this run installed nothing"* and *"this build does not report
+installations"* the same bytes — the reading § 8.1 refuses everywhere else. There is no `unk` case:
+this is metaharness's claim about its own copying, and it always knows.
+
+**Whether the vendor then loaded the plugin is not in this block and must not be.** That is H1a,
+read from the vendor's own plugin list, and on an adapter whose placement is undriven a record that
+carries no plugin list leaves H1a `unk` — which is the honest verdict for an installation nobody
+has watched the vendor pick up.
+
 ---
 
 ### 8.4 Adapter obligations
@@ -1024,7 +1111,7 @@ approximately.
 | O1 | **Pin the vendor version.** The adapter declares the versions it was written against, and every `session.started` carries the version actually observed. A version outside the pin is a `warning`; under `--strict-version` it is a refusal before the run | the vendor formats are not stable public schemas. `trace-ir` versions its adapters for exactly this reason: *a verdict that changed because the reader changed is visible as such rather than as a change in the agent's behaviour* |
 | O2 | **Total projection.** Every vendor record becomes exactly one metaharness event, or an `opaque` carrying its declared type, subtype and digest. Nothing is dropped, and a record whose envelope was recognised but whose body was not is `opaque` too | D4 |
 | O3 | **Unknown fields tolerated, unknown records preserved.** An unrecognised *field* on a recognised record is ignored in silence; an unrecognised *record* is `opaque` | a reader that refused a transcript for carrying a new key is a reader that stops working on the next patch release, and it fails in the worst available way |
-| O4 | **Declare the capability set honestly.** The adapter publishes which tiers it delivers (§ 7.1), which commands it can honour, and which it refuses. A tier it has not driven is declared `unverified`, and an embedder that *requires* an unverified tier gets a refusal rather than a silent no-op | § 7.3's `turn/steer` row is the live case |
+| O4 | **Declare the capability set honestly.** The adapter publishes which tiers it delivers (§ 7.1), which commands it can honour, which it refuses, and — **a10** — which **decision modes** (§ 4.2) it delivers. A tier or mode it has not driven is declared `unverified`, and an embedder that *requires* an unverified one gets a refusal rather than a silent no-op | § 7.3's `turn/steer` row is the live case. The mode table's live case is `observe` on Codex: the mode is the `allow` half of that vendor's decision wire and only the `deny` half has been driven (a7), so it is `unverified` in the descriptor **and** refused at plan time — one decision, read from one place, so the published capability and the behaviour cannot drift apart |
 | O5 | **No cross-class fallback, and no mid-run degradation.** A harness adapter never becomes a direct API call. An adapter that cannot honour a declared requirement refuses at start | § 11 |
 | O6 | **Publish the operation rendering as a value.** `capabilities <kind> --render` prints the neutral-operation → vendor-tool table without running anything | § 5.2. A rendering that only exists inside a run cannot be asserted on before one |
 | O7 | **Assert the argv, the environment and the hook definition before spawning.** The constructed command line, the constructed child environment, the ancestor walk for memory files (H11) and the emitted hook definition — `type: command`, neither `async` nor `asyncRewake` — are all values the adapter's tests read | `engineering-protocols` does exactly this for three flags *"because every one of the failures would be silent"*. The hook-definition clause is review finding **F6**: a hook that matches everything and does not block is a guard that has already stopped guarding |
@@ -1126,7 +1213,7 @@ shape rather than a thing to remember.
 
 ```
 metaharness run <claude|codex> [--hermetic|--hermetic strict] [-p <prompt>] [--frame <file>]
-                               [--decisions frame|ask] [--tool-surface native|owned]
+                               [--decisions frame|ask|observe] [--tool-surface native|owned]
                                [--credentials operator-login|api-key|none]
                                [--model <m>] [--max-turns <n>] [--plugin-dir <d>]…
                                [--cwd <dir>] [--strict-version]
@@ -1432,6 +1519,8 @@ is a row nobody intends to close.
 | Q16 | **Where does the decision *envelope* belong — the thing that correlates one decision to one `call_id` on the way back to the child?** (amendment a3) | **CLOSED by amendment a4 (V22).** The spawner and the hook program are written, and the answer was read off the vendor: the hook input carries **`tool_use_id`**, which *is* the transcript's `tool_use` block `id` and therefore `Event::ToolRequested`'s `call_id`. The correlation is exact and needs no digest, no ordering assumption and no per-process bookkeeping. **M1's provisional envelope — `{"call_id":…, "response":…}` — turns out to be exactly right, so nothing about it changes.** The one thing that did change is where the rendezvous *name* comes from: the hook process picks its own, publishes its stdin under it, and metaharness matches `tool_use_id` to a call — so the shell parses no JSON | — |
 | Q17 | **Can `session.started` carry the transcript's digest, when the transcript is a file the run is still writing?** § 8.4 O8 says the opening record references the retained bytes **and their digest**, and the opening record is emitted at line 1 of a file whose last line does not exist yet. M2 retains the bytes and the path, and leaves `digest` and `bytes` absent there (amendment a4) | decide which of two shapes the IR wants: a digest emitted at `session.ended`, when the file is complete, or a `transcript.sealed` event carrying it — then check whether `trace-spec`'s `transcript_digest` expectation can read it from either | O8 is met in substance — the bytes are retained and the auditor reads them by path — and the § 4.4 cross-check stays unbuilt, which it already is |
 | Q18 | **Which version is the Codex adapter actually pinned to?** `codex --version` reports `codex-cli 0.145.0`, and the `session_meta.cli_version` written by the run that binary starts reports **`0.144.0`** — on the same machine, in the same run (amendment a7). `codex doctor` reports two npm installs whose package roots differ, which is the likely cause but is **not verified as the cause**. It matters because the two are read by different rows: `doctor codex` compares the *former* against the pin before money is spent, and H9's floor compares the *latter* after — so a run can pass the pre-flight and report off-pin from its own record, which is exactly what CX-M2's live run did | **CLOSED by amendment a8 (CT-3, 2026-08-23), and the cause was not this row's guess.** Not one binary reporting two strings and not two npm roots: **two binaries, resolved by two `PATH`s.** `/usr/bin/codex` is pacman `openai-codex 0.145.0-1`; `~/.local/bin/codex` is npm `@openai/codex` and reports 0.144.0; the operator's shell puts `/usr/bin` first, the launch plan's constructed child `PATH` puts `~/.local/bin` first — so the pre-flight and the run answered about different binaries, verified end to end: the golden rollout's `cli_version` 0.144.0 equals `~/.local/bin/codex --version` exactly. Closed by two mechanisms: `doctor` resolves on **the child's `PATH`** (`child_path`, exported by both adapters) and reports the resolved absolute path — on this machine it now honestly reads `/home/timo/.local/bin/codex 0.144.0, OFF the pin (0.145.0)` — and the contract carries a `golden-version-pair` vector per adapter, whose off-pin answer is a **named warning** on every conformance surface (stderr beside the `--contract` record), never a silent pass and never a failure | what stays is the machine's, not the protocol's: two installs remain, and resolving them to one — or repinning to 0.144.0 and re-verifying the a7 claims against it, since a8 shows the driven evidence was that binary's — is the operator's call. The reader's gate is unchanged: a version outside the pin is a `warning` and never a mid-read refusal. Nothing is silently widened |
+
+| Q19 | **Does codex 0.145.0 load a plugin from a directory placed in its `CODEX_HOME`, with no marketplace manifest and no `codex plugin add` behind it?** (amendment a10.) `codex exec` has no `--plugin-dir` — `codex plugin` installs from *marketplace snapshots* — so unlike Claude Code there is no flag with which to name a directory, and the adapter must pick a location. It picks `$CODEX_HOME/plugins/<name>`, from strings in the binary and **not** from a driven call: 0.145.0 resolves `plugins/cache` and `plugins/data` under the Codex home, and a marketplace's own plugin entries are `./plugins/<plugin-name>` relative to a marketplace root. Neither says a bare directory there is loaded. The launch deliberately writes **no** `[marketplaces]` table to go with the copy: an unrecognised key under a table this binary reads is dropped without failing the config load (§ 7.4), and a malformed one could fail it outright — which on this vendor is a run with no seam | one `codex exec` run into a scratch `CODEX_HOME` holding a copied plugin, reading the run's own record for whether the plugin's skills, hooks or commands appear — then, if not, the same with a `[marketplaces]` entry pointing at the scratch home as a local marketplace root | the copy stays a copy and nothing pretends otherwise: the attestation's `loaded_by` already says *"nothing names it to the vendor … whether codex loads it from there is unverified"*, H1a stays `unk` for a record with no plugin list, and the eval program's arm b is **not** claimable on Codex until this row closes. The alternative route is stateful — `codex plugin marketplace add` then `codex plugin add`, two commands run against the scratch home before the run — and is a later milestone, not a silent fallback |
 
 ---
 

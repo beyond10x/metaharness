@@ -151,7 +151,7 @@ fn an_unmet_obligation_names_the_row_and_the_vector() {
 #[test]
 fn a_run_that_checked_nothing_is_an_unmet_obligation_on_its_own() {
     let declared = contract_obligations(Kind::Claude).expect("the adapter exists");
-    let unmet = declared.unmet(&[], "claude 2.1.239");
+    let unmet = declared.unmet(&[], "claude 2.1.240");
     assert!(
         unmet.iter().any(|gap| gap.contains("checked is 0")),
         "{unmet:#?}"

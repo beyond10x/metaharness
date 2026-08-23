@@ -1,0 +1,6 @@
+{
+  "refusal": {
+    "code": null,
+    "display": "--plugin-dir /operator/integrations/claude-code cannot be installed: it is a directory and it holds no file at all. It is refused rather than skipped, because a run that installed no plugin and reported one would be the untreated run wearing the treated run's label"
+  }
+}

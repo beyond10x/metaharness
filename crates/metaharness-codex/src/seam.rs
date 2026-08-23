@@ -14,8 +14,8 @@
 use std::collections::BTreeMap;
 
 use metaharness_protocol::{
-    AdapterClass, AdapterId, COMMAND_NAMES, Capabilities, CommandSupport, Decision, Operation,
-    RefusalCode, Refused, Tier, TierStatus,
+    AdapterClass, AdapterId, COMMAND_NAMES, Capabilities, CommandSupport, Decision, DecisionMode,
+    Operation, RefusalCode, Refused, Tier, TierStatus,
 };
 use serde_json::{Map, Value, json};
 
@@ -69,6 +69,27 @@ pub fn capabilities() -> Capabilities {
             (Tier::Kill, TierStatus::Delivered),
         ]),
         commands,
+        // Two delivered and one not, and the split is the same driven/undriven line the tier table
+        // draws. `frame` and `ask` reach this wire through a **deny**, which CX-M2 drove and the
+        // vendor's own record confirmed. `observe` is the **allow** half and nothing else — the
+        // half no run here has driven, and the 0.145.0 binary carries a string suggesting some
+        // `permissionDecision` values are refused at `PreToolUse`. An allow the vendor discards is
+        // a hook response that decided nothing, which on a capture run would be indistinguishable
+        // from a capture that worked. Refused by name at plan time until a run drives it (R2.4).
+        decision_modes: BTreeMap::from([
+            (
+                DecisionMode::Frame.as_str().to_string(),
+                TierStatus::Delivered,
+            ),
+            (
+                DecisionMode::Ask.as_str().to_string(),
+                TierStatus::Delivered,
+            ),
+            (
+                DecisionMode::Observe.as_str().to_string(),
+                TierStatus::Unverified,
+            ),
+        ]),
         rendering: rendering(),
     }
 }

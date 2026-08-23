@@ -106,12 +106,20 @@ fn session_events() -> Vec<Event> {
             },
             hermetic: HermeticAttestation {
                 mode: HermeticMode::Strict,
+                decisions: metaharness_protocol::DecisionMode::Observe,
                 imposed: vec![ImposedControl {
                     row: metaharness_protocol::HermeticRow::H5,
                     how: "--strict-mcp-config".into(),
                 }],
                 unavailable: vec![],
                 ambient_inputs: vec!["git status is in the system prompt".into()],
+                installed_plugins: vec![metaharness_protocol::InstalledPlugin {
+                    name: "claude-code".into(),
+                    source: "/operator/integrations/claude-code".into(),
+                    installed_at: "/scratch/run-1/plugins/claude-code".into(),
+                    digest: Digest::of(b"plugin"),
+                    loaded_by: "--plugin-dir in the argv".into(),
+                }],
             },
         },
         Event::SessionEnded {
@@ -256,7 +264,7 @@ fn tool_and_accounting_events() -> Vec<Event> {
         },
         Event::Warning {
             code: warning_code::VERSION_OFF_PIN.into(),
-            message: "2.1.240 is outside the pin".into(),
+            message: "2.1.239 is outside the pin".into(),
         },
         Event::Opaque {
             vendor_type: Some("system".into()),

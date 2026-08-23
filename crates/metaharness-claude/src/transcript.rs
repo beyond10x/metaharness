@@ -798,7 +798,7 @@ mod tests {
             r#"{"type":"system","subtype":"init","cwd":"/scratch/run-1/work",
                 "session_id":"s-1","tools":["Read"],"mcp_servers":[],"model":"a-model",
                 "permissionMode":"default","slash_commands":[],"apiKeySource":"none",
-                "claude_code_version":"2.1.239","output_style":"default","agents":[],
+                "claude_code_version":"2.1.240","output_style":"default","agents":[],
                 "skills":[],"plugins":[]}"#,
         ));
         let Event::SessionStarted {
@@ -815,7 +815,7 @@ mod tests {
             panic!("expected session.started");
         };
         assert_eq!(adapter, ADAPTER_ID);
-        assert_eq!(harness_version.as_deref(), Some("2.1.239"));
+        assert_eq!(harness_version.as_deref(), Some("2.1.240"));
         assert_eq!(credential_source.as_deref(), Some("none"));
         assert_eq!(output_style.as_deref(), Some("default"));
         assert_eq!(offered_tools, Some(vec!["Read".to_string()]));

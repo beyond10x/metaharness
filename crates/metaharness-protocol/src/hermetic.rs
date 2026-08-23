@@ -12,6 +12,9 @@
 
 use serde::{Deserialize, Serialize};
 
+use crate::plugin::InstalledPlugin;
+use crate::spec::DecisionMode;
+
 /// How hermetic a run is asked to be.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 #[cfg_attr(feature = "clap", derive(clap::ValueEnum))]
@@ -208,6 +211,15 @@ pub struct UnavailableControl {
 pub struct HermeticAttestation {
     /// How hermetic the run asked to be.
     pub mode: HermeticMode,
+    /// **Who decided every tool call in this run** (design amendment a10).
+    ///
+    /// Beside `mode` because it is the same kind of claim: metaharness's own posture, stated by
+    /// metaharness, reaching `session.started` where a reader can put it beside what the vendor
+    /// recorded. It is here rather than left to be inferred from the `tool.decided` events,
+    /// because a run in which the model called no tool emits none of those — and *"the model
+    /// never called a tool"* and *"metaharness would have allowed anything it called"* are not
+    /// the same fact.
+    pub decisions: DecisionMode,
     /// What was imposed.
     pub imposed: Vec<ImposedControl>,
     /// What could not be.
@@ -216,17 +228,33 @@ pub struct HermeticAttestation {
     /// named one, because the vendor's own flag description says it is in the system prompt
     /// (design § 8.1, H11's second half).
     pub ambient_inputs: Vec<String>,
+    /// Every plugin this launch copied into the run's scratch tree, with its digest and where it
+    /// came from (crossing #4).
+    ///
+    /// **Always present, empty when there is none.** A key that vanished on a plugin-less run
+    /// would make "this run installed nothing" and "this build does not report installations"
+    /// the same bytes, which is the reading § 8.1 refuses everywhere else: absence of evidence is
+    /// not a property. `[]` is metaharness saying *none*; there is no third answer, because this
+    /// is metaharness's claim about its own copying and it always knows.
+    pub installed_plugins: Vec<InstalledPlugin>,
 }
 
 impl HermeticAttestation {
     /// An attestation for a run that imposes nothing.
+    ///
+    /// `decisions` is [`DecisionMode::Frame`] and not the run's, because this constructor is for
+    /// readers that have no run — a replay fixture, an offline projection — and the safe
+    /// direction for a value nobody supplied is the one that claims the least. `observe` is
+    /// reached by a run asking for it, never by a default.
     #[must_use]
     pub fn none(mode: HermeticMode) -> Self {
         Self {
             mode,
+            decisions: DecisionMode::Frame,
             imposed: Vec::new(),
             unavailable: Vec::new(),
             ambient_inputs: Vec::new(),
+            installed_plugins: Vec::new(),
         }
     }
 
@@ -234,6 +262,17 @@ impl HermeticAttestation {
     #[must_use]
     pub fn claims(&self, row: HermeticRow) -> bool {
         self.imposed.iter().any(|control| control.row == row)
+    }
+
+    /// Whether this run allowed every call and adjudicated none of them.
+    ///
+    /// One named predicate rather than a comparison spelled out at each reader, so a consumer
+    /// asking *"was this a capture run?"* asks it the same way everywhere — and so a run that
+    /// did not ask for observe mode cannot be read as one by an expression that got the
+    /// comparison the wrong way round.
+    #[must_use]
+    pub fn is_observing(&self) -> bool {
+        self.decisions == DecisionMode::Observe
     }
 }
 

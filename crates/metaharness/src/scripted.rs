@@ -241,7 +241,7 @@ impl HarnessProcess for ScriptedProcess {
 /// The language is one JSON object per line with an `emit` key:
 ///
 /// ```text
-/// {"emit":"session.started","harness_version":"2.1.239","cwd":"/w","output_style":"default"}
+/// {"emit":"session.started","harness_version":"2.1.240","cwd":"/w","output_style":"default"}
 /// {"emit":"tool.requested","call_id":"t1","name":"Bash","input":{"command":"ls"}}
 /// {"emit":"tool.result","call_id":"t1","is_error":false}
 /// {"emit":"text","text":"done"}
