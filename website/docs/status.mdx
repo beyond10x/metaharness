@@ -15,9 +15,10 @@ disagree, **the document is amended** rather than the disagreement left in the c
 |---|---|
 | **Claude Code, driven end to end** | `metaharness run claude --hermetic -p "…"` spawns 2.1.240 into a scratch config home, installs a blocking `PreToolUse` hook, answers it per call, streams protocol events on stdout, takes steering on stdin, retains the raw transcript, and exits on the hermetic floor's verdict. |
 | **Codex, driven end to end (CX-M2)** | `metaharness run codex --hermetic -p "…"` starts a real `codex exec` into a scratch `CODEX_HOME`, copies `auth.json` per spawn, declares a blocking `PreToolUse` hook, and tails the **session rollout** for events. |
-| **Free verbs** | `capabilities`, `conformance` and `doctor` work with **no model and no credential**. `conformance claude` runs **24** vectors; `conformance codex` runs **10**, three of which drive a real process and the real hook program. |
+| **Free verbs** | `capabilities`, `conformance` and `doctor` work with **no model and no credential**. `conformance claude` runs **24** vectors; `conformance codex` runs **17**, four of which drive a real process and the real hook program. |
 | **Capture mode** | `--decisions observe` allows every call and records every call, through the same hook the enforcing modes use: the same events, the same correlation keys, `decided_by: "observe"`. It exists so an unsteered run and a steered one can be scored by one set of expectations. It is refused beside a `--frame`, and an `allow` on this wire *grants* — the attestation says so on every observe launch. |
 | **Plugin injection** | `--plugin-dir` copies the directory into the run's own scratch tree, digests it before the copy, and points the vendor at the copy. The copy list and the digest are readable off the launch plan before anything is spawned, and `session.started` carries the digest and the source — or an explicit empty list. A directory that is missing or empty is refused with exit `2`. |
+| **The loopback provider — Claude Code, and now the API-key half of Codex** | `--credentials loopback` puts metaharness in front of the vendor: the child holds a per-run placeholder and **no credential file at all**, and one custody attaches the real token on the way out. On Codex the child is pointed at the proxy by a `[model_providers.metaharness_loopback]` entry in the scratch `CODEX_HOME`. A **ChatGPT-plan** Codex login is **refused by name** — whether the vendor routes subscription traffic through a custom provider is unverified, and no run here guesses. |
 | **Frames across the process boundary (a5)** | `--frame step.frame.json` takes a sealed `metaharness.frame/1` document — digest-verified on load, refused by name when unreadable, untagged, misshapen or edited after sealing, enforced per call from the first turn. |
 | **The eval machinery** | Lives in `evals/`, migrated from `engineering-protocols`. Reads its denial census from `tool.decided` events in the run's own streams. **Nothing under `evals/` is part of `task check`.** |
 
@@ -30,6 +31,13 @@ vendor's own record says so**.
 |---|---|
 | Claude Code | `Bash` in `permission_denials` |
 | Codex | `Command blocked by PreToolUse hook…` with an **empty** `Output:` |
+
+And the grant half, driven 2026-08-23 (R2.4): the hook held a real `Bash` call, metaharness
+answered `permissionDecision: allow`, the command ran, and the rollout's own
+`custom_tool_call_output` carried its output — census `allowed: 1, denied: 0`. `--decisions
+observe` on Codex plans since that run. Caveat carried with the observation: the child's `PATH`
+resolved codex **0.144.0** while the pin is 0.145.0 (the two-install warning fired), so the grant
+is a driven fact about 0.144.0 and an inference about 0.145.0 until one machine holds one install.
 
 That is the claim the whole design exists to be able to make, and it is the one thing no free test
 tier can reach.
@@ -49,8 +57,15 @@ Both refuse with **exit 2**, naming what they wait for.
 |---|---|
 | `--tool-surface owned` | Strategy C means metaharness implements the tools itself, and per-step re-listing is unverified vendor behaviour (**Q1**). |
 | `steer` on Claude Code | Claude Code headless has no mid-turn tier. |
-| The `allow` half of Codex's decision wire | Only the deny path has been driven. `--decisions observe` on Codex is refused by name for the same reason: the capture mode *is* the allow half. |
-| Claiming Codex loads an injected plugin | Codex has no `--plugin-dir`; the copy lands at `$CODEX_HOME/plugins/<name>`, a placement read from the binary and driven by nobody. The attestation says so per plugin (**Q19**). |
+| Claiming Codex's opening record confirms an injected plugin | It does not: `session.started.plugins` is `null` on this vendor, so **H1a reads `unk`**. One live run *did* observe the plugin's skills reaching the model's context (**Q19**) — that is the treatment arriving, not the vendor enumerating what it loaded, and the attestation says which of the two it is. |
+| `--credentials loopback` on a **ChatGPT-plan** Codex login | Whether subscription traffic can be routed through a `model_providers` entry at all is unverified (**V-LP6**). Refused by name, never degraded to the credential-copy path. |
+
+## Built, and not driven live — the labels that have not moved
+
+| Claim | Where it stands |
+|---|---|
+| The Codex loopback door | **Built free, paid confirmation outstanding.** The provider entry, the placeholder, the empty copy list and the custody swap are all proven without a vendor binary. That `codex` itself honours the entry is one live turn nobody has spent. |
+| Codex loading an injected plugin | **Driven once, 2026-08-23 (Q19).** A directed probe copied a plugin to `$CODEX_HOME/plugins/<name>` and asked the model to answer from its runtime context with no tools; it quoted the injected **skills catalog** — *"Available skills catalog — `## Skills`"* — with **zero tool calls**. Two limits travel with it: the child was codex **0.144.0** against a 0.145.0 pin, and the vendor's opening record still lists no plugins, so H1a is `unk`. Nothing is claimed about how well the skill is *used*. |
 
 ## Open questions in flight
 
@@ -59,7 +74,14 @@ Both refuse with **exit 2**, naming what they wait for.
 | **Q1** | Per-step tool re-listing — is it a verifiable vendor behaviour? Gates `--tool-surface owned`. |
 | **Q9** | A reader for `trace-ir/1`. Gates `metaharness project`. |
 | **Q13** | Credential lifetime. Answered in part by the `auth.expired` event and the per-spawn copy. |
-| **Q19** | Does Codex load a plugin from a directory placed in its `CODEX_HOME`, with no marketplace manifest behind it? Gates the treated arm of an evaluation on Codex. |
+
+Q19 — whether Codex loads a plugin from a directory placed in its `CODEX_HOME` — left this table on
+2026-08-23, answered **yes** by one directed probe: a plugin copied to `$CODEX_HOME/plugins/<name>`
+had its **skills catalog** surfaced into the model's context, quoted back with **zero tool calls**,
+with no marketplace manifest behind it. It is answered rather than closed, and both limits travel
+with the claim wherever it is stated: the child was codex **0.144.0** against a 0.145.0 pin, and the
+vendor's opening record still enumerates no plugins — so H1a is `unk` and the evidence is the
+model's answer, not the vendor's plugin list.
 
 Q18 — the version pair disagreeing — left this table with CT-3 (amendment a8): doctor and the spawn
 were resolving **different installed binaries**, doctor now resolves on the child's own `PATH`, and a
@@ -72,7 +94,7 @@ Each is a direction, not a work order. Ordered roughly by how much it de-risks e
 
 | # | Direction |
 |---|---|
-| 1 | **Contract-test every adapter mapping — built.** All four milestones: `conformance <kind> --contract` emits a `contract_result` (CT-1) whose bytes are themselves pinned as a golden record; both adapters carry recorded real vendor wire on both faces (CT-2); the version pin is a reconciled pair that names a disagreement instead of hiding it (CT-3); and every adapter declares its obligations through one authoring shape, checked against the vectors it really produces (CT-4). What that last one found is that the two adapters are **not** symmetrical yet: codex tests no launch face, and its declaration now says so. |
+| 1 | **Contract-test every adapter mapping — built.** All four milestones: `conformance <kind> --contract` emits a `contract_result` (CT-1) whose bytes are themselves pinned as a golden record; both adapters carry recorded real vendor wire on both faces (CT-2); the version pin is a reconciled pair that names a disagreement instead of hiding it (CT-3); and every adapter declares its obligations through one authoring shape, checked against the vectors it really produces (CT-4). What that last one found is that the two adapters were **not** symmetrical — codex tested no launch face — and its declaration said so out loud rather than reading green. **That gap is now closed**: six recorded launch expectations, and the codex record moved `checked: 10 → 17` deliberately, with the diff read and this page updated with it. |
 | 2 | **More harnesses: `pi`, `opencode`** — same pattern, research record first, live proof last. Whichever comes first fills the contract checklist before it is believed. |
 | 3 | **metaharness usage ≡ flux usage** — UX parity with `flux run --stream-json`. A `metaharness-flux` adapter is **refused**: nothing flux-related is embedded here. |
 | 4 | **Sandbox inversion** — wrap the inner harness in a sandbox *metaharness* owns and disable the vendor's own inside it. One enforcement surface, vendor-independent, and H3/H7/H11 plus network isolation become impositions metaharness can actually make. |

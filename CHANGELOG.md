@@ -5,9 +5,86 @@ was amended and the amendment is named here.
 
 ## [Unreleased]
 
+### Verified
+
+- **Q19 is answered: Codex surfaces an injected plugin's skills from `$CODEX_HOME/plugins/<name>`
+  — observed once, on 0.144.0.** The placement crossing #4 picks on Codex was chosen from strings
+  in the binary and driven by nobody, which left the treated arm of an evaluation unclaimable on
+  that vendor. A directed live probe on 2026-08-23 (run `codex-2139643`) settled it:
+  `metaharness run codex --hermetic --decisions observe --plugin-dir integrations/codex` copied the
+  plugin to the placement (digest `154857db…`) and asked the model to answer **from its runtime
+  context only, using no tools**. It answered *"Available skills catalog — `## Skills`"*, and the
+  run made **zero tool calls** — the census read `0/0/0/0` and no `tool.requested` was emitted at
+  all — so the catalog could not have been read off disk. The vendor put the injected plugin's
+  skills into the model's context, with **no `[marketplaces]` table and no `codex plugin add`**
+  behind it; the copy alone was enough, which is what the launch had bet on.
+  **Two limits travel with the claim, and they are carried in the record rather than in a footnote
+  here.** The child was codex **0.144.0** — the binary this machine's constructed `PATH` resolves —
+  against a pin of 0.145.0, the same caveat R2.4's allow-half proof carries (Q18/a8): a driven fact
+  about that binary, an inference about the pin. And `session.started.plugins` was still `null`:
+  **the vendor's opening record enumerates no plugins, so H1a still reads `unk` on Codex.** What was
+  observed is the plugin's *content* reaching the model — which is exactly what an evaluation's
+  treated arm needs — and not the vendor stating what it loaded, which is what H1a asks for. The two
+  are different claims and the attestation's `loaded_by` now says which one it is making.
+  **Nothing more is claimed:** not that the surfaced skill is *used* well, and nothing about
+  0.145.0. Every label moved together — `PLUGIN_HOME`'s doc, the per-install `loaded_by`, H1a's
+  `how` text, design § 8.3 and the Q19 register row, `status.mdx` (which left the open-questions
+  table the way Q18 did, with the mechanism and the caveat below it) and `harnesses/codex.mdx` —
+  and the codex launch test now requires the record to carry the observation **and both limits**,
+  so a row that quietly upgraded to a bare *"it loads"* reddens.
+
+### Fixed
+
+- **`--cwd` on Codex now gives the child a tree it can actually write to (design amendment a6.1).**
+  Amendment a6 is the declaration that trades H7 and H11 **for real work in a real tree** — and on
+  this vendor it bought nothing. A paid subscription run on 2026-08-23 (`codex-1982431`,
+  `run codex --hermetic --decisions observe --cwd <a real clone>`) spawned, worked, and could not
+  write one file: the child reported *"this workspace is mounted read-only"* and the vendor's own
+  stream said *"the workspace is read-only, so the planning-store patch was rejected."* The cause
+  was that the scratch `config.toml` wrote `sandbox_mode = "read-only"` for **every** run, so the
+  vendor's sandbox applied to the operator's own repository exactly as it applied to a scratch
+  directory. A trade whose consideration cannot be delivered is not a trade, which is why this is an
+  amendment to a6 rather than a bug fix under it.
+  **What changed:** `sandbox_mode` is now decided by the cwd declaration —
+  `sandbox_mode = "workspace-write"` when the run carries an operator-named `--cwd`, and
+  `"read-only"` otherwise, unchanged, for every scratch run. The value is the vendor's own spelling,
+  not a guess: `SandboxMode` deserialises `read-only`, `workspace-write` and `danger-full-access`
+  (kebab-case, read from the pinned 0.145.0 binary's serde variant list, where the snake-case trio
+  beside it belongs to a different type), and the binary's own description of it is *"The sandbox
+  permits reading files, and editing files in `cwd` and `writable_roots`. Editing files in other
+  directories requires approval."* The child is spawned **in** the named tree, so `cwd` is that tree
+  and **no `writable_roots` entry is written** — the grant stops where the declaration stopped.
+  Nothing wider goes with it: `--add-dir` stays denied, `danger-full-access` is never written, and
+  no `[sandbox_workspace_write]` table is emitted, so this vendor's `network_access` default is
+  neither changed nor claimed (it is undriven here, and so is stated nowhere).
+  **The grant is visible without diffing a config that no longer exists.** H7's attested-unavailable
+  reason now says it in words — *"THE CHILD COULD WRITE TO THAT TREE: the vendor sandbox was widened
+  to it for this run — sandbox_mode = "workspace-write" …"* — and the scratch case's imposed row says
+  the opposite just as plainly. **`--hermetic strict` still refuses a named-cwd run**: the grant
+  changes what the child may *do*, never what the attestation *claims*, so H7 and H11 stay
+  unavailable and the strict floor reads them exactly as before.
+  Five unit tests on the plan, no new vector: the config carries the grant iff the cwd is
+  operator-named, the scratch posture is unmoved, the attestation states the grant, a named-cwd run
+  is still not hermetically clean, and a **mutation** — the grant stripped back to `read-only` —
+  fails the same check that passes on the real plan, so the check can go red. The six recorded C1
+  expectations were regenerated because the config document's comment changed; **no value in them
+  moved** (none uses `--cwd`, so all six still record `sandbox_mode = "read-only"`), **no vector was
+  added, and `checked` stays 17** — the `contract_result` bytes the other repository reads are
+  untouched.
+
 ### Changed
 
-- **The claude adapter is re-pinned 2.1.239 → 2.1.240 (protocol amendment a10).** The installed
+- **The `allow` half of Codex's decision wire is driven, and `--decisions observe` on Codex plans
+  now (R2.4's paid vector, spent 2026-08-23).** The hook held a real `Bash` call, metaharness
+  answered `permissionDecision: allow`, the command ran, and the rollout's own
+  `custom_tool_call_output` carried its output — census `allowed: 1, denied: 0`. The mode table
+  moves `observe` to delivered, the plan-time refusal lifts with it (they read from one place, and
+  the drift test held), and every prose site that said *built, undriven live* moves together:
+  `README.md`, `status.mdx`, `harnesses/codex.mdx`, the adapter's module doc. The observation
+  carries its own caveat wherever it is stated: the child's `PATH` resolved codex **0.144.0**
+  while the pin is 0.145.0 — the two-install warning fired, as it must — so the grant is a driven
+  fact about 0.144.0 and an inference about 0.145.0 until one machine holds one install.
+- **The claude adapter is re-pinned 2.1.239 → 2.1.240 (protocol amendment a11).** The installed
   binary had moved and the pin had not, so every run reported a disagreement it could do nothing
   about: `doctor claude` read *"OFF the adapter's pin"*, the hermetic floor's **H9** row came back
   `Gap`, and the contract carried a standing `warn C2 golden-version-pair` on stderr beside its
@@ -111,10 +188,9 @@ was amended and the amendment is named here.
   own under the config home (beside `known_marketplaces.json` and a `marketplaces` cache) and H1a's
   *"exactly the declared set"* must not depend on the vendor's own bookkeeping not adding to it.
   Codex: **there is no such flag**, `codex plugin` installs from marketplace snapshots, and the
-  placement `$CODEX_HOME/plugins/<name>` is read from strings in the binary rather than driven —
-  so it is a named constant, the attestation's `loaded_by` says *"nothing names it to the vendor …
-  whether codex loads it from there is unverified"*, and the open question is **Q19** with the
-  command that would close it. The launch deliberately writes **no** `[marketplaces]` table to go
+  placement `$CODEX_HOME/plugins/<name>` was read from strings in the binary rather than driven —
+  so it is a named constant, and the open question is **Q19**, *answered by a live probe the same
+  day; see the entry below*. The launch deliberately writes **no** `[marketplaces]` table to go
   with the copy: an unrecognised key under a table this binary reads is dropped in silence and a
   malformed one can fail the config load, which on this vendor is a run with no seam. The previous
   blanket refusal of `--plugin-dir` on codex is lifted — it was hiding a mechanism behind a fact
@@ -140,6 +216,81 @@ was amended and the amendment is named here.
   `session.started`: four fixtures regenerated through the two `#[ignore]`d regenerators, diff read
   line by line, and the only change in any of them is `"decisions":"frame"` and
   `"installed_plugins":[]` appearing inside `hermetic`. Nothing else in the stream moved.
+- **Codex has a launch face now, and the record moved to say so: `checked: 10 → 17` (CT-4's named
+  gap, closed).** The adapter-contract checklist found on its first run that codex tested no launch
+  face at all — no `fixtures/c1/`, its argv and child environment pinned by unit tests and by
+  nothing a consumer could read, while its `contract_result` said `checked: 10`, `failed: 0` and
+  nothing whatsoever about the face it never tested. It was declared `Obligation::Gap(reason)`
+  rather than left absent, precisely so closing it would be a deliberate act. This is that act.
+  Six recorded expectations under `crates/metaharness-codex/fixtures/c1/`, declared
+  `Obligation::Filled` and checked against the run that produces them: `c1-strict-hermetic`,
+  `c1-api-key`, `c1-loopback`, `c1-loopback-subscription-refusal`,
+  `c1-unsupported-option-refusal`, `c1-memory-ancestor-refusal`. **The observation is not claude's
+  and could not be**: a codex launch vector records `program`, `args`, `env`, **the whole scratch
+  `config.toml`** and the credential-copy list, because on this vendor the seam, the model provider
+  and the sandbox posture are keys in a file rather than flags on a command line — a vector that
+  recorded only the argv would pin nothing about the hook, and an unrecognised key under `[hooks]`
+  is dropped *without failing the config load*. The copy list is in it because "how many
+  credentials travel" is H6's claim and LP-4's upgrade both. A mutation test proves the fixtures
+  can go red on a seam spelled wrong, and `regenerate_the_launch_expectations` (`#[ignore]`d) is
+  the deliberate way to move them.
+  **The count movement is the point, not a side effect.** `crates/metaharness/fixtures/golden/contract-result-codex.json`
+  is regenerated to `{"breaking_changes":0,"checked":17,"consumer":"metaharness.event/1","failed":0,"kind":"contract_result","provider":"codex 0.145.0"}`
+  — +6 launch and +1 the allow round trip below — through the `#[ignore]`d
+  `regenerate_the_contract_records`, with the diff read: one line, one field, `checked: was 10, is
+  now 17`. **Claude's record did not move in this change** (it moved twice the same day in sibling changes: `provider` to `claude 2.1.240` with the re-pin, `checked` to 24 with the observe/plugin vectors). The consumer building
+  against these bytes is being told, which is the other half of the rule. The
+  `contract_symmetry` test that pinned the gap is replaced by one that pins it **closed** — no
+  adapter may answer the launch row with a gap now that both answer it with vectors — and the
+  counts on the site and in `fixtures/golden/README.md` moved with it (the claude counts there were
+  stale at 17 and are corrected to the 20 the binary really runs).
+
+- **The codex loopback door, API-key half (LP-4) — the child holds no `auth.json` at all.**
+  `credentials: loopback` on codex was a flat refusal by name; it is now a door for the login class
+  the vendor's own shapes let metaharness route. A codex loopback run starts the same per-run proxy
+  Claude Code's does, and the child is pointed at it by a `[model_providers.metaharness_loopback]`
+  entry written into the scratch `CODEX_HOME` — `base_url = http://127.0.0.1:<port>/v1`,
+  `wire_api = "responses"`, `env_key = "METAHARNESS_LOOPBACK_KEY"` — with the per-run placeholder in
+  that variable and nothing else: no credential copy (H6 is attested as the **stronger** row, an
+  imposition rather than an unavailable one), `OPENAI_API_KEY` and `CODEX_API_KEY` still scrubbed,
+  and a declared `--model-endpoint` becoming the **proxy's upstream** one hop further out rather
+  than the child's provider. Exactly one `model_provider` is ever written, so no vendor precedence
+  rule decides which brain answered. Proven free and end to end: `builder.rs`'s codex vector starts
+  the proxy over a fabricated custody, reads the provider base **out of the config file that was
+  really written**, dials it, and the fake upstream sees the custody key with no trace of the
+  placeholder; the port is closed by the run's wind-up. `CredentialCustody` is now kind-aware and
+  reads codex's `auth.json` as well as Claude Code's `.credentials.json`, classifying the two logins
+  the vendor's own `AuthDotJson` shape distinguishes.
+  **What is not built, said out loud:** a **ChatGPT-plan** login is refused by name
+  (`LoopbackSubscriptionUnverified`, `UNSUPPORTED_CONTROL`), because **V-LP6's subscription half is
+  still unanswered** — the binary carries both `chatgpt.com/backend-api/codex` and the custom-provider
+  machinery, and a string table cannot say whether a subscription session honours a custom
+  `base_url`. Refused, never degraded to the credential-copy path the loopback provider exists to
+  replace. And what no free tier can reach: that `codex` itself honours the entry. That is one paid
+  turn, outstanding, and the design doc's LP-4 row now reads `built-free-half`.
+  Vectors: +2 (`c1-loopback`, `c1-loopback-subscription-refusal`), counted in the 17 above.
+
+- **The allow half of Codex's decision wire: built, free-proven, and still labelled undriven.**
+  The status page said *"only the deny path has been driven"* and left the grant half reading as
+  unbuilt. It is built: `render_hook_response` emits the envelope the vendor's own
+  `PreToolUseHookSpecificOutputWire` names, and a new C3 vector —
+  `c3/codex-spawn-an-allow-reaches-the-hook-process-and-the-call-proceeds` — drives it through the
+  **real** hook program to a second process holding a call, which then proceeds. Its stub honours
+  the allow only when the hook really printed one, so the deny vector gained its **negative half**
+  (a denied call leaves no output record) and a mutation test proves that assertion can go red —
+  fail-closed polarity in both directions on one wire. Rendering is now pinned by unit tests
+  against six literals read verbatim from the pinned 0.145.0 binary: a `deny` always carries a
+  non-empty reason, `updatedInput` always travels **with** `permissionDecision: "allow"`, `ask` and
+  the legacy `decision:approve` are never emitted, `continue`/`stopReason`/`suppressOutput` are
+  never written, and an `abstain` is still no bytes at all.
+  **The caveat is kept and sharpened rather than removed.** The same binary carries
+  `PreToolUse hook returned unsupported permissionDecision:allow` beside
+  `PreToolUse hook returned updatedInput without permissionDecision:allow` — one literal that would
+  refuse an allow, one that requires it — and which code path emits which **cannot be told from a
+  string table**. So no capability row moved on the strength of a string: the paid vector that
+  settles it is written and gated (`an_allowed_shell_call_runs_and_the_codex_record_shows_its_output`,
+  `METAHARNESS_LIVE=1`), and every label says *built, undriven live* until it is spent.
+  Vectors: +1 C3, counted in the 17 above.
 
 - **The contract record is a golden, and a new adapter's contract is now a checklist (CT-4; the
   adapter-contract milestone table closes).** `engineering-protocols` reads

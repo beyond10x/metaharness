@@ -29,6 +29,21 @@
 > such a run and `--hermetic` reports it; the two cwd refusals (outside-scratch, memory
 > ancestors) apply only to the scratch case they were written for. `--add-dir` stays denied.
 > All marked at each point of change, on the same rule as the review's corrections.
+> **Amendment a6.1, 2026-08-23**, from a paid run (codex-1982431) that the amendment as written
+> could not deliver: **giving up H7 and H11 buys nothing unless the child can write to the named
+> tree**, and on Codex it could not. The scratch `config.toml` set `sandbox_mode = "read-only"`
+> for every run, so a `--cwd` child got a real repository it could only read — the vendor's own
+> stream: *"the workspace is read-only, so the planning-store patch was rejected"*. So a6 is
+> corrected at its point of definition: **an operator-named `--cwd` grants the vendor sandbox over
+> that tree** (`sandbox_mode = "workspace-write"` on codex — the vendor's own value, *"permits
+> reading files, and editing files in `cwd` and `writable_roots`"*), and the H7 attestation row
+> **states the grant in words**, so a reader sees "this run could write to the operator's tree"
+> without diffing a scratch config that no longer exists. Scratch-cwd runs are unchanged and still
+> write nothing. Nothing else moves: `--add-dir` stays denied, no `writable_roots` widens the grant
+> past the declared tree, no network claim is made or changed, and `--hermetic strict` still
+> refuses — the grant changes what the child may **do**, never what the attestation **claims**.
+> A trade whose consideration is undeliverable is not a trade, which is why this is an amendment
+> and not a bug fix.
 > **Amendment a7, 2026-08-22**, from the **first driven Codex run** (CX-M2): the § 7.4 matrix's
 > `PreToolUse` row moves from documented to **driven** — a real `codex exec` was refused one shell
 > call at metaharness's own hook and the vendor's record shows the command blocked with empty
@@ -75,9 +90,13 @@
 > the run's own scratch tree with the plugin's digest on the launch plan and in the attestation, so
 > the treated arm's plugin is a pinned artifact rather than a directory that can change under the
 > run. Where a plugin has to sit for a vendor to load it is a **vendor fact**: verified on Claude
-> Code (its own `--plugin-dir` flag names the path) and **undriven on Codex**, which is
-> **Q19**, labelled at the point of use rather than assumed. Marked at each point of change, on the
-> same rule as the review's corrections.
+> Code (its own `--plugin-dir` flag names the path), and on Codex — where there is no such flag —
+> chosen from strings in the binary and then **driven once** by a directed probe (**Q19**,
+> 2026-08-23): the vendor surfaced an injected plugin's skills catalog into the model's context from
+> `$CODEX_HOME/plugins/<name>`, with zero tool calls. Two limits travel with that observation and
+> are carried in the record itself — the child was 0.144.0 against a 0.145.0 pin, and the vendor's
+> opening record still lists no plugins, so **H1a still reads `unk`** there. Marked at each point of
+> change, on the same rule as the review's corrections.
 > **Amendment a11, 2026-08-23**, from the machine rather than from a build: **the claude adapter
 > is re-pinned 2.1.239 → 2.1.240.** The installed binary had moved and the pin had not, so every
 > run reported a version disagreement it could do nothing about — `doctor claude` read *"OFF the
@@ -986,7 +1005,7 @@ when its unobservability is a property of the mechanism rather than of the run.
 | H4 | no API key unless declared | `ANTHROPIC_API_KEY` is not in the allowlist unless the run declares `credentials: api_key` | record: credential source in the opening record | absent ⇒ `unk` | **gating** |
 | H5 | MCP surface is exactly what the launch gave | `--strict-mcp-config`, always | record: the MCP server **list** — length and names | list absent ⇒ `unk`, **never zero** | **gating** |
 | H6 | credentials are one file, copied | one file into the scratch home, nothing else, **re-copied immediately before every spawn** (amendment a1) | **not directly assertable in any record.** The evidence is the effect: H1a, H4, H5 | — | **advisory**, and § 8.3 says why an attestation is not evidence |
-| H7 | the working directory is ours | a directory metaharness created; `--add-dir` never passed. **a6: under an operator-named `--cwd` this row is attested unavailable, never claimed** | record: `cwd` in the opening record | absent ⇒ `unk` | **gating** |
+| H7 | the working directory is ours | a directory metaharness created; `--add-dir` never passed. **a6: under an operator-named `--cwd` this row is attested unavailable, never claimed** — and **a6.1: its reason states that the vendor sandbox was widened to that tree** (codex: `sandbox_mode = "workspace-write"`), because a run that may change the operator's repository must say so in its own record and not only in a scratch config file | record: `cwd` in the opening record | absent ⇒ `unk` | **gating** |
 | H8 | hooks and customizations are not skipped | an argv **denylist**: neither `--bare` nor **`--safe-mode`**, and neither `CLAUDE_CODE_SAFE_MODE` nor `CLAUDE_CODE_SIMPLE` in the child environment | launch: the argv and environment as values | n/a — launch assertion | **gating** |
 | H9 | the vendor version is the pinned one | `doctor` before the run | record: the harness version in the opening record | absent ⇒ `unk` | **gating** |
 | H10 | governing documents cannot move under the run | inputs are copied into the run directory, not referenced | record: the digest of the copied tree, in `session.started` | n/a | **gating** |
@@ -1087,7 +1106,7 @@ any other way.
 | field | what it says | why it is a field and not prose in `imposed` |
 |---|---|---|
 | `decisions` | which mode decided every call in this run (§ 4.2) | a run whose model called no tool emits no `tool.decided` at all, and *"the model never called a tool"* and *"metaharness would have allowed anything it called"* are not the same fact. A reader must be able to tell them apart from the opening record alone |
-| `installed_plugins` | one entry per injected plugin: its name, the directory it came from, where it was put, its **digest**, and `loaded_by` — how this vendor is told it is there **and how strong that claim is** | the eval matrix's arm-b column is a plugin identity, so it has to be a value a consumer reads rather than a sentence somebody parses. `loaded_by` exists because the two adapters do not know it equally well (§ 8.4 O1's rule applied to placement): Claude Code's own `--plugin-dir` names the directory, and on Codex nothing names it at all — **Q19** |
+| `installed_plugins` | one entry per injected plugin: its name, the directory it came from, where it was put, its **digest**, and `loaded_by` — how this vendor is told it is there **and how strong that claim is** | the eval matrix's arm-b column is a plugin identity, so it has to be a value a consumer reads rather than a sentence somebody parses. `loaded_by` carries the observation **and its limits**, which is why it is prose and not a boolean: on Codex it now records a driven sighting (Q19) *and* that the run's plugin list was still empty and the binary was off the pin. `loaded_by` exists because the two adapters do not know it equally well (§ 8.4 O1's rule applied to placement): Claude Code's own `--plugin-dir` names the directory, and on Codex nothing names it at all — **Q19** |
 
 `installed_plugins` is **always present and empty when there is none**. A key that vanished on a
 plugin-less run would make *"this run installed nothing"* and *"this build does not report
@@ -1095,9 +1114,12 @@ installations"* the same bytes — the reading § 8.1 refuses everywhere else. T
 this is metaharness's claim about its own copying, and it always knows.
 
 **Whether the vendor then loaded the plugin is not in this block and must not be.** That is H1a,
-read from the vendor's own plugin list, and on an adapter whose placement is undriven a record that
-carries no plugin list leaves H1a `unk` — which is the honest verdict for an installation nobody
-has watched the vendor pick up.
+read from the vendor's own plugin list — and a record that carries no plugin list leaves H1a `unk`
+however strong the evidence elsewhere. Codex is the live case and it is worth keeping the two
+apart: Q19's probe watched an injected plugin's **skills reach the model's context**, and that same
+run's `session.started.plugins` was `null`. The treatment demonstrably arrived; the vendor still
+did not enumerate it. `unk` is the honest verdict for the second question, and the first is
+answered in `loaded_by`, where it belongs.
 
 ---
 
@@ -1520,7 +1542,7 @@ is a row nobody intends to close.
 | Q17 | **Can `session.started` carry the transcript's digest, when the transcript is a file the run is still writing?** § 8.4 O8 says the opening record references the retained bytes **and their digest**, and the opening record is emitted at line 1 of a file whose last line does not exist yet. M2 retains the bytes and the path, and leaves `digest` and `bytes` absent there (amendment a4) | decide which of two shapes the IR wants: a digest emitted at `session.ended`, when the file is complete, or a `transcript.sealed` event carrying it — then check whether `trace-spec`'s `transcript_digest` expectation can read it from either | O8 is met in substance — the bytes are retained and the auditor reads them by path — and the § 4.4 cross-check stays unbuilt, which it already is |
 | Q18 | **Which version is the Codex adapter actually pinned to?** `codex --version` reports `codex-cli 0.145.0`, and the `session_meta.cli_version` written by the run that binary starts reports **`0.144.0`** — on the same machine, in the same run (amendment a7). `codex doctor` reports two npm installs whose package roots differ, which is the likely cause but is **not verified as the cause**. It matters because the two are read by different rows: `doctor codex` compares the *former* against the pin before money is spent, and H9's floor compares the *latter* after — so a run can pass the pre-flight and report off-pin from its own record, which is exactly what CX-M2's live run did | **CLOSED by amendment a8 (CT-3, 2026-08-23), and the cause was not this row's guess.** Not one binary reporting two strings and not two npm roots: **two binaries, resolved by two `PATH`s.** `/usr/bin/codex` is pacman `openai-codex 0.145.0-1`; `~/.local/bin/codex` is npm `@openai/codex` and reports 0.144.0; the operator's shell puts `/usr/bin` first, the launch plan's constructed child `PATH` puts `~/.local/bin` first — so the pre-flight and the run answered about different binaries, verified end to end: the golden rollout's `cli_version` 0.144.0 equals `~/.local/bin/codex --version` exactly. Closed by two mechanisms: `doctor` resolves on **the child's `PATH`** (`child_path`, exported by both adapters) and reports the resolved absolute path — on this machine it now honestly reads `/home/timo/.local/bin/codex 0.144.0, OFF the pin (0.145.0)` — and the contract carries a `golden-version-pair` vector per adapter, whose off-pin answer is a **named warning** on every conformance surface (stderr beside the `--contract` record), never a silent pass and never a failure | what stays is the machine's, not the protocol's: two installs remain, and resolving them to one — or repinning to 0.144.0 and re-verifying the a7 claims against it, since a8 shows the driven evidence was that binary's — is the operator's call. The reader's gate is unchanged: a version outside the pin is a `warning` and never a mid-read refusal. Nothing is silently widened |
 
-| Q19 | **Does codex 0.145.0 load a plugin from a directory placed in its `CODEX_HOME`, with no marketplace manifest and no `codex plugin add` behind it?** (amendment a10.) `codex exec` has no `--plugin-dir` — `codex plugin` installs from *marketplace snapshots* — so unlike Claude Code there is no flag with which to name a directory, and the adapter must pick a location. It picks `$CODEX_HOME/plugins/<name>`, from strings in the binary and **not** from a driven call: 0.145.0 resolves `plugins/cache` and `plugins/data` under the Codex home, and a marketplace's own plugin entries are `./plugins/<plugin-name>` relative to a marketplace root. Neither says a bare directory there is loaded. The launch deliberately writes **no** `[marketplaces]` table to go with the copy: an unrecognised key under a table this binary reads is dropped without failing the config load (§ 7.4), and a malformed one could fail it outright — which on this vendor is a run with no seam | one `codex exec` run into a scratch `CODEX_HOME` holding a copied plugin, reading the run's own record for whether the plugin's skills, hooks or commands appear — then, if not, the same with a `[marketplaces]` entry pointing at the scratch home as a local marketplace root | the copy stays a copy and nothing pretends otherwise: the attestation's `loaded_by` already says *"nothing names it to the vendor … whether codex loads it from there is unverified"*, H1a stays `unk` for a record with no plugin list, and the eval program's arm b is **not** claimable on Codex until this row closes. The alternative route is stateful — `codex plugin marketplace add` then `codex plugin add`, two commands run against the scratch home before the run — and is a later milestone, not a silent fallback |
+| Q19 | **Does codex load a plugin from a directory placed in its `CODEX_HOME`, with no marketplace manifest and no `codex plugin add` behind it?** (amendment a10.) `codex exec` has no `--plugin-dir` — `codex plugin` installs from *marketplace snapshots* — so unlike Claude Code there is no flag with which to name a directory, and the adapter must pick a location. It picks `$CODEX_HOME/plugins/<name>`, from strings in the binary: 0.145.0 resolves `plugins/cache` and `plugins/data` under the Codex home, and a marketplace's own plugin entries are `./plugins/<plugin-name>` relative to a marketplace root | **ANSWERED YES, once, by a directed live probe (2026-08-23, run `codex-2139643`).** `metaharness run codex --hermetic --decisions observe --plugin-dir integrations/codex` copied the plugin to that placement (digest `154857db…`) and asked the model to answer **from its runtime context only, using no tools**. It answered *"Available skills catalog — `## Skills`"* — and the run made **zero tool calls**: the census read `0/0/0/0` and no `tool.requested` was emitted at all, so the catalog could not have been read off disk. **The vendor surfaced the injected plugin's skills into the model's context from this path**, with no `[marketplaces]` table and no `codex plugin add`. The launch still writes no marketplace table, deliberately — an unrecognised key under a table this binary reads is dropped without failing the config load (§ 7.4), a malformed one can fail it outright, and the probe shows the copy alone is enough | **the row is answered, not closed, and two limits travel with it in the record itself.** (1) The child was **codex 0.144.0**, the binary this machine's constructed `PATH` resolves, against a pin of 0.145.0 (Q18/a8) — a driven fact about that binary and an inference about the pin. (2) `session.started.plugins` was still `null`: **the vendor's opening record enumerates no plugins, so H1a still reads `unk` on this vendor.** What was observed is the plugin's *content* reaching the model, which is what an evaluation's treated arm needs; it is not the vendor stating what it loaded, which is what H1a asks for. Nothing is claimed about how *well* the surfaced skill is used, and nothing about 0.145.0 |
 
 ---
 

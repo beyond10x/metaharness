@@ -48,7 +48,7 @@ each harness through its own.
 
 | harness | mechanism | status |
 |---|---|---|
-| Claude Code | `ANTHROPIC_BASE_URL` (+ auth env) into the launch environment; `--model <id>` verbatim. The hermetic env scrub must **whitelist** the adapter's auth variable — hermeticity currently deletes exactly the class of variable this feature requires | documented; **verified against the pin, 2.1.240** (MA-V1). The reading is recorded where it is relied on — `crates/metaharness-claude/src/launch.rs`: with a base URL and the placeholder key set, every API request goes to the base. The pin moved 2.1.239 → 2.1.240 on 2026-08-23 (protocol amendment a10) and this row is the version it was actually driven against |
+| Claude Code | `ANTHROPIC_BASE_URL` (+ auth env) into the launch environment; `--model <id>` verbatim. The hermetic env scrub must **whitelist** the adapter's auth variable — hermeticity currently deletes exactly the class of variable this feature requires | documented; **verified against the pin, 2.1.240** (MA-V1). The reading is recorded where it is relied on — `crates/metaharness-claude/src/launch.rs`: with a base URL and the placeholder key set, every API request goes to the base. The pin moved 2.1.239 → 2.1.240 on 2026-08-23 (protocol amendment a11) and this row is the version it was actually driven against |
 | Codex | a `model_providers` entry injected into the run's config (`base_url`, `wire_api`, `env_key`), profile-selected | documented; **to verify against pinned 0.145.0** (MA-V2), incl. whether `wire_api = "responses"` works against a vLLM-class gateway or only `"chat"` (MA-V3) |
 | `models()` | `GET {base}/v1/models`, the one endpoint both dialect families share | to verify per gateway (MA-V4) |
 

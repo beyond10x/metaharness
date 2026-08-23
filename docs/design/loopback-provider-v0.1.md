@@ -63,12 +63,24 @@ and it would still age there. The stronger shape, same mechanism:
 | V-LP3 | **verified, same run**: the streamed reply arrived intact through the pass-through, ttft 2623 ms of 2667 ms total — within noise of the API's own `duration_api_ms` 2622 | same run as V-LP2 | — |
 | V-LP4 | the child never attempts its own OAuth refresh when it holds only a placeholder; proxy-side refresh-and-retry is invisible to it | forced 401 from the stub | free |
 | V-LP5 | does the vendor rotate refresh tokens on use? (the mutual-invalidation hypothesis) | two custodies refreshing the same stored token, watch the second | risks one login's session; do this **last**, deliberately |
-| V-LP6 | Codex 0.145.0: can subscription (ChatGPT-plan) traffic be routed through a `model_providers` entry at all, or only API-key providers? If not: which endpoint does subscription traffic pin to, and does `CODEX_HOME` isolation still allow a loopback base? | config injection against a recording stub, then one live turn | free + cents |
+| V-LP6 | Codex 0.145.0: can subscription (ChatGPT-plan) traffic be routed through a `model_providers` entry at all, or only API-key providers? If not: which endpoint does subscription traffic pin to, and does `CODEX_HOME` isolation still allow a loopback base? — **split, 2026-08-23: the API-key half is answered and built (LP-4, free); the subscription half is still a `?` and is refused by name** | config injection against a recording stub, then one live turn | free + cents |
 
-V-LP6 is the known hard one: the research record verified `model_providers` for API-key
-providers; subscription-over-custom-provider is a **?**. If it refuses, the Codex door ships
-API-key-only through the proxy and the subscription path keeps today's copy — stated, not
-silently degraded (the model-adapter design's rule: no silent fallback between adapter classes).
+V-LP6 was the known hard one and it **split in two** rather than resolving. What the API-key half
+cost was config injection and no live turn at all; what the subscription half still needs is one
+paid turn nobody has spent. Three facts were added to the record on 2026-08-23, all read from the
+pinned binary itself (`strings` over `codex` 0.145.0 — a static reading, and labelled as one):
+
+| fact | label |
+|---|---|
+| `ModelProviderInfo` deserialises `base_url`, `env_key`, `wire_api`, `http_headers`, `query_params`, `requires_openai_auth`, `supports_websockets`, … — so a **custom provider can declare `requires_openai_auth`** | **V** (the binary's own serde field list) |
+| a custom provider id may not collide with a built-in: `model_providers contains reserved built-in provider IDs: … Rename your custom provider (for example, openai-custom)` | **V** (verbatim literal) |
+| `auth.json` is `struct AuthDotJson with 7 elements` — `OPENAI_API_KEY`, `auth_mode`, `tokens`, `last_refresh`, … — so the two login classes are **distinguishable before a run starts**, which is what makes a by-name refusal possible instead of a failure at the first request | **V** (the binary's own serde field list) |
+| whether a ChatGPT-plan token is actually *sent* to a custom `base_url`, or the client rewrites the base to `chatgpt.com/backend-api/codex` and ignores the entry | **?** — undriven. A string table cannot say which, and inferring it from adjacent facts is the thing this register exists to stop |
+
+So the Codex door ships **API-key-only through the proxy**, and the subscription path keeps today's
+copy — stated at the refusal, not silently degraded (the model-adapter design's rule: no silent
+fallback between adapter classes). `metaharness_codex::LaunchRefusal::LoopbackSubscriptionUnverified`
+is that sentence, and it names this row.
 
 ## Build plan, if accepted
 
@@ -78,7 +90,7 @@ silently degraded (the model-adapter design's rule: no silent fallback between a
 | LP-1 | the proxy: std `TcpListener` + rustls-backed upstream client (one new dependency, chosen deliberately — the workspace is dependency-light), per-run port, placeholder auth, generic reverse-proxy, SSE pipe | C3-style vectors against a fake upstream: auth swap, stream pipe, 401-refresh-retry, unknown-path pass-through — free |
 | LP-2 | custody: one credential store, file-locked serialized refresh, `auth.expired` emitted when refresh itself fails; the credential-copy path stays and remains the default | two concurrent scripted runs share one refresh |
 | LP-3 | the switch: `--credentials loopback` (a fourth `CredentialSource`), H6 attestation row upgraded under it, `model_endpoint` emitted; flip the default only after a governed run has used it in anger | live driven run, then the default question goes to the operator |
-| LP-4 | the Codex door, shaped by V-LP6 | per V-LP6's answer |
+| LP-4 | the Codex door, shaped by V-LP6 | **built-free-half, 2026-08-23; the paid confirmation is outstanding.** What is built: `credentials: loopback` on codex starts the same per-run proxy, and the child is pointed at it by a `[model_providers.metaharness_loopback]` entry in the scratch `CODEX_HOME` — `base_url = {port}/v1`, `wire_api = "responses"`, `env_key = METAHARNESS_LOOPBACK_KEY` — with the per-run placeholder in that variable, **no `auth.json` copied at all** (H6 attested as the stronger row) and `OPENAI_API_KEY`/`CODEX_API_KEY` still scrubbed. Proven free, end to end: `builder.rs`'s codex vector starts the proxy over a fabricated custody, reads the provider base **out of the written config file**, dials it, and the fake upstream sees the custody key with no trace of the placeholder; the port is closed by the run's wind-up. Two C1 vectors pin the plan (`c1-loopback`, `c1-loopback-subscription-refusal`). **Not proven: that `codex` itself honours the entry** — no vendor binary runs in any free tier, so that is one paid turn, and until it is spent this row says so. The subscription half is not built at all (V-LP6) |
 
 ## Decisions taken in this review (defaults if nobody objects)
 

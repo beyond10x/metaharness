@@ -51,7 +51,7 @@ is absent.
 
 ```bash
 metaharness conformance claude    # 24 vectors
-metaharness conformance codex     # 10 vectors, 3 of which run a real process and the real hook
+metaharness conformance codex     # 17 vectors, 4 of which run a real process and the real hook
 ```
 
 Free conformance vectors: no model, no network, no credential.
@@ -99,8 +99,11 @@ metaharness run claude --hermetic --cwd ~/projects/thing -p "…"
 ```
 
 `--cwd` is the declaration that **trades two hermetic rows for real work**: the child runs in your
-tree, so H7 and H11 stop being impositions and are attested *unavailable*, naming the directory.
-`--hermetic strict` therefore refuses such a run, plain `--hermetic` reports it honestly.
+tree **and can write to it**, so H7 and H11 stop being impositions and are attested *unavailable*,
+naming the directory. The vendor sandbox is widened to that tree for the run — on codex,
+`sandbox_mode = "workspace-write"` — and the H7 attestation row states the grant in words, so the
+run's own record says it could change your repository. `--hermetic strict` therefore refuses such a
+run, plain `--hermetic` reports it honestly. A scratch-cwd run writes nothing, anywhere.
 
 ## Exit codes
 

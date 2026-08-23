@@ -48,7 +48,7 @@ It spawns Claude Code 2.1.240 into a scratch config home, installs a blocking `P
 answers that hook's calls per call, streams the session out as protocol events on stdout, takes
 steering on stdin, retains the raw transcript, and exits on the hermetic floor's verdict.
 `capabilities`, `conformance` and `doctor` work with no model and no credential;
-`metaharness conformance claude` runs **24** vectors that way.
+`metaharness conformance claude` runs **24** vectors that way, and `conformance codex` **17**.
 
 **The seam is real, and it was verified against a paid run.** A frame that admitted no shell was
 given a prompt that asked for one: metaharness denied the call at the hook, the call did not run,
@@ -81,7 +81,11 @@ met a prompt that asked for one. The hook process received the call — `"tool_n
 own session record* reads `Command blocked by PreToolUse hook: this step admits no shell, so the
 command did not run` with an **empty** `Output:`. The model's closing message was *"The command was
 blocked and did not run."* So `tool.decide` is `Honoured` and the call tier is `Delivered`. The
-`allow` half of that wire is **not** claimed: only the deny path has been driven.
+`allow` half of that wire was **driven live on 2026-08-23**: the hook held a real `Bash` call,
+metaharness answered `permissionDecision: allow`, and the rollout's own `custom_tool_call_output`
+carried the command's output — the grant is honoured, not discarded. One caveat travels with it:
+the binary that honoured it was the child-`PATH` codex **0.144.0** (the pin is 0.145.0; the
+two-install warning fired, as it must), so the observation names 0.144.0.
 
 Three things about Codex cost more to learn than the code that uses them, and all three are silent
 failures — which is why every claim above is read from the run's own record and not from the file

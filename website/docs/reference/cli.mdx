@@ -33,14 +33,14 @@ Six verbs. Three of them need no model, no network and no credential.
 | `-p, --prompt <TEXT>` | — | The prompt to start with. |
 | `--model <NAME>` | — | The model to ask for. Passed through to the vendor, which resolves it. |
 | `--max-turns <N>` | — | A ceiling on turns. |
-| `--cwd <DIR>` | scratch | An operator-named working directory for the child. **Trades two hermetic rows for real work** — see below. |
+| `--cwd <DIR>` | scratch | An operator-named working directory for the child, **which it can write to**. Trades two hermetic rows for real work — see below. |
 
 ### Hermeticity
 
 | Flag | Default | Meaning |
 |---|---|---|
 | `--hermetic [off\|on\|strict]` | `off`; bare `--hermetic` means `on` | See [the hermetic contract](../hermetic.mdx). |
-| `--credentials <SOURCE>` | `operator-login` | `operator-login`, `api-key`, or `none`. |
+| `--credentials <SOURCE>` | `operator-login` | `operator-login`, `api-key`, `loopback`, or `none`. |
 | `--plugin-dir <DIR>` | *(none)* | Plugin directories to load, **and only these**. Repeatable. |
 | `--strict-version` | off | Refuse before the run when the installed vendor version is outside the adapter's pin, instead of warning. |
 
@@ -49,6 +49,12 @@ sometimes exactly what a test wants.
 
 **`--credentials api-key`** is a declaration: without it, `ANTHROPIC_API_KEY` is not in the child
 environment at all.
+
+**`--credentials loopback`** puts metaharness in front of the vendor: the child holds a per-run
+placeholder and **no credential file**, and one custody attaches the real token on the way out. On
+Claude Code the child is pointed at the proxy by `ANTHROPIC_BASE_URL`; on codex by a
+`[model_providers.metaharness_loopback]` entry in the scratch `CODEX_HOME`. A **ChatGPT-plan** codex
+login is refused by name — see [the codex adapter](../harnesses/codex.mdx).
 
 ### Control
 
@@ -79,15 +85,26 @@ two-word subcommand is not a special case.
 
 ## `--cwd`: the declaration that trades two rows for real work
 
-The child runs **in this tree**. So:
+The child runs **in this tree**, and **can write to it**. So:
 
 - **H7** ("the working directory is ours") and **H11** ("no memory file outside the copied tree")
   stop being impositions and are attested **unavailable**, naming this directory.
+- **The vendor sandbox is widened to that tree** so the work can actually happen — on codex the
+  scratch config carries `sandbox_mode = "workspace-write"`, which permits editing files in the
+  cwd. The H7 attestation row **says so in words**: a reader sees that the run could write to the
+  operator's tree without diffing a scratch config that no longer exists.
 - `--hermetic strict` therefore **refuses** such a run.
 - Plain `--hermetic` reports it honestly.
-- `--add-dir` stays denied either way.
+- `--add-dir` stays denied either way, and no `writable_roots` widens the grant past this tree.
 
-The embedder that wants a governed run over a real repository accepts exactly that trade.
+The embedder that wants a governed run over a real repository accepts exactly that trade. A
+scratch-cwd run is unchanged: the child writes nothing, anywhere.
+
+:::note Why the grant is part of the trade
+Until 2026-08-23 it was not, and the trade bought nothing: a paid codex run with `--cwd` got a real
+repository it could only read, and the vendor's own stream said *"the workspace is read-only, so the
+planning-store patch was rejected."* Design amendment **a6.1**.
+:::
 
 ## `metaharness capabilities`
 
