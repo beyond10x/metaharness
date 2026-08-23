@@ -7,6 +7,26 @@ was amended and the amendment is named here.
 
 ### Added
 
+- **The frame seam is now golden-pinned on both sides of it.** `engineering-protocols` mints the
+  `metaharness.frame/1` documents this workspace reads, cannot depend on it (it is public, this is
+  not), and therefore tests its minter against a **transcription** of `frame.rs` — a second
+  implementation of the digest rule, written out by hand, whose own suite says the risk it cannot
+  close is *"the transcription's continued agreement with `frame.rs` … only by the metaharness-side
+  replay of these bytes."* That replay is here. The document that repository's driver minted is
+  committed byte-identically at
+  `crates/metaharness-protocol/fixtures/golden/metaharness-frame-canonical.json` (file sha256
+  `ef897a58…`, recorded 2026-08-23, provenance and re-recording procedure in
+  `fixtures/golden/README.md`), and `tests/frame_golden.rs` runs it through the real
+  `Frame::parse_document`: the bytes are accepted, the step they describe is asserted field by
+  field — workflow, node, step 2 attempt 1, the two verbatim requirement lines, the handoff, and
+  the seven admitted operations in wire-name order — the digest the consumer **re-derives** is the
+  literal `43a6f845…` both repositories pin, one flipped byte (`"index": 2` → `3`) comes back as
+  `DigestMismatch` naming both digests, and `to_document` re-emits the minted file **byte for
+  byte**, tag and trailing newline included. The last one is the surprise worth keeping: the two
+  minters agree not merely on the digest but on the file. Nothing moved to make room for this —
+  frame parsing is protocol-level, so these are plain tests in `metaharness-protocol` and no
+  adapter conformance count changed (20 claude / 10 codex, as before).
+
 - **Four payload fields at the seam, so four expectation kinds stop being undecidable about a
   driven run (design amendment a9).** The motivation is a consumer's, not ours:
   `engineering-protocols` reads `metaharness.event/1` as a transcript and its gap register

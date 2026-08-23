@@ -642,6 +642,22 @@ embedder's, who renders § 5.1's instruction text into it if the step wants the 
 run therefore requires the decision channel (`tool.decide`), not the mid-session `frame.set`
 command, which remains undriven and refused (§ 7.3).
 
+**Both sides of this format are now pinned to one artifact (2026-08-23).** Until then the seam was
+held together by two readings of the paragraphs above: `engineering-protocols` mints these
+documents, cannot link this workspace, and tests its minter against a **transcription** of
+`frame.rs` — so a drift in either the minter or the reader was invisible until a driven run died at
+its first step with the session already paid for. The document its driver mints for one
+deterministic step is now committed here byte-identically
+(`crates/metaharness-protocol/fixtures/golden/metaharness-frame-canonical.json`, sha256
+`ef897a58…`, sealed digest `43a6f845…`) and replayed through the real `Frame::parse_document`
+(`crates/metaharness-protocol/tests/frame_golden.rs`), which re-derives that digest rather than
+trusting the one the file states. Two things the replay found that neither side had claimed: the
+two implementations agree **byte for byte on the file**, not merely on the digest — `to_document`
+reproduces the minted bytes, tag and trailing newline included — and the ordering rule this section
+spells out is the only part an outside producer could not have guessed, which is why it is asserted
+about the bytes rather than left to a `sort`. When that fixture fails it is asking which side moved;
+re-sealing it answers by deleting the evidence.
+
 ---
 
 ## 6. Commands
