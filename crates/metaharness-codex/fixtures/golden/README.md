@@ -1,0 +1,42 @@
+# Golden samples — recorded real wire (adapter contract CT-2)
+
+These files are **not synthesised**. They are the bytes codex-cli actually wrote during one
+controlled hermetic run, kept so the adapter is tested against the vendor's real wire rather
+than against this crate's own assumptions about it (design
+`docs/design/adapter-contract-v0.1.md`, milestone CT-2).
+
+Two facts the synthesised vectors could never have carried are in these bytes:
+
+- the real tool call arrives as **`custom_tool_call`/`custom_tool_call_output`**, not the
+  `function_call` shape the synthesised fixtures use — both are read, and only the recorded
+  sample proves the one the vendor now writes;
+- `session_meta.cli_version` reads **0.144.0** out of the 0.145.0 binary — **Q18 on disk**, and
+  the expected stream records the `version_outside_pin` warning it earns.
+
+## Provenance
+
+| fact | value |
+|---|---|
+| captured | 2026-08-23 |
+| binary | `codex` 0.145.0 (`codex --version`) — on the adapter's pin; its own record claims 0.144.0 (Q18) |
+| command | `metaharness run codex --hermetic --retain-dir <dir> -p "Run exactly one tool call: ls via the shell. …"` |
+| run shape | scratch `CODEX_HOME`, scratch cwd, one `exec(ls)` call answered through the hook, on the operator's plan |
+| reviewed | before commit, for credentials and account identifiers: none present. Paths are the run's own scratch (`~/.cache/claude-tmp/.tmp*`); ids are the session's own UUIDv7s |
+
+## Files
+
+| file | face | read by |
+|---|---|---|
+| `rollout.jsonl` | the session rollout, as the tail retained it | `golden-rollout` vector (`src/vectors.rs`) |
+| `hook-input.json` | the raw `PreToolUse` stdin, exactly as published into the hook channel — `tool_name` **`Bash`**, the CX-M2 vocabulary finding | `golden-hook-input` vector |
+| `rollout.expected.jsonl` | **generated** — the event stream the reader owes for `rollout.jsonl` | the same vector, byte-exact |
+
+## Re-capture (one-time cost per pin)
+
+1. `metaharness run codex --hermetic --retain-dir <dir> -p "…"` — a prompt that makes exactly
+   one tool call. No `--max-turns`: codex refuses it by name.
+2. Review `<dir>/rollout.jsonl` and `<dir>/requests/*.json` line by line before they enter the
+   tree; then copy them over `rollout.jsonl` and `hook-input.json`.
+3. `cargo test -p metaharness-codex --lib regenerate -- --ignored` rewrites
+   `rollout.expected.jsonl`; review that diff — it is the mapping's changelog.
+4. Update the recorded values pinned in `golden_hook_vector` and this table.

@@ -4,7 +4,8 @@ Status: **proposed** (operator brain-dump, 2026-08-22, `docs/ROADMAP.md` item 1)
 written decision-complete the same day. Companion to `metaharness-protocol-v0.1.md` (§ 8.5, the
 conformance tiers this builds on) and to `engineering-protocols`' `contract-testing` principle,
 whose vocabulary this reuses. The first slice (LP-equivalent CT-1) is built alongside this page;
-everything past it is proposed.
+**CT-2 is built** (2026-08-23, one recorded capture run per adapter); CT-3 and CT-4 stay
+proposed.
 
 ## The idea, in the operator's words
 
@@ -67,13 +68,13 @@ is "and it is the vendor's fault", and only the second is the number an operator
 
 ## What exists already, and what this adds
 
-§ 8.5's tiers are the contract's test cases; they run today (`conformance <kind>`, 17 claude / 7
+§ 8.5's tiers are the contract's test cases; they run today (`conformance <kind>`, 19 claude / 9
 codex vectors, free). What is missing is three things, in dependency order:
 
 | # | milestone | content | acceptance |
 |---|---|---|---|
 | **CT-1** | **the record** | conformance emits a `contract_result` — `conformance <kind> --contract` prints it; a library `contract_result(kind, &[VectorOutcome])` builds it | **built with this page.** Both adapters emit a valid record; `provider` carries the pin; `breaking_changes ≤ failed`; a CLI test pins codex's provider string to `0.145.0` |
-| CT-2 | recorded vendor samples as the contract | today's C1/C2 vectors are synthesized in code; promote each adapter's to **recorded real wire** on disk (one captured hook input, one captured rollout/transcript), so a vendor-shape change is a red replay rather than a green test of a stale assumption. Capture is a one-time cost per pin | each adapter has ≥1 on-disk golden sample per face; a mutated byte fails its vector |
+| **CT-2** | **recorded vendor samples as the contract** | today's C1/C2 vectors are synthesized in code; promote each adapter's to **recorded real wire** on disk (one captured hook input, one captured rollout/transcript), so a vendor-shape change is a red replay rather than a green test of a stale assumption. Capture is a one-time cost per pin | **built, 2026-08-23.** `--retain-dir` is the capture surface: the run copies its raw wire (transcript/rollout, hook inputs — never a credential) out of the scratch at wind-up. One hermetic capture run per adapter produced `fixtures/golden/` in each adapter crate: both faces, byte-exact expected streams, a `#[ignore]`d regeneration test per crate, and a mutation test proving a flipped byte fails its vector. The recorded wire immediately earned its keep twice: codex's real call arrives as `custom_tool_call` (the synthesized vectors used `function_call`), and its `session_meta` claims 0.144.0 out of the 0.145.0 binary — Q18 as a committed byte, warned as `version_outside_pin` in the golden stream |
 | CT-3 | the version reconciliation (Q18) | the pin is a pair — `doctor`'s `--version` source and the record's `cli_version` — and the contract asserts they agree, or names the gap. Closes Q18 | a recorded sample whose `cli_version` differs from the doctor pin is a named contract warning, not a silent pass |
 | CT-4 | symmetry across adapters | one contract-vector authoring shape every adapter fills (claude, codex, and the next), so a new adapter's contract is a checklist, not a fresh invention | pi/opencode/flux adapters (`ROADMAP.md` 2–3) declare their contract by filling the shape |
 

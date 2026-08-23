@@ -264,6 +264,7 @@ fn every_builder_method_sets_one_field_of_the_one_options_type() {
         .with_max_turns(30)
         .with_plugin_dir("plugins/one")
         .with_cwd("/operator/repo")
+        .with_retain_dir("/operator/keep")
         .with_strict_version(true)
         .with_audit(true)
         .with_spec_file("expectations.yaml")
@@ -283,6 +284,7 @@ fn every_builder_method_sets_one_field_of_the_one_options_type() {
         max_turns: Some(30),
         plugin_dir: vec!["plugins/one".into()],
         cwd: Some("/operator/repo".into()),
+        retain_dir: Some("/operator/keep".into()),
         strict_version: true,
         audit: true,
         spec: Some("expectations.yaml".into()),

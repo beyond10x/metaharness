@@ -287,7 +287,7 @@ impl ProcessRunner for CodexSpawnRunner {
 
 /// Where the thin `--json` stream is retained, beside the record it is not.
 #[must_use]
-fn stdout_path(transcript: &Path) -> PathBuf {
+pub(crate) fn stdout_path(transcript: &Path) -> PathBuf {
     transcript.with_extension("stdout.jsonl")
 }
 

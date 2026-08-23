@@ -16,8 +16,26 @@ was amended and the amendment is named here.
   and `breaking_changes` counts only the vendor-facing tiers (C1/C2) — a C3 failure is
   metaharness's own control machinery regressing, red in `failed` but not the vendor's fault.
   The design is written against the three drifts CX-M2's live run surfaced (the `Bash`/`exec`
-  vocabulary split, the 0.144/0.145 version mismatch, the un-joinable ids); CT-2–4 (recorded
-  golden vendor samples, the version reconciliation, cross-adapter symmetry) stay proposed.
+  vocabulary split, the 0.144/0.145 version mismatch, the un-joinable ids); CT-3–4 (the version
+  reconciliation, cross-adapter symmetry) stay proposed.
+
+- **Each adapter's contract now holds recorded real wire, not only synthesized shapes (CT-2).**
+  `metaharness run <kind> --retain-dir <dir>` is the capture surface: when the run ends, its raw
+  vendor wire — the retained transcript or rollout, the thin codex `--json` stdout, and every raw
+  `PreToolUse` stdin — is copied out of the scratch root before the scratch is deleted, named
+  file by file and never the scratch home, so a copied credential cannot travel; wire the
+  operator asked for that is not there is a `RETAIN_FAILED` warning, never silence. One hermetic
+  capture run per adapter promoted both faces to `fixtures/golden/` in each adapter crate:
+  `golden-transcript`/`golden-rollout` replay the recorded record byte-exact against a committed
+  expected stream, and `golden-hook-input` pins every field the seam reads off the recorded hook
+  stdin **and** that the rendering table agrees with the wire (`operation.shell` → the recorded
+  `tool_name`). A mutation test per sample proves a flipped byte fails its vector, and a
+  `#[ignore]`d `regenerate` test per crate makes re-capture at a new pin a reviewed diff rather
+  than a rewrite. The recorded bytes earned their keep on arrival: codex's real call is a
+  `custom_tool_call` where every synthesized vector used `function_call`, and its `session_meta`
+  claims `cli_version` 0.144.0 out of the 0.145.0 binary — Q18 as a committed byte, warned as
+  `version_outside_pin` in the golden stream. `conformance` now runs 19 claude / 9 codex vectors;
+  the contract records read `checked: 19` / `checked: 9`, 0 failed, 0 breaking.
 
 - **`metaharness run codex` drives a real Codex session (CX-M2).** A scratch `CODEX_HOME`, a
   constructed child environment, the operator's `~/.codex/auth.json` copied in immediately before

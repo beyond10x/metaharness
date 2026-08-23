@@ -156,6 +156,16 @@ pub struct RunSpec {
     #[cfg_attr(feature = "clap", arg(long, value_name = "DIR"))]
     pub cwd: Option<PathBuf>,
 
+    /// Copy the run's raw vendor wire into this directory when the run ends.
+    ///
+    /// The retained transcript or rollout and every raw hook input the vendor wrote are copied
+    /// out of the scratch root before it is deleted — those files and nothing else, so a
+    /// credential copied into the scratch home never travels. This is the capture surface the
+    /// adapter contract's golden samples come from (CT-2): recorded real wire otherwise dies
+    /// with the scratch directory that held it, and capture is a per-pin cost worth a flag.
+    #[cfg_attr(feature = "clap", arg(long, value_name = "DIR"))]
+    pub retain_dir: Option<PathBuf>,
+
     /// Refuse before the run when the installed vendor version is outside the adapter's pin,
     /// instead of warning (design § 8.4 O1).
     #[cfg_attr(feature = "clap", arg(long))]
@@ -198,6 +208,7 @@ impl RunSpec {
             max_turns: None,
             plugin_dir: Vec::new(),
             cwd: None,
+            retain_dir: None,
             strict_version: false,
             audit: false,
             spec: None,

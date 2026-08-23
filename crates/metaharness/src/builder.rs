@@ -150,6 +150,16 @@ impl Metaharness {
         self
     }
 
+    /// Copy the run's raw vendor wire into this directory when the run ends.
+    ///
+    /// The capture surface the adapter contract's golden samples come from (CT-2): the retained
+    /// transcript or rollout and the raw hook inputs, and never a credential.
+    #[must_use]
+    pub fn with_retain_dir(mut self, directory: impl Into<PathBuf>) -> Self {
+        self.spec.retain_dir = Some(directory.into());
+        self
+    }
+
     /// Refuse before the run when the installed vendor version is outside the adapter's pin.
     #[must_use]
     pub fn with_strict_version(mut self, strict: bool) -> Self {
@@ -388,6 +398,12 @@ fn start_claude(
             seam,
             vendor_timeout_ms: vendor_hook_timeout_ms(&plan.hook),
             launch,
+            // The raw wire, named file by file — never the scratch root, which also holds the
+            // copied credential (H6). What `--retain-dir` captures is exactly this list.
+            wire: vec![
+                transcript_path,
+                metaharness_claude::HookChannelPaths::under(scratch.path()).requests,
+            ],
             scratch: Some(scratch),
         }))
     }
@@ -491,6 +507,14 @@ fn start_codex(
         seam,
         vendor_timeout_ms: vendor_hook_timeout_ms(&plan.hook),
         launch,
+        // The raw wire: the copied rollout, the thin `--json` stdout retained beside it, and
+        // the hook inputs. Named file by file for the same reason as the claude list — the
+        // scratch `CODEX_HOME` holds a copied `auth.json` that must never travel.
+        wire: vec![
+            crate::spawn_codex::stdout_path(&transcript_path),
+            transcript_path,
+            metaharness_codex::HookChannelPaths::under(scratch.path()).requests,
+        ],
         scratch: Some(scratch),
     }))
 }

@@ -11,9 +11,18 @@
 //!   **byte-exact JSONL**. It proves O2 and O3, including that a record type this adapter has
 //!   never heard of becomes `opaque` and is not dropped.
 //!
-//! The fixtures are **synthesised**. No transcript from a real account is reproduced here: a
-//! fixture that carried a server name, an address or a path from somebody's machine would be a
-//! leak wearing a test's clothes.
+//! The C1 and C2 fixtures are **synthesised**. No transcript from a real account is reproduced
+//! in them: a fixture that carried a server name, an address or a path from somebody's machine
+//! would be a leak wearing a test's clothes.
+//!
+//! The **golden** fixtures under `fixtures/golden/` are the deliberate exception (adapter
+//! contract CT-2): **recorded real wire**, captured from one controlled hermetic run of the
+//! installed binary through `metaharness run claude --hermetic --retain-dir …` — a scratch
+//! config home, a scratch cwd, one `ls`, and nothing of anybody's account in the bytes
+//! (reviewed before commit; provenance in `fixtures/golden/README.md`). A synthesised fixture
+//! tests the adapter against this crate's own assumptions; the golden one tests it against what
+//! the vendor actually wrote, which is the difference between a green test of a stale
+//! assumption and a red replay when the vendor moves.
 
 use std::collections::BTreeSet;
 use std::fmt::Write as _;
@@ -36,7 +45,90 @@ use crate::transcript::TranscriptReader;
 pub fn conformance_vectors() -> Vec<VectorOutcome> {
     let mut outcomes = launch_vectors();
     outcomes.extend(replay_vectors());
+    outcomes.push(golden_transcript_vector(GOLDEN_TRANSCRIPT));
+    outcomes.push(golden_hook_vector(GOLDEN_HOOK_INPUT));
     outcomes
+}
+
+/// Recorded real wire (adapter contract CT-2): one hermetic run's `stream-json` transcript and
+/// the raw `PreToolUse` stdin its one tool call produced, byte for byte as the vendor wrote
+/// them. Capture provenance is `fixtures/golden/README.md`; re-capture per pin with
+/// `metaharness run claude --hermetic --retain-dir …`.
+const GOLDEN_HOOK_INPUT: &str = include_str!("../fixtures/golden/hook-input.json");
+const GOLDEN_TRANSCRIPT: &str = include_str!("../fixtures/golden/transcript.jsonl");
+const GOLDEN_TRANSCRIPT_EXPECTED: &str =
+    include_str!("../fixtures/golden/transcript.expected.jsonl");
+
+/// The run id the golden replay is framed under.
+const GOLDEN_RUN: &str = "golden";
+
+/// The recorded transcript in, the committed event stream out, byte-exact.
+///
+/// The input is what the pinned binary actually wrote, so a pass means the mapping holds
+/// against the vendor's real bytes — including record types the synthesised fixtures never
+/// thought to invent. On a re-capture at a new pin, a red run of this vector is the vendor
+/// having moved, which is exactly the news it exists to carry.
+fn golden_transcript_vector(input: &str) -> VectorOutcome {
+    let id = "golden-transcript";
+    let observed = replay_as(GOLDEN_RUN, input);
+    if observed == GOLDEN_TRANSCRIPT_EXPECTED {
+        VectorOutcome::passed(id, ConformanceTier::C2)
+    } else {
+        VectorOutcome::failed(
+            id,
+            ConformanceTier::C2,
+            first_difference(GOLDEN_TRANSCRIPT_EXPECTED, &observed),
+        )
+    }
+}
+
+/// The recorded hook stdin parses to exactly the recorded values, and the rendering table
+/// agrees with the wire.
+///
+/// The second half is the CX-M2 lesson: what a hook receives in `tool_name` is a fact about the
+/// vendor the adapter asserts and could be wrong about, so the recorded input must name the
+/// same tool [`crate::render_operation`] renders `operation.shell` to — read off the published
+/// capability descriptor, the same table the run loop admits calls by.
+fn golden_hook_vector(input: &str) -> VectorOutcome {
+    let id = "golden-hook-input";
+    let parsed = match crate::parse_hook_input(input) {
+        Ok(parsed) => parsed,
+        Err(refused) => {
+            return VectorOutcome::failed(
+                id,
+                ConformanceTier::C2,
+                format!("the recorded hook input was refused: {}", refused.reason),
+            );
+        }
+    };
+    let expected = crate::HookInput {
+        tool_name: Some("Bash".to_string()),
+        tool_input: json!({"command": "ls", "description": "List files in current directory"}),
+        session_id: Some("2c430a9a-faa4-4305-a3f4-e012153e600a".to_string()),
+        tool_use_id: Some("toolu_0126wZX9VgSsd4Hw7AbgMkc3".to_string()),
+        hook_event_name: Some("PreToolUse".to_string()),
+    };
+    if parsed != expected {
+        return VectorOutcome::failed(
+            id,
+            ConformanceTier::C2,
+            format!("parsed {parsed:?}, expected {expected:?}"),
+        );
+    }
+    let capabilities = crate::capabilities();
+    let rendered = capabilities.renders(&metaharness_protocol::Operation::Shell);
+    if rendered != parsed.tool_name.as_deref() {
+        return VectorOutcome::failed(
+            id,
+            ConformanceTier::C2,
+            format!(
+                "the rendering table says operation.shell is {rendered:?}, the recorded wire \
+                 says {:?}",
+                parsed.tool_name
+            ),
+        );
+    }
+    VectorOutcome::passed(id, ConformanceTier::C2)
 }
 
 /// The recorded expectations, paired with the case that produces them.
@@ -199,10 +291,15 @@ fn replay_vector(id: &str, input: &str, expected: &str) -> VectorOutcome {
 
 /// Read a fixture transcript and frame every event, byte for byte.
 fn replay(input: &str) -> String {
+    replay_as(REPLAY_RUN, input)
+}
+
+/// [`replay`] framed under a caller-named run id, so the golden stream says what it is.
+fn replay_as(run: &str, input: &str) -> String {
     let mut reader = TranscriptReader::new(replay_transcript(), replay_attestation())
         .with_seam(Seam::Hook)
         .with_inputs_digest(Digest::of(b"the copied input tree"));
-    let mut stream = EventStream::new(RunId::new(REPLAY_RUN));
+    let mut stream = EventStream::new(RunId::new(run));
     let mut out = String::new();
     for line in input.lines() {
         for emission in reader.push_line(line) {
@@ -326,6 +423,8 @@ mod tests {
             "c2-session",
             "c2-unknown-records",
             "c2-auth-expired",
+            "golden-transcript",
+            "golden-hook-input",
         ] {
             assert!(ids.iter().any(|seen| seen == id), "{id} is not covered");
         }
@@ -336,5 +435,44 @@ mod tests {
     fn a_failing_vector_reports_the_line_that_differed() {
         let detail = first_difference("a\nb\n", "a\nc\n");
         assert!(detail.contains("line 2"), "{detail}");
+    }
+
+    /// CT-2's acceptance clause, exercised: a mutated byte in the recorded wire fails its
+    /// vector. A golden sample a mutation cannot redden is decoration, not a contract.
+    #[test]
+    fn a_mutated_byte_in_the_golden_transcript_fails_its_vector() {
+        let mutated = GOLDEN_TRANSCRIPT.replacen("\"command\":\"ls\"", "\"command\":\"lz\"", 1);
+        assert_ne!(mutated, GOLDEN_TRANSCRIPT, "the mutation found its byte");
+        let outcome = golden_transcript_vector(&mutated);
+        assert!(!outcome.passed, "the mutated transcript still passed");
+        assert!(outcome.detail.contains("line"), "{}", outcome.detail);
+    }
+
+    #[test]
+    fn a_mutated_byte_in_the_golden_hook_input_fails_its_vector() {
+        let mutated =
+            GOLDEN_HOOK_INPUT.replacen("\"tool_name\":\"Bash\"", "\"tool_name\":\"Wash\"", 1);
+        assert_ne!(mutated, GOLDEN_HOOK_INPUT, "the mutation found its byte");
+        let outcome = golden_hook_vector(&mutated);
+        assert!(!outcome.passed, "the mutated hook input still passed");
+    }
+
+    /// Regenerate the golden expectation from the committed recorded wire. `#[ignore]`d because
+    /// it writes into the source tree; it is the second half of a re-capture, not of the gate:
+    ///
+    /// ```console
+    /// metaharness run claude --hermetic --retain-dir <dir> -p "…"   # new pin, new wire
+    /// cp <dir>/transcript.jsonl fixtures/golden/transcript.jsonl   # review it first
+    /// cargo test -p metaharness-claude --lib regenerate -- --ignored
+    /// ```
+    #[test]
+    #[ignore = "writes fixtures/golden/transcript.expected.jsonl from the committed input; run after a re-capture"]
+    fn regenerate_the_golden_expectation() {
+        let path = concat!(
+            env!("CARGO_MANIFEST_DIR"),
+            "/fixtures/golden/transcript.expected.jsonl"
+        );
+        std::fs::write(path, replay_as(GOLDEN_RUN, GOLDEN_TRANSCRIPT))
+            .expect("the expectation is written");
     }
 }

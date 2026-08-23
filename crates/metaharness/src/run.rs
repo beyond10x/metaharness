@@ -48,6 +48,10 @@ pub mod warning {
     /// A tool was called that no operation in the v0.1 vocabulary renders to, so the frame has
     /// no way to admit it (design § 7.8).
     pub const UNCOVERED_TOOL: &str = "UNCOVERED_TOOL";
+    /// The spec named a `retain_dir` and some of the run's raw wire could not be copied into
+    /// it. A warning and never a failure: the run itself is over, and losing its verdict over
+    /// a capture that was best-effort by construction would cost more than the copy was worth.
+    pub const RETAIN_FAILED: &str = "RETAIN_FAILED";
 }
 
 /// The vendor hook timeout metaharness assumes when the adapter's plan states none.
@@ -207,6 +211,11 @@ pub struct Run {
     warned_no_frame: bool,
     pub(crate) launch: LaunchFacts,
     pub(crate) scratch: Option<tempfile::TempDir>,
+    /// The raw vendor wire this run writes, as absolute paths into the scratch: the retained
+    /// transcript or rollout and the hook channel's `requests` directory. Listed by the builder
+    /// — the only party that knows a vendor's layout — and deliberately never the whole scratch
+    /// root, because the scratch home also holds a copied credential.
+    wire: Vec<std::path::PathBuf>,
 }
 
 impl std::fmt::Debug for Run {
@@ -233,6 +242,7 @@ pub(crate) struct RunParts {
     pub(crate) vendor_timeout_ms: u64,
     pub(crate) launch: LaunchFacts,
     pub(crate) scratch: Option<tempfile::TempDir>,
+    pub(crate) wire: Vec<std::path::PathBuf>,
 }
 
 impl Run {
@@ -280,6 +290,7 @@ impl Run {
             warned_no_frame: false,
             launch: parts.launch,
             scratch: parts.scratch,
+            wire: parts.wire,
         }
     }
 
@@ -775,10 +786,30 @@ impl Run {
 
     fn wind_up(&mut self) {
         self.abandon_pending("the stream ended", warning::PENDING_CALL_ABANDONED);
+        self.retain_wire();
         self.bridge.set_census(self.census.clone());
         let emissions = self.bridge.finish();
         self.outbox.extend(emissions);
         self.finished = true;
+    }
+
+    /// Copy the run's raw wire into the spec's `retain_dir`, if one was named.
+    ///
+    /// Here at wind-up and not in a `Drop`, because this is the last moment the scratch is both
+    /// complete and alive: the stream has ended, so the tail threads have written everything
+    /// they will, and the `TempDir` has not yet been dropped. A run abandoned before its stream
+    /// ended dies with its scratch, retained nothing, and that is recorded nowhere — which is
+    /// the honest account, since its wire was incomplete anyway.
+    fn retain_wire(&mut self) {
+        let Some(target) = self.spec.retain_dir.clone() else {
+            return;
+        };
+        for message in retain(&self.wire, &target) {
+            self.outbox.push_back(Emission::untimed(Event::Warning {
+                code: warning::RETAIN_FAILED.to_string(),
+                message,
+            }));
+        }
     }
 
     /// Rule 4: `interrupt` is a legal answer to a pending decision — and rule 1 says the
@@ -903,6 +934,60 @@ impl Run {
     }
 }
 
+/// Copy each named wire path into `target`, returning one message per failure.
+///
+/// A file is copied under its own name; a directory has its immediate files copied into a
+/// subdirectory of the same name — one level, because both hook channels are flat. A named file
+/// that does not exist is a failure worth a message (the operator asked for wire that is not
+/// there), but a directory that exists and is empty copies nothing and says nothing: a run whose
+/// model never called a tool has an empty `requests` directory, and that is not a defect.
+fn retain(wire: &[std::path::PathBuf], target: &std::path::Path) -> Vec<String> {
+    let mut failures = Vec::new();
+    if let Err(error) = std::fs::create_dir_all(target) {
+        return vec![format!(
+            "{} could not be created: {error}",
+            target.display()
+        )];
+    }
+    for source in wire {
+        let Some(name) = source.file_name() else {
+            failures.push(format!(
+                "{} has no file name to retain under",
+                source.display()
+            ));
+            continue;
+        };
+        let destination = target.join(name);
+        let result = if source.is_dir() {
+            retain_directory(source, &destination)
+        } else {
+            std::fs::copy(source, &destination).map(|_| ())
+        };
+        if let Err(error) = result {
+            failures.push(format!(
+                "{} could not be retained as {}: {error}",
+                source.display(),
+                destination.display()
+            ));
+        }
+    }
+    failures
+}
+
+fn retain_directory(
+    source: &std::path::Path,
+    destination: &std::path::Path,
+) -> std::io::Result<()> {
+    std::fs::create_dir_all(destination)?;
+    for entry in std::fs::read_dir(source)? {
+        let path = entry?.path();
+        if let Some(name) = path.file_name().filter(|_| path.is_file()) {
+            std::fs::copy(&path, destination.join(name))?;
+        }
+    }
+    Ok(())
+}
+
 /// What metaharness says when it denies on its own deadline.
 ///
 /// One function so the vendor's timeout and metaharness's own budget always appear together: a
@@ -964,5 +1049,112 @@ pub fn decider_name(by: DecidedBy) -> &'static str {
         DecidedBy::Frame => "frame",
         DecidedBy::Deadline => "deadline",
         DecidedBy::Adapter => "adapter",
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use metaharness_protocol::Kind;
+
+    use crate::builder::{Input, Metaharness};
+    use crate::clock::ManualClock;
+    use crate::scripted::{ScriptedLog, ScriptedRunner, ScriptedSeams};
+
+    /// The capture surface CT-2's golden samples come from: a run with a `retain_dir` copies its
+    /// raw wire — the transcript and the hook inputs — out of the scratch before the scratch
+    /// dies, and copies **exactly** that. The exact-set assertion is the credential half of the
+    /// claim: the scratch home holds a copied login, and a retention that swept the scratch root
+    /// would show up here as a third entry.
+    #[test]
+    fn a_retain_dir_receives_the_wire_exactly_and_the_scratch_home_never_travels() {
+        let keep = tempfile::TempDir::new().expect("a retain target");
+        let log = ScriptedLog::new();
+        let mut runner =
+            ScriptedRunner::of_lines([r#"{"emit":"text","text":"scripted"}"#.to_string()], log);
+        let mut seams = ScriptedSeams;
+        let mut run = Metaharness::new(Kind::Claude)
+            .with_retain_dir(keep.path())
+            .start_with_clock(
+                Input::Prompt("retain".to_string()),
+                &mut runner,
+                &mut seams,
+                Box::new(ManualClock::new()),
+            )
+            .expect("a scripted run starts");
+
+        // Write what the real child writes, where it writes it: the retained transcript, one
+        // raw hook input, and — the thing that must not travel — a credential in the scratch.
+        let scratch = run
+            .scratch_root()
+            .expect("a scripted run owns a scratch")
+            .to_path_buf();
+        std::fs::write(scratch.join("transcript.jsonl"), b"{\"raw\":1}\n").expect("the wire");
+        let requests = metaharness_claude::HookChannelPaths::under(&scratch).requests;
+        std::fs::create_dir_all(&requests).expect("the channel");
+        std::fs::write(requests.join("h1.json"), b"{\"tool_name\":\"Bash\"}\n").expect("a hook");
+        std::fs::write(scratch.join(".credentials.json"), b"secret").expect("the decoy");
+
+        let lines = run.drain().expect("the run drains");
+        assert!(
+            !lines.iter().any(|line| line.event.name() == "warning"),
+            "retention warned: {lines:?}"
+        );
+
+        let mut kept: Vec<String> = std::fs::read_dir(keep.path())
+            .expect("the retain dir")
+            .map(|entry| {
+                entry
+                    .expect("an entry")
+                    .file_name()
+                    .to_string_lossy()
+                    .into_owned()
+            })
+            .collect();
+        kept.sort();
+        assert_eq!(
+            kept,
+            ["requests", "transcript.jsonl"],
+            "exactly the wire, nothing else"
+        );
+        assert_eq!(
+            std::fs::read(keep.path().join("transcript.jsonl")).expect("the transcript copy"),
+            b"{\"raw\":1}\n"
+        );
+        assert_eq!(
+            std::fs::read(keep.path().join("requests").join("h1.json")).expect("the hook copy"),
+            b"{\"tool_name\":\"Bash\"}\n"
+        );
+    }
+
+    /// A missing wire file is a warning that names it, never a silent nothing: the operator
+    /// asked for wire, and an empty capture that says nothing reads exactly like a capture.
+    #[test]
+    fn wire_that_is_not_there_is_warned_about_by_name() {
+        let keep = tempfile::TempDir::new().expect("a retain target");
+        let log = ScriptedLog::new();
+        let mut runner = ScriptedRunner::of_lines(Vec::<String>::new(), log);
+        let mut seams = ScriptedSeams;
+        let mut run = Metaharness::new(Kind::Claude)
+            .with_retain_dir(keep.path())
+            .start_with_clock(
+                Input::Prompt("retain".to_string()),
+                &mut runner,
+                &mut seams,
+                Box::new(ManualClock::new()),
+            )
+            .expect("a scripted run starts");
+        let lines = run.drain().expect("the run drains");
+        let warned = lines.iter().any(|line| {
+            matches!(
+                &line.event,
+                metaharness_protocol::Event::Warning { code, message }
+                    if code == super::warning::RETAIN_FAILED
+                        && message.contains("transcript.jsonl")
+            )
+        });
+        assert!(
+            warned,
+            "no RETAIN_FAILED warning named the missing transcript: {lines:?}"
+        );
     }
 }

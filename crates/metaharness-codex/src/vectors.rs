@@ -8,8 +8,8 @@
 //! with the difference in the detail.
 
 use metaharness_protocol::{
-    ConformanceTier, Emission, Event, HermeticAttestation, HermeticMode, TranscriptRef,
-    VectorOutcome,
+    ConformanceTier, Emission, Event, EventStream, HermeticAttestation, HermeticMode, RunId,
+    TranscriptRef, VectorOutcome,
 };
 
 use crate::rollout::RolloutReader;
@@ -31,7 +31,143 @@ pub fn conformance_vectors() -> Vec<VectorOutcome> {
         vector_version_gate(),
         vector_drifted_shape_is_opaque_not_fatal(),
         vector_nothing_is_dropped(),
+        golden_rollout_vector(GOLDEN_ROLLOUT),
+        golden_hook_vector(GOLDEN_HOOK_INPUT),
     ]
+}
+
+/// Recorded real wire (adapter contract CT-2): one hermetic run's session rollout and the raw
+/// `PreToolUse` stdin its one tool call produced, byte for byte as codex-cli 0.145.0 wrote them
+/// — including its `session_meta` claiming `cli_version` **0.144.0**, which is Q18 on disk.
+/// The synthesized fixtures above test the reader against this crate's own assumptions; these
+/// test it against what the vendor actually wrote — the real call arrives as `custom_tool_call`,
+/// a shape no synthesized vector had thought to use. Capture provenance is
+/// `fixtures/golden/README.md`; re-capture per pin with
+/// `metaharness run codex --hermetic --retain-dir …`.
+const GOLDEN_HOOK_INPUT: &str = include_str!("../fixtures/golden/hook-input.json");
+const GOLDEN_ROLLOUT: &str = include_str!("../fixtures/golden/rollout.jsonl");
+const GOLDEN_ROLLOUT_EXPECTED: &str = include_str!("../fixtures/golden/rollout.expected.jsonl");
+
+/// The run id the golden replay is framed under.
+const GOLDEN_RUN: &str = "golden";
+
+/// The recorded rollout in, the committed event stream out, byte-exact.
+fn golden_rollout_vector(input: &str) -> VectorOutcome {
+    let id = "golden-rollout";
+    let observed = golden_replay(input);
+    if observed == GOLDEN_ROLLOUT_EXPECTED {
+        VectorOutcome::passed(id, ConformanceTier::C2)
+    } else {
+        VectorOutcome::failed(
+            id,
+            ConformanceTier::C2,
+            first_difference(GOLDEN_ROLLOUT_EXPECTED, &observed),
+        )
+    }
+}
+
+/// Frame every event the reader emits for this input, one JSON line each.
+fn golden_replay(input: &str) -> String {
+    let mut rollout = reader();
+    let mut stream = EventStream::new(RunId::new(GOLDEN_RUN));
+    let mut out = String::new();
+    for line in input.lines() {
+        for emission in rollout.push_line(line) {
+            push_line(&mut out, &stream.stamp(emission));
+        }
+    }
+    for emission in rollout.finish() {
+        push_line(&mut out, &stream.stamp(emission));
+    }
+    out
+}
+
+fn push_line(out: &mut String, line: &metaharness_protocol::EventLine) {
+    match serde_json::to_string(line) {
+        Ok(json) => {
+            out.push_str(&json);
+            out.push('\n');
+        }
+        Err(error) => {
+            use std::fmt::Write as _;
+            let _ = writeln!(out, "UNSERIALIZABLE: {error}");
+        }
+    }
+}
+
+/// The first line that differs, so a byte-exact failure names a line rather than a file.
+fn first_difference(expected: &str, observed: &str) -> String {
+    let mut expected_lines = expected.lines();
+    let mut observed_lines = observed.lines();
+    let mut number = 0;
+    loop {
+        number += 1;
+        match (expected_lines.next(), observed_lines.next()) {
+            (None, None) => return "the streams differ only in trailing bytes".to_string(),
+            (left, right) if left == right => {}
+            (left, right) => {
+                return format!(
+                    "line {number}: expected {}, observed {}",
+                    left.unwrap_or("<end of stream>"),
+                    right.unwrap_or("<end of stream>")
+                );
+            }
+        }
+    }
+}
+
+/// The recorded hook stdin parses to exactly the recorded values, and the rendering table
+/// agrees with the wire.
+///
+/// The second half is what CX-M2 paid to learn: the hook speaks Claude Code's tool vocabulary
+/// (`tool_name` **`Bash`**) on a vendor whose rollout calls the same call `exec` and whose
+/// model-facing list says `shell`. The recorded input must name the same tool the capability
+/// descriptor renders `operation.shell` to, because that table is what the seam matches a live
+/// call against — and it is a fact about the vendor this adapter asserts and could be wrong
+/// about.
+fn golden_hook_vector(input: &str) -> VectorOutcome {
+    let id = "golden-hook-input";
+    let parsed = match crate::parse_hook_input(input) {
+        Ok(parsed) => parsed,
+        Err(refused) => {
+            return VectorOutcome::failed(
+                id,
+                ConformanceTier::C2,
+                format!("the recorded hook input was refused: {}", refused.reason),
+            );
+        }
+    };
+    let expected = crate::HookInput {
+        tool_name: Some("Bash".to_string()),
+        tool_input: serde_json::json!({"command": "ls"}),
+        tool_use_id: Some("exec-9d0c7ef7-57b5-4ddd-b0ce-b64736b8ee9d".to_string()),
+        session_id: Some("01a02c8e-5288-70e2-8458-487f54cbfd7a".to_string()),
+        turn_id: Some("01a02c8e-5293-7d63-ae7d-fb2dbf46c68b".to_string()),
+        cwd: Some("/home/timo/.cache/claude-tmp/.tmpXbOIdF/work".to_string()),
+        permission_mode: Some("bypassPermissions".to_string()),
+        hook_event_name: Some("PreToolUse".to_string()),
+    };
+    if parsed != expected {
+        return VectorOutcome::failed(
+            id,
+            ConformanceTier::C2,
+            format!("parsed {parsed:?}, expected {expected:?}"),
+        );
+    }
+    let capabilities = crate::capabilities();
+    let rendered = capabilities.renders(&metaharness_protocol::Operation::Shell);
+    if rendered != parsed.tool_name.as_deref() {
+        return VectorOutcome::failed(
+            id,
+            ConformanceTier::C2,
+            format!(
+                "the rendering table says operation.shell is {rendered:?}, the recorded wire \
+                 says {:?}",
+                parsed.tool_name
+            ),
+        );
+    }
+    VectorOutcome::passed(id, ConformanceTier::C2)
 }
 
 fn reader() -> RolloutReader {
@@ -170,5 +306,48 @@ fn vector_nothing_is_dropped() -> VectorOutcome {
             ConformanceTier::C2,
             format!("{} events, {opaque_count} opaque", emitted.len()),
         )
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    /// CT-2's acceptance clause, exercised: a mutated byte in the recorded wire fails its
+    /// vector. A golden sample a mutation cannot redden is decoration, not a contract.
+    #[test]
+    fn a_mutated_byte_in_the_golden_rollout_fails_its_vector() {
+        let mutated = GOLDEN_ROLLOUT.replacen("custom_tool_call", "custom_tool_cull", 1);
+        assert_ne!(mutated, GOLDEN_ROLLOUT, "the mutation found its byte");
+        let outcome = golden_rollout_vector(&mutated);
+        assert!(!outcome.passed, "the mutated rollout still passed");
+        assert!(outcome.detail.contains("line"), "{}", outcome.detail);
+    }
+
+    #[test]
+    fn a_mutated_byte_in_the_golden_hook_input_fails_its_vector() {
+        let mutated =
+            GOLDEN_HOOK_INPUT.replacen("\"tool_name\":\"Bash\"", "\"tool_name\":\"Wash\"", 1);
+        assert_ne!(mutated, GOLDEN_HOOK_INPUT, "the mutation found its byte");
+        let outcome = golden_hook_vector(&mutated);
+        assert!(!outcome.passed, "the mutated hook input still passed");
+    }
+
+    /// Regenerate the golden expectation from the committed recorded wire. `#[ignore]`d because
+    /// it writes into the source tree; it is the second half of a re-capture, not of the gate:
+    ///
+    /// ```console
+    /// metaharness run codex --hermetic --retain-dir <dir> -p "…"    # new pin, new wire
+    /// cp <dir>/rollout.jsonl fixtures/golden/rollout.jsonl          # review it first
+    /// cargo test -p metaharness-codex --lib regenerate -- --ignored
+    /// ```
+    #[test]
+    #[ignore = "writes fixtures/golden/rollout.expected.jsonl from the committed input; run after a re-capture"]
+    fn regenerate_the_golden_expectation() {
+        let path = concat!(
+            env!("CARGO_MANIFEST_DIR"),
+            "/fixtures/golden/rollout.expected.jsonl"
+        );
+        std::fs::write(path, golden_replay(GOLDEN_ROLLOUT)).expect("the expectation is written");
     }
 }
