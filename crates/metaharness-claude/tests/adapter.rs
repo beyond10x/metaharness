@@ -141,8 +141,9 @@ fn the_plans_attestation_reaches_the_opening_event() {
 #[test]
 fn every_conformance_vector_passes_without_a_model_a_network_or_a_credential() {
     let outcomes = conformance_vectors();
-    // Four launch, three synthesised replays, and the two golden recorded-wire vectors (CT-2).
-    assert_eq!(outcomes.len(), 9);
+    // Four launch, three synthesised replays, the two golden recorded-wire vectors (CT-2) and
+    // the version pair (CT-3).
+    assert_eq!(outcomes.len(), 10);
     for outcome in &outcomes {
         assert!(outcome.passed, "{}: {}", outcome.id, outcome.detail);
         assert!(matches!(

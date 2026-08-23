@@ -86,4 +86,30 @@ impl VectorOutcome {
             detail: detail.into(),
         }
     }
+
+    /// A vector that held, carrying a named gap the reader must still see (CT-3).
+    ///
+    /// `passed` with a non-empty `detail`: not a failure, because the observed state is a known,
+    /// recorded fact and reddening the contract over it would teach operators to ignore red —
+    /// and not a silent pass, because a version pair that disagrees is exactly the finding Q18
+    /// existed for. Consumers render the detail as a warning.
+    #[must_use]
+    pub fn passed_with_warning(
+        id: impl Into<String>,
+        tier: ConformanceTier,
+        detail: impl Into<String>,
+    ) -> Self {
+        Self {
+            id: id.into(),
+            tier,
+            passed: true,
+            detail: detail.into(),
+        }
+    }
+
+    /// Whether this outcome is a pass that carries a named gap.
+    #[must_use]
+    pub fn is_warning(&self) -> bool {
+        self.passed && !self.detail.is_empty()
+    }
 }

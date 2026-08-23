@@ -7,6 +7,24 @@ was amended and the amendment is named here.
 
 ### Added
 
+- **`doctor` now answers about the binary the run will execute, and the contract names a version
+  pair that disagrees (CT-3; Q18 closed as amendment a8).** Q18's cause was two binaries, not one
+  binary lying: the operator's shell resolves pacman codex 0.145.0 at `/usr/bin` while the launch
+  plan's constructed child `PATH` resolves npm codex 0.144.0 at `~/.local/bin` first — so the
+  pre-flight blessed a binary the spawn never executed, and every driven a7 claim was in fact
+  driven through 0.144.0. `doctor <kind>` now resolves the vendor binary on **the child's
+  `PATH`** (`child_path()`, exported by both adapters) and prints the resolved absolute path, so
+  on a machine with two installs it reports the one that will spend the money — here,
+  `/home/timo/.local/bin/codex 0.144.0, OFF the pin`, exit `1`, where it previously said on-pin.
+  A `golden-version-pair` vector per adapter reads the recorded golden sample's own version claim
+  against the pin: agreement passes silently, disagreement is a **named warning** — rendered as
+  `warn` in the vector listing and on stderr beside the `--contract` record, never a silent pass
+  and never a failure, because the recorded fact is known and reddening the contract over it
+  teaches operators to ignore red. Both adapters warn today (codex 0.144.0 vs 0.145.0, claude
+  2.1.240 vs 2.1.239). `conformance` now runs 20 claude / 10 codex vectors. What remains is the
+  machine's: two codex installs, one to be removed or the pin re-verified against 0.144.0 — the
+  operator's call.
+
 - **An adapter's conformance run is a `contract_result` (CT-1, design
   `adapter-contract-v0.1.md`).** `metaharness conformance <kind> --contract` emits the record
   `engineering-protocols`' `contract-testing` principle reads — `{checked, failed,

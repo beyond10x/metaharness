@@ -540,7 +540,19 @@ fn build_env(
 /// The operator's `~/.local/bin` is on it because that is where `codex` is installed, and a child
 /// that cannot find its own program is not a hermetic run, it is no run.
 fn reduced_path(env: &BTreeMap<String, String>) -> String {
-    match env.get("HOME") {
+    child_path(env.get("HOME").map(String::as_str))
+}
+
+/// The `PATH` a spawned child gets, given the inherited `HOME`.
+///
+/// Public because `doctor` must resolve the vendor binary **the way the spawn will** (CT-3).
+/// Q18's cause was exactly the two resolutions disagreeing: this machine holds a pacman codex
+/// 0.145.0 at `/usr/bin` and an npm codex 0.144.0 at `~/.local/bin`, the operator's shell puts
+/// `/usr/bin` first, and this constructed `PATH` puts `~/.local/bin` first — so the pre-flight
+/// blessed a binary the run never executed, and the run's own record told the truth about it.
+#[must_use]
+pub fn child_path(home: Option<&str>) -> String {
+    match home {
         Some(home) => format!("{home}/.local/bin:{BASE_PATH}"),
         None => BASE_PATH.to_string(),
     }

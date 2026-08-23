@@ -57,16 +57,34 @@ impl Installed {
 
 /// Ask the installed vendor binary what version it is.
 ///
+/// **Resolved on the child's `PATH`, not this process's** (CT-3). The two can disagree — Q18's
+/// cause was a pacman codex 0.145.0 at `/usr/bin` and an npm codex 0.144.0 at `~/.local/bin`,
+/// with the operator's shell putting `/usr/bin` first and the constructed child `PATH` putting
+/// `~/.local/bin` first — and the binary this verb blesses must be the binary the spawn will
+/// execute, or the pre-flight answers a question nobody asked. The resolved absolute path is
+/// reported in [`Installed::program`] so a disagreement between installs is visible as a path,
+/// not inferable from a version.
+///
 /// # Errors
 ///
 /// [`Refusal::NoAdapter`] for a kind this build has no adapter for, and [`Refusal::Io`] when the
-/// binary is absent or would not run — both exit `2`, because neither is a verdict about a run.
+/// binary is absent from the child's `PATH` or would not run — both exit `2`, because neither is
+/// a verdict about a run.
 pub fn installed(kind: Kind) -> Result<Installed, Refusal> {
-    let program = match kind {
-        Kind::Claude => metaharness_claude::ADAPTER_ID,
-        Kind::Codex => metaharness_codex::ADAPTER_ID,
+    let home = std::env::var("HOME").ok();
+    let (adapter, child_path) = match kind {
+        Kind::Claude => (
+            metaharness_claude::ADAPTER_ID,
+            metaharness_claude::child_path(home.as_deref()),
+        ),
+        Kind::Codex => (
+            metaharness_codex::ADAPTER_ID,
+            metaharness_codex::child_path(home.as_deref()),
+        ),
     };
-    let output = std::process::Command::new(program)
+    let program = resolve_on(adapter, &child_path)?;
+    let program = program.display().to_string();
+    let output = std::process::Command::new(&program)
         .arg("--version")
         .output()
         .map_err(|error| Refusal::Io {
@@ -96,11 +114,35 @@ pub fn installed(kind: Kind) -> Result<Installed, Refusal> {
             .collect(),
     };
     Ok(Installed {
-        adapter: program.to_string(),
-        program: program.to_string(),
+        adapter: adapter.to_string(),
+        program,
         version: version_token(&reported),
         reported,
         pinned,
+    })
+}
+
+/// The first executable named `program` on the child's `PATH`, in the child's own order.
+///
+/// A hand-rolled walk rather than a `which` dependency, because the whole point is to use
+/// **exactly** the string the launch plan constructs — a resolver with its own opinions about
+/// order would reintroduce the disagreement this exists to close.
+fn resolve_on(program: &str, child_path: &str) -> Result<std::path::PathBuf, Refusal> {
+    use std::os::unix::fs::PermissionsExt as _;
+    for dir in child_path.split(':').filter(|dir| !dir.is_empty()) {
+        let candidate = std::path::Path::new(dir).join(program);
+        let Ok(meta) = std::fs::metadata(&candidate) else {
+            continue;
+        };
+        if meta.is_file() && meta.permissions().mode() & 0o111 != 0 {
+            return Ok(candidate);
+        }
+    }
+    Err(Refusal::Io {
+        detail: format!(
+            "{program} is not on the child's PATH ({child_path}); the operator's own shell \
+             finding one somewhere else would not help, because no spawned run could execute it"
+        ),
     })
 }
 
@@ -123,6 +165,49 @@ fn version_token(reported: &str) -> String {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    fn executable_named(dir: &std::path::Path, name: &str, mode: u32) -> std::path::PathBuf {
+        use std::os::unix::fs::PermissionsExt as _;
+        let path = dir.join(name);
+        std::fs::write(&path, b"#!/bin/sh\n").expect("a program body");
+        std::fs::set_permissions(&path, std::fs::Permissions::from_mode(mode)).expect("its mode");
+        path
+    }
+
+    /// Q18's mechanism, closed: with the same name installed twice, the resolution follows the
+    /// **child's** `PATH` order — the string the launch plan constructs — not the shell's.
+    #[test]
+    fn resolution_follows_the_childs_path_order_not_the_shells() {
+        let front = tempfile::TempDir::new().expect("a directory");
+        let back = tempfile::TempDir::new().expect("another");
+        let wanted = executable_named(front.path(), "vendor", 0o755);
+        executable_named(back.path(), "vendor", 0o755);
+        let path = format!("{}:{}", front.path().display(), back.path().display());
+        assert_eq!(resolve_on("vendor", &path).expect("resolved"), wanted);
+    }
+
+    /// A file without an execute bit is not an install: the child's `execvp` would skip it, so
+    /// the pre-flight must too, or it blesses a binary the run cannot start.
+    #[test]
+    fn a_non_executable_file_is_skipped_and_the_next_directory_wins() {
+        let front = tempfile::TempDir::new().expect("a directory");
+        let back = tempfile::TempDir::new().expect("another");
+        executable_named(front.path(), "vendor", 0o644);
+        let wanted = executable_named(back.path(), "vendor", 0o755);
+        let path = format!("{}:{}", front.path().display(), back.path().display());
+        assert_eq!(resolve_on("vendor", &path).expect("resolved"), wanted);
+    }
+
+    /// The refusal names the searched `PATH`, because "not found" without the where sends the
+    /// operator to `which`, whose answer is the wrong resolution by construction.
+    #[test]
+    fn an_absent_program_is_refused_naming_the_searched_path() {
+        let empty = tempfile::TempDir::new().expect("a directory");
+        let path = empty.path().display().to_string();
+        let refusal = resolve_on("vendor", &path).expect_err("nothing to find");
+        let detail = format!("{refusal:?}");
+        assert!(detail.contains(&path), "{detail}");
+    }
 
     #[test]
     fn the_version_token_is_the_first_word_and_not_the_product_name() {

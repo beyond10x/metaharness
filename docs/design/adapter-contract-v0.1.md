@@ -4,8 +4,8 @@ Status: **proposed** (operator brain-dump, 2026-08-22, `docs/ROADMAP.md` item 1)
 written decision-complete the same day. Companion to `metaharness-protocol-v0.1.md` (§ 8.5, the
 conformance tiers this builds on) and to `engineering-protocols`' `contract-testing` principle,
 whose vocabulary this reuses. The first slice (LP-equivalent CT-1) is built alongside this page;
-**CT-2 is built** (2026-08-23, one recorded capture run per adapter); CT-3 and CT-4 stay
-proposed.
+**CT-2 and CT-3 are built** (2026-08-23 — one recorded capture run per adapter, then the version
+pair reconciled and Q18 closed by protocol amendment a8); CT-4 stays proposed.
 
 ## The idea, in the operator's words
 
@@ -68,14 +68,14 @@ is "and it is the vendor's fault", and only the second is the number an operator
 
 ## What exists already, and what this adds
 
-§ 8.5's tiers are the contract's test cases; they run today (`conformance <kind>`, 19 claude / 9
+§ 8.5's tiers are the contract's test cases; they run today (`conformance <kind>`, 20 claude / 10
 codex vectors, free). What is missing is three things, in dependency order:
 
 | # | milestone | content | acceptance |
 |---|---|---|---|
 | **CT-1** | **the record** | conformance emits a `contract_result` — `conformance <kind> --contract` prints it; a library `contract_result(kind, &[VectorOutcome])` builds it | **built with this page.** Both adapters emit a valid record; `provider` carries the pin; `breaking_changes ≤ failed`; a CLI test pins codex's provider string to `0.145.0` |
 | **CT-2** | **recorded vendor samples as the contract** | today's C1/C2 vectors are synthesized in code; promote each adapter's to **recorded real wire** on disk (one captured hook input, one captured rollout/transcript), so a vendor-shape change is a red replay rather than a green test of a stale assumption. Capture is a one-time cost per pin | **built, 2026-08-23.** `--retain-dir` is the capture surface: the run copies its raw wire (transcript/rollout, hook inputs — never a credential) out of the scratch at wind-up. One hermetic capture run per adapter produced `fixtures/golden/` in each adapter crate: both faces, byte-exact expected streams, a `#[ignore]`d regeneration test per crate, and a mutation test proving a flipped byte fails its vector. The recorded wire immediately earned its keep twice: codex's real call arrives as `custom_tool_call` (the synthesized vectors used `function_call`), and its `session_meta` claims 0.144.0 out of the 0.145.0 binary — Q18 as a committed byte, warned as `version_outside_pin` in the golden stream |
-| CT-3 | the version reconciliation (Q18) | the pin is a pair — `doctor`'s `--version` source and the record's `cli_version` — and the contract asserts they agree, or names the gap. Closes Q18 | a recorded sample whose `cli_version` differs from the doctor pin is a named contract warning, not a silent pass |
+| **CT-3** | **the version reconciliation (Q18)** | the pin is a pair — `doctor`'s `--version` source and the record's `cli_version` — and the contract asserts they agree, or names the gap. Closes Q18 | **built, 2026-08-23, and the investigation beat the milestone's own framing:** the pair disagreed because doctor and the spawn resolved **different binaries** — the operator's shell `PATH` finds pacman codex 0.145.0 at `/usr/bin`, the constructed child `PATH` finds npm codex 0.144.0 at `~/.local/bin` first. So the reconciliation is mechanical, not bookkeeping: `doctor` now resolves the vendor binary on **the child's `PATH`** (`child_path()`, exported by both adapters) and reports the resolved absolute path, and a `golden-version-pair` vector per adapter reads the recorded sample's own version claim against the pin — agreement passes silently, disagreement is a **named warning** (`warn C2 golden-version-pair — …`, and on stderr beside the `--contract` record), never a silent pass and never a failure. The acceptance clause holds today on both adapters: codex warns 0.144.0-vs-0.145.0, claude warns 2.1.240-vs-2.1.239. Q18 closed as protocol amendment a8; what remains — one install or two on the machine — is the operator's |
 | CT-4 | symmetry across adapters | one contract-vector authoring shape every adapter fills (claude, codex, and the next), so a new adapter's contract is a checklist, not a fresh invention | pi/opencode/flux adapters (`ROADMAP.md` 2–3) declare their contract by filling the shape |
 
 ## Decisions taken in this review (defaults if nobody objects)

@@ -53,8 +53,8 @@ mod vectors;
 pub use bridge::{CodexSeam, CodexSeams, hook_request_line};
 pub use hook::{HOOK_WAIT_SECONDS, HookChannelPaths, hook_program};
 pub use launch::{
-    CredentialCopy, HOOK_TIMEOUT_SECONDS, LaunchContext, LaunchPlan, LaunchRefusal, config_path,
-    hook_program_path, plan_launch,
+    CredentialCopy, HOOK_TIMEOUT_SECONDS, LaunchContext, LaunchPlan, LaunchRefusal, child_path,
+    config_path, hook_program_path, plan_launch,
 };
 pub use rollout::RolloutReader;
 pub use seam::{HookInput, capabilities, parse_hook_input, render_hook_response, render_operation};

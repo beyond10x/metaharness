@@ -523,7 +523,18 @@ fn build_env(
 /// The operator's `~/.local/bin` is on it because that is where the vendor installs `claude`,
 /// and a child that cannot find its own program is not a hermetic run, it is no run.
 fn reduced_path(env: &BTreeMap<String, String>) -> String {
-    match env.get("HOME") {
+    child_path(env.get("HOME").map(String::as_str))
+}
+
+/// The `PATH` a spawned child gets, given the inherited `HOME`.
+///
+/// Public because `doctor` must resolve the vendor binary **the way the spawn will** (CT-3): a
+/// machine that holds two installs can resolve them differently on the operator's `PATH` and on
+/// this constructed one — the codex adapter's Q18 was exactly that — and a pre-flight that
+/// blesses a binary the run never executes is not a pre-flight.
+#[must_use]
+pub fn child_path(home: Option<&str>) -> String {
+    match home {
         Some(home) => format!("{home}/.local/bin:{BASE_PATH}"),
         None => BASE_PATH.to_string(),
     }

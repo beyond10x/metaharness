@@ -47,7 +47,52 @@ pub fn conformance_vectors() -> Vec<VectorOutcome> {
     outcomes.extend(replay_vectors());
     outcomes.push(golden_transcript_vector(GOLDEN_TRANSCRIPT));
     outcomes.push(golden_hook_vector(GOLDEN_HOOK_INPUT));
+    outcomes.push(golden_version_pair_vector(GOLDEN_TRANSCRIPT));
     outcomes
+}
+
+/// The version pair (CT-3, Q18): the recorded sample's own version claim against the pin.
+///
+/// The recorded wire and the pin are two sources that can disagree — the codex adapter's did,
+/// caused by two installs resolved differently by two `PATH`s — so the contract asserts they
+/// agree **or names the gap**: a disagreement is a warning the reader must see, never a silent
+/// pass, and never a failure either, because the recorded fact is known and reddening the
+/// contract over it teaches operators to ignore red.
+fn golden_version_pair_vector(transcript: &str) -> VectorOutcome {
+    let recorded = transcript
+        .lines()
+        .next()
+        .and_then(|line| serde_json::from_str::<Value>(line).ok())
+        .and_then(|init| {
+            init.get("claude_code_version")?
+                .as_str()
+                .map(ToString::to_string)
+        });
+    version_pair_outcome(recorded.as_deref())
+}
+
+fn version_pair_outcome(recorded: Option<&str>) -> VectorOutcome {
+    let id = "golden-version-pair";
+    let Some(recorded) = recorded else {
+        return VectorOutcome::failed(
+            id,
+            ConformanceTier::C2,
+            "the golden sample's init record carries no claude_code_version, so the pair cannot \
+             be reconciled",
+        );
+    };
+    if crate::PINNED_VERSIONS.contains(&recorded) {
+        return VectorOutcome::passed(id, ConformanceTier::C2);
+    }
+    VectorOutcome::passed_with_warning(
+        id,
+        ConformanceTier::C2,
+        format!(
+            "the recorded sample was written by {recorded} and the adapter pins {}; every claim \
+             the golden vectors hold is the recorded binary's, not the pin's (Q18)",
+            crate::PINNED_VERSIONS.join(", ")
+        ),
+    )
 }
 
 /// Recorded real wire (adapter contract CT-2): one hermetic run's `stream-json` transcript and
@@ -425,6 +470,7 @@ mod tests {
             "c2-auth-expired",
             "golden-transcript",
             "golden-hook-input",
+            "golden-version-pair",
         ] {
             assert!(ids.iter().any(|seen| seen == id), "{id} is not covered");
         }
@@ -455,6 +501,32 @@ mod tests {
         assert_ne!(mutated, GOLDEN_HOOK_INPUT, "the mutation found its byte");
         let outcome = golden_hook_vector(&mutated);
         assert!(!outcome.passed, "the mutated hook input still passed");
+    }
+
+    /// CT-3's acceptance clause: a recorded sample whose version differs from the doctor pin is
+    /// a **named** contract warning — passed, non-empty detail, both versions in it.
+    #[test]
+    fn a_recorded_version_off_the_pin_is_a_named_warning_not_a_silent_pass() {
+        let outcome = version_pair_outcome(Some("9.9.9"));
+        assert!(outcome.is_warning(), "{outcome:?}");
+        assert!(outcome.detail.contains("9.9.9"), "{}", outcome.detail);
+        assert!(outcome.detail.contains("2.1.239"), "{}", outcome.detail);
+    }
+
+    #[test]
+    fn a_recorded_version_on_the_pin_passes_with_nothing_to_say() {
+        let outcome = version_pair_outcome(Some("2.1.239"));
+        assert!(outcome.passed && outcome.detail.is_empty(), "{outcome:?}");
+    }
+
+    /// The committed golden sample was captured from 2.1.240 against the 2.1.239 pin, so the
+    /// shipped contract carries this warning today. A re-capture from an on-pin binary flips
+    /// this expectation deliberately — that is the pair being reconciled.
+    #[test]
+    fn the_committed_golden_sample_carries_the_version_pair_warning() {
+        let outcome = golden_version_pair_vector(GOLDEN_TRANSCRIPT);
+        assert!(outcome.is_warning(), "{outcome:?}");
+        assert!(outcome.detail.contains("2.1.240"), "{}", outcome.detail);
     }
 
     /// Regenerate the golden expectation from the committed recorded wire. `#[ignore]`d because

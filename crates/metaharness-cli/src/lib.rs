@@ -326,7 +326,13 @@ fn conformance(kind: Kind, contract: bool) -> i32 {
     let failed = vectors.iter().filter(|vector| !vector.passed).count();
     if contract {
         // The record and nothing else on stdout, so a consumer pipes it straight into the
-        // evidence shape it already reads. The exit code still carries the verdict.
+        // evidence shape it already reads. The exit code still carries the verdict. A warning
+        // vector goes to stderr: the record's shape is shared vocabulary and does not grow a
+        // field here, but a named gap that contract mode swallowed would be a silent pass
+        // (CT-3's acceptance clause is exactly this line).
+        for vector in vectors.iter().filter(|vector| vector.is_warning()) {
+            eprintln!("metaharness: {}", render_vector(vector));
+        }
         match metaharness::contract_result(kind, &vectors) {
             Ok(record) => println!("{record}"),
             Err(refusal) => return refuse(&refusal),
@@ -348,8 +354,17 @@ fn conformance(kind: Kind, contract: bool) -> i32 {
 }
 
 /// One vector's line. The detail is printed on a failure because the whole point of a vector is
-/// that a failure says what differed.
+/// that a failure says what differed — and on a warning, because a named gap that is not
+/// rendered is a silent pass wearing a different type (CT-3).
 fn render_vector(vector: &VectorOutcome) -> String {
+    if vector.is_warning() {
+        return format!(
+            "warn {} {} — {}",
+            vector.tier.as_str(),
+            vector.id,
+            vector.detail
+        );
+    }
     let mark = if vector.passed { "pass" } else { "FAIL" };
     if vector.passed {
         format!("{mark} {} {}", vector.tier.as_str(), vector.id)

@@ -34,7 +34,7 @@ mod vectors;
 pub use bridge::{ClaudeSeam, ClaudeSeams};
 pub use hook::{HOOK_WAIT_SECONDS, HookChannelPaths, hook_program};
 pub use launch::{
-    CredentialCopy, HOOK_TIMEOUT_SECONDS, LaunchContext, LaunchPlan, LaunchRefusal,
+    CredentialCopy, HOOK_TIMEOUT_SECONDS, LaunchContext, LaunchPlan, LaunchRefusal, child_path,
     hook_program_path, plan_launch, settings_path,
 };
 pub use seam::{HookInput, capabilities, parse_hook_input, render_hook_response, render_operation};

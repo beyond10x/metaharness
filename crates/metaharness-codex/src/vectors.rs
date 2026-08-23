@@ -33,7 +33,53 @@ pub fn conformance_vectors() -> Vec<VectorOutcome> {
         vector_nothing_is_dropped(),
         golden_rollout_vector(GOLDEN_ROLLOUT),
         golden_hook_vector(GOLDEN_HOOK_INPUT),
+        golden_version_pair_vector(GOLDEN_ROLLOUT),
     ]
+}
+
+/// The version pair (CT-3, Q18): the recorded sample's own version claim against the pin.
+///
+/// The recorded wire and the pin are two sources that can disagree — this adapter's did, and
+/// the cause was two installs resolved differently by two `PATH`s — so the contract asserts
+/// they agree **or names the gap**: a disagreement is a warning the reader must see, never a
+/// silent pass, and never a failure either, because the recorded fact is known and reddening
+/// the contract over it teaches operators to ignore red.
+fn golden_version_pair_vector(rollout: &str) -> VectorOutcome {
+    let recorded = rollout
+        .lines()
+        .next()
+        .and_then(|line| serde_json::from_str::<serde_json::Value>(line).ok())
+        .and_then(|meta| {
+            meta.get("payload")?
+                .get("cli_version")?
+                .as_str()
+                .map(ToString::to_string)
+        });
+    version_pair_outcome(recorded.as_deref())
+}
+
+fn version_pair_outcome(recorded: Option<&str>) -> VectorOutcome {
+    let id = "golden-version-pair";
+    let Some(recorded) = recorded else {
+        return VectorOutcome::failed(
+            id,
+            ConformanceTier::C2,
+            "the golden sample's session_meta carries no cli_version, so the pair cannot be \
+             reconciled",
+        );
+    };
+    if crate::PINNED_VERSIONS.contains(&recorded) {
+        return VectorOutcome::passed(id, ConformanceTier::C2);
+    }
+    VectorOutcome::passed_with_warning(
+        id,
+        ConformanceTier::C2,
+        format!(
+            "the recorded sample was written by {recorded} and the adapter pins {}; every claim \
+             the golden vectors hold is the recorded binary's, not the pin's (Q18)",
+            crate::PINNED_VERSIONS.join(", ")
+        ),
+    )
 }
 
 /// Recorded real wire (adapter contract CT-2): one hermetic run's session rollout and the raw
@@ -341,6 +387,32 @@ mod tests {
     /// cp <dir>/rollout.jsonl fixtures/golden/rollout.jsonl          # review it first
     /// cargo test -p metaharness-codex --lib regenerate -- --ignored
     /// ```
+    /// CT-3's acceptance clause: a recorded sample whose version differs from the doctor pin is
+    /// a **named** contract warning — passed, non-empty detail, both versions in it.
+    #[test]
+    fn a_recorded_version_off_the_pin_is_a_named_warning_not_a_silent_pass() {
+        let outcome = version_pair_outcome(Some("9.9.9"));
+        assert!(outcome.is_warning(), "{outcome:?}");
+        assert!(outcome.detail.contains("9.9.9"), "{}", outcome.detail);
+        assert!(outcome.detail.contains("0.145.0"), "{}", outcome.detail);
+    }
+
+    #[test]
+    fn a_recorded_version_on_the_pin_passes_with_nothing_to_say() {
+        let outcome = version_pair_outcome(Some("0.145.0"));
+        assert!(outcome.passed && outcome.detail.is_empty(), "{outcome:?}");
+    }
+
+    /// The committed golden sample really was written by 0.144.0 out of a 0.145.0-pinned
+    /// adapter, so the shipped contract carries this warning today. A re-capture from an on-pin
+    /// binary flips this expectation deliberately — that is the pair being reconciled.
+    #[test]
+    fn the_committed_golden_sample_carries_the_q18_warning() {
+        let outcome = golden_version_pair_vector(GOLDEN_ROLLOUT);
+        assert!(outcome.is_warning(), "{outcome:?}");
+        assert!(outcome.detail.contains("0.144.0"), "{}", outcome.detail);
+    }
+
     #[test]
     #[ignore = "writes fixtures/golden/rollout.expected.jsonl from the committed input; run after a re-capture"]
     fn regenerate_the_golden_expectation() {
