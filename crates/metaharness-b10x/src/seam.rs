@@ -298,7 +298,7 @@ mod tests {
     }
 
     #[test]
-    fn the_opening_record_says_this_is_a_loop_and_not_a_harness() {
+    fn the_opening_record_names_the_class_the_protocol_already_had() {
         // Design § 8.4 O5 in the other direction: a reader filtering on `adapter_class` must be
         // able to see that nothing here drives a vendor binary.
         let mut seam = seam();
@@ -320,7 +320,10 @@ mod tests {
             panic!("an opening record")
         };
         assert_eq!(adapter, "b10x");
-        assert_eq!(adapter_class, "loop");
+        assert_eq!(
+            adapter_class, "direct_provider",
+            "the protocol's own word for *the embedder holds the conversation*, not a synonym"
+        );
         assert_eq!(harness_version.as_deref(), Some("0.1.0"));
         assert_eq!(
             offered_tools,
@@ -473,5 +476,62 @@ mod tests {
         assert_eq!(usage.cache_read_input_tokens, Some(0));
         assert!(usage.thinking_tokens.is_none(), "the loop reports none");
         assert!(usage.cost_usd.is_none());
+    }
+}
+
+/// What this adapter can and cannot do, published as a value.
+///
+/// **Observe only, and every tier that implies a decision is `Unverified` rather than
+/// `Delivered`.** There is no registration seam, no hook, no control request: the loop decides in
+/// process and this adapter reads what it did. Declaring a tier delivered here would let an
+/// embedder ask for a decision mode that silently does nothing, which is the failure the whole
+/// capability document exists to prevent.
+pub fn capabilities() -> metaharness_protocol::Capabilities {
+    use metaharness_protocol::{
+        AdapterClass, AdapterId, Capabilities, COMMAND_NAMES, CommandSupport, RefusalCode, Tier,
+        TierStatus,
+    };
+    use std::collections::BTreeMap;
+
+    // Every command refused, and none of them is an oversight: `tool.decide` has nothing to answer
+    // because nothing asks, and `interrupt` and `halt` would need a control wire the loop does not
+    // have. An adapter that claimed them would leave an embedder believing a run could be stopped
+    // through this seam.
+    let commands: BTreeMap<String, CommandSupport> = COMMAND_NAMES
+        .iter()
+        .map(|name| {
+            (
+                (*name).to_string(),
+                CommandSupport::Refused(RefusalCode::UnsupportedControl),
+            )
+        })
+        .collect();
+
+    Capabilities {
+        adapter: AdapterId {
+            id: crate::ADAPTER_ID.to_string(),
+            // Not `Harness`. The protocol's own word for *the embedder holds the conversation and
+            // calls a model API*, which until now nothing had been.
+            class: AdapterClass::DirectProvider,
+        },
+        versions_pinned: crate::PINNED_VERSIONS
+            .iter()
+            .map(|version| (*version).to_string())
+            .collect(),
+        tiers: BTreeMap::from([
+            (Tier::Registration, TierStatus::Unverified),
+            (Tier::Call, TierStatus::Unverified),
+            (Tier::Turn, TierStatus::Unverified),
+            (Tier::Kill, TierStatus::Unverified),
+        ]),
+        commands,
+        decision_modes: BTreeMap::from([
+            ("observe".to_string(), TierStatus::Delivered),
+            ("ask".to_string(), TierStatus::Unverified),
+            ("frame".to_string(), TierStatus::Unverified),
+        ]),
+        // Nothing is rendered: this adapter publishes no neutral operation onto a vendor tool,
+        // because the toolset is the loop's own and metaharness does not compose it.
+        rendering: BTreeMap::new(),
     }
 }

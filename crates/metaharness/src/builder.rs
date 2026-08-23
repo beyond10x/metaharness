@@ -53,6 +53,12 @@ fn vendor_upstream(kind: Kind) -> &'static str {
     match kind {
         Kind::Claude => VENDOR_UPSTREAM,
         Kind::Codex => CODEX_VENDOR_UPSTREAM,
+        // **There is no vendor upstream for a loop we own.** The other two kinds name a vendor's
+        // API because metaharness may stand a credential proxy in front of it; `b10x-harness` is
+        // pointed at a `--base-url` the caller names and reads a credential file the caller names,
+        // so there is nothing here to forward to and nothing to intercept. The empty string is the
+        // honest answer and `loopback_for` never asks for it on this kind.
+        Kind::B10x => "",
     }
 }
 
@@ -286,6 +292,14 @@ impl Metaharness {
                 &mut crate::spawn_codex::CodexSpawnRunner::new(),
                 &mut metaharness_codex::CodexSeams,
             ),
+            // The loop writes its whole record down one pipe, like Claude Code, so the plain
+            // spawn runner reads it. What differs is that nothing decides its calls, which is the
+            // seam's business rather than the runner's.
+            Kind::B10x => self.start_with(
+                input,
+                &mut crate::spawn::SpawnRunner::new(),
+                &mut metaharness_b10x::B10xSeams::new(None, None, None),
+            ),
         }
     }
 
@@ -359,6 +373,7 @@ impl Metaharness {
         match spec.kind {
             Kind::Claude => start_claude(spec, credentials, frame, runner, seams, clock),
             Kind::Codex => start_codex(spec, credentials, frame, runner, seams, clock),
+            Kind::B10x => start_b10x(spec, frame, runner, seams, clock),
         }
     }
 
@@ -377,6 +392,109 @@ impl Metaharness {
 /// so unlike `--model-endpoint` — a static string the spec already carries into `plan_launch` —
 /// there is nothing for a pure function to compute until something has bound a socket. So: start
 /// the proxy, put its two facts in the context, then plan.
+/// Launching a loop we own.
+///
+/// # Why this is a fifth the size of the other two
+///
+/// Not because it is unfinished. The five things that cost `start_claude` and `start_codex` their
+/// hundred lines each — a scratch `HOME` so ambient config cannot leak in, a copied plugin tree, a
+/// hook channel the seam answers on, retrieval of a transcript the vendor wrote somewhere else, and
+/// custody of a credential this process must hold and proxy — are all answered by what
+/// `b10x-harness` already is. It reads no config file, has no plugin mechanism, decides in-process,
+/// writes its record to stdout, and reads a credential file the caller named.
+///
+/// What is left is an argv and a pipe.
+///
+/// # No loopback, and that is a property rather than a gap
+///
+/// The other kinds may stand a credential proxy between the vendor and its API so a subscription
+/// login never leaves this machine. There is nothing to intercept here: the loop is pointed at a
+/// `--base-url` and a key file, both named by the caller, and metaharness never sees the
+/// credential. `credentials_file` answers `None` on this kind for the same reason.
+fn start_b10x(
+    spec: RunSpec,
+    frame: Option<Frame>,
+    runner: &mut dyn ProcessRunner,
+    seams: &mut dyn SeamFactory,
+    clock: Box<dyn Clock>,
+) -> Result<Run, Refusal> {
+    let capabilities = metaharness_b10x::capabilities();
+    let refusals = start_refusals(&capabilities, &spec);
+    if !refusals.is_empty() {
+        return Err(Refusal::Control { refusals });
+    }
+
+    let scratch = tempfile::TempDir::new()?;
+    let cwd = resolve_cwd(&spec, scratch.path())?;
+    let transcript_path = scratch.path().join("transcript.jsonl");
+    let run_id = run_id(&spec);
+
+    let transcript = TranscriptRef {
+        path: Some(transcript_path.display().to_string()),
+        digest: None,
+        bytes: None,
+    };
+    // `Seam::None` whatever the tool surface says. There is no seam: no registration, no hook, no
+    // control request. Naming one would put a word in the record for a thing that does not exist,
+    // and every `tool.requested` this adapter emits says `nobody adjudicated this` in the same
+    // breath.
+    let seam = Seam::None;
+    // The attestation is honest about being empty: metaharness imposed nothing on this launch
+    // because there was nothing to impose. An attestation claiming controls it did not apply is
+    // the one document a reader has no way to check.
+    let attestation = metaharness_protocol::HermeticAttestation::none(spec.hermetic);
+    let bridge = seams.build(transcript.clone(), attestation, seam);
+
+    let program = "b10x-harness".to_owned();
+    let args: Vec<String> = spec
+        .prompt
+        .as_ref()
+        .map(|prompt| vec!["run".to_owned(), "--json".to_owned(), "--input".to_owned(), prompt.clone()])
+        .unwrap_or_else(|| vec!["run".to_owned(), "--json".to_owned()]);
+    let env: BTreeMap<String, String> = BTreeMap::new();
+    let view = LaunchPlanView {
+        program: &program,
+        args: &args,
+        env: &env,
+        cwd: &cwd,
+        credential_copies: &[],
+        // There is no decision channel. The scratch root stands in as a path the runner can hold,
+        // and nothing is ever written to it: a run that answered a decision here would be a run
+        // this adapter had decided something in.
+        decision_channel: scratch.path(),
+        transcript: &transcript_path,
+    };
+    let process = runner.start(&view)?;
+
+    let launch = LaunchFacts {
+        planned_cwd: Some(cwd.display().to_string()),
+        declared_plugins: Vec::new(),
+        pinned_versions: metaharness_b10x::PINNED_VERSIONS
+            .iter()
+            .map(ToString::to_string)
+            .collect(),
+        transcript,
+    };
+
+    Ok(Run::new(RunParts {
+        stream: EventStream::new(RunId::new(run_id)),
+        spec,
+        bridge,
+        process,
+        clock,
+        capabilities,
+        frame,
+        seam,
+        // Zero, because there is no vendor deadline to wait out: nothing asks this adapter for a
+        // decision, so no call is ever left hanging on one.
+        vendor_timeout_ms: 0,
+        launch,
+        wire: vec![transcript_path],
+        scratch: Some(scratch),
+        loopback: None,
+    }))
+}
+
 fn start_claude(
     spec: RunSpec,
     credentials: Option<PathBuf>,
@@ -1046,6 +1164,10 @@ fn credentials_file(spec: &RunSpec) -> Option<PathBuf> {
     let (directory, file) = match spec.kind {
         Kind::Claude => (".claude", ".credentials.json"),
         Kind::Codex => (".codex", "auth.json"),
+        // **No login to copy.** `b10x-harness` reads a credential file the caller named and has no
+        // vendor login directory of its own; `CredentialSource::OperatorLogin` on this kind names
+        // nothing, so this answers `None` before the match on the source below is reached.
+        Kind::B10x => return None,
     };
     match spec.credentials {
         CredentialSource::OperatorLogin | CredentialSource::Loopback => {

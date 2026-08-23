@@ -21,6 +21,13 @@ pub enum Kind {
     Claude,
     /// Codex.
     Codex,
+    /// The b10x loop, which this workspace observes rather than drives.
+    ///
+    /// The odd one out, and the enum should say so rather than a reader discovering it: every other
+    /// kind names a vendor binary metaharness puts itself in front of. This one names a loop we
+    /// own, whose published toolset already *is* its policy, so the adapter for it decides nothing
+    /// and contributes attestation and one wire. See `metaharness-b10x`.
+    B10x,
 }
 
 impl Kind {
@@ -30,6 +37,7 @@ impl Kind {
         match self {
             Kind::Claude => "claude",
             Kind::Codex => "codex",
+            Kind::B10x => "b10x",
         }
     }
 }

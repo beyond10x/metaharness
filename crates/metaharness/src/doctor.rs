@@ -81,6 +81,10 @@ pub fn installed(kind: Kind) -> Result<Installed, Refusal> {
             metaharness_codex::ADAPTER_ID,
             metaharness_codex::child_path(home.as_deref()),
         ),
+        // The binary is `b10x-harness`, not `b10x`: the adapter id names the *adapter*, and only
+        // for this kind do the two differ. Resolved on the ordinary `PATH` because this loop keeps
+        // no vendor home to look inside.
+        Kind::B10x => ("b10x-harness", std::env::var("PATH").unwrap_or_default()),
     };
     let program = resolve_on(adapter, &child_path)?;
     let program = program.display().to_string();
@@ -109,6 +113,10 @@ pub fn installed(kind: Kind) -> Result<Installed, Refusal> {
             .map(ToString::to_string)
             .collect(),
         Kind::Codex => metaharness_codex::PINNED_VERSIONS
+            .iter()
+            .map(ToString::to_string)
+            .collect(),
+        Kind::B10x => metaharness_b10x::PINNED_VERSIONS
             .iter()
             .map(ToString::to_string)
             .collect(),

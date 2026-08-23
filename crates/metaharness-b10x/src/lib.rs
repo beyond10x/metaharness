@@ -24,11 +24,13 @@
 //! no run will ever send, and every `tool.requested` carries `decision_required: false` and
 //! [`Seam::None`] — *nobody adjudicated this call*, which is the fact rather than the omission.
 //!
-//! # `adapter_class` is `loop`, not `harness`
+//! # `adapter_class` is `direct_provider`, not `harness`
 //!
 //! Design § 8.4 O5 requires that a harness adapter never silently becomes a direct API call. This
-//! is the other direction of the same rule: this adapter drives no vendor binary, and a reader
-//! filtering on `adapter_class` must be able to see that without reading the source.
+//! is the other direction of the same rule, and the protocol already had the word for it:
+//! [`AdapterClass::DirectProvider`](metaharness_protocol::AdapterClass) — *"the embedder holds the
+//! conversation and calls a model API"* — which carried a *not in v0.1* note because nothing had
+//! ever been one. This is the first.
 //!
 //! # What the loop does not have, written as `null`
 //!
@@ -43,13 +45,19 @@ mod launch;
 mod seam;
 
 pub use launch::{B10xLaunch, argv};
-pub use seam::{B10xSeam, B10xSeams};
+pub use seam::{B10xSeam, B10xSeams, capabilities};
 
 /// What this adapter calls itself on the wire.
 pub const ADAPTER_ID: &str = "b10x";
 
-/// Not `harness`: this adapter observes a loop rather than driving somebody else's.
-pub const ADAPTER_CLASS: &str = "loop";
+/// Not `harness`, and **the protocol already had the word**.
+///
+/// `AdapterClass::DirectProvider` is documented as *"the embedder holds the conversation and calls
+/// a model API"* and carried a *"not in v0.1"* note because nothing had ever been one. This adapter
+/// is exactly that, so it takes the existing class rather than coining a synonym — an adapter that
+/// invented `loop` beside it would have given a reader two words for one thing and no way to tell
+/// which documents applied.
+pub const ADAPTER_CLASS: &str = "direct_provider";
 
 /// The `b10x-harness` versions this adapter's claims were read from.
 ///
@@ -57,3 +65,36 @@ pub const ADAPTER_CLASS: &str = "loop";
 /// names of the loop record, the shape of its terminal event — was observed against these, and a
 /// run against another is unverified rather than wrong.
 pub const PINNED_VERSIONS: [&str; 1] = ["0.1.0"];
+
+/// What this adapter's contract owes, and what it does not yet pay.
+///
+/// **Every row a gap, in words that say what stands in for it.** The checklist is not a formality:
+/// a consumer reads it to know what a `contract_result` from this adapter can be trusted to mean,
+/// and an adapter that filled a row it had not earned would be exactly the false confidence the
+/// document exists to prevent.
+///
+/// The four rows are also, read together, an accurate description of how young this adapter is:
+/// there is no recorded launch vector, no byte-exact replay of a captured loop record, no hook
+/// input at all — the loop has no hook — and no version pair, because nothing has yet compared a
+/// captured record's own version claim against the pin.
+pub const CONTRACT_OBLIGATIONS: metaharness_protocol::ContractObligations =
+    metaharness_protocol::ContractObligations {
+        adapter: ADAPTER_ID,
+        launch: metaharness_protocol::Obligation::Gap(
+            "the launch is unit-tested in `launch.rs` and has no recorded C1 vector, so a consumer \
+             cannot read an argv-and-environment guarantee off this adapter's contract record",
+        ),
+        recorded_wire: metaharness_protocol::Obligation::Gap(
+            "no captured `b10x-harness --json` record is replayed byte-exact yet; the mapping is \
+             covered by hand-written lines in `seam.rs`, which proves the projection and not that \
+             a real run produces the lines it was written against",
+        ),
+        recorded_hook_input: metaharness_protocol::Obligation::Gap(
+            "there is no hook and there will not be one: this adapter observes and decides nothing, \
+             so the row is permanently not applicable rather than outstanding",
+        ),
+        version_pair: metaharness_protocol::Obligation::Gap(
+            "nothing has compared a captured record's own version claim against `PINNED_VERSIONS`, \
+             so a run against a `b10x-harness` other than the pin is unverified rather than refused",
+        ),
+    };

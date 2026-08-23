@@ -495,6 +495,12 @@ pub fn conformance_vectors(kind: Kind) -> Result<Vec<VectorOutcome>, Refusal> {
             vectors.extend(crate::spawn_codex_vectors::spawn_vectors());
             Ok(vectors)
         }
+        // **Refused rather than empty**, which is this function's own rule: a conformance run
+        // reporting zero vectors reads exactly like one that passed. This adapter has no vector
+        // suite yet, and `CONTRACT_OBLIGATIONS` says so row by row.
+        Kind::B10x => Err(Refusal::NoAdapter {
+            kind: Kind::B10x.as_str().to_owned(),
+        }),
     }
 }
 
@@ -508,6 +514,7 @@ pub fn capabilities(kind: Kind) -> Result<metaharness_protocol::Capabilities, Re
     match kind {
         Kind::Claude => Ok(metaharness_claude::capabilities()),
         Kind::Codex => Ok(metaharness_codex::capabilities()),
+        Kind::B10x => Ok(metaharness_b10x::capabilities()),
     }
 }
 
@@ -525,6 +532,7 @@ pub fn contract_obligations(kind: Kind) -> Result<ContractObligations, Refusal> 
     match kind {
         Kind::Claude => Ok(metaharness_claude::CONTRACT_OBLIGATIONS),
         Kind::Codex => Ok(metaharness_codex::CONTRACT_OBLIGATIONS),
+        Kind::B10x => Ok(metaharness_b10x::CONTRACT_OBLIGATIONS),
     }
 }
 

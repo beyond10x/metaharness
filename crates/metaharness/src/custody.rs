@@ -198,6 +198,14 @@ impl CredentialCustody {
         let read = match self.kind {
             Kind::Claude => claude_access_token(&bytes).map(|token| (token, None)),
             Kind::Codex => codex_credential(&bytes).map(|(token, login)| (token, Some(login))),
+            // Custody is for a vendor login this process must read, hold and proxy. `b10x-harness`
+            // is handed a file path and reads it itself, so metaharness never has the credential
+            // and has nothing to take custody of. A parser here would be one written for a shape
+            // nobody sends.
+            Kind::B10x => Err(
+                "the b10x loop reads its own credential file; metaharness takes no custody of it"
+                    .to_owned(),
+            ),
         };
         read.map_err(|detail| CustodyError::Malformed {
             path: self.credential.clone(),

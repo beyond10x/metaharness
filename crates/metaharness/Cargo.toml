@@ -16,6 +16,7 @@ clap = ["metaharness-protocol/clap"]
 metaharness-protocol = { path = "../metaharness-protocol" }
 metaharness-claude = { path = "../metaharness-claude" }
 metaharness-codex = { path = "../metaharness-codex" }
+metaharness-b10x = { path = "../metaharness-b10x" }
 # The loopback placeholder's nonce — see the workspace manifest for why it is not the clock.
 getrandom = { workspace = true }
 # The custody file lock (`flock`), so a run that dies holding it does not strand the next one.
