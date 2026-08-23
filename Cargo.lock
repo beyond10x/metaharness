@@ -264,6 +264,16 @@ dependencies = [
 ]
 
 [[package]]
+name = "metaharness-b10x"
+version = "0.1.0"
+dependencies = [
+ "metaharness-protocol",
+ "serde",
+ "serde_json",
+ "sha2",
+]
+
+[[package]]
 name = "metaharness-claude"
 version = "0.1.0"
 dependencies = [

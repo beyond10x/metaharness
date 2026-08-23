@@ -5,6 +5,7 @@ members = [
     "crates/metaharness-protocol",
     "crates/metaharness-claude",
     "crates/metaharness-codex",
+    "crates/metaharness-b10x",
     "crates/metaharness-cli",
 ]
 
