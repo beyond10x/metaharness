@@ -280,6 +280,7 @@ fn every_builder_method_sets_one_field_of_the_one_options_type() {
         .with_prices("rates.json")
         .with_substrate("/run/substrate.sock")
         .with_cgroup_root("/sys/fs/cgroup/run.slice")
+        .with_toolchain("rust")
         .with_auditor_arg("--advisory")
         .with_auditor_arg("billed-to-the-session");
 
@@ -305,6 +306,7 @@ fn every_builder_method_sets_one_field_of_the_one_options_type() {
         substrate: Some("/run/substrate.sock".into()),
         substrate_embedded: false,
         cgroup_root: Some("/sys/fs/cgroup/run.slice".into()),
+        toolchain: Some("rust".to_string()),
         prices: Some("rates.json".into()),
         auditor: Some("protocol trace check".to_string()),
         auditor_args: vec![

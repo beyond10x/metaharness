@@ -327,6 +327,19 @@ pub struct RunSpec {
     #[cfg_attr(feature = "clap", arg(long, value_name = "DIR"))]
     pub cgroup_root: Option<PathBuf>,
 
+    /// A build toolchain admitted read-only inside the confined workspace. **`b10x` only.**
+    ///
+    /// Without one a confined run can execute anything whose implementation lives under `/usr` —
+    /// an interpreter — and nothing whose compilers live in the operator's home, which is every
+    /// build tool. The directories are mounted read-only and reported in the run's observation
+    /// (substrate ADR 0010); the network stays unshared.
+    ///
+    /// Declared rather than implied, because it is the one place a confined run is given something
+    /// substrate did not verify. Refused for the vendor kinds, which reach the filesystem through
+    /// their own tools and would have nothing to do with it.
+    #[cfg_attr(feature = "clap", arg(long, value_name = "NAME"))]
+    pub toolchain: Option<String>,
+
     /// A rate card, so the run's record states what it cost. **`b10x` only.**
     ///
     /// Claude Code and codex price their own runs from a catalogue their service delivers, and
@@ -381,6 +394,7 @@ impl RunSpec {
             substrate: None,
             substrate_embedded: false,
             cgroup_root: None,
+            toolchain: None,
             prices: None,
             auditor: None,
             auditor_args: Vec::new(),

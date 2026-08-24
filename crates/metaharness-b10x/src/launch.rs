@@ -119,6 +119,8 @@ pub struct B10xLaunch {
     pub allow_program: Vec<String>,
     /// Ceiling on model turns.
     pub max_turns: Option<u32>,
+    /// A build toolchain the run may read, admitted read-only.
+    pub toolchain: Option<String>,
     /// A rate card, so the run's record states what it cost.
     ///
     /// The one thing on this launch that has no counterpart on the vendor adapters, and the
@@ -151,6 +153,7 @@ impl B10xLaunch {
             cgroup_root: None,
             allow_program: Vec::new(),
             max_turns: None,
+            toolchain: None,
             prices: None,
             input: input.into(),
         }
@@ -169,6 +172,13 @@ impl B10xLaunch {
     #[must_use]
     pub fn from_environment(mut self, variable: impl Into<String>) -> Self {
         self.credential = Some(Credential::Environment(variable.into()));
+        self
+    }
+
+    /// The same launch, with a build toolchain admitted read-only.
+    #[must_use]
+    pub fn with_toolchain(mut self, name: impl Into<String>) -> Self {
+        self.toolchain = Some(name.into());
         self
     }
 
@@ -245,6 +255,10 @@ pub fn argv(launch: &B10xLaunch) -> Vec<String> {
             argv.push(variable.clone());
         }
         None => {}
+    }
+    if let Some(name) = &launch.toolchain {
+        argv.push("--toolchain".to_owned());
+        argv.push(name.clone());
     }
     if let Some(card) = &launch.prices {
         argv.push("--prices".to_owned());

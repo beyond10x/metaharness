@@ -238,6 +238,13 @@ impl Metaharness {
         self
     }
 
+    /// A build toolchain admitted read-only inside the confined workspace. `b10x` only.
+    #[must_use]
+    pub fn with_toolchain(mut self, name: impl Into<String>) -> Self {
+        self.spec.toolchain = Some(name.into());
+        self
+    }
+
     /// substrate's daemon socket, so the run may write and execute. `b10x` only.
     #[must_use]
     pub fn with_substrate(mut self, socket: impl Into<PathBuf>) -> Self {
@@ -1302,8 +1309,10 @@ pub fn check_spec(spec: &RunSpec) -> Result<(), Refusal> {
     }
     // substrate confines the tools **we** publish. The vendor harnesses bring their own and reach
     // the filesystem through them, so a socket here would be configured and never consulted.
-    let confinement_asked_for =
-        spec.substrate.is_some() || spec.substrate_embedded || spec.cgroup_root.is_some();
+    let confinement_asked_for = spec.substrate.is_some()
+        || spec.substrate_embedded
+        || spec.cgroup_root.is_some()
+        || spec.toolchain.is_some();
     if confinement_asked_for && spec.kind != Kind::B10x {
         return Err(Refusal::ConfinementUnsupported { kind: spec.kind });
     }
@@ -1395,6 +1404,9 @@ fn b10x_launch(
     };
     if let Some(root) = &spec.cgroup_root {
         launch = launch.with_cgroup_root(root);
+    }
+    if let Some(name) = &spec.toolchain {
+        launch = launch.with_toolchain(name);
     }
     if let Some(card) = &spec.prices {
         launch = launch.with_prices(card);
