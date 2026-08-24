@@ -19,7 +19,8 @@ use std::sync::Arc;
 
 use metaharness_protocol::{
     Capabilities, CredentialSource, DecisionMode, Digest, EventStream, Frame, HermeticMode, Kind,
-    PluginContent, PluginInstall, PluginTree, Refused, RunId, RunSpec, Seam, ToolSurface,
+    PluginContent, PluginInstall, PluginTree, Refused, RunId, RunSpec, ScopeAnnounce, Seam,
+    ToolSurface,
     TranscriptRef, tree_digest,
 };
 
@@ -270,6 +271,31 @@ impl Metaharness {
     #[must_use]
     pub fn with_prices(mut self, path: impl Into<PathBuf>) -> Self {
         self.spec.prices = Some(path.into());
+        self
+    }
+
+    /// One more rule about where this run may write. `b10x` only — see [`RunSpec::write_scope`].
+    ///
+    /// Ordered: first match wins, so the order rules are added in is the order they are read in.
+    #[must_use]
+    pub fn with_write_scope(mut self, rule: impl Into<String>) -> Self {
+        self.spec.write_scope.push(rule.into());
+        self
+    }
+
+    /// Bind the tools to the scope without stating it in the instruction. `b10x` only — see
+    /// [`RunSpec::scope_announce`].
+    #[must_use]
+    pub fn with_scope_silent(mut self) -> Self {
+        self.spec.scope_announce = ScopeAnnounce::Silent;
+        self
+    }
+
+    /// One more file this run is given rather than has to find. `b10x` only — see
+    /// [`RunSpec::context`].
+    #[must_use]
+    pub fn with_context(mut self, file: impl Into<PathBuf>) -> Self {
+        self.spec.context.push(file.into());
         self
     }
 
@@ -1330,6 +1356,13 @@ pub fn check_spec(spec: &RunSpec) -> Result<(), Refusal> {
     if confinement_asked_for && spec.kind != Kind::B10x {
         return Err(Refusal::ConfinementUnsupported { kind: spec.kind });
     }
+    // A scope and a preloaded context reach a vendor arm through the frame it is already sealed
+    // into. See the variant.
+    if (!spec.write_scope.is_empty() || !spec.context.is_empty() || spec.scope_announce == ScopeAnnounce::Silent)
+        && spec.kind != Kind::B10x
+    {
+        return Err(Refusal::ScopeUnsupported { kind: spec.kind });
+    }
     Ok(())
 }
 
@@ -1424,6 +1457,15 @@ fn b10x_launch(
     }
     if let Some(card) = &spec.prices {
         launch = launch.with_prices(card);
+    }
+    for rule in &spec.write_scope {
+        launch = launch.with_write_scope(rule);
+    }
+    if spec.scope_announce == ScopeAnnounce::Silent {
+        launch = launch.with_scope_silent();
+    }
+    for file in &spec.context {
+        launch = launch.with_context(file);
     }
     if let Some(turns) = spec.max_turns {
         launch = launch.with_max_turns(turns);
@@ -2696,6 +2738,36 @@ mod b10x_launch_tests {
         let mut confined = RunSpec::new(Kind::B10x);
         confined.substrate_embedded = true;
         assert!(check_spec(&confined).is_ok(), "b10x is the one that takes it");
+    }
+
+    #[test]
+    fn a_scope_is_refused_for_a_kind_whose_scope_travels_in_the_frame() {
+        // Not because a vendor arm should be unbounded — because it already carries the same rule
+        // as `Frame.subjects`, sealed. A flag here would be a second, unsealed copy of it.
+        for kind in [Kind::Claude, Kind::Codex] {
+            let mut spec = RunSpec::new(kind);
+            spec.write_scope = vec![".engineering/planning/**=partial-only".to_owned()];
+            let refusal = check_spec(&spec).expect_err("refused");
+            assert!(matches!(refusal, Refusal::ScopeUnsupported { .. }), "{kind:?}");
+            assert!(refusal.to_string().contains("Frame.subjects"));
+
+            let mut seeded = RunSpec::new(kind);
+            seeded.context = vec!["SKILL.md".into()];
+            assert!(
+                matches!(
+                    check_spec(&seeded).expect_err("refused"),
+                    Refusal::ScopeUnsupported { .. }
+                ),
+                "{kind:?}"
+            );
+        }
+        let mut scoped = RunSpec::new(Kind::B10x);
+        scoped.write_scope = vec!["**=allowed".to_owned()];
+        scoped.context = vec!["SKILL.md".into()];
+        assert!(
+            check_spec(&scoped).is_ok(),
+            "the loop with no seam is the one that takes it"
+        );
     }
 
     #[test]

@@ -121,6 +121,12 @@ pub struct B10xLaunch {
     pub max_turns: Option<u32>,
     /// A build toolchain the run may read, admitted read-only.
     pub toolchain: Option<String>,
+    /// Where the run may write, ordered, as `<glob>=<allowed|partial-only|denied>`.
+    pub write_scope: Vec<String>,
+    /// Files the run is given before it starts, instead of discovering them.
+    pub context: Vec<String>,
+    /// Bind the tools to the scope without stating it in the instruction.
+    pub scope_silent: bool,
     /// A rate card, so the run's record states what it cost.
     ///
     /// The one thing on this launch that has no counterpart on the vendor adapters, and the
@@ -154,6 +160,9 @@ impl B10xLaunch {
             allow_program: Vec::new(),
             max_turns: None,
             toolchain: None,
+            write_scope: Vec::new(),
+            context: Vec::new(),
+            scope_silent: false,
             prices: None,
             input: input.into(),
         }
@@ -179,6 +188,30 @@ impl B10xLaunch {
     #[must_use]
     pub fn with_toolchain(mut self, name: impl Into<String>) -> Self {
         self.toolchain = Some(name.into());
+        self
+    }
+
+    /// The same launch, with one more rule about where it may write.
+    ///
+    /// Ordered: the first rule whose glob matches decides, so the order they are added in is the
+    /// order they are read in.
+    #[must_use]
+    pub fn with_write_scope(mut self, rule: impl Into<String>) -> Self {
+        self.write_scope.push(rule.into());
+        self
+    }
+
+    /// The same launch, binding the tools to its scope without stating it in the instruction.
+    #[must_use]
+    pub fn with_scope_silent(mut self) -> Self {
+        self.scope_silent = true;
+        self
+    }
+
+    /// The same launch, with one more file it is given rather than has to find.
+    #[must_use]
+    pub fn with_context(mut self, file: impl AsRef<Path>) -> Self {
+        self.context.push(file.as_ref().display().to_string());
         self
     }
 
@@ -259,6 +292,18 @@ pub fn argv(launch: &B10xLaunch) -> Vec<String> {
     if let Some(name) = &launch.toolchain {
         argv.push("--toolchain".to_owned());
         argv.push(name.clone());
+    }
+    for rule in &launch.write_scope {
+        argv.push("--write-scope".to_owned());
+        argv.push(rule.clone());
+    }
+    if launch.scope_silent {
+        argv.push("--scope-announce".to_owned());
+        argv.push("silent".to_owned());
+    }
+    for file in &launch.context {
+        argv.push("--context".to_owned());
+        argv.push(file.clone());
     }
     if let Some(card) = &launch.prices {
         argv.push("--prices".to_owned());
@@ -404,5 +449,56 @@ mod tests {
             !argv(&launch()).iter().any(|word| word == "--prices"),
             "and a launch nobody priced names no card"
         );
+    }
+
+    #[test]
+    fn a_write_scope_reaches_the_argv_in_the_order_it_was_declared() {
+        let scoped = argv(
+            &launch()
+                .with_write_scope(".engineering/planning/**=partial-only")
+                .with_write_scope("**=allowed"),
+        );
+        let rules: Vec<&String> = scoped
+            .iter()
+            .zip(scoped.iter().skip(1))
+            .filter(|(flag, _)| *flag == "--write-scope")
+            .map(|(_, rule)| rule)
+            .collect();
+        // First match wins downstream, so the order is the declaration and not a set.
+        assert_eq!(
+            rules,
+            vec![".engineering/planning/**=partial-only", "**=allowed"]
+        );
+        assert!(
+            !argv(&launch()).iter().any(|word| word == "--write-scope"),
+            "a scope nobody declared bounds nothing"
+        );
+    }
+
+    #[test]
+    fn the_experiment_control_reaches_the_argv_only_when_it_was_asked_for() {
+        let silent = argv(&launch().with_scope_silent());
+        assert_eq!(
+            value_after(&silent, "--scope-announce"),
+            Some("silent".to_owned())
+        );
+        assert!(
+            !argv(&launch())
+                .iter()
+                .any(|word| word == "--scope-announce"),
+            "a real run states its scope, because being refused costs a call"
+        );
+    }
+
+    #[test]
+    fn every_context_file_reaches_the_argv_because_a_partial_context_is_not_reproducible() {
+        let seeded = argv(&launch().with_context("/a/SKILL.md").with_context("/b/api.rs"));
+        let files: Vec<&String> = seeded
+            .iter()
+            .zip(seeded.iter().skip(1))
+            .filter(|(flag, _)| *flag == "--context")
+            .map(|(_, file)| file)
+            .collect();
+        assert_eq!(files, vec!["/a/SKILL.md", "/b/api.rs"]);
     }
 }

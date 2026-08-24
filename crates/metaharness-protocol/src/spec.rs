@@ -145,6 +145,19 @@ pub enum ToolSurface {
     Owned,
 }
 
+/// Whether a declared scope is stated in the instruction as well as bound into the tools.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default, Serialize, Deserialize)]
+#[cfg_attr(feature = "clap", derive(clap::ValueEnum))]
+#[serde(rename_all = "snake_case")]
+pub enum ScopeAnnounce {
+    /// Say it up front, so no turn is spent discovering it by being refused.
+    #[default]
+    Stated,
+    /// Bind it and say nothing. The refusal has to teach it — which is what makes a run under this
+    /// a measurement of the toolset rather than of the prose.
+    Silent,
+}
+
 /// Everything a run is.
 ///
 /// The builder's `with_…` methods and the CLI's flags are two spellings of this struct, and
@@ -358,6 +371,45 @@ pub struct RunSpec {
     #[cfg_attr(feature = "clap", arg(long, value_name = "FILE"))]
     pub prices: Option<PathBuf>,
 
+    /// Where this run may write, as `<glob>=<allowed|partial-only|denied>`. **`b10x` only.**
+    ///
+    /// Ordered, first match wins, and a path no rule names is unrestricted — this declares where
+    /// writing is *bounded*, and a scope nobody wrote bounds nothing.
+    ///
+    /// `partial-only` is the word that earns the shape: the path may be changed in part and never
+    /// replaced whole. No set of operations can say that, because `file.write` and `file.edit` are
+    /// both writes, and it is exactly the rule a planning store whose frontmatter is owned by a CLI
+    /// needs.
+    ///
+    /// The **operation is refused, never the run** — a run killed for reaching once makes the scope
+    /// a trap rather than a boundary, and the reaching is what a denial is for.
+    ///
+    /// Refused for the vendor kinds, and not because they should be unbounded: they carry the same
+    /// rule as `Frame.subjects`, sealed into the frame's digest and adjudicated at their hook seam.
+    /// The b10x loop has no seam at all — its published toolset *is* its policy — so for that kind
+    /// the scope has to travel to the tools.
+    #[cfg_attr(feature = "clap", arg(long, value_name = "GLOB=SCOPE"))]
+    pub write_scope: Vec<String>,
+
+    /// Whether the declared scope is also stated in the instruction. **`b10x` only.**
+    ///
+    /// `silent` is an experiment control. A run told the rule and a run refused the rule both end
+    /// with the rule kept, and only the second shows that the **toolset** kept it. Stating it is
+    /// cheaper, so a real run states it.
+    #[cfg_attr(feature = "clap", arg(long, value_name = "MODE", default_value = "stated"))]
+    pub scope_announce: ScopeAnnounce,
+
+    /// A file the run is given before it starts, instead of discovering it. **`b10x` only.**
+    ///
+    /// A stateless loop replays its conversation, so this is paid on every turn rather than once.
+    /// It is still usually a saving: what it replaces is a read, a turn, *and* a result that joins
+    /// the same replay. Bounded deliberately — a handful of named files, never a directory.
+    ///
+    /// A file that is not there refuses the run. A run given a smaller context than it was declared
+    /// to have is one nobody can reproduce from the declaration.
+    #[cfg_attr(feature = "clap", arg(long, value_name = "FILE"))]
+    pub context: Vec<PathBuf>,
+
     /// The external auditor, as an **argv prefix**. A single-word program name is a degenerate
     /// prefix and a two-word subcommand is not a special case (design § 9.4, finding F2).
     #[cfg_attr(feature = "clap", arg(long, value_name = "PREFIX"))]
@@ -396,6 +448,9 @@ impl RunSpec {
             cgroup_root: None,
             toolchain: None,
             prices: None,
+            write_scope: Vec::new(),
+            scope_announce: ScopeAnnounce::Stated,
+            context: Vec::new(),
             auditor: None,
             auditor_args: Vec::new(),
         }

@@ -66,4 +66,4 @@ pub use projection::{
     CONTROL_PLANE_EVENTS, IrFamily, ProjectionReport, ir_family, project, required_ir_fields,
 };
 pub use seam::{HarnessSeam, SeamFactory};
-pub use spec::{CredentialSource, DecisionMode, Kind, RunSpec, ToolSurface};
+pub use spec::{CredentialSource, DecisionMode, Kind, RunSpec, ScopeAnnounce, ToolSurface};

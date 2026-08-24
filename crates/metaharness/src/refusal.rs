@@ -91,6 +91,15 @@ pub enum Refusal {
         /// The kind that brings its own tools.
         kind: Kind,
     },
+    /// `--write-scope` or `--context` was given for a kind that carries them another way.
+    ///
+    /// Not because a vendor arm should be unbounded. A scope reaches it as `Frame.subjects`, sealed
+    /// into the frame's digest and adjudicated at its hook seam; a flag here would be a second,
+    /// unsealed copy of the same rule, and the two would disagree the first time one moved.
+    ScopeUnsupported {
+        /// The kind whose scope travels in the frame.
+        kind: Kind,
+    },
     /// The adapter refused to plan the launch.
     Launch {
         /// What the adapter said, verbatim.
@@ -179,6 +188,7 @@ impl Refusal {
             | Refusal::ToolSurfaceOwned { .. }
             | Refusal::PricesUnsupported { .. }
             | Refusal::ConfinementUnsupported { .. }
+            | Refusal::ScopeUnsupported { .. }
             | Refusal::ObserveWithFrame => Some(RefusalCode::UnsupportedControl),
             _ => None,
         }
@@ -242,6 +252,15 @@ impl fmt::Display for Refusal {
                  own tools. A socket here would be configured and never consulted, which reads as \
                  containment nobody applied. Only b10x takes one",
                 kind.as_str(),
+                kind.as_str(),
+            ),
+            Refusal::ScopeUnsupported { kind } => write!(
+                f,
+                "--write-scope and --context are refused for {}: a scope reaches it as \
+                 Frame.subjects, sealed into the frame's digest and adjudicated at its hook seam. A \
+                 flag here would be a second copy of the same rule that nothing seals, and the two \
+                 would disagree the first time one moved. The b10x loop takes them because it has \
+                 no seam: its published toolset is its policy, so the scope travels to the tools",
                 kind.as_str(),
             ),
             Refusal::Launch { detail } => {

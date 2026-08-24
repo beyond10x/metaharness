@@ -309,6 +309,9 @@ fn every_builder_method_sets_one_field_of_the_one_options_type() {
         substrate_embedded: false,
         cgroup_root: Some("/sys/fs/cgroup/run.slice".into()),
         toolchain: Some("rust".to_string()),
+        write_scope: Vec::new(),
+        scope_announce: metaharness_protocol::ScopeAnnounce::Stated,
+        context: Vec::new(),
         prices: Some("rates.json".into()),
         auditor: Some("protocol trace check".to_string()),
         auditor_args: vec![
