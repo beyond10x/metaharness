@@ -353,10 +353,16 @@ fn a_path_is_reported_as_the_caller_wrote_it() {
 #[test]
 fn a_catalogue_question_and_an_unknown_entry_touch_nothing() {
     for tool in [SEARCH_VERB, DESCRIBE_VERB] {
-        assert!(subjects_of_verb(tool, &json!({"name": "file_read"})).is_empty(), "{tool}");
+        assert!(
+            subjects_of_verb(tool, &json!({"name": "file_read"})).is_empty(),
+            "{tool}"
+        );
     }
     assert!(subjects_of_verb(INVOKE_VERB, &json!({"name": "Bash"})).is_empty());
-    assert!(subjects_of_verb("Write", &json!({"file_path": "a"})).is_empty(), "not a verb");
+    assert!(
+        subjects_of_verb("Write", &json!({"file_path": "a"})).is_empty(),
+        "not a verb"
+    );
 }
 
 #[test]

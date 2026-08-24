@@ -13,10 +13,9 @@
 //! `METAHARNESS_LIVE=1`.
 
 use metaharness::protocol::{
-    SubjectScope,
     Command, CommandOutcome, CredentialSource, DecidedBy, Decision, DecisionMode, Digest, Event,
     EvidenceLine, Frame, Handoff, HermeticMode, Kind, NodeRef, Operation, OperationSet,
-    RefusalCode, RunSpec, Seam, StepRef, ToolSurface, WorkflowRef,
+    RefusalCode, RunSpec, Seam, StepRef, SubjectScope, ToolSurface, WorkflowRef,
 };
 use metaharness::{
     ClaudeSeams, Input, ManualClock, Metaharness, Refusal, Run, ScriptStep, ScriptedLog,
@@ -1150,7 +1149,7 @@ fn requested_with(tool: &str, input: &str) -> String {
 }
 
 /// Runs one scripted call and answers the `operations` its `tool.requested` carried.
-fn operations_of(surface: ToolSurface, frame: Option<Frame>, line: String) -> Vec<String> {
+fn operations_of(surface: ToolSurface, frame: Option<Frame>, line: &str) -> Vec<String> {
     let mut builder = Metaharness::new(Kind::Claude)
         .with_tool_surface(surface)
         .with_decisions(DecisionMode::Frame);
@@ -1161,7 +1160,7 @@ fn operations_of(surface: ToolSurface, frame: Option<Frame>, line: String) -> Ve
         builder,
         vec![
             ScriptStep::line(INIT),
-            ScriptStep::line(&line),
+            ScriptStep::line(line),
             ScriptStep::line(END),
         ],
     );
@@ -1189,7 +1188,7 @@ fn one_act_reads_as_one_operation_whatever_the_harness_called_the_tool() {
         operations_of(
             ToolSurface::Native,
             None,
-            requested_with("Write", r#"{"file_path":"a.rs","content":"x"}"#)
+            &requested_with("Write", r#"{"file_path":"a.rs","content":"x"}"#)
         ),
         vec!["file.write".to_string()],
         "native: resolved through the adapter's own published rendering"
@@ -1199,7 +1198,7 @@ fn one_act_reads_as_one_operation_whatever_the_harness_called_the_tool() {
         operations_of(
             ToolSurface::Owned,
             None,
-            requested_with(
+            &requested_with(
                 "mcp__metaharness__tool_invoke",
                 r#"{"name":"file_write","arguments":{"path":"a.rs","text":"x"}}"#
             )
@@ -1219,7 +1218,7 @@ fn the_verb_road_is_taken_only_by_a_run_that_actually_published_the_verbs() {
         operations_of(
             ToolSurface::Native,
             None,
-            requested_with(
+            &requested_with(
                 "tool_invoke",
                 r#"{"name":"run","arguments":{"argv":["sh"]}}"#
             )
@@ -1243,7 +1242,7 @@ fn a_frame_admits_asking_what_tools_exist_and_still_judges_the_act_by_what_it_is
             .with_frame(frame_admitting(OperationSet::of([Operation::FileRead]))),
         vec![
             ScriptStep::line(INIT),
-            ScriptStep::line(&requested_with("mcp__metaharness__tool_search", "{}")),
+            ScriptStep::line(requested_with("mcp__metaharness__tool_search", "{}")),
             ScriptStep::line(END),
         ],
     );
@@ -1271,7 +1270,7 @@ fn a_frame_admits_asking_what_tools_exist_and_still_judges_the_act_by_what_it_is
         operations_of(
             ToolSurface::Owned,
             Some(frame_admitting(OperationSet::of([Operation::FileRead]))),
-            requested_with(
+            &requested_with(
                 "mcp__metaharness__tool_invoke",
                 r#"{"name":"file_write","arguments":{"path":"a","text":"x"}}"#
             )
@@ -1297,7 +1296,10 @@ fn silent_run(said: &str) -> Run {
 fn warned(run: &mut Run, code: &str) -> Option<String> {
     while run.next_event().expect("the stream drains").is_some() {}
     run.events().iter().find_map(|event| match event {
-        Event::Warning { code: seen, message } if seen == code => Some(message.clone()),
+        Event::Warning {
+            code: seen,
+            message,
+        } if seen == code => Some(message.clone()),
         _ => None,
     })
 }
@@ -1386,9 +1388,21 @@ fn a_write_the_step_admits_is_refused_on_a_path_it_does_not_own() {
             .with_frame(frame_scoped_to_the_store()),
         vec![
             ScriptStep::line(INIT),
-            ScriptStep::line(&scoped_call("c1", "Write", ".engineering/planning/story/a.md")),
-            ScriptStep::line(&scoped_call("c2", "Edit", ".engineering/planning/story/a.md")),
-            ScriptStep::line(&scoped_call("c3", "Write", "crates/protocol-cli/src/planning.rs")),
+            ScriptStep::line(scoped_call(
+                "c1",
+                "Write",
+                ".engineering/planning/story/a.md",
+            )),
+            ScriptStep::line(scoped_call(
+                "c2",
+                "Edit",
+                ".engineering/planning/story/a.md",
+            )),
+            ScriptStep::line(scoped_call(
+                "c3",
+                "Write",
+                "crates/protocol-cli/src/planning.rs",
+            )),
             ScriptStep::line(END),
         ],
     );
@@ -1423,7 +1437,11 @@ fn the_refusal_says_what_would_work_instead() {
             .with_frame(frame_scoped_to_the_store()),
         vec![
             ScriptStep::line(INIT),
-            ScriptStep::line(&scoped_call("c1", "Write", ".engineering/planning/story/a.md")),
+            ScriptStep::line(scoped_call(
+                "c1",
+                "Write",
+                ".engineering/planning/story/a.md",
+            )),
             ScriptStep::line(END),
         ],
     );
@@ -1431,7 +1449,10 @@ fn the_refusal_says_what_would_work_instead() {
     let Decision::Deny { reason } = &decided[0].1 else {
         panic!("refused");
     };
-    assert!(reason.contains(".engineering/planning/story/a.md"), "{reason}");
+    assert!(
+        reason.contains(".engineering/planning/story/a.md"),
+        "{reason}"
+    );
     assert!(reason.contains("file.edit"), "names the way in: {reason}");
 }
 

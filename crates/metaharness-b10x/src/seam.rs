@@ -22,6 +22,7 @@ pub struct B10xSeams {
 }
 
 impl B10xSeams {
+    #[must_use]
     pub fn new(version: Option<String>, model: Option<String>, cwd: Option<String>) -> Self {
         Self {
             version,
@@ -81,11 +82,13 @@ impl B10xSeam {
     ///
     /// Recorded and never acted on: this adapter adjudicates nothing, and the tier is a fact about
     /// the launch a reader may want rather than an input to a decision that is not taken.
+    #[must_use]
     pub fn control(&self) -> Seam {
         self.control
     }
 
     /// Whether an opening record has been read.
+    #[must_use]
     pub fn started(&self) -> bool {
         self.started
     }
@@ -94,6 +97,7 @@ impl B10xSeam {
     ///
     /// `false` at the end of a stream means the run stopped without one, and nothing here invents
     /// a substitute.
+    #[must_use]
     pub fn ended(&self) -> bool {
         self.ended
     }
@@ -109,6 +113,7 @@ impl B10xSeam {
 }
 
 impl HarnessSeam for B10xSeam {
+    #[allow(clippy::too_many_lines)]
     fn push_line(&mut self, line: &str) -> Vec<Emission> {
         self.line += 1;
         if line.trim().is_empty() {
@@ -257,7 +262,8 @@ impl HarnessSeam for B10xSeam {
                     // answer from a run that hit a ceiling and nothing from one that finished —
                     // and an advisory bound on run length could not decide a single completed run.
                     // The stop's figure stays as the fallback for a record written before this.
-                    num_turns: number("turns").or_else(|| stop.get("turns").and_then(Value::as_u64)),
+                    num_turns: number("turns")
+                        .or_else(|| stop.get("turns").and_then(Value::as_u64)),
                     duration_ms: None,
                     duration_api_ms: None,
                     ttft_ms: None,
@@ -297,7 +303,9 @@ impl HarnessSeam for B10xSeam {
             // projecting into no `trace-ir/1` family, and **not** uncertain. They are emitted as
             // what they are.
             "turn-started" => vec![Emission::untimed(Event::TurnStarted {
-                turn: number("turn").and_then(|turn| u32::try_from(turn).ok()).unwrap_or(0),
+                turn: number("turn")
+                    .and_then(|turn| u32::try_from(turn).ok())
+                    .unwrap_or(0),
                 // Nothing narrowed this run: the toolset it drew from is the policy.
                 frame_digest: None,
             })],
@@ -540,8 +548,10 @@ mod tests {
         // Set rather than computed by the reader, because the census counts what *metaharness*
         // decided and the loop's record cannot see it.
         let mut seam = seam();
-        let mut census = DecisionCensus::default();
-        census.abstained = 7;
+        let census = DecisionCensus {
+            abstained: 7,
+            ..Default::default()
+        };
         seam.set_census(census);
         let event = one(
             &mut *seam,
@@ -629,6 +639,7 @@ fn rendering() -> std::collections::BTreeMap<String, Option<String>> {
 /// process and this adapter reads what it did. Declaring a tier delivered here would let an
 /// embedder ask for a decision mode that silently does nothing, which is the failure the whole
 /// capability document exists to prevent.
+#[must_use]
 pub fn capabilities() -> metaharness_protocol::Capabilities {
     use metaharness_protocol::{
         AdapterClass, AdapterId, COMMAND_NAMES, Capabilities, CommandSupport, RefusalCode, Tier,
@@ -718,10 +729,13 @@ mod turn_count_tests {
     }
 
     fn ended(line: &str) -> Option<u64> {
-        seam().push_line(line).into_iter().find_map(|emission| match emission.event {
-            Event::SessionEnded { num_turns, .. } => num_turns,
-            _ => None,
-        })
+        seam()
+            .push_line(line)
+            .into_iter()
+            .find_map(|emission| match emission.event {
+                Event::SessionEnded { num_turns, .. } => num_turns,
+                _ => None,
+            })
     }
 
     #[test]

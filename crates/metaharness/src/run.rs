@@ -828,7 +828,9 @@ impl Run {
     }
 
     fn resolve(&self, tool: &str, input: &Value) -> Vec<String> {
-        if self.publishes_verbs() && let Some(resolved) = metaharness_tools::resolve_verb(tool, input) {
+        if self.publishes_verbs()
+            && let Some(resolved) = metaharness_tools::resolve_verb(tool, input)
+        {
             return match resolved {
                 metaharness_tools::Resolved::Operations(operations) => operations,
                 // A question about the catalogue and an uncovered call both answer empty here.

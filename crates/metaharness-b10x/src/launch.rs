@@ -492,7 +492,11 @@ mod tests {
 
     #[test]
     fn every_context_file_reaches_the_argv_because_a_partial_context_is_not_reproducible() {
-        let seeded = argv(&launch().with_context("/a/SKILL.md").with_context("/b/api.rs"));
+        let seeded = argv(
+            &launch()
+                .with_context("/a/SKILL.md")
+                .with_context("/b/api.rs"),
+        );
         let files: Vec<&String> = seeded
             .iter()
             .zip(seeded.iter().skip(1))

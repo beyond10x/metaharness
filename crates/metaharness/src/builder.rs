@@ -20,8 +20,7 @@ use std::sync::Arc;
 use metaharness_protocol::{
     Capabilities, CredentialSource, DecisionMode, Digest, EventStream, Frame, HermeticMode, Kind,
     PluginContent, PluginInstall, PluginTree, Refused, RunId, RunSpec, ScopeAnnounce, Seam,
-    ToolSurface,
-    TranscriptRef, tree_digest,
+    ToolSurface, TranscriptRef, tree_digest,
 };
 
 use crate::clock::{Clock, SystemClock};
@@ -472,6 +471,7 @@ impl Metaharness {
 /// login never leaves this machine. There is nothing to intercept here: the loop is pointed at a
 /// `--base-url` and a key file, both named by the caller, and metaharness never sees the
 /// credential. `credentials_file` answers `None` on this kind for the same reason.
+#[allow(clippy::too_many_lines)]
 fn start_b10x(
     spec: RunSpec,
     frame: Option<Frame>,
@@ -546,7 +546,6 @@ fn start_b10x(
         })?
         .display()
         .to_string();
-    let args = argv;
     // Constructed, never inherited. `PATH` is the one variable the loop always needs and the one
     // whose absence made every launch of this arm fail before it read an argument.
     let mut env: BTreeMap<String, String> = BTreeMap::from([("PATH".to_owned(), child_path)]);
@@ -582,7 +581,7 @@ fn start_b10x(
     }
     let view = LaunchPlanView {
         program: &program,
-        args: &args,
+        args: &argv,
         env: &env,
         cwd: &cwd,
         credential_copies: &[],
@@ -1358,7 +1357,9 @@ pub fn check_spec(spec: &RunSpec) -> Result<(), Refusal> {
     }
     // A scope and a preloaded context reach a vendor arm through the frame it is already sealed
     // into. See the variant.
-    if (!spec.write_scope.is_empty() || !spec.context.is_empty() || spec.scope_announce == ScopeAnnounce::Silent)
+    if (!spec.write_scope.is_empty()
+        || !spec.context.is_empty()
+        || spec.scope_announce == ScopeAnnounce::Silent)
         && spec.kind != Kind::B10x
     {
         return Err(Refusal::ScopeUnsupported { kind: spec.kind });
@@ -2737,7 +2738,10 @@ mod b10x_launch_tests {
         }
         let mut confined = RunSpec::new(Kind::B10x);
         confined.substrate_embedded = true;
-        assert!(check_spec(&confined).is_ok(), "b10x is the one that takes it");
+        assert!(
+            check_spec(&confined).is_ok(),
+            "b10x is the one that takes it"
+        );
     }
 
     #[test]
@@ -2748,7 +2752,10 @@ mod b10x_launch_tests {
             let mut spec = RunSpec::new(kind);
             spec.write_scope = vec![".engineering/planning/**=partial-only".to_owned()];
             let refusal = check_spec(&spec).expect_err("refused");
-            assert!(matches!(refusal, Refusal::ScopeUnsupported { .. }), "{kind:?}");
+            assert!(
+                matches!(refusal, Refusal::ScopeUnsupported { .. }),
+                "{kind:?}"
+            );
             assert!(refusal.to_string().contains("Frame.subjects"));
 
             let mut seeded = RunSpec::new(kind);

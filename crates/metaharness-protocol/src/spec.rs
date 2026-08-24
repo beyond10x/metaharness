@@ -360,7 +360,7 @@ pub struct RunSpec {
     /// here would be a second number that disagrees with the invoice the first time a rate moves
     /// (design § 4.1, D4). Nothing changes about that.
     ///
-    /// The b10x loop has no such catalogue behind it: the OpenAI Responses wire returns token
+    /// The b10x loop has no such catalogue behind it: the `OpenAI` Responses wire returns token
     /// counts and no price, and the codex model cache carries no rates either. So the rates are
     /// declared and the **loop** multiplies them out, exactly as Claude Code's own client does
     /// — the figure that reaches `session.ended.total_cost_usd` is still the harness's own, not
@@ -396,7 +396,10 @@ pub struct RunSpec {
     /// `silent` is an experiment control. A run told the rule and a run refused the rule both end
     /// with the rule kept, and only the second shows that the **toolset** kept it. Stating it is
     /// cheaper, so a real run states it.
-    #[cfg_attr(feature = "clap", arg(long, value_name = "MODE", default_value = "stated"))]
+    #[cfg_attr(
+        feature = "clap",
+        arg(long, value_name = "MODE", default_value = "stated")
+    )]
     pub scope_announce: ScopeAnnounce,
 
     /// A file the run is given before it starts, instead of discovering it. **`b10x` only.**

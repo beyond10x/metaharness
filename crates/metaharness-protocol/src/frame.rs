@@ -970,7 +970,11 @@ fn glob_matches(pattern: &str, value: &str) -> bool {
             Some(b'*') => {
                 // `**` crosses `/`; a single `*` stops at one.
                 let crosses = pattern.get(1) == Some(&b'*');
-                let rest = if crosses { &pattern[2..] } else { &pattern[1..] };
+                let rest = if crosses {
+                    &pattern[2..]
+                } else {
+                    &pattern[1..]
+                };
                 for taken in 0..=value.len() {
                     if !crosses && value[..taken].contains(&b'/') {
                         break;
@@ -981,9 +985,7 @@ fn glob_matches(pattern: &str, value: &str) -> bool {
                 }
                 false
             }
-            Some(&expected) => {
-                value.first() == Some(&expected) && go(&pattern[1..], &value[1..])
-            }
+            Some(&expected) => value.first() == Some(&expected) && go(&pattern[1..], &value[1..]),
         }
     }
     go(pattern.as_bytes(), value.as_bytes())

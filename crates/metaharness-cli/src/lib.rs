@@ -41,7 +41,10 @@ pub struct Cli {
 #[derive(Subcommand, Debug)]
 pub enum Verb {
     /// Run a harness session: events as JSON lines on stdout, commands as JSON lines on stdin.
-    Run(RunArgs),
+    ///
+    /// Boxed because the run options dwarf every other verb's, and the enum is sized by its
+    /// largest variant.
+    Run(Box<RunArgs>),
     /// What an adapter says it can do: declared tiers, pinned versions, operation rendering.
     ///
     /// Exists so an embedder can refuse early rather than discovering mid-run that a tier is

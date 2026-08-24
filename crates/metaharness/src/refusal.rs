@@ -196,6 +196,7 @@ impl Refusal {
 }
 
 impl fmt::Display for Refusal {
+    #[allow(clippy::too_many_lines)]
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
             Refusal::NoAdapter { kind } => write!(

@@ -189,7 +189,10 @@ fn the_launchs_own_mcp_server_is_the_expected_surface_and_not_a_breach() {
         }
     });
 
-    let rows = hermetic_floor(&[record.clone()], &inputs_serving(&spec, &pins(), &serving));
+    let rows = hermetic_floor(
+        std::slice::from_ref(&record),
+        &inputs_serving(&spec, &pins(), &serving),
+    );
     let h5 = rows.iter().find(|row| row.row == HermeticRow::H5).unwrap();
     assert_eq!(h5.verdict, Verdict::Ok, "{}", h5.detail);
     assert!(h5.detail.contains("metaharness"), "{}", h5.detail);
@@ -804,7 +807,7 @@ fn a_run_goes_from_spec_through_plan_and_transcript_to_a_judged_verdict() {
             // The version is read off the pin rather than written out, because this record
             // stands for "a well-formed run on the version the adapter is pinned to" — and a
             // literal here means every pin move fails a test about something else entirely.
-            ScriptStep::line(&format!(
+            ScriptStep::line(format!(
                 r#"{{"emit":"session.started","harness_version":"{}","output_style":"default","plugins":[],"mcp_servers":[],"credential_source":"operator-login","inputs_digest":"tree"}}"#,
                 metaharness_claude::PINNED_VERSIONS[0]
             )),

@@ -24,9 +24,8 @@
 //! frame does not admit, so the denial census cannot come back `0` while the guard is holding.
 
 use metaharness::protocol::{
-    SubjectScope,
     Digest, Event, EvidenceLine, Frame, Handoff, HermeticMode, Kind, NodeRef, Operation,
-    OperationSet, StepRef, Verdict, WorkflowRef,
+    OperationSet, StepRef, SubjectScope, Verdict, WorkflowRef,
 };
 use metaharness::{Input, Metaharness};
 

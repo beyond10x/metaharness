@@ -8,14 +8,14 @@
 use std::collections::BTreeMap;
 
 use metaharness_protocol::{
-    SubjectScope,
     COMMAND_FORMAT, COMMAND_NAMES, CONTROL_PLANE_EVENTS, Command, CommandLine, CommandOutcome,
     DecidedBy, Decision, DecisionCensus, DecisionMode, Digest, EVENT_FORMAT, EVENT_NAMES, Emission,
     EntityList, Event, EventStream, EvidenceLine, Frame, FramingError, Handoff,
     HermeticAttestation, HermeticMode, ImposedControl, Kind, Line, McpServerRef, NodeRef,
     Operation, OperationSet, PermissionDenial, PluginRef, RateLimitInfo, RefusalCode, Refused,
-    RunId, RunSpec, Seam, StepOutcome, StepRef, ToolSurface, TranscriptRef, Usage, WorkflowRef,
-    ir_family, parse_command_line, parse_event_line, project, required_commands, warning_code,
+    RunId, RunSpec, Seam, StepOutcome, StepRef, SubjectScope, ToolSurface, TranscriptRef, Usage,
+    WorkflowRef, ir_family, parse_command_line, parse_event_line, project, required_commands,
+    warning_code,
 };
 use serde_json::json;
 
