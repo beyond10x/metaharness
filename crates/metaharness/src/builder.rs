@@ -540,6 +540,20 @@ fn start_b10x(
         })?;
         env.insert(B10X_API_KEY_VARIABLE.to_owned(), key);
     }
+    if spec.toolchain.is_some() {
+        // The child locates its toolchain the way the tools themselves do, and with `env_clear`
+        // it can only do that if it is told where to look. Passed by name and only when a
+        // toolchain was declared, so a run that asked for none still inherits nothing.
+        //
+        // Without this the child refuses at once — "neither `RUSTUP_HOME` nor a home directory
+        // says where the Rust toolchain is" — which is the right refusal and was not reaching
+        // anybody until `NO_TERMINAL_RECORD` started carrying the child's stderr.
+        for variable in ["RUSTUP_HOME", "HOME"] {
+            if let Ok(value) = std::env::var(variable) {
+                env.insert(variable.to_owned(), value);
+            }
+        }
+    }
     let view = LaunchPlanView {
         program: &program,
         args: &args,
