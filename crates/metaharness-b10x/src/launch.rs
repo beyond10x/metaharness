@@ -60,6 +60,23 @@ pub fn resolve_program(program: &str, path: &str) -> Option<PathBuf> {
         .find(|candidate| candidate.is_file())
 }
 
+/// Where the run's writes and executions are confined, if anywhere.
+///
+/// Without one the catalogue behind the three verbs is read-only. That is not a setting the loop
+/// chooses: what appears is what the machine can confine, so a run with no confinement has no
+/// write entry to publish and an arm launched that way cannot attempt a task that changes a file.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum Confinement {
+    /// `--substrate <socket>`: substrate's daemon, which authenticates a peer.
+    Daemon(String),
+    /// `--substrate-embedded <root>`: the driver in the loop's own process.
+    ///
+    /// The root is the workspace's **parent**, because the workspace is adopted rather than
+    /// created. The loop derives the same value from `--workspace` and ignores what is passed
+    /// here; it is stated anyway so the launch record says which tree was served.
+    Embedded(String),
+}
+
 /// Where the loop is told to read its bearer.
 ///
 /// Two variants and no third: the loop refuses to pick a credential up from anywhere it was not
@@ -94,8 +111,10 @@ pub struct B10xLaunch {
     pub credential: Option<Credential>,
     /// The tree the read-only tools may see.
     pub workspace: String,
-    /// The substrate socket, where the run may write and execute.
-    pub substrate: Option<String>,
+    /// Where the run may write and execute. [`None`] leaves the catalogue read-only.
+    pub confinement: Option<Confinement>,
+    /// A delegated cgroup subtree, without which no `run` entry is published.
+    pub cgroup_root: Option<String>,
     /// Programs `run` may start. Empty publishes no `run`.
     pub allow_program: Vec<String>,
     /// Ceiling on model turns.
@@ -128,7 +147,8 @@ impl B10xLaunch {
             model: model.into(),
             credential: None,
             workspace: workspace.as_ref().display().to_string(),
-            substrate: None,
+            confinement: None,
+            cgroup_root: None,
             allow_program: Vec::new(),
             max_turns: None,
             prices: None,
@@ -159,15 +179,34 @@ impl B10xLaunch {
         self
     }
 
-    /// The same launch, with a confined workspace and the programs it may start.
+    /// The same launch, confined by substrate's daemon, with the programs it may start.
     #[must_use]
     pub fn confined(
         mut self,
         socket: impl AsRef<Path>,
         programs: impl IntoIterator<Item = String>,
     ) -> Self {
-        self.substrate = Some(socket.as_ref().display().to_string());
+        self.confinement = Some(Confinement::Daemon(socket.as_ref().display().to_string()));
         self.allow_program = programs.into_iter().collect();
+        self
+    }
+
+    /// The same launch, confined by a driver in the loop's own process.
+    #[must_use]
+    pub fn confined_in_process(
+        mut self,
+        root: impl AsRef<Path>,
+        programs: impl IntoIterator<Item = String>,
+    ) -> Self {
+        self.confinement = Some(Confinement::Embedded(root.as_ref().display().to_string()));
+        self.allow_program = programs.into_iter().collect();
+        self
+    }
+
+    /// The cgroup subtree a confined run may start a process inside.
+    #[must_use]
+    pub fn with_cgroup_root(mut self, root: impl AsRef<Path>) -> Self {
+        self.cgroup_root = Some(root.as_ref().display().to_string());
         self
     }
 
@@ -211,9 +250,20 @@ pub fn argv(launch: &B10xLaunch) -> Vec<String> {
         argv.push("--prices".to_owned());
         argv.push(card.clone());
     }
-    if let Some(socket) = &launch.substrate {
-        argv.push("--substrate".to_owned());
-        argv.push(socket.clone());
+    match &launch.confinement {
+        Some(Confinement::Daemon(socket)) => {
+            argv.push("--substrate".to_owned());
+            argv.push(socket.clone());
+        }
+        Some(Confinement::Embedded(root)) => {
+            argv.push("--substrate-embedded".to_owned());
+            argv.push(root.clone());
+        }
+        None => {}
+    }
+    if let Some(root) = &launch.cgroup_root {
+        argv.push("--cgroup-root".to_owned());
+        argv.push(root.clone());
     }
     for program in &launch.allow_program {
         argv.push("--allow-program".to_owned());

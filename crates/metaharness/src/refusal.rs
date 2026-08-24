@@ -81,6 +81,16 @@ pub enum Refusal {
         /// The kind that prices itself.
         kind: Kind,
     },
+    /// `--substrate`, `--substrate-embedded` or `--cgroup-root` was given for a kind whose tools
+    /// are not ours to confine.
+    ///
+    /// substrate stands behind the catalogue the b10x loop publishes. Claude Code and codex reach
+    /// the filesystem through their own tools, so a socket configured for one of them would be
+    /// accepted, never consulted, and would read as containment nobody applied.
+    ConfinementUnsupported {
+        /// The kind that brings its own tools.
+        kind: Kind,
+    },
     /// The adapter refused to plan the launch.
     Launch {
         /// What the adapter said, verbatim.
@@ -168,6 +178,7 @@ impl Refusal {
             Refusal::NoAdapter { .. }
             | Refusal::ToolSurfaceOwned { .. }
             | Refusal::PricesUnsupported { .. }
+            | Refusal::ConfinementUnsupported { .. }
             | Refusal::ObserveWithFrame => Some(RefusalCode::UnsupportedControl),
             _ => None,
         }
@@ -222,6 +233,15 @@ impl fmt::Display for Refusal {
                  (design § 4.1, D4). A card here could only be ignored, leaving the run priced at \
                  the vendor's rates while the operator believed it was priced at theirs. The b10x \
                  loop takes one, because nothing behind it returns a price at all",
+                kind.as_str(),
+            ),
+            Refusal::ConfinementUnsupported { kind } => write!(
+                f,
+                "--substrate, --substrate-embedded and --cgroup-root are refused for {}: substrate \
+                 confines the catalogue *we* publish, and {} reaches the filesystem through its \
+                 own tools. A socket here would be configured and never consulted, which reads as \
+                 containment nobody applied. Only b10x takes one",
+                kind.as_str(),
                 kind.as_str(),
             ),
             Refusal::Launch { detail } => {

@@ -113,6 +113,19 @@ pub trait HarnessProcess {
     ///
     /// Whatever the platform said.
     fn wait(&mut self) -> std::io::Result<Option<i32>>;
+
+    /// Everything the child wrote to stderr, where the runner retained it.
+    ///
+    /// **The only thing that says why a run produced no records at all.** A child that dies on its
+    /// own argument parsing writes one sentence here and nothing to stdout, so without this the
+    /// run ends at exit 3 — *nobody found out* — with both streams empty and no way to tell a
+    /// vendor that refused a flag from one that was never installed. That is exactly what a b10x
+    /// launch did, and the stderr the spawner had been retaining all along had no reader.
+    ///
+    /// Empty by default: a scripted runner has no child and inventing one would be a claim.
+    fn stderr(&self) -> String {
+        String::new()
+    }
 }
 
 /// Perform the plan's credential copies.

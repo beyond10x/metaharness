@@ -278,6 +278,8 @@ fn every_builder_method_sets_one_field_of_the_one_options_type() {
         .with_spec_file("expectations.yaml")
         .with_auditor("protocol trace check")
         .with_prices("rates.json")
+        .with_substrate("/run/substrate.sock")
+        .with_cgroup_root("/sys/fs/cgroup/run.slice")
         .with_auditor_arg("--advisory")
         .with_auditor_arg("billed-to-the-session");
 
@@ -300,6 +302,9 @@ fn every_builder_method_sets_one_field_of_the_one_options_type() {
         strict_version: true,
         audit: true,
         spec: Some("expectations.yaml".into()),
+        substrate: Some("/run/substrate.sock".into()),
+        substrate_embedded: false,
+        cgroup_root: Some("/sys/fs/cgroup/run.slice".into()),
         prices: Some("rates.json".into()),
         auditor: Some("protocol trace check".to_string()),
         auditor_args: vec![
@@ -1266,4 +1271,47 @@ fn a_frame_admits_asking_what_tools_exist_and_still_judges_the_act_by_what_it_is
         ),
         vec!["file.write".to_string()]
     );
+}
+
+/// A run whose child produced nothing, having said this on the way out.
+fn silent_run(said: &str) -> Run {
+    let mut runner = ScriptedRunner::new(Vec::new(), ScriptedLog::new()).saying_on_stderr(said);
+    let mut seams = ScriptedSeams;
+    Metaharness::new(Kind::Claude)
+        .start_with_clock(
+            Input::Prompt("do the thing".to_string()),
+            &mut runner,
+            &mut seams,
+            Box::new(ManualClock::new()),
+        )
+        .expect("the run starts")
+}
+
+fn warned(run: &mut Run, code: &str) -> Option<String> {
+    while run.next_event().expect("the stream drains").is_some() {}
+    run.events().iter().find_map(|event| match event {
+        Event::Warning { code: seen, message } if seen == code => Some(message.clone()),
+        _ => None,
+    })
+}
+
+#[test]
+fn a_run_that_produced_no_record_says_what_the_child_said_on_the_way_out() {
+    // The silent exit 3 this closes: a b10x launch died on one bad argument, wrote one sentence to
+    // stderr and nothing to stdout, and metaharness reported *nobody found out* with both streams
+    // empty. The spawner had been retaining stderr for exactly this since it was written, and
+    // nothing read it.
+    let mut run = silent_run("error: unexpected argument '--nope' found");
+    let warning = warned(&mut run, "NO_TERMINAL_RECORD").expect("the run says why");
+
+    assert!(!run.saw_terminal_record());
+    assert!(warning.contains("--nope"), "{warning}");
+}
+
+#[test]
+fn a_child_that_was_silent_too_gets_no_invented_explanation() {
+    // No stderr means no warning: "it said nothing" is already what an empty record says, and a
+    // warning carrying an empty string would be noise wearing the shape of a finding.
+    let mut run = silent_run("   ");
+    assert!(warned(&mut run, "NO_TERMINAL_RECORD").is_none());
 }

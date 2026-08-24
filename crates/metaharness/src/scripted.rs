@@ -118,13 +118,28 @@ impl ScriptedLog {
 pub struct ScriptedRunner {
     script: Vec<ScriptStep>,
     log: ScriptedLog,
+    stderr: String,
 }
 
 impl ScriptedRunner {
     /// A runner that replays this script at every spawn.
     #[must_use]
     pub fn new(script: Vec<ScriptStep>, log: ScriptedLog) -> Self {
-        Self { script, log }
+        Self {
+            script,
+            log,
+            stderr: String::new(),
+        }
+    }
+
+    /// The same runner, whose child writes this on stderr.
+    ///
+    /// For the one thing a scripted child otherwise cannot rehearse: dying before it produced a
+    /// terminal record, with the reason only on the stream nobody used to read.
+    #[must_use]
+    pub fn saying_on_stderr(mut self, said: impl Into<String>) -> Self {
+        self.stderr = said.into();
+        self
     }
 
     /// A runner replaying these lines and blocking nowhere.
@@ -157,6 +172,7 @@ impl ProcessRunner for ScriptedRunner {
             answered: BTreeSet::new(),
             log: self.log.clone(),
             exit_code: Some(0),
+            stderr: self.stderr.clone(),
         }))
     }
 }
@@ -168,6 +184,7 @@ pub struct ScriptedProcess {
     answered: BTreeSet<String>,
     log: ScriptedLog,
     exit_code: Option<i32>,
+    stderr: String,
 }
 
 impl ScriptedProcess {
@@ -179,11 +196,26 @@ impl ScriptedProcess {
             answered: BTreeSet::new(),
             log,
             exit_code: Some(0),
+            stderr: String::new(),
         }
+    }
+
+    /// The same process, having written this on stderr.
+    ///
+    /// For the one thing a scripted child otherwise cannot rehearse: dying before it produced a
+    /// terminal record, with the reason only on the stream nobody used to read.
+    #[must_use]
+    pub fn saying_on_stderr(mut self, said: impl Into<String>) -> Self {
+        self.stderr = said.into();
+        self
     }
 }
 
 impl HarnessProcess for ScriptedProcess {
+    fn stderr(&self) -> String {
+        self.stderr.clone()
+    }
+
     fn next_line(&mut self) -> std::io::Result<Option<String>> {
         loop {
             match self.steps.front() {

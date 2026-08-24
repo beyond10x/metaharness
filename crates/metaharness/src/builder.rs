@@ -238,6 +238,27 @@ impl Metaharness {
         self
     }
 
+    /// substrate's daemon socket, so the run may write and execute. `b10x` only.
+    #[must_use]
+    pub fn with_substrate(mut self, socket: impl Into<PathBuf>) -> Self {
+        self.spec.substrate = Some(socket.into());
+        self
+    }
+
+    /// Hold substrate's driver in the run's own process instead. `b10x` only.
+    #[must_use]
+    pub fn with_substrate_embedded(mut self, embedded: bool) -> Self {
+        self.spec.substrate_embedded = embedded;
+        self
+    }
+
+    /// The delegated cgroup subtree a confined run may start a process inside. `b10x` only.
+    #[must_use]
+    pub fn with_cgroup_root(mut self, root: impl Into<PathBuf>) -> Self {
+        self.spec.cgroup_root = Some(root.into());
+        self
+    }
+
     /// The rate card this run is priced at. `b10x` only — see [`RunSpec::prices`].
     #[must_use]
     pub fn with_prices(mut self, path: impl Into<PathBuf>) -> Self {
@@ -432,7 +453,31 @@ fn start_b10x(
     }
 
     let scratch = tempfile::TempDir::new()?;
-    let cwd = resolve_cwd(&spec, scratch.path())?;
+    let confined = spec.substrate.is_some() || spec.substrate_embedded;
+    let cwd = resolve_cwd_named(
+        &spec,
+        scratch.path(),
+        if confined {
+            B10X_SCRATCH_WORKSPACE
+        } else {
+            "work"
+        },
+    )?;
+    if confined && !adoptable(&cwd) {
+        // Refused rather than degraded, because the degradation is invisible: substrate would
+        // decline to represent the workspace, the catalogue would come back read-only, and the run
+        // would go on to report that it could not find a way to change the file it was asked to
+        // change. That reads as a model failure and is a naming rule.
+        return Err(Refusal::Launch {
+            detail: format!(
+                "confinement was asked for and the working directory {} cannot be adopted: \
+                 substrate represents a workspace only when its directory name starts with \
+                 `{SUBSTRATE_WORKSPACE_PREFIX}`. Rename it, or drop --cwd and let the run use a \
+                 scratch one",
+                cwd.display()
+            ),
+        });
+    }
     let transcript_path = scratch.path().join("transcript.jsonl");
     let run_id = run_id(&spec);
 
@@ -1175,6 +1220,20 @@ pub fn start_refusals(capabilities: &Capabilities, spec: &RunSpec) -> Vec<(Strin
 /// The operator's directory is used, never created: a typo that silently became an empty
 /// directory would be a run over nothing reporting success.
 fn resolve_cwd(spec: &RunSpec, scratch_root: &std::path::Path) -> Result<PathBuf, Refusal> {
+    resolve_cwd_named(spec, scratch_root, "work")
+}
+
+/// The same, with the scratch directory's own name.
+///
+/// Named rather than fixed because substrate will only represent a workspace whose directory starts
+/// with `ws_`, and a b10x run that means to write needs one it can adopt. A scratch directory called
+/// `work` leaves that run **silently read-only** — the tools it publishes are what the machine can
+/// confine, so the write entries simply do not appear and nothing says why.
+fn resolve_cwd_named(
+    spec: &RunSpec,
+    scratch_root: &std::path::Path,
+    scratch_name: &str,
+) -> Result<PathBuf, Refusal> {
     match &spec.cwd {
         Some(directory) if directory.is_dir() => Ok(directory.clone()),
         Some(directory) => Err(Refusal::Io {
@@ -1184,12 +1243,18 @@ fn resolve_cwd(spec: &RunSpec, scratch_root: &std::path::Path) -> Result<PathBuf
             ),
         }),
         None => {
-            let work = scratch_root.join("work");
+            let work = scratch_root.join(scratch_name);
             std::fs::create_dir_all(&work)?;
             Ok(work)
         }
     }
 }
+
+/// The prefix substrate requires of a workspace directory it will represent.
+const SUBSTRATE_WORKSPACE_PREFIX: &str = "ws_";
+
+/// The scratch working directory a confined b10x run gets.
+const B10X_SCRATCH_WORKSPACE: &str = "ws_run";
 
 /// The frame in force, from whichever of the two spellings this run used.
 ///
@@ -1234,6 +1299,13 @@ pub fn check_spec(spec: &RunSpec) -> Result<(), Refusal> {
     // A rate card is only meaningful where nothing else prices the run. See the variant.
     if spec.prices.is_some() && spec.kind != Kind::B10x {
         return Err(Refusal::PricesUnsupported { kind: spec.kind });
+    }
+    // substrate confines the tools **we** publish. The vendor harnesses bring their own and reach
+    // the filesystem through them, so a socket here would be configured and never consulted.
+    let confinement_asked_for =
+        spec.substrate.is_some() || spec.substrate_embedded || spec.cgroup_root.is_some();
+    if confinement_asked_for && spec.kind != Kind::B10x {
+        return Err(Refusal::ConfinementUnsupported { kind: spec.kind });
     }
     Ok(())
 }
@@ -1303,6 +1375,27 @@ fn b10x_launch(
             ));
         }
     };
+    // The programs `run` may start, and where it may start them. An empty set publishes no `run`
+    // at all, which is the right answer to nobody having named one.
+    let programs = spec.allow_program.clone();
+    launch = match (&spec.substrate, spec.substrate_embedded) {
+        (Some(socket), _) => launch.confined(socket, programs),
+        // The root substrate serves is the workspace's parent, because the workspace is adopted
+        // rather than created. A run whose working directory has no parent has no tree to serve.
+        (None, true) => match cwd.parent() {
+            Some(root) => launch.confined_in_process(root, programs),
+            None => {
+                return Err(refuse(
+                    "--substrate-embedded serves the working directory's parent, and this working \
+                     directory has none",
+                ));
+            }
+        },
+        (None, false) => launch,
+    };
+    if let Some(root) = &spec.cgroup_root {
+        launch = launch.with_cgroup_root(root);
+    }
     if let Some(card) = &spec.prices {
         launch = launch.with_prices(card);
     }
@@ -1310,6 +1403,13 @@ fn b10x_launch(
         launch = launch.with_max_turns(turns);
     }
     Ok(launch)
+}
+
+/// `true` when substrate will represent a workspace at this path.
+fn adoptable(cwd: &std::path::Path) -> bool {
+    cwd.file_name()
+        .and_then(|name| name.to_str())
+        .is_some_and(|name| name.starts_with(SUBSTRATE_WORKSPACE_PREFIX))
 }
 
 /// The variable `--credentials api-key` points the b10x loop at.
@@ -2495,6 +2595,80 @@ mod b10x_launch_tests {
             .expect_err("refused")
             .to_string();
         assert!(said.contains("--model"), "{said}");
+    }
+
+    #[test]
+    fn a_confined_run_names_the_socket_the_programs_and_the_cgroup_subtree() {
+        // Without these the catalogue behind the three verbs is read-only, so the arm cannot
+        // attempt a task that changes a file — and nothing in the record says why.
+        let mut spec = spec();
+        spec.substrate = Some("/run/substrate.sock".into());
+        spec.cgroup_root = Some("/sys/fs/cgroup/run.slice".into());
+        spec.allow_program = vec!["/usr/bin/python3".to_owned()];
+
+        let argv = argv_of(&spec);
+        assert_eq!(
+            value_after(&argv, "--substrate"),
+            Some("/run/substrate.sock".to_owned())
+        );
+        assert_eq!(
+            value_after(&argv, "--cgroup-root"),
+            Some("/sys/fs/cgroup/run.slice".to_owned())
+        );
+        assert_eq!(
+            value_after(&argv, "--allow-program"),
+            Some("/usr/bin/python3".to_owned()),
+            "the program set is what makes a `run` entry appear at all"
+        );
+    }
+
+    #[test]
+    fn an_embedded_run_serves_the_working_directorys_parent() {
+        // The workspace is adopted rather than created, so the root is the tree above it. Naming
+        // the workspace itself would ask substrate to represent a tree it is inside.
+        let mut spec = spec();
+        spec.substrate_embedded = true;
+        let launch = b10x_launch(&spec, std::path::Path::new("/scratch/ws_run")).expect("planned");
+        assert_eq!(
+            value_after(&metaharness_b10x::argv(&launch), "--substrate-embedded"),
+            Some("/scratch".to_owned())
+        );
+    }
+
+    #[test]
+    fn an_unconfined_run_names_no_socket_and_gets_a_read_only_catalogue() {
+        let argv = argv_of(&spec());
+        for flag in ["--substrate", "--substrate-embedded", "--cgroup-root"] {
+            assert!(!argv.iter().any(|word| word == flag), "{flag}: {argv:?}");
+        }
+    }
+
+    #[test]
+    fn a_working_directory_substrate_cannot_adopt_is_refused_rather_than_left_read_only() {
+        // The degradation this refuses is invisible: substrate declines the workspace, the write
+        // entries never appear, and the run reports that it could not change the file it was asked
+        // to change. That reads as a model failure and is a directory naming rule.
+        assert!(super::adoptable(std::path::Path::new("/scratch/ws_run")));
+        assert!(!super::adoptable(std::path::Path::new("/scratch/work")));
+    }
+
+    #[test]
+    fn confinement_is_refused_for_a_kind_whose_tools_are_not_ours() {
+        // A socket configured for Claude Code would be accepted and never consulted: it reaches
+        // the filesystem through its own tools, so this would read as containment nobody applied.
+        for kind in [Kind::Claude, Kind::Codex] {
+            let mut spec = RunSpec::new(kind);
+            spec.substrate = Some("/run/substrate.sock".into());
+            let refusal = check_spec(&spec).expect_err("refused");
+            assert!(
+                matches!(refusal, Refusal::ConfinementUnsupported { .. }),
+                "{kind:?}"
+            );
+            assert!(refusal.to_string().contains("never consulted"));
+        }
+        let mut confined = RunSpec::new(Kind::B10x);
+        confined.substrate_embedded = true;
+        assert!(check_spec(&confined).is_ok(), "b10x is the one that takes it");
     }
 
     #[test]

@@ -297,6 +297,36 @@ pub struct RunSpec {
     #[cfg_attr(feature = "clap", arg(long, value_name = "FILE"))]
     pub spec: Option<PathBuf>,
 
+    /// substrate's daemon socket, so the run may write and execute inside a confined workspace.
+    /// **`b10x` only.**
+    ///
+    /// The vendor harnesses bring their own tools and their own containment story; this is the
+    /// declaration that gives *our* loop one. Without it — or [`Self::substrate_embedded`] — the
+    /// catalogue behind the three verbs is read-only, which is a fact about the machine rather
+    /// than a setting, and it is why an arm launched with neither cannot attempt a task that has
+    /// to change a file.
+    #[cfg_attr(feature = "clap", arg(long, value_name = "SOCKET"))]
+    pub substrate: Option<PathBuf>,
+
+    /// Hold substrate's driver in the run's own process instead of reaching a daemon.
+    /// **`b10x` only**, and never beside [`Self::substrate`].
+    ///
+    /// The same confinement — guarded IO, `openat2` containment, cgroups and namespaces around an
+    /// exec. What a socket adds and this does not is an authenticated subject derived from kernel
+    /// peer credentials; embedded there is no peer. Right for a run on the operator's own machine,
+    /// wrong for anything multi-tenant.
+    #[cfg_attr(feature = "clap", arg(long, conflicts_with = "substrate"))]
+    pub substrate_embedded: bool,
+
+    /// A delegated cgroup subtree, so a confined run may start a process. **`b10x` only.**
+    ///
+    /// Without one substrate reports no exec facts and no `run` entry is published — correct, and
+    /// also why a test-first task cannot be attempted: a run that may not execute its suite cannot
+    /// see a test fail before writing the code, so it will not write the code. The subtree must be
+    /// delegated to this user, hold `cpu`, `memory` and `pids`, and be free of processes.
+    #[cfg_attr(feature = "clap", arg(long, value_name = "DIR"))]
+    pub cgroup_root: Option<PathBuf>,
+
     /// A rate card, so the run's record states what it cost. **`b10x` only.**
     ///
     /// Claude Code and codex price their own runs from a catalogue their service delivers, and
@@ -348,6 +378,9 @@ impl RunSpec {
             strict_version: false,
             audit: false,
             spec: None,
+            substrate: None,
+            substrate_embedded: false,
+            cgroup_root: None,
             prices: None,
             auditor: None,
             auditor_args: Vec::new(),

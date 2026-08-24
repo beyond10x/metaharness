@@ -485,6 +485,10 @@ impl SpawnedProcess {
 }
 
 impl HarnessProcess for SpawnedProcess {
+    fn stderr(&self) -> String {
+        Self::stderr(self)
+    }
+
     fn next_line(&mut self) -> std::io::Result<Option<String>> {
         loop {
             self.pump()?;

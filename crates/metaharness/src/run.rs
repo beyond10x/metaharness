@@ -48,6 +48,12 @@ pub mod warning {
     /// A tool was called that no operation in the v0.1 vocabulary renders to, so the frame has
     /// no way to admit it (design § 7.8).
     pub const UNCOVERED_TOOL: &str = "UNCOVERED_TOOL";
+    /// The child produced no terminal record, and this is what it said on the way out.
+    ///
+    /// Raised once, at wind-up. The run already ends at exit 3 — *nobody found out* — and until
+    /// this existed that was the whole of the report: both streams empty, no way to tell a vendor
+    /// that refused a flag from one that was never installed.
+    pub const NO_TERMINAL_RECORD: &str = "NO_TERMINAL_RECORD";
     /// The spec named a `retain_dir` and some of the run's raw wire could not be copied into
     /// it. A warning and never a failure: the run itself is over, and losing its verdict over
     /// a capture that was best-effort by construction would cost more than the copy was worth.
@@ -932,12 +938,36 @@ impl Run {
 
     fn wind_up(&mut self) {
         self.abandon_pending("the stream ended", warning::PENDING_CALL_ABANDONED);
+        self.report_silent_child();
         self.retain_wire();
         self.bridge.set_census(self.census.clone());
         let emissions = self.bridge.finish();
         self.outbox.extend(emissions);
         self.stop_loopback();
         self.finished = true;
+    }
+
+    /// Says what the child said, when it said nothing this run could read.
+    ///
+    /// The spawner has retained stderr from the beginning for exactly this — its own documentation
+    /// says *the only thing that says why is what it printed on the way out* — and nothing read it.
+    /// A b10x launch that died on one bad argument therefore produced a completely silent exit 3.
+    ///
+    /// Nothing is invented where the child was silent too: no stderr means no warning, because
+    /// "it said nothing" is already what an empty record says.
+    fn report_silent_child(&mut self) {
+        if self.saw_terminal_record {
+            return;
+        }
+        let said = self.process.stderr();
+        let said = said.trim();
+        if said.is_empty() {
+            return;
+        }
+        self.warn(
+            warning::NO_TERMINAL_RECORD,
+            format!("the harness produced no terminal record and wrote this on stderr: {said}"),
+        );
     }
 
     /// Close this run's loopback port, and keep its counters.
