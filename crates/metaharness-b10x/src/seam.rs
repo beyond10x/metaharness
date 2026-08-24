@@ -252,7 +252,12 @@ impl HarnessSeam for B10xSeam {
                     stop_reason: None,
                     terminal_reason: Some(reason),
                     api_error_status: None,
-                    num_turns: stop.get("turns").and_then(Value::as_u64),
+                    // The loop's own count, beside the stop rather than inside it. Only the two
+                    // bound-bound stops carry one, so a reader asking how long a run was got an
+                    // answer from a run that hit a ceiling and nothing from one that finished —
+                    // and an advisory bound on run length could not decide a single completed run.
+                    // The stop's figure stays as the fallback for a record written before this.
+                    num_turns: number("turns").or_else(|| stop.get("turns").and_then(Value::as_u64)),
                     duration_ms: None,
                     duration_api_ms: None,
                     ttft_ms: None,
@@ -691,6 +696,54 @@ pub fn capabilities() -> metaharness_protocol::Capabilities {
         // run cannot be read*. An adapter that published none forced every consumer to learn its
         // tool names, which is how a corpus ends up with `Bash` written into it.
         rendering: rendering(),
+    }
+}
+
+#[cfg(test)]
+mod turn_count_tests {
+    use metaharness_protocol::{Event, HarnessSeam, Seam, SeamFactory, TranscriptRef};
+
+    fn seam() -> Box<dyn HarnessSeam> {
+        super::B10xSeams::new(None, None, None).build(
+            TranscriptRef {
+                path: None,
+                digest: None,
+                bytes: None,
+            },
+            metaharness_protocol::HermeticAttestation::none(
+                metaharness_protocol::HermeticMode::Off,
+            ),
+            Seam::None,
+        )
+    }
+
+    fn ended(line: &str) -> Option<u64> {
+        seam().push_line(line).into_iter().find_map(|emission| match emission.event {
+            Event::SessionEnded { num_turns, .. } => num_turns,
+            _ => None,
+        })
+    }
+
+    #[test]
+    fn a_completed_run_reports_how_long_it_was() {
+        // The count lives beside the stop, not inside it: only the two bound-bound stops ever
+        // carried one, so a reader asking how long a run was got an answer from a run that hit a
+        // ceiling and nothing from one that finished. An advisory bound on run length could not
+        // decide a single completed run - which is exactly what a live scoring pass reported.
+        assert_eq!(
+            ended(r#"{"kind":"finished","stop":{"kind":"completed"},"turns":7}"#),
+            Some(7)
+        );
+    }
+
+    #[test]
+    fn a_record_written_before_that_keeps_the_stops_own_figure() {
+        // A bound-bound stop has always carried it, and losing it on a replay of an older capture
+        // would be this seam taking a fact away.
+        assert_eq!(
+            ended(r#"{"kind":"finished","stop":{"kind":"budget-exhausted","turns":9}}"#),
+            Some(9)
+        );
     }
 }
 
