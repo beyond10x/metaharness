@@ -313,3 +313,69 @@ fn a_tool_that_is_not_one_of_the_verbs_is_left_to_the_callers_own_table() {
         assert_eq!(resolve_verb(tool, &json!({})), None, "{tool}");
     }
 }
+
+// --- what a call touched ------------------------------------------------------------------------
+
+#[test]
+fn an_invocation_names_the_file_its_entry_would_touch() {
+    // `operations` says a write happened; this says which file. Without both, an expectation can
+    // assert that a run wrote something and never that it wrote the test before the source.
+    assert_eq!(
+        subjects_of_verb(
+            "mcp__metaharness__tool_invoke",
+            &json!({"name": "file_write", "arguments": {"path": "src/lib.rs", "text": "x"}})
+        ),
+        vec!["file:src/lib.rs".to_owned()]
+    );
+    assert_eq!(
+        subjects_of_verb(
+            INVOKE_VERB,
+            &json!({"name": "run", "arguments": {"argv": ["/usr/bin/python3", "t.py"]}})
+        ),
+        vec!["proc:/usr/bin/python3".to_owned()],
+        "a `run` names the program, not the whole argv"
+    );
+}
+
+#[test]
+fn a_path_is_reported_as_the_caller_wrote_it() {
+    // The tidy answer canonicalisation would give is exactly wrong for the one call whose whole
+    // problem is where it pointed.
+    assert_eq!(
+        subjects_of_verb(
+            INVOKE_VERB,
+            &json!({"name": "file_read", "arguments": {"path": "../../etc/passwd"}})
+        ),
+        vec!["file:../../etc/passwd".to_owned()]
+    );
+}
+
+#[test]
+fn a_catalogue_question_and_an_unknown_entry_touch_nothing() {
+    for tool in [SEARCH_VERB, DESCRIBE_VERB] {
+        assert!(subjects_of_verb(tool, &json!({"name": "file_read"})).is_empty(), "{tool}");
+    }
+    assert!(subjects_of_verb(INVOKE_VERB, &json!({"name": "Bash"})).is_empty());
+    assert!(subjects_of_verb("Write", &json!({"file_path": "a"})).is_empty(), "not a verb");
+}
+
+#[test]
+fn a_vendor_call_names_the_path_whichever_argument_holds_it() {
+    // Three names and no vendor table: this asks *which key holds a path*, where *which tool is a
+    // write* is the rendering's question and has an owner already.
+    assert_eq!(
+        subjects_of_vendor_call(&json!({"file_path": "src/lib.rs", "old_string": "a"})),
+        vec!["file:src/lib.rs".to_owned()]
+    );
+    assert_eq!(
+        subjects_of_vendor_call(&json!({"notebook_path": "book.ipynb"})),
+        vec!["file:book.ipynb".to_owned()]
+    );
+}
+
+#[test]
+fn a_shell_command_is_left_alone_rather_than_guessed_at() {
+    // A command string is not a program. Pulling an argv[0] out of one is parsing a language this
+    // crate does not speak, and a `proc:` subject guessed that way would be a claim about what ran.
+    assert!(subjects_of_vendor_call(&json!({"command": "cargo test --workspace"})).is_empty());
+}

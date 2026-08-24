@@ -89,3 +89,49 @@ pub fn resolve_verb(tool: &str, input: &Value) -> Option<Resolved> {
         _ => None,
     }
 }
+
+/// What this call would touch, when the run publishes the three verbs.
+///
+/// The other half of [`resolve_verb`]. `operations` says *a write happened*; this says *which
+/// file*, and neither implies the other: without both, an expectation can assert that a run wrote
+/// something and never that it wrote the test before the source.
+///
+/// Read from the catalogue's own rule rather than from the arguments directly, so a reader of a
+/// finished run and a live gate answer the same question the same way.
+///
+/// Empty for a catalogue question, for an entry outside the vocabulary, and for a tool that is not
+/// one of the verbs — in each case there is no entry whose arguments could name a subject.
+#[must_use]
+pub fn subjects_of_verb(tool: &str, input: &Value) -> Vec<String> {
+    if unprefixed(tool) != INVOKE_VERB {
+        return Vec::new();
+    }
+    let Some(entry) = input.get("name").and_then(Value::as_str) else {
+        return Vec::new();
+    };
+    let arguments = input.get("arguments").cloned().unwrap_or(Value::Null);
+    b10x_harness_tools::subjects_of(entry, &arguments)
+        .into_iter()
+        .map(|subject| subject.as_str().to_owned())
+        .collect()
+}
+
+/// What a **vendor's own** tool call would touch, from the argument a path is recorded under.
+///
+/// Claude Code writes `file_path`, its notebook editor writes `notebook_path`, and several tools
+/// write a bare `path`. Three names and no vendor table: this is *which key holds a path*, not
+/// *which tool is a write* — the second is the rendering's job and has one owner already.
+///
+/// **`command` is deliberately not read.** A shell string is not a program, and pulling an argv[0]
+/// out of one is parsing a language this crate does not speak; a `proc:` subject guessed that way
+/// would be a claim about what ran. An expectation about a command still reads `args.command`,
+/// which is exactly as decidable as it was.
+#[must_use]
+pub fn subjects_of_vendor_call(input: &Value) -> Vec<String> {
+    const PATH_ARGUMENTS: [&str; 3] = ["file_path", "notebook_path", "path"];
+    PATH_ARGUMENTS
+        .iter()
+        .filter_map(|key| input.get(*key).and_then(Value::as_str))
+        .map(|path| b10x_harness_tools::Subject::file(path).as_str().to_owned())
+        .collect()
+}

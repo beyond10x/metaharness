@@ -224,6 +224,10 @@ impl RolloutReader {
                 let input = serde_json::from_str::<Value>(raw)
                     .unwrap_or_else(|_| Value::String(raw.to_string()));
                 vec![Event::ToolRequested {
+                // Left empty here on purpose, exactly as `operations` is: what a call touches is
+                // resolved by whoever holds the run's published rendering, and an adapter that
+                // answered for itself would be a second owner of one rule (design § 8.4 O6).
+                subjects: Vec::new(),
                     // Left empty here on purpose: the resolution needs the adapter\'s *published*
                     // rendering, which the loop holds and an adapter must not (design § 8.4 O6).
                     operations: Vec::new(),

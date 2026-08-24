@@ -540,12 +540,23 @@ impl Run {
             },
         );
         let resolved = self.resolve(&name, &input);
-        if resolved.is_empty() {
+        let touched = self.subjects(&name, &input);
+        if resolved.is_empty() && touched.is_empty() {
             return emission;
         }
         let mut emission = emission;
-        if let Event::ToolRequested { operations, .. } = &mut emission.event {
-            *operations = resolved;
+        if let Event::ToolRequested {
+            operations,
+            subjects,
+            ..
+        } = &mut emission.event
+        {
+            if !resolved.is_empty() {
+                *operations = resolved;
+            }
+            if subjects.is_empty() {
+                *subjects = touched;
+            }
         }
         emission
     }
@@ -602,6 +613,7 @@ impl Run {
         // repeated paths, so a reader of any `tool.requested` gets the same answer to "what is
         // this?" whatever else the record says about it.
         let operations = self.resolve(&name, &input);
+        let subjects = self.subjects(&name, &input);
 
         if let Some(previous) = self.presented.get(&call_id)
             && *previous != digest
@@ -616,6 +628,7 @@ impl Run {
                     name,
                     input,
                     operations,
+                    subjects,
                     decision_required: false,
                     deadline_ms: None,
                     seam,
@@ -679,6 +692,7 @@ impl Run {
                     name,
                     input,
                     operations,
+                    subjects,
                     decision_required: true,
                     deadline_ms: Some(self.deadline_ms),
                     seam: self.seam,
@@ -702,6 +716,7 @@ impl Run {
                 name: name.clone(),
                 input: input.clone(),
                 operations,
+                subjects,
                 decision_required: false,
                 deadline_ms: None,
                 seam,
@@ -746,10 +761,34 @@ impl Run {
     /// surface is `native` because there is no vendor surface being replaced, and reading that as
     /// *no verbs here* left every call on this arm resolving to nothing: the arm reached the matrix
     /// with an empty `operations` on every act, which is the blindness this field was added to end.
+    /// What a call would touch, in the neutral `file:`/`proc:` form.
+    ///
+    /// Two roads and the same rule about which to take as [`Run::resolve`]. A run that publishes
+    /// the three verbs keeps the entry inside the call, so the subject is the **entry's** and is
+    /// read from the catalogue's own rule. Every other run names a path in an argument, and this
+    /// reads the argument.
+    ///
+    /// The vendor road is not a rendering table and does not need to be: it asks *which key holds
+    /// a path*, which is the same three names on every harness that records one, where *which tool
+    /// is a write* is the rendering's question and has an owner already.
+    fn subjects(&self, tool: &str, input: &Value) -> Vec<String> {
+        if self.publishes_verbs() {
+            return metaharness_tools::subjects_of_verb(tool, input);
+        }
+        metaharness_tools::subjects_of_vendor_call(input)
+    }
+
+    /// Whether this run offered the model the three verbs.
+    ///
+    /// `--tool-surface owned` is metaharness serving the catalogue over MCP; `b10x` is the same
+    /// catalogue bound in-process, which is why `owned` is refused for that kind as meaningless
+    /// rather than unsupported.
+    fn publishes_verbs(&self) -> bool {
+        self.spec.tool_surface == ToolSurface::Owned || self.spec.kind == Kind::B10x
+    }
+
     fn resolve(&self, tool: &str, input: &Value) -> Vec<String> {
-        let publishes_verbs =
-            self.spec.tool_surface == ToolSurface::Owned || self.spec.kind == Kind::B10x;
-        if publishes_verbs && let Some(resolved) = metaharness_tools::resolve_verb(tool, input) {
+        if self.publishes_verbs() && let Some(resolved) = metaharness_tools::resolve_verb(tool, input) {
             return match resolved {
                 metaharness_tools::Resolved::Operations(operations) => operations,
                 // A question about the catalogue and an uncovered call both answer empty here.

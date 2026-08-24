@@ -47,7 +47,9 @@ mod server;
 pub use b10x_harness_tools::{
     Catalogue, DESCRIBE_VERB, INVOKE_VERB, LocalOperations, Operations, SEARCH_VERB, Verbs,
 };
-pub use resolve::{Resolved, operation_of, resolve_verb, unprefixed};
+pub use resolve::{
+    Resolved, operation_of, resolve_verb, subjects_of_vendor_call, subjects_of_verb, unprefixed,
+};
 pub use server::{PROTOCOL_VERSION, SERVER_NAME, Server, serve};
 
 #[cfg(test)]

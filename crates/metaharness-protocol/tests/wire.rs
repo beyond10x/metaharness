@@ -222,6 +222,9 @@ fn tool_and_accounting_events() -> Vec<Event> {
             // The neutral answer beside the vendor's name, which is the field a consumer reads:
             // `Bash` here, `run` on b10x, `tool_invoke` under an owned surface — one `shell`.
             operations: vec!["shell".into()],
+            // Empty on a shell call, and deliberately: a command string is not a program, and
+            // pulling an argv[0] out of one would be a claim about what ran.
+            subjects: Vec::new(),
             decision_required: true,
             deadline_ms: Some(5_000),
             seam: Seam::Hook,

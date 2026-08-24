@@ -404,6 +404,8 @@ impl HarnessSeam for ScriptedSeam {
                 census: self.census.clone(),
             },
             "tool.requested" => Event::ToolRequested {
+                // A scripted line states what it states; the run loop fills these where it can.
+                subjects: Vec::new(),
                 call_id: text_of(&value, "call_id").unwrap_or_default(),
                 name: text_of(&value, "name").unwrap_or_default(),
                 input: value.get("input").cloned().unwrap_or(Value::Null),

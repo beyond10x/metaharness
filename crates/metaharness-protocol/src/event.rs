@@ -440,6 +440,25 @@ pub enum Event {
         /// ambiguous is that an empty list is never evidence that nothing happened.
         #[serde(default, skip_serializing_if = "Vec::is_empty")]
         operations: Vec<String>,
+        /// **What** this call would touch: `file:src/lib.rs`, `proc:/usr/bin/python3`.
+        ///
+        /// `operations` says a write happened; this says which file. Both are needed and neither
+        /// implies the other, and a consumer that had only the first could assert *this run wrote
+        /// something* and never *this run wrote the test before the source*.
+        ///
+        /// The scheme-prefixed form is `harness_wire::Subject`'s, carried across rather than
+        /// re-coined: `file:` for a path, `proc:` for a program a call would start.
+        ///
+        /// **The path is as the caller wrote it**, never canonicalised. A reader asking where a
+        /// call was going has to see `../../etc/passwd` as the model sent it; the tidy answer is
+        /// exactly wrong for the one call whose whole problem is where it pointed.
+        ///
+        /// Empty means the record does not say, never that the call touched nothing. Its absence
+        /// is why a path-scoped expectation had to read a vendor's own argument name — `file_path`
+        /// on Claude Code, and a level down under `arguments.path` on a three-verb surface — so
+        /// every such row decided on one harness and reported `unk` for the rest.
+        #[serde(default, skip_serializing_if = "Vec::is_empty")]
+        subjects: Vec<String>,
         /// Whether the run is blocked here waiting for an embedder decision.
         decision_required: bool,
         /// The budget for deciding, armed at delivery to the embedder rather than at the
