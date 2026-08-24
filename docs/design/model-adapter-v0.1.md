@@ -26,8 +26,8 @@ per harness kind (`opus` → `claude-opus-5`, and the vendor's own routing and b
 Or it can inject another one — `with_model_adapter(ModelAdapter::generic("https://llmgw.example"))`
 — and then **Claude picks the `v1/messages` endpoint and Codex the `responses` endpoint** of that
 gateway (a vLLM-class server exposing both dialects), with `mh.models()` fetching and showing the
-adapter's model ids. former organization has already attempted this adaptation and **will be a consumer of
-metaharness later**, which makes its lessons requirements rather than trivia.
+adapter's model ids. The private agent runtime has already attempted this adaptation and **will be
+a consumer of metaharness later**, which makes its lessons requirements rather than trivia.
 
 ## What an adapter is
 
@@ -52,7 +52,7 @@ each harness through its own.
 | Codex | a `model_providers` entry injected into the run's config (`base_url`, `wire_api`, `env_key`), profile-selected | documented; **to verify against pinned 0.145.0** (MA-V2), incl. whether `wire_api = "responses"` works against a vLLM-class gateway or only `"chat"` (MA-V3) |
 | `models()` | `GET {base}/v1/models`, the one endpoint both dialect families share | to verify per gateway (MA-V4) |
 
-## former organization's lessons, adopted as constraints
+## The private agent runtime's lessons, adopted as constraints
 
 1. **No silent fallback between adapter classes.** A harness that cannot honour the injected
    adapter (flag combination, wire dialect, version) refuses by name — the same posture as the
@@ -60,7 +60,7 @@ each harness through its own.
 2. **A budget the adapter cannot observe is refused, not ignored.** A gateway relays bytes and
    reports no price; `with_max_spend(...)` under a generic adapter is an error naming the reason,
    not a ceiling that silently never fires.
-3. **Reasoning/opaque items are wire-tagged.** former organization carries provider blobs verbatim, tagged
+3. **Reasoning/opaque items are wire-tagged.** The runtime carries provider blobs verbatim, tagged
    by the wire that produced them, so one provider's chain-of-thought is never replayed into
    another's. The same rule binds if metaharness ever replays context across adapters.
 
@@ -76,7 +76,7 @@ each harness through its own.
 
 | # | content | acceptance |
 |---|---|---|
-| MA-0 | study former organization's attempt (their responses wire, their provider routing) + verify MA-V1..V4 against pinned versions | each V-row flips to verified or the feature row that needs it is marked refused |
+| MA-0 | study the prior runtime's attempt (its responses wire, its provider routing) + verify MA-V1..V4 against pinned versions | each V-row flips to verified or the feature row that needs it is marked refused |
 | MA-1 | `ModelAdapter` in the `metaharness` crate: default (alias tables) + `generic(base_url)`, builder verbs `with_model` / `with_model_adapter`, `models()` | model-free tests over command/env/config construction for both harnesses |
 | MA-2 | live smoke against a real gateway — operator-run, network-dependent | one turn through each door of one gateway; `model_endpoint` event matches the injection |
 
@@ -84,7 +84,7 @@ each harness through its own.
 
 - **Codex dialect default against vLLM-class gateways** (responses vs chat). Decides: owner.
   Default if nobody answers: **configurable on the adapter with `responses` preferred and `chat`
-  the named fallback** — former organization implemented the responses wire against its gateway, so
+  the named fallback** — the prior runtime implemented the responses wire against its gateway, so
   preferring it follows the working precedent; the fallback is named because MA-V3 may fail.
 - **Alias table ownership.** Default: built into each harness adapter, overridable per
   `ModelAdapter` — an alias is a harness fact (`opus` means something to Claude, nothing to a

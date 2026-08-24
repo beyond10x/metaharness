@@ -119,7 +119,7 @@
 > move this row forbids — the next move costs a capture, which is a decision with a price on it
 > rather than an edit.
 > **Audience:** whoever reviews this for acceptance, and whoever builds it afterwards.
-> **Sources studied:** `former organization/engineering-protocols` (public, read-only), and a private
+> **Sources studied:** `beyond10x/engineering-protocols` (public, read-only), and a private
 > agent runtime whose patterns are described here generically and whose names, records and
 > postures are not reproduced.
 > **Verification date:** 2026-08-22, against `claude` **2.1.239** and `codex-cli` **0.145.0**.

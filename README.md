@@ -1,10 +1,13 @@
 # metaharness
 
-One interface to many agent harnesses. A harness — Claude Code, Codex, the next one — keeps its
-own loop, its own tools and its own credentials; metaharness drives it from outside and makes the
-run **observable, steerable and hermetic**, the same way regardless of which harness is inside.
+One interface to many agent harnesses. A harness — Claude Code, Codex, the next one — keeps its own
+loop, its own tools and its own credentials; metaharness drives it from outside and makes the run
+**observable, steerable and hermetic**, the same way regardless of which harness is inside.
 
-## The shape
+The problem it removes: every vendor harness has a different transcript format, a different way to
+approve or refuse a tool call, and a different set of things it silently inherits from the machine
+it runs on. Writing a workflow against one of them means writing it again for the next one, and
+being unable to prove what a run was actually allowed to do.
 
 ```text
               events out (JSONL) ─────────▶  your process / your workflow engine
@@ -21,95 +24,90 @@ metaharness
 
 1. **Unified**: one event stream and one command set; everything harness-specific lives in that
    harness's adapter crate and nowhere else.
-2. **Hermetic**: a run shares credentials with the operator and nothing else — no ambient
-   plugins, no account-level MCP servers, no inherited environment. Hermeticity is asserted from
-   the transcript, not assumed from a directory.
+2. **Hermetic**: a run shares credentials with the operator and nothing else — no ambient plugins,
+   no account-level MCP servers, no inherited environment. Hermeticity is asserted from the
+   transcript, not assumed from a directory.
 3. **In control at every step**: which tools the harness may call is decided per call, by the
    embedder, through the protocol — not once at launch.
 
-## Where it came from
+## Where it sits
 
-Two working systems, each of which built half of this and proved it:
+| direction | repo | relationship |
+|---|---|---|
+| drives | Claude Code, Codex | vendor binaries, spawned into a scratch config home |
+| drives | [harness](https://github.com/beyond10x/harness) | the b10x agent loop, via the `b10x` adapter — observed rather than driven, because its published toolset already is its policy |
+| scored by | [engineering-protocols](https://github.com/beyond10x/engineering-protocols) | supplies the workflows and trace expectations the evals under `evals/` judge a run against |
+| mapped in | [atlas](https://github.com/beyond10x/atlas) | how this repo fits the rest of `beyond10x` |
 
-- [`engineering-protocols`](https://github.com/former organization/engineering-protocols) — hermetic
-  headless evals, deterministic hook enforcement with 1:1 denial audits, and a transcript IR
-  (`trace-ir/1`) that turns "the agent behaved" into a checked claim.
-- former organization's agent runtime — harness adapter classes (a vendor keeps its loop; we drive its
-  documented surface), approvals as blocking calls, steering, and the port seam that makes
-  in-process and over-the-wire tool binding indistinguishable to the loop.
+Nothing consumes metaharness as a dependency yet. An external driver integrates through the sealed
+frame document (`--frame step.frame.json`) and the event/command protocol — it writes a file and
+never links this workspace.
 
 ## Status
 
-Pre-v1, and the design in `docs/design/` is what is binding — where this code and that document
-disagree, the document is amended rather than the disagreement left in the code.
+**Pre-v1. Tagged `0.1.0` (2026-08-24).** The design in `docs/design/` is binding: where this code
+and that document disagree, the document is amended rather than the disagreement left in the code.
 
-**M2 is built: `metaharness run claude --hermetic -p "…"` drives the real binary end to end.**
-It spawns Claude Code 2.1.240 into a scratch config home, installs a blocking `PreToolUse` hook,
-answers that hook's calls per call, streams the session out as protocol events on stdout, takes
-steering on stdin, retains the raw transcript, and exits on the hermetic floor's verdict.
-`capabilities`, `conformance` and `doctor` work with no model and no credential;
-`metaharness conformance claude` runs **24** vectors that way, and `conformance codex` **17**.
+| verb | state |
+|---|---|
+| `run claude` | drives the real binary end to end; verified against a paid run |
+| `run codex` | drives real `codex exec`; verified against a paid run |
+| `run b10x` | observes the b10x loop |
+| `capabilities`, `conformance`, `doctor` | work with no model and no credential |
+| `mcp-serve` | serves the owned tool surface over MCP on stdio |
+| `project` | refuses with exit 2 — `trace-ir/1` has no reader yet |
+| `audit` over a foreign transcript | refuses with exit 2 |
 
-**The seam is real, and it was verified against a paid run.** A frame that admitted no shell was
-given a prompt that asked for one: metaharness denied the call at the hook, the call did not run,
-and *the vendor's own terminal record* listed `Bash` in `permission_denials`. That is the claim
-the whole design exists to be able to make, and it is the one thing no free test tier can reach.
+The live runs cost money, sit behind `METAHARNESS_LIVE=1`, and are never part of `task check`. The
+per-change record of what was verified and what it cost to learn is in
+[`CHANGELOG.md`](CHANGELOG.md).
 
-Two findings from that first live run are worth naming, because both were defects in metaharness
-and neither was reachable without a real session: the hermetic floor read the wrong field for
-"was an API key in use", and it treated *"this run pinned no documents"* as *"nobody found out
-whether the documents moved"* — which made `--hermetic strict` unpassable. Both are fixed, both
-are regression-tested, and both are recorded as amendment a4 in the design.
+## Build, test, run
 
-**The frame crosses the process boundary (amendment a5).** `metaharness run claude --hermetic
---frame step.frame.json -p "…"` now takes the workflow frame as a sealed `metaharness.frame/1`
-document: digest-verified on load, refused by name when unreadable, untagged, misshapen or
-edited after sealing, and enforced per call from the first turn. This is the seam an external
-driver integrates through — it writes the frame as a file and never links this workspace.
+The gate is **`task check`** — `cargo fmt --check`, `cargo clippy --workspace --all-targets -D
+warnings`, `cargo test --workspace`. Green before any push.
 
-**Codex is driven for real (CX-M2).** `metaharness run codex --hermetic -p "…"` starts a real
-`codex exec` into a scratch `CODEX_HOME`, copies the operator's `auth.json` in per spawn, declares
-a blocking `PreToolUse` hook, tails the **session rollout** for events — the record that carries
-timestamps, durations and per-turn usage where `codex exec --json` stdout carries none — retains
-those bytes for the auditor, and answers the hook per call. `capabilities codex`, `conformance
-codex` (**10** vectors, including three that run a real process and the real hook program) and
-`doctor codex` all still work with no model and no credential.
+| command | what it does |
+|---|---|
+| `task check` | the full gate |
+| `task fmt` | format the workspace |
+| `task docs` | the documentation site in dev mode, hot reload |
+| `task docs:build` | build the site; a broken link fails the build |
 
-**The seam was verified against a paid run, on this vendor too.** A policy that admitted no shell
-met a prompt that asked for one. The hook process received the call — `"tool_name":"Bash"`,
-`"tool_use_id":"exec-96257928-…"` — metaharness answered `deny` with a reason, and *the vendor's
-own session record* reads `Command blocked by PreToolUse hook: this step admits no shell, so the
-command did not run` with an **empty** `Output:`. The model's closing message was *"The command was
-blocked and did not run."* So `tool.decide` is `Honoured` and the call tier is `Delivered`. The
-`allow` half of that wire was **driven live on 2026-08-23**: the hook held a real `Bash` call,
-metaharness answered `permissionDecision: allow`, and the rollout's own `custom_tool_call_output`
-carried the command's output — the grant is honoured, not discarded. One caveat travels with it:
-the binary that honoured it was the child-`PATH` codex **0.144.0** (the pin is 0.145.0; the
-two-install warning fired, as it must), so the observation names 0.144.0.
+Rust 1.98, edition 2024. To exercise the binary without a credential:
 
-Three things about Codex cost more to learn than the code that uses them, and all three are silent
-failures — which is why every claim above is read from the run's own record and not from the file
-that configured it:
+```sh
+cargo run -p metaharness-cli -- conformance claude
+cargo run -p metaharness-cli -- capabilities codex --render
+cargo run -p metaharness-cli -- doctor claude
+```
 
-- **A hook is declared in `config.toml`, not `hooks.json`.** A `hooks.json` is a plugin manifest's
-  file. An unrecognised key under `[hooks]` is dropped *without failing the config load*, so a
-  misconfigured seam and a run where nothing was attempted are the same observation.
-- **A hook in a fresh `CODEX_HOME` never fires without `--dangerously-bypass-hook-trust`.** A
-  scratch home cannot hold persisted trust. The flag warns about running *somebody else's* hook
-  unvetted; the only hook here is the one metaharness wrote a moment earlier.
-- **The hook speaks Claude Code's tool vocabulary.** `tool_name` is `Bash`, where the rollout calls
-  the same call `exec` and the binary's own tool list calls it `shell`. A rendering table built
-  from the record would have denied every shell call and reported it as a frame decision.
+## Layout
 
-One thing the live run found that nobody was looking for: `codex --version` says `0.145.0` and the
-`session_meta.cli_version` written by the run that binary starts says `0.144.0`. The adapter keeps
-one pin, the reader warns rather than widening it, and the split is **Q18**.
+| path | holds |
+|---|---|
+| `crates/metaharness` | the library: builder, run, hermetic floor, audit |
+| `crates/metaharness-protocol` | the harness-neutral wire — events a run emits, commands that steer it, `RunSpec` |
+| `crates/metaharness-claude` | the Claude Code adapter, and nothing else |
+| `crates/metaharness-codex` | the Codex adapter, and nothing else |
+| `crates/metaharness-b10x` | the b10x adapter: a loop we own, observed rather than driven |
+| `crates/metaharness-tools` | the owned tool surface, served to a vendor harness over MCP |
+| `crates/metaharness-cli` | the `metaharness` binary |
+| `docs/design/` | the binding design documents and their amendments |
+| `docs/research/` | vendor behaviour established by reading or probing, not by design |
+| `evals/` | paid and recorded evaluations, by subject — not part of `task check` |
+| `website/` | the public documentation site (Docusaurus) |
 
-**The eval machinery lives here now** (`evals/`), migrated from engineering-protocols under its
-`epic:metaharness-migration`: the driven eval reads its denial census from `tool.decided` events
-in the run's own streams, and nothing under `evals/` is part of `task check`.
+## Read more
 
-**What is still not built:** `metaharness project` (gated on Q9 — `trace-ir/1` has no reader) and
-`metaharness audit` over a transcript metaharness did not itself launch. Both refuse with exit 2
-naming what they wait for. The live runs cost money and are behind
-`METAHARNESS_LIVE=1`; they are never part of `task check`.
+- [`docs/design/metaharness-protocol-v0.1.md`](docs/design/metaharness-protocol-v0.1.md) — the
+  event and command protocol.
+- [`docs/design/adapter-contract-v0.1.md`](docs/design/adapter-contract-v0.1.md) — what an adapter
+  must declare and prove.
+- [`docs/design/model-adapter-v0.1.md`](docs/design/model-adapter-v0.1.md) and
+  [`loopback-provider-v0.1.md`](docs/design/loopback-provider-v0.1.md) — model selection and the
+  loopback credential proxy.
+- [`docs/ROADMAP.md`](docs/ROADMAP.md) — operator-scheduled directions.
+- [`evals/README.md`](evals/README.md) — what the evals cover and what they cost.
+- [`AGENTS.md`](AGENTS.md) — working agreements for anyone, human or agent, changing this repo.
+- Published docs: <https://beyond10x.github.io/metaharness/>
