@@ -50,6 +50,8 @@ against it, or labelled unverified.
 - Rust CLIs use clap (derive). Hand-rolled argv parsing is banned.
 - Task runner is `Taskfile.yml` (go-task). `task check` = fmt + clippy -D warnings + test; green
   before any push.
+- Releases: cut `CHANGELOG.md` under a version heading. The tag is the bare version — `0.1.0`,
+  the version and nothing else — annotated, at a fully gated `main` commit.
 - Never write work files to `/tmp`; use `~/.cache/claude-tmp` or the repo.
 - Commit style: semantic type(scope), body with bullets, `git commit -F` (never `-m` with
   backticks). Author email is the GitHub noreply address.

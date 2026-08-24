@@ -5,6 +5,11 @@ was amended and the amendment is named here.
 
 ## [Unreleased]
 
+## [0.1.0] — 2026-08-24
+
+First tagged release. The entries below cover everything since the crate was established; the
+commit history and `docs/design/` carry the full reasoning per change.
+
 ### Verified
 
 - **Q19 is answered: Codex surfaces an injected plugin's skills from `$CODEX_HOME/plugins/<name>`
@@ -35,6 +40,15 @@ was amended and the amendment is named here.
 
 ### Fixed
 
+- **`session.started` on the b10x arm says what a run can do.** The loop's opening record carries
+  the published toolset, and a line the reader could parse is no longer reported as one it could
+  not — control plane is not opacity.
+- **The b10x child is told where its toolchain is.** Under a constructed environment
+  (`env_clear`), a declared toolchain was unreachable until `RUSTUP_HOME` and `HOME` were passed
+  by name — and only when a toolchain was declared, so a run that asked for none still inherits
+  nothing.
+- **The loop's own turn count is read** from the b10x terminal record, so an advisory bound can
+  decide a completed run instead of reading `null`.
 - **`--cwd` on Codex now gives the child a tree it can actually write to (design amendment a6.1).**
   Amendment a6 is the declaration that trades H7 and H11 **for real work in a real tree** — and on
   this vendor it bought nothing. A paid subscription run on 2026-08-23 (`codex-1982431`,
@@ -123,6 +137,27 @@ was amended and the amendment is named here.
 
 ### Added
 
+- **A third kind: `b10x` — the adapter for a loop we own, which observes and decides nothing.**
+  `metaharness run b10x` launches the b10x harness under `Seam::None`: there is no hook and no
+  control request, because the published toolset *is* the policy. Confinement reaches the arm
+  (`--substrate-embedded`, `--cgroup-root`, `--toolchain`, `--allow-program`), so it can build and
+  test instead of only reading, and the adapter publishes its rendering table rather than making
+  every consumer learn its tool names.
+- **A b10x run carries its write scope and its preloaded context**: `--write-scope
+  <glob>=<allowed|partial-only|denied>` (ordered, first match wins), `--context <file>`, and
+  `--scope-announce stated|silent` on `RunSpec` and the CLI. On any other kind they are refused
+  (`ScopeUnsupported`): a vendor arm's scope travels as `Frame.subjects`, sealed, and a flag would
+  be a second unsealed copy of it.
+- **A step says where its operations may act.** `Frame.subjects` (`SubjectScope`: ordered rules,
+  first match wins, sealed into the frame digest) sits beside `Frame.operations`, and the seam
+  refuses a call whose subject falls outside its scope — with a reason that names the path, the
+  refused class, and the way in.
+- **`tool.requested` says what a call touched, beside what it was**: neutral subjects
+  (`file:<path>`, `proc:<program>`) resolved through the run's published rendering, on every arm.
+- **The owned tool surface resolves to operations** (`metaharness-tools`): `tool_search`,
+  `tool_describe` and `tool_invoke` are read for the entry inside the call, so an owned-surface
+  run's record names `file.write` rather than a verb — and a `native` run's invented `tool_invoke`
+  resolves to nothing, because that run had no such tool.
 - **A decision mode that steers nothing and records everything — `--decisions observe` (R2.5,
   design amendment a10).** The three-arm evaluation program's first design constant is *"the
   instrument is constant across arms; only the treatment varies"*: arms a and b measure a harness
