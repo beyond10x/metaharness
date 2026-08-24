@@ -323,6 +323,13 @@ pub struct Frame {
     pub handoff: Handoff,
     /// Strictly the operations admitted here.
     pub operations: OperationSet,
+    /// **Where** those operations may act. See [`SubjectScope`].
+    ///
+    /// Empty is the default and means no scope was declared: nothing is enforced and nothing claims
+    /// to be. Sealed into [`Self::digest`] with everything else, so a scope cannot be widened after
+    /// the frame was shown to anybody.
+    #[serde(default, skip_serializing_if = "SubjectScope::is_empty")]
+    pub subjects: SubjectScope,
     /// The enumerated set a routing step chooses from, when there is one.
     pub entities: Option<EntityList>,
     /// SHA-256 over the canonical form of everything above. Set by [`Frame::seal`].
@@ -605,7 +612,7 @@ fn render_handoff(handoff: &Handoff) -> String {
 mod tests {
     use super::*;
 
-    fn frame() -> Frame {
+    pub(super) fn frame() -> Frame {
         Frame {
             workflow: WorkflowRef {
                 id: "development/default".into(),
@@ -640,6 +647,7 @@ mod tests {
                 kind: Some("change".into()),
             },
             operations: OperationSet::of([Operation::FileEdit, Operation::Shell]),
+            subjects: SubjectScope::default(),
             entities: None,
             digest: Digest::of(b""),
         }
@@ -847,5 +855,250 @@ mod tests {
             Frame::parse_document(&format!(r#"{{"format":"{FRAME_FORMAT}","workflow":3}}"#)),
             Err(FrameDocError::Invalid { .. })
         ));
+    }
+}
+
+/// Where the operations admitted by a frame may act.
+///
+/// # The half `OperationSet` cannot carry
+///
+/// [`OperationSet`] says *which operations are admitted at this step*. It cannot say **where**, and
+/// the rule that made this necessary needs exactly that: the planning store's frontmatter is owned
+/// by a CLI, so under `.engineering/planning/**` a file may be *edited* and never *replaced whole*.
+/// Both are writes. No set of operations expresses it.
+///
+/// The input this reads now exists on every arm: `tool.requested.subjects` carries
+/// `file:crates/protocol-cli/src/planning.rs` and `proc:/usr/bin/cargo` in one form whichever
+/// harness produced the call.
+///
+/// # Precise here, coarse in the document a person writes
+///
+/// A step map says `write: partial-only` over a path — three words, no operation names, so a
+/// document about work is not coupled to this enum. Compiling that into *these operations for these
+/// subjects* is the adapter's job, because which operations replace a whole file is the adapter's
+/// fact. This type is the compiled form: exact, ordered, and sealed into the frame's digest with
+/// everything else, so it cannot be widened after the frame was shown to anybody.
+#[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize)]
+pub struct SubjectScope {
+    /// Ordered rules. **First match wins**, and a scope that is not empty ends in a catch-all.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub rules: Vec<SubjectRule>,
+}
+
+/// One rule of a [`SubjectScope`].
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct SubjectRule {
+    /// Globs over the subject in its scheme-prefixed form, such as `file:.engineering/planning/**`.
+    ///
+    /// The scheme is part of the value on purpose: without it a rule about files would also catch a
+    /// program with a similar name.
+    pub subjects: Vec<String>,
+    /// The operations admitted for a subject this rule matches. Empty admits none.
+    pub operations: OperationSet,
+}
+
+/// What a scope says about one call.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum ScopeVerdict {
+    /// A rule matched and admits this operation.
+    Admitted,
+    /// A rule matched and does not admit it. Carries the rule, so a refusal can quote it.
+    Refused,
+    /// Nothing to say: no scope was declared, or the call named no subject to judge.
+    ///
+    /// **Not the same as admitted**, and the caller must not read it as permission — it means this
+    /// scope had no opinion, and whatever else decides the call still decides it.
+    Silent,
+}
+
+impl SubjectScope {
+    /// Whether this scope says nothing at all.
+    #[must_use]
+    pub fn is_empty(&self) -> bool {
+        self.rules.is_empty()
+    }
+
+    /// What this scope says about an operation acting on these subjects.
+    ///
+    /// A call carrying several subjects is judged by the **first rule any of them matches**, and a
+    /// call whose record names none is `Silent`: the harness did not say what was touched, and
+    /// refusing on silence would deny calls for being unobservable rather than for being wrong.
+    #[must_use]
+    pub fn verdict(&self, operation: &Operation, subjects: &[String]) -> ScopeVerdict {
+        if self.rules.is_empty() || subjects.is_empty() {
+            return ScopeVerdict::Silent;
+        }
+        for rule in &self.rules {
+            let matched = subjects.iter().any(|subject| {
+                rule.subjects
+                    .iter()
+                    .any(|pattern| glob_matches(pattern, subject))
+            });
+            if matched {
+                return if rule.operations.admits(operation) {
+                    ScopeVerdict::Admitted
+                } else {
+                    ScopeVerdict::Refused
+                };
+            }
+        }
+        ScopeVerdict::Silent
+    }
+
+    /// The rule a subject falls under, for a refusal that can say which.
+    #[must_use]
+    pub fn rule_for(&self, subjects: &[String]) -> Option<&SubjectRule> {
+        self.rules.iter().find(|rule| {
+            subjects.iter().any(|subject| {
+                rule.subjects
+                    .iter()
+                    .any(|pattern| glob_matches(pattern, subject))
+            })
+        })
+    }
+}
+
+/// `*` matches within a path segment, `**` across them, and everything else is literal.
+///
+/// No regular expressions and no dependency: a scope is a boundary somebody has to be able to read
+/// at a glance, and the expressive power a regex adds is power to write a boundary nobody can check.
+/// The same refusal `trace-spec`'s matcher language makes, for the same reason.
+fn glob_matches(pattern: &str, value: &str) -> bool {
+    fn go(pattern: &[u8], value: &[u8]) -> bool {
+        match pattern.first() {
+            None => value.is_empty(),
+            Some(b'*') => {
+                // `**` crosses `/`; a single `*` stops at one.
+                let crosses = pattern.get(1) == Some(&b'*');
+                let rest = if crosses { &pattern[2..] } else { &pattern[1..] };
+                for taken in 0..=value.len() {
+                    if !crosses && value[..taken].contains(&b'/') {
+                        break;
+                    }
+                    if go(rest, &value[taken..]) {
+                        return true;
+                    }
+                }
+                false
+            }
+            Some(&expected) => {
+                value.first() == Some(&expected) && go(&pattern[1..], &value[1..])
+            }
+        }
+    }
+    go(pattern.as_bytes(), value.as_bytes())
+}
+
+#[cfg(test)]
+mod scope_tests {
+    use super::{Operation, OperationSet, ScopeVerdict, SubjectRule, SubjectScope, glob_matches};
+
+    /// The planning store's own rule: bodies may be edited, files may never be replaced whole.
+    fn store_scope() -> SubjectScope {
+        SubjectScope {
+            rules: vec![
+                SubjectRule {
+                    subjects: vec!["file:.engineering/planning/**".to_owned()],
+                    operations: OperationSet::of([Operation::FileEdit, Operation::FileRead]),
+                },
+                SubjectRule {
+                    subjects: vec!["file:crates/**".to_owned()],
+                    operations: OperationSet::of([
+                        Operation::FileEdit,
+                        Operation::FileWrite,
+                        Operation::FileRead,
+                    ]),
+                },
+                SubjectRule {
+                    subjects: vec!["**".to_owned()],
+                    operations: OperationSet::of([Operation::FileRead]),
+                },
+            ],
+        }
+    }
+
+    #[test]
+    fn the_rule_no_operation_set_can_express() {
+        // Both are writes, so `OperationSet` alone admits both or neither. Under the store one is
+        // right and the other re-types frontmatter the CLI owns.
+        let store = ["file:.engineering/planning/story/a.md".to_owned()];
+        assert_eq!(
+            store_scope().verdict(&Operation::FileEdit, &store),
+            ScopeVerdict::Admitted
+        );
+        assert_eq!(
+            store_scope().verdict(&Operation::FileWrite, &store),
+            ScopeVerdict::Refused
+        );
+    }
+
+    #[test]
+    fn first_match_wins_so_a_later_rule_cannot_widen_an_earlier_one() {
+        // `crates/**` admits a whole-file write; the store rule sits above it and is not undone by
+        // it. Order is the whole of the language, so it has to be the whole of the test.
+        assert_eq!(
+            store_scope().verdict(
+                &Operation::FileWrite,
+                &["file:crates/protocol-cli/src/planning.rs".to_owned()]
+            ),
+            ScopeVerdict::Admitted
+        );
+        assert_eq!(
+            store_scope().verdict(&Operation::FileWrite, &["file:website/index.md".to_owned()]),
+            ScopeVerdict::Refused,
+            "the catch-all reads only"
+        );
+    }
+
+    #[test]
+    fn a_call_that_named_no_subject_is_silent_and_never_refused() {
+        // A harness that did not say what a call touched has calls this cannot judge. Denying them
+        // would refuse work for being unobservable rather than for being wrong.
+        assert_eq!(
+            store_scope().verdict(&Operation::FileWrite, &[]),
+            ScopeVerdict::Silent
+        );
+        assert_eq!(
+            SubjectScope::default().verdict(&Operation::FileWrite, &["file:anything".to_owned()]),
+            ScopeVerdict::Silent,
+            "and a scope nobody declared claims nothing"
+        );
+    }
+
+    #[test]
+    fn the_scheme_is_part_of_the_subject_so_a_file_rule_cannot_catch_a_program() {
+        let scope = SubjectScope {
+            rules: vec![SubjectRule {
+                subjects: vec!["file:**".to_owned()],
+                operations: OperationSet::of([Operation::FileRead]),
+            }],
+        };
+        assert_eq!(
+            scope.verdict(&Operation::Shell, &["proc:/usr/bin/cargo".to_owned()]),
+            ScopeVerdict::Silent,
+            "a rule about files has nothing to say about a program"
+        );
+    }
+
+    #[test]
+    fn one_star_stops_at_a_segment_and_two_cross_them() {
+        assert!(glob_matches("file:crates/*/src", "file:crates/cli/src"));
+        assert!(!glob_matches("file:crates/*/src", "file:crates/a/b/src"));
+        assert!(glob_matches("file:crates/**", "file:crates/a/b/c.rs"));
+        assert!(glob_matches("**", "anything/at/all"));
+        assert!(!glob_matches("file:crates/**", "file:docs/a.md"));
+    }
+
+    #[test]
+    fn a_scope_is_sealed_with_the_rest_of_the_frame() {
+        // A scope that could be widened after the frame was shown to anybody is not a boundary.
+        let frame = super::tests::frame().seal();
+        let mut widened = frame.clone();
+        widened.subjects = store_scope();
+        assert!(frame.digest_intact());
+        assert!(
+            !widened.digest_intact(),
+            "changing the scope must break the seal"
+        );
     }
 }

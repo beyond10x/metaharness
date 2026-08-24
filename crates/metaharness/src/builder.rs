@@ -2484,6 +2484,7 @@ mod injection_tests {
             next: Vec::new(),
             handoff: Handoff::None,
             operations: OperationSet::of([Operation::FileRead]),
+            subjects: metaharness_protocol::SubjectScope::default(),
             entities: None,
             digest: Digest::of(b""),
         };

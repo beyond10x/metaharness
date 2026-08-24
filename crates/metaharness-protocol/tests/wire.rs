@@ -8,6 +8,7 @@
 use std::collections::BTreeMap;
 
 use metaharness_protocol::{
+    SubjectScope,
     COMMAND_FORMAT, COMMAND_NAMES, CONTROL_PLANE_EVENTS, Command, CommandLine, CommandOutcome,
     DecidedBy, Decision, DecisionCensus, DecisionMode, Digest, EVENT_FORMAT, EVENT_NAMES, Emission,
     EntityList, Event, EventStream, EvidenceLine, Frame, FramingError, Handoff,
@@ -55,6 +56,7 @@ fn frame() -> Frame {
         handoff: Handoff::StructuredAnswer {
             schema: "verdict/1".into(),
         },
+        subjects: SubjectScope::default(),
         operations: OperationSet::of([
             Operation::FileEdit,
             Operation::Shell,

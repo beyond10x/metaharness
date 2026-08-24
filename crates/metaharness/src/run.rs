@@ -901,6 +901,16 @@ impl Run {
             .iter()
             .any(|operation| operations.iter().any(|name| name == operation.name()));
         if admitted {
+            // Admitted **and** in scope. The operation set says what may happen; the scope says
+            // where, and the rule that made it necessary needs both: under the planning store a
+            // file may be edited and never replaced whole, and both of those are writes.
+            if let Some(refusal) = self.out_of_scope(&frame, tool, input, &operations) {
+                return (
+                    Decision::Deny { reason: refusal },
+                    DecidedBy::Frame,
+                    self.seam,
+                );
+            }
             (Decision::Allow, DecidedBy::Frame, self.seam)
         } else {
             let legal: Vec<&str> = frame
@@ -919,6 +929,73 @@ impl Run {
                 self.seam,
             )
         }
+    }
+
+    /// Why this call falls outside the step's scope, or [`None`] if it does not.
+    ///
+    /// # The refusal has to be usable, or it is a loop
+    ///
+    /// A denial that says only "denied" gets retried until the turn budget runs out, which is money
+    /// spent on a wall. So the reason names the subject, what was refused, and what would work —
+    /// and where the scope admits a narrower operation on the same path, it says which one. That
+    /// wording is not invented here: `store_integrity` in the protocol CLI worked it out against a
+    /// real run, and this is the same sentence made portable.
+    fn out_of_scope(
+        &self,
+        frame: &Frame,
+        tool: &str,
+        input: &Value,
+        operations: &[String],
+    ) -> Option<String> {
+        if frame.subjects.is_empty() {
+            return None;
+        }
+        let subjects = self.subjects(tool, input);
+        // Silence is not a violation. A harness that did not say what a call touched has calls that
+        // cannot be judged on where they act, and denying them would refuse work for being
+        // unobservable rather than for being wrong.
+        if subjects.is_empty() {
+            return None;
+        }
+        let refused: Vec<&String> = operations
+            .iter()
+            .filter(|name| {
+                metaharness_protocol::Operation::PARAMETERLESS
+                    .iter()
+                    .find(|operation| operation.name() == name.as_str())
+                    .is_some_and(|operation| {
+                        frame.subjects.verdict(operation, &subjects)
+                            == metaharness_protocol::ScopeVerdict::Refused
+                    })
+            })
+            .collect();
+        if refused.is_empty() {
+            return None;
+        }
+        let instead: Vec<&str> = frame
+            .subjects
+            .rule_for(&subjects)
+            .map(|rule| {
+                rule.operations
+                    .iter()
+                    .map(metaharness_protocol::Operation::name)
+                    .collect()
+            })
+            .unwrap_or_default();
+        let where_it_went = subjects.join(", ");
+        Some(if instead.is_empty() {
+            format!(
+                "this step admits no operation on {where_it_went}, and {tool} is {refused:?}. \
+                 The path is outside what this step may change; a refusal is the answer, not an \
+                 obstacle."
+            )
+        } else {
+            format!(
+                "this step does not admit {refused:?} on {where_it_went}; it admits {instead:?} \
+                 there. Use one of those on that path — a narrower operation is admitted precisely \
+                 because the wider one would replace more than this step owns."
+            )
+        })
     }
 
     /// Rule 1: the decision reaches the child **before** any control is applied.

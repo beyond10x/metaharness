@@ -13,6 +13,7 @@
 //! `METAHARNESS_LIVE=1`.
 
 use metaharness::protocol::{
+    SubjectScope,
     Command, CommandOutcome, CredentialSource, DecidedBy, Decision, DecisionMode, Digest, Event,
     EvidenceLine, Frame, Handoff, HermeticMode, Kind, NodeRef, Operation, OperationSet,
     RefusalCode, RunSpec, Seam, StepRef, ToolSurface, WorkflowRef,
@@ -56,6 +57,7 @@ fn frame_admitting(operations: OperationSet) -> Frame {
         next: Vec::new(),
         handoff: Handoff::None,
         operations,
+        subjects: SubjectScope::default(),
         entities: None,
         digest: Digest::of(b""),
     }
@@ -1316,4 +1318,135 @@ fn a_child_that_was_silent_too_gets_no_invented_explanation() {
     // warning carrying an empty string would be noise wearing the shape of a finding.
     let mut run = silent_run("   ");
     assert!(warned(&mut run, "NO_TERMINAL_RECORD").is_none());
+}
+
+// --- a step's write scope, enforced at the seam --------------------------------------------------
+
+/// A frame admitting writes everywhere, then narrowed to the planning store's own rule.
+fn frame_scoped_to_the_store() -> Frame {
+    let mut frame = frame_admitting(OperationSet::of([
+        Operation::FileWrite,
+        Operation::FileEdit,
+        Operation::FileRead,
+    ]));
+    frame.subjects = metaharness::protocol::SubjectScope {
+        rules: vec![
+            metaharness::protocol::SubjectRule {
+                subjects: vec!["file:.engineering/planning/**".to_owned()],
+                operations: OperationSet::of([Operation::FileEdit, Operation::FileRead]),
+            },
+            metaharness::protocol::SubjectRule {
+                subjects: vec!["**".to_owned()],
+                operations: OperationSet::of([
+                    Operation::FileWrite,
+                    Operation::FileEdit,
+                    Operation::FileRead,
+                ]),
+            },
+        ],
+    };
+    frame.seal()
+}
+
+/// One `tool.requested` on the vendor road: its own tool name, its own path argument.
+///
+/// Deliberately not the three-verb form. The operation and the subject are both resolved by the run
+/// from what this harness records, which is the road a Claude Code arm actually takes — and the
+/// point of a scope is that it works there too.
+fn scoped_call(id: &str, tool: &str, path: &str) -> String {
+    format!(
+        r#"{{"emit":"tool.requested","call_id":"{id}","name":"{tool}","input":{{"file_path":"{path}"}},"decision_required":true,"seam":"hook"}}"#
+    )
+}
+
+fn decisions(run: &mut Run) -> Vec<(String, Decision)> {
+    while run.next_event().expect("the stream drains").is_some() {}
+    run.events()
+        .iter()
+        .filter_map(|event| match event {
+            Event::ToolDecided {
+                call_id, decision, ..
+            } => Some((call_id.clone(), decision.clone())),
+            _ => None,
+        })
+        .collect()
+}
+
+#[test]
+fn a_write_the_step_admits_is_refused_on_a_path_it_does_not_own() {
+    // The rule no `OperationSet` can express: both are writes, and under the planning store one is
+    // right and the other re-types frontmatter the CLI owns. `crates/protocol-cli/src/drive.rs`
+    // has enforced it for a year in Claude Code's tool names, so every other arm walked past it.
+    let mut started = start(
+        Metaharness::new(Kind::Claude)
+            .with_decisions(DecisionMode::Frame)
+            .with_frame(frame_scoped_to_the_store()),
+        vec![
+            ScriptStep::line(INIT),
+            ScriptStep::line(&scoped_call("c1", "Write", ".engineering/planning/story/a.md")),
+            ScriptStep::line(&scoped_call("c2", "Edit", ".engineering/planning/story/a.md")),
+            ScriptStep::line(&scoped_call("c3", "Write", "crates/protocol-cli/src/planning.rs")),
+            ScriptStep::line(END),
+        ],
+    );
+    let decided = decisions(&mut started.run);
+
+    let by_id = |id: &str| {
+        decided
+            .iter()
+            .find(|(call, _)| call == id)
+            .map(|(_, decision)| decision.clone())
+            .expect("every call is decided")
+    };
+    assert!(
+        matches!(by_id("c1"), Decision::Deny { .. }),
+        "a whole-file write under the store is refused"
+    );
+    assert_eq!(by_id("c2"), Decision::Allow, "an edit there is the way in");
+    assert_eq!(
+        by_id("c3"),
+        Decision::Allow,
+        "and the same operation is fine where the step owns the path"
+    );
+}
+
+#[test]
+fn the_refusal_says_what_would_work_instead() {
+    // A denial that says only "denied" gets retried until the turn budget runs out, which is money
+    // spent on a wall. Where the scope admits a narrower operation on the same path, it says which.
+    let mut started = start(
+        Metaharness::new(Kind::Claude)
+            .with_decisions(DecisionMode::Frame)
+            .with_frame(frame_scoped_to_the_store()),
+        vec![
+            ScriptStep::line(INIT),
+            ScriptStep::line(&scoped_call("c1", "Write", ".engineering/planning/story/a.md")),
+            ScriptStep::line(END),
+        ],
+    );
+    let decided = decisions(&mut started.run);
+    let Decision::Deny { reason } = &decided[0].1 else {
+        panic!("refused");
+    };
+    assert!(reason.contains(".engineering/planning/story/a.md"), "{reason}");
+    assert!(reason.contains("file.edit"), "names the way in: {reason}");
+}
+
+#[test]
+fn a_call_that_named_no_subject_is_decided_by_the_operation_set_alone() {
+    // Silence is not a violation. Refusing a call the harness could not describe would deny work
+    // for being unobservable rather than for being wrong.
+    let mut started = start(
+        Metaharness::new(Kind::Claude)
+            .with_decisions(DecisionMode::Frame)
+            .with_frame(frame_scoped_to_the_store()),
+        vec![
+            ScriptStep::line(INIT),
+            ScriptStep::line(
+                r#"{"emit":"tool.requested","call_id":"c1","name":"Write","input":{},"decision_required":true,"seam":"hook"}"#,
+            ),
+            ScriptStep::line(END),
+        ],
+    );
+    assert_eq!(decisions(&mut started.run)[0].1, Decision::Allow);
 }
