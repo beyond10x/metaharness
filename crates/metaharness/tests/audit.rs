@@ -18,6 +18,7 @@ use metaharness::{
 /// An opening record whose every observable field is present and correct.
 fn good_record() -> Event {
     Event::SessionStarted {
+        available_operations: None,
         adapter: "claude".to_string(),
         adapter_class: "harness".to_string(),
         harness_version: Some("2.1.239".to_string()),

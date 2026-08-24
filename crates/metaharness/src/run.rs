@@ -516,6 +516,46 @@ impl Run {
         line
     }
 
+    /// The same emission with what the run could **do** filled in.
+    ///
+    /// The b10x loop states it: only the catalogue knows what the machine admitted. A vendor
+    /// harness does not, and does not have to — its tool list plus this adapter's published
+    /// rendering is the answer, and that table is the run's to hold.
+    ///
+    /// Left alone where the harness already answered, and left [`None`] where the rendering covers
+    /// nothing it offered: an empty list would say *this run could do nothing*, about a run that
+    /// plainly did something.
+    fn with_reach(&self, emission: Emission) -> Emission {
+        let Event::SessionStarted {
+            available_operations: None,
+            offered_tools: Some(offered),
+            ..
+        } = &emission.event
+        else {
+            return emission;
+        };
+        let mut reach: Vec<String> = offered
+            .iter()
+            .filter_map(|tool| self.operation_of_tool.get(tool))
+            .flatten()
+            .cloned()
+            .collect();
+        reach.sort_unstable();
+        reach.dedup();
+        if reach.is_empty() {
+            return emission;
+        }
+        let mut emission = emission;
+        if let Event::SessionStarted {
+            available_operations,
+            ..
+        } = &mut emission.event
+        {
+            *available_operations = Some(reach);
+        }
+        emission
+    }
+
     /// The same emission with its `operations` filled in.
     ///
     /// For a call no seam covered. The adapter leaves the field empty because resolution needs the
@@ -588,7 +628,7 @@ impl Run {
                 continue;
             }
             let closes_window = matches!(emission.event, Event::TurnEnded { .. });
-            self.outbox.push_back(emission);
+            self.outbox.push_back(self.with_reach(emission));
             if closes_window {
                 self.abandon_pending("the turn ended", warning::PENDING_CALL_ABANDONED);
             }

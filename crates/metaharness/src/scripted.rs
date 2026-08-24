@@ -348,6 +348,7 @@ impl HarnessSeam for ScriptedSeam {
             .unwrap_or_default();
         let event = match emit {
             "session.started" => Event::SessionStarted {
+                available_operations: None,
                 adapter: metaharness_claude::ADAPTER_ID.to_string(),
                 adapter_class: "harness".to_string(),
                 harness_version: text_of(&value, "harness_version"),

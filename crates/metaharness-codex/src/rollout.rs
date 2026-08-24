@@ -170,6 +170,10 @@ impl RolloutReader {
         self.saw_meta = true;
         let version = payload["cli_version"].as_str().map(ToString::to_string);
         let mut events = vec![Event::SessionStarted {
+            // Left to the run loop, which holds this adapter's published rendering: turning a
+            // vendor's tool list into operations is that table's job and an adapter that kept its
+            // own copy would be a second owner of one rule (design § 8.4 O6).
+            available_operations: None,
             adapter: ADAPTER_ID.to_string(),
             adapter_class: "harness".to_string(),
             harness_version: version.clone(),

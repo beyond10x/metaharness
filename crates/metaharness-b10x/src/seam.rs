@@ -146,6 +146,16 @@ impl HarnessSeam for B10xSeam {
                     credential_source: Some("named".to_owned()),
                     output_style: None,
                     cwd: self.cwd.clone(),
+                    // The catalogue behind the verbs, which is the only thing that differs from
+                    // run to run here. The loop states it; this passes it through.
+                    available_operations: value.get("operations").and_then(Value::as_array).map(
+                        |names| {
+                            names
+                                .iter()
+                                .filter_map(|name| name.as_str().map(ToOwned::to_owned))
+                                .collect()
+                        },
+                    ),
                     offered_tools: value.get("published_tools").and_then(Value::as_array).map(
                         |tools| {
                             tools
@@ -224,7 +234,9 @@ impl HarnessSeam for B10xSeam {
                     self.spent_micro_usd =
                         Some(self.spent_micro_usd.unwrap_or(0).saturating_add(micro));
                 }
-                vec![self.opaque(line, Some(kind))]
+                // Read and used; the run total goes out on `session.ended`. See the control-plane
+                // arm below for why emitting nothing here is not a drop.
+                Vec::new()
             }
             "finished" => {
                 self.ended = true;
@@ -268,10 +280,38 @@ impl HarnessSeam for B10xSeam {
                     census: self.census.clone(),
                 })]
             }
-            // `turn-started`, `tool-arguments-delta`, `approval-required`, `approval-resolved` and
-            // `warning` have no counterpart any expectation reads. Carried across rather than
-            // dropped (design D4): the failure that costs the most is a checker reporting *the tool
-            // was never called* when what happened is that it stopped being able to see tool calls.
+            // **Control plane, not opaque, and the difference was costing this arm its score.**
+            //
+            // `Opaque` means *I could not read this*, and a consumer treats it accordingly: an
+            // unread event could have been the tool call an expectation was looking for, so every
+            // count over the run goes `unk`. Sending the loop's own bookkeeping down that road put
+            // 130 opaque events in a 12-call run, and the corpus answered `unk` for seven rows out
+            // of eleven — about a stream it had read perfectly.
+            //
+            // A turn boundary and a warning are metaharness's own `CONTROL_PLANE_EVENTS`: understood,
+            // projecting into no `trace-ir/1` family, and **not** uncertain. They are emitted as
+            // what they are.
+            "turn-started" => vec![Emission::untimed(Event::TurnStarted {
+                turn: number("turn").and_then(|turn| u32::try_from(turn).ok()).unwrap_or(0),
+                // Nothing narrowed this run: the toolset it drew from is the policy.
+                frame_digest: None,
+            })],
+            "warning" => vec![Emission::untimed(Event::Warning {
+                code: string("code").unwrap_or_default(),
+                message: string("message").unwrap_or_default(),
+            })],
+            // Read, understood, and carrying nothing any `trace-ir/1` family models: a fragment of
+            // a tool's arguments, an approval on a loop that adjudicates nothing, the rate card,
+            // and a per-turn cost already folded into the run's total above.
+            //
+            // **Emitting nothing is not the drop design D4 forbids.** D4 protects an event nobody
+            // could read; these were read. And the line itself is not lost: metaharness writes the
+            // child's stdout to the run's transcript verbatim, so the raw record still holds every
+            // one of them for anyone who wants to look.
+            "tool-arguments-delta" | "approval-required" | "approval-resolved" | "rates" => {
+                Vec::new()
+            }
+            // A kind this build does not know. Opaque, and every rule above still applies to it.
             other => vec![self.opaque(line, Some(other))],
         }
     }

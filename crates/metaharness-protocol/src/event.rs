@@ -279,6 +279,25 @@ pub enum Event {
         /// Every tool the model was offered. Offered is not called, and only this record can
         /// tell them apart.
         offered_tools: Option<Vec<String>>,
+        /// **What the run could do**, in the neutral operation vocabulary.
+        ///
+        /// Beside `offered_tools` and answering a different question. That field says what the
+        /// model was *offered*; this says what the run could *perform*, and the two stop agreeing
+        /// the moment a surface publishes fewer tools than it has reach.
+        ///
+        /// Behind three verbs they come apart completely: every such run offers `tool_search`,
+        /// `tool_describe`, `tool_invoke` and nothing else, while the catalogue behind them holds
+        /// three entries on a machine that cannot confine a process and six on one that can. An
+        /// attribution control asking *was there a writer to refuse* read the tool list, found no
+        /// writer, and reported the run as having none — a verdict about a vocabulary rather than
+        /// about the run.
+        ///
+        /// Filled for a vendor harness too, from its offered tools through the adapter's published
+        /// rendering, so the question has one answer on every arm.
+        ///
+        /// [`None`] means the harness did not say, never that the run could do nothing.
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        available_operations: Option<Vec<String>>,
         /// Slash commands the session has.
         slash_commands: Option<Vec<String>>,
         /// Skills the session has.

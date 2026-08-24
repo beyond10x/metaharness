@@ -76,6 +76,9 @@ fn frame() -> Frame {
 fn session_events() -> Vec<Event> {
     vec![
         Event::SessionStarted {
+            // What the run could *do*, beside what it was offered — the two come apart entirely
+            // behind a surface that publishes three verbs over a catalogue.
+            available_operations: Some(vec!["file.read".into(), "shell".into()]),
             adapter: "claude".into(),
             adapter_class: "harness".into(),
             harness_version: Some("2.1.239".into()),

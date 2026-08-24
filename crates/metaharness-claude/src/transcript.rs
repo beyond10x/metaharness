@@ -190,6 +190,10 @@ impl TranscriptReader {
         let credential_source = str_field(record, "apiKeySource");
         self.credential_source.clone_from(&credential_source);
         Event::SessionStarted {
+            // Left to the run loop, which holds this adapter's published rendering: turning a
+            // vendor's tool list into operations is that table's job and an adapter that kept its
+            // own copy would be a second owner of one rule (design § 8.4 O6).
+            available_operations: None,
             adapter: ADAPTER_ID.to_string(),
             adapter_class: "harness".to_string(),
             harness_version: str_field(record, "claude_code_version"),
