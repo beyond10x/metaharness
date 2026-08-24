@@ -197,6 +197,15 @@ pub struct RunSpec {
     #[cfg_attr(feature = "clap", arg(long, value_enum, default_value = "native"))]
     pub tool_surface: ToolSurface,
 
+    /// A program the **served** `run` tool may start. Repeatable; empty publishes no `run` at all.
+    ///
+    /// Only under [`ToolSurface::Owned`], where metaharness supplies the tools: an argv whose
+    /// program could be anything is the shell that surface exists to remove, and a set nobody
+    /// named means nobody wanted one. Under `native` the vendor's own shell is on the tool list
+    /// and this says nothing about it.
+    #[cfg_attr(feature = "clap", arg(long, value_name = "PROGRAM"))]
+    pub allow_program: Vec<String>,
+
     /// Where the credential comes from.
     #[cfg_attr(
         feature = "clap",
@@ -288,6 +297,24 @@ pub struct RunSpec {
     #[cfg_attr(feature = "clap", arg(long, value_name = "FILE"))]
     pub spec: Option<PathBuf>,
 
+    /// A rate card, so the run's record states what it cost. **`b10x` only.**
+    ///
+    /// Claude Code and codex price their own runs from a catalogue their service delivers, and
+    /// metaharness reads the figure they report rather than computing one — a cost multiplied out
+    /// here would be a second number that disagrees with the invoice the first time a rate moves
+    /// (design § 4.1, D4). Nothing changes about that.
+    ///
+    /// The b10x loop has no such catalogue behind it: the OpenAI Responses wire returns token
+    /// counts and no price, and the codex model cache carries no rates either. So the rates are
+    /// declared and the **loop** multiplies them out, exactly as Claude Code's own client does
+    /// — the figure that reaches `session.ended.total_cost_usd` is still the harness's own, not
+    /// metaharness's. Passed through to `--prices` and validated there.
+    ///
+    /// Refused by name on the other kinds rather than ignored: a card handed to a run that cannot
+    /// use one would leave the operator believing a figure was declared when the vendor's was used.
+    #[cfg_attr(feature = "clap", arg(long, value_name = "FILE"))]
+    pub prices: Option<PathBuf>,
+
     /// The external auditor, as an **argv prefix**. A single-word program name is a degenerate
     /// prefix and a two-word subcommand is not a special case (design § 9.4, finding F2).
     #[cfg_attr(feature = "clap", arg(long, value_name = "PREFIX"))]
@@ -309,6 +336,7 @@ impl RunSpec {
             frame: None,
             decisions: DecisionMode::Frame,
             tool_surface: ToolSurface::Native,
+            allow_program: Vec::new(),
             credentials: CredentialSource::OperatorLogin,
             model: None,
             model_endpoint: None,
@@ -320,6 +348,7 @@ impl RunSpec {
             strict_version: false,
             audit: false,
             spec: None,
+            prices: None,
             auditor: None,
             auditor_args: Vec::new(),
         }

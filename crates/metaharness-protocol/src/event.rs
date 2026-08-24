@@ -423,6 +423,23 @@ pub enum Event {
         name: String,
         /// The input as presented.
         input: Value,
+        /// What this call **is**, in the neutral operation vocabulary — `file.write`, `shell`.
+        ///
+        /// The field a reader of a finished run actually wants. `name` is the vendor's, and one
+        /// act has a different one in every harness: `workspace_write`, `Write`, `apply_patch`,
+        /// or `tool_invoke` with the entry inside its input. A consumer that selected on `name`
+        /// was therefore written in one vendor's vocabulary and blind to the rest — which is what
+        /// the evaluation corpus was, and why widening it kept making it worse.
+        ///
+        /// A **list**, because a rendering need not be injective: codex writes and edits through
+        /// one `apply_patch`, so one call answers to two operations.
+        ///
+        /// Empty means one of three different things, and they are deliberately not distinguished
+        /// here — no operation in the v0.1 vocabulary covers it, or the call is a question about
+        /// the catalogue rather than an act, or the resolution was never attempted. What is *not*
+        /// ambiguous is that an empty list is never evidence that nothing happened.
+        #[serde(default, skip_serializing_if = "Vec::is_empty")]
+        operations: Vec<String>,
         /// Whether the run is blocked here waiting for an embedder decision.
         decision_required: bool,
         /// The budget for deciding, armed at delivery to the embedder rather than at the

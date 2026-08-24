@@ -55,6 +55,12 @@ pub enum Verb {
     Audit(AuditArgs),
     /// The installed vendor version against the adapter's pin.
     Doctor(DoctorArgs),
+    /// Serve the owned tool surface over MCP on stdio, for a harness launched with `--tools ""`.
+    ///
+    /// Not a verb an operator types. `metaharness run --tool-surface owned` writes an
+    /// `--mcp-config` naming *this binary and this subcommand*, so the server the vendor starts is
+    /// the one already installed — design § 7.5, strategy C.
+    McpServe(McpServeArgs),
 }
 
 /// `run` carries the library's option struct and nothing else.
@@ -123,6 +129,27 @@ pub struct AuditArgs {
     pub auditor: Option<String>,
 }
 
+/// `mcp-serve --workspace <dir> [--writable] [--allow-program <p>]...`.
+#[derive(Args, Debug)]
+pub struct McpServeArgs {
+    /// The only directory the served tools can see.
+    #[arg(long, value_name = "DIR", default_value = ".")]
+    pub workspace: std::path::PathBuf,
+    /// Let the served tools change the tree.
+    ///
+    /// Off by default and asked for by name, because nothing under this confines the process: the
+    /// bound on an effect is `b10x-harness-tools`' own path arithmetic. A run that wants the
+    /// effects actually confined is a b10x run against substrate, not this.
+    #[arg(long)]
+    pub writable: bool,
+    /// A program the served `run` may start. Repeatable, and an empty set publishes no `run`.
+    ///
+    /// Declared rather than open, because an argv whose program could be anything is the shell
+    /// this surface exists to remove.
+    #[arg(long, value_name = "PROGRAM")]
+    pub allow_program: Vec<String>,
+}
+
 /// `doctor <kind>`.
 #[derive(Args, Debug)]
 pub struct DoctorArgs {
@@ -156,6 +183,40 @@ pub fn execute(cli: Cli) -> i32 {
                       transcript metaharness did not itself launch does not carry",
         }),
         Verb::Doctor(args) => doctor(args.kind),
+        Verb::McpServe(args) => mcp_serve(&args),
+    }
+}
+
+/// `mcp-serve` — the owned tool surface, on stdin and stdout, until the client goes away.
+fn mcp_serve(args: &McpServeArgs) -> i32 {
+    use metaharness_tools::{Catalogue, LocalOperations, Server, Verbs, serve};
+
+    if !args.writable && !args.allow_program.is_empty() {
+        return refuse(&Refusal::Io {
+            detail: "`--allow-program` without `--writable` names programs nothing will start;                      add `--writable` or drop them"
+                .to_owned(),
+        });
+    }
+
+    let operations = if args.writable {
+        LocalOperations::unconfined(&args.workspace, args.allow_program.clone())
+    } else {
+        LocalOperations::new(&args.workspace)
+    };
+    let operations = match operations {
+        Ok(operations) => operations,
+        Err(detail) => return refuse(&Refusal::Io { detail }),
+    };
+
+    let mut server = Server::new(Verbs::new(Catalogue::of(operations)));
+    let stdin = std::io::stdin();
+    match serve(&mut server, stdin.lock(), std::io::stdout().lock()) {
+        Ok(()) => 0,
+        // The client hung up or the pipe broke. Exit `2`: metaharness could not do its job, and
+        // this is never a verdict about the run the tools were serving.
+        Err(error) => refuse(&Refusal::Io {
+            detail: error.to_string(),
+        }),
     }
 }
 

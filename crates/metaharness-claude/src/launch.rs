@@ -60,6 +60,20 @@ const SETTINGS_FILE: &str = "claude-settings.json";
 /// Where the caller must place the executable the `PreToolUse` hook runs.
 const HOOK_FILE: &str = "hooks/pretooluse";
 
+/// Where the caller must write [`LaunchPlan::mcp_config`], under `--tool-surface owned`.
+///
+/// Beside the settings document and outside the config home, for the same reason: a config the
+/// vendor discovered on its own would be a second source of servers, and `--strict-mcp-config`
+/// exists precisely to say that this file is the only one.
+const MCP_CONFIG_FILE: &str = "mcp-config.json";
+
+/// The server name the tools are published under, and the string `--allowedTools` grants.
+///
+/// One constant because the two must agree: a grant naming a server the config does not define
+/// admits nothing, and the run then has no tools at all — with `--tools ""` having already taken
+/// the vendor's own away.
+const TOOL_SERVER_NAME: &str = "metaharness";
+
 /// Where an injected plugin is copied to: `<scratch root>/plugins/<name>`.
 ///
 /// **Deliberately outside [`CONFIG_HOME`]**, and the reason is the same one that puts the settings
@@ -86,6 +100,14 @@ const PLUGIN_HOME: &str = "plugins";
 #[must_use]
 pub fn settings_path(scratch_root: &Path) -> PathBuf {
     scratch_root.join(SETTINGS_FILE)
+}
+
+/// Where the argv's `--mcp-config` points, for a caller that has to write the document there.
+///
+/// Published for the same reason as [`settings_path`]: one place decides where it lives.
+#[must_use]
+pub fn mcp_config_path(scratch_root: &Path) -> PathBuf {
+    scratch_root.join(MCP_CONFIG_FILE)
 }
 
 /// Where the caller must place the `PreToolUse` executable, which is the path the hook
@@ -172,6 +194,14 @@ pub struct LaunchContext {
     /// evidence for H10. `None` means the caller pinned nothing, and the attestation says so
     /// rather than leaving the row silent.
     pub inputs_digest: Option<Digest>,
+    /// The metaharness binary, so `--tool-surface owned` can name a server to start.
+    ///
+    /// The caller's to supply, because finding it is `current_exe()` — I/O, and this function does
+    /// none. A run that asked for the owned surface and arrives without it is
+    /// [`LaunchRefusal::ToolServerMissing`] rather than a child launched with `--tools ""` and
+    /// nothing to replace them: that child has no tools at all, and would spend the whole run
+    /// explaining that it cannot read a file.
+    pub tool_server: Option<PathBuf>,
     /// Every directory `spec.plugin_dir` named, **as the caller read it** (crossing #4).
     ///
     /// The caller does the walk and the per-file digests, on the same division as
@@ -254,6 +284,12 @@ pub struct LaunchPlan {
     /// The settings document the argv's `--settings` names. The caller writes it; this crate
     /// only decides what is in it.
     pub settings: Value,
+    /// The MCP configuration the argv's `--mcp-config` names, under `--tool-surface owned`.
+    ///
+    /// `None` under every other surface, and the flag is then absent too. A value on the plan
+    /// rather than a file this crate writes, on the same division as [`LaunchPlan::settings`]: the
+    /// adapter decides what is in it and the caller performs the I/O.
+    pub mcp_config: Option<Value>,
     /// The `PreToolUse` hook definition, as a value, so its two dangerous absences are testable:
     /// **neither `async` nor `asyncRewake` is set** (V7b, finding F6, design § 7.8). A hook that
     /// matches every tool and does not block is a guard that has already stopped guarding.
@@ -286,6 +322,13 @@ impl LaunchPlan {
 /// (design § 7.1).
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum LaunchRefusal {
+    /// `--tool-surface owned` was asked for and the caller named no metaharness binary.
+    ///
+    /// A refusal and not a fallback to the vendor's tools: the argv would carry `--tools ""` with
+    /// nothing to replace them, and a child with no tools at all spends the whole run explaining
+    /// that it cannot read a file — which reads, from the outside, exactly like a model that
+    /// would not do the task.
+    ToolServerMissing,
     /// The spec asks for a harness this adapter is not.
     WrongKind {
         /// What it asked for.
@@ -414,6 +457,11 @@ impl fmt::Display for LaunchRefusal {
             LaunchRefusal::NoPrompt => f.write_str(
                 "the run carries no prompt, and a headless session with nothing to do is a paid \
                  call for no observation",
+            ),
+            LaunchRefusal::ToolServerMissing => f.write_str(
+                "--tool-surface owned needs the metaharness binary to serve the tools, and the \
+                 caller named none. Without it the child gets --tools \"\" and nothing in their \
+                 place",
             ),
             LaunchRefusal::CwdOutsideScratch { cwd, scratch_root } => write!(
                 f,
@@ -570,11 +618,15 @@ pub fn plan_launch(spec: &RunSpec, context: &LaunchContext) -> Result<LaunchPlan
     let config_home = context.scratch_root.join(CONFIG_HOME);
     let credential_copies = credential_copies(spec, context, &config_home)?;
     let plugin_installs = plugin_installs(spec, context)?;
+    let mcp_config = build_mcp_config(spec, context)?;
     let args = build_args(
         spec,
         prompt,
         &context.scratch_root.join(SETTINGS_FILE),
         &plugin_installs,
+        mcp_config
+            .is_some()
+            .then(|| mcp_config_path(&context.scratch_root)),
     );
     guard_arguments(&args)?;
     guard_shadowing(spec, &args)?;
@@ -589,6 +641,7 @@ pub fn plan_launch(spec: &RunSpec, context: &LaunchContext) -> Result<LaunchPlan
         config_home: config_home.clone(),
         credential_copies,
         settings: build_settings(&hook),
+        mcp_config,
         hook,
         attestation: attest(spec, context, &config_home, &plugin_installs),
         plugin_installs,
@@ -737,6 +790,7 @@ fn build_args(
     prompt: &str,
     settings_path: &Path,
     plugin_installs: &[PluginInstall],
+    mcp_config_path: Option<PathBuf>,
 ) -> Vec<String> {
     let mut args = vec![
         "-p".to_string(),
@@ -774,17 +828,63 @@ fn build_args(
         args.push("--plugin-dir".to_string());
         args.push(install.to.display().to_string());
     }
-    if spec.tool_surface == ToolSurface::Owned {
-        // Strategy C (design § 7.5): `--tools ""` disables the whole built-in set (V11) and the
-        // metaharness server's tools are admitted by a whole-server grant, because nothing in the
-        // vendor's own settings has heard of them. That grant is *bare*, which is exactly what
-        // `guard_shadowing` refuses — see its own comment.
+    if let Some(mcp_config_path) = mcp_config_path {
+        // Strategy C (design § 7.5), and all three flags are one act. `--tools ""` disables the
+        // whole built-in set (V11) — no `Bash` to deny, because there is no `Bash`. `--mcp-config`
+        // names the server that replaces them. The grant is a whole-server one because nothing in
+        // the vendor's own settings has heard of these tools, and it is *bare*: under this surface
+        // no decision travels to the vendor per call — metaharness runs the tool itself — so there
+        // is no seam for a bare grant to shadow. `guard_shadowing` still refuses the combination
+        // wherever a seam *does* need to see the call, which `--decisions ask` is.
         args.push("--tools".to_string());
         args.push(String::new());
+        args.push("--mcp-config".to_string());
+        args.push(mcp_config_path.display().to_string());
         args.push("--allowedTools".to_string());
-        args.push("mcp__metaharness".to_string());
+        args.push(format!("mcp__{TOOL_SERVER_NAME}"));
     }
     args
+}
+
+/// The MCP configuration under `--tool-surface owned`, and `None` under every other surface.
+///
+/// One stdio server, which is **this binary** under its own `mcp-serve` subcommand: the program
+/// the vendor starts is therefore already installed, already the version this run is, and needs no
+/// second artefact to be built, found or kept in step.
+///
+/// The workspace it serves is the child's own cwd, so the model sees the tree it was pointed at
+/// and nothing above it.
+fn build_mcp_config(
+    spec: &RunSpec,
+    context: &LaunchContext,
+) -> Result<Option<Value>, LaunchRefusal> {
+    if spec.tool_surface != ToolSurface::Owned {
+        return Ok(None);
+    }
+    let Some(server) = &context.tool_server else {
+        return Err(LaunchRefusal::ToolServerMissing);
+    };
+
+    let mut args = vec![
+        "mcp-serve".to_string(),
+        "--workspace".to_string(),
+        context.cwd.display().to_string(),
+        "--writable".to_string(),
+    ];
+    for program in &spec.allow_program {
+        args.push("--allow-program".to_string());
+        args.push(program.clone());
+    }
+
+    Ok(Some(json!({
+        "mcpServers": {
+            TOOL_SERVER_NAME: {
+                "type": "stdio",
+                "command": server.display().to_string(),
+                "args": args,
+            }
+        }
+    })))
 }
 
 /// The child environment, constructed from [`INHERITED_KEYS`] and then checked.
@@ -974,10 +1074,14 @@ fn needs_call_seam(spec: &RunSpec) -> bool {
 /// the callback is consulted."* A bare entry is one with no parenthesised specifier — `Bash`
 /// rather than `Bash(git status:*)` — so it grants the tool whatever the arguments are.
 ///
-/// The guard reads the argv this adapter just built, which is why it is a guard: today the only
-/// configuration that reaches it is `--tool-surface owned`, and refusing that is the honest
-/// answer for M1 anyway, since per-step re-listing on this vendor depends on unverified
-/// `notifications/tools/list_changed` behaviour (**Q1**).
+/// The guard reads the argv this adapter just built, which is why it is a guard rather than a
+/// check on the spec. `--tool-surface owned` is the only configuration that puts a bare entry
+/// there, and on its own it is **not** the trap: under strategy C metaharness runs the tool, no
+/// decision travels to the vendor per call, and there is no seam for the grant to shadow.
+///
+/// Combine it with `--decisions ask` and there is: the operator is answering every call, and a
+/// bare `--allowedTools` entry auto-approves before their answer is asked for. That is what this
+/// refuses, and the golden vector `c1-shadow-refusal` is exactly that pair.
 fn guard_shadowing(spec: &RunSpec, args: &[String]) -> Result<(), LaunchRefusal> {
     if !needs_call_seam(spec) {
         return Ok(());
@@ -1298,6 +1402,7 @@ mod tests {
             inputs_digest: Some(Digest::of(b"inputs")),
             plugins: Vec::new(),
             loopback: None,
+            tool_server: Some(PathBuf::from("/usr/local/bin/metaharness")),
         }
     }
 
@@ -1960,6 +2065,9 @@ mod tests {
     fn a_run_needing_a_call_seam_beside_a_bare_allowed_tools_entry_is_refused_shadowed() {
         let mut spec = spec();
         spec.tool_surface = ToolSurface::Owned;
+        // `owned` alone is no longer the trap — nothing decides per call under it. `ask` is what
+        // puts an operator behind every call that the bare grant would answer before them.
+        spec.decisions = DecisionMode::Ask;
         let refusal = plan_launch(&spec, &context()).expect_err("the shadow is refused");
         assert_eq!(
             refusal,
@@ -1968,6 +2076,76 @@ mod tests {
             }
         );
         assert_eq!(refusal.code(), Some(RefusalCode::Shadowed));
+    }
+
+    /// The owned surface plans, and all three flags are there: the built-ins removed, a server
+    /// to replace them, and a grant that names it.
+    ///
+    /// The failure this pins is the one the argv had for as long as the refusal stood above it:
+    /// `--tools ""` and `--allowedTools mcp__metaharness` with **no `--mcp-config`** — a run whose
+    /// vendor tools are gone and whose replacement server was never configured, so the model has
+    /// no tools at all and spends the run saying it cannot read a file.
+    #[test]
+    fn an_owned_surface_takes_the_vendors_tools_away_and_names_the_server_that_replaces_them() {
+        let mut spec = spec();
+        spec.tool_surface = ToolSurface::Owned;
+        spec.allow_program = vec!["/usr/bin/cargo".to_string()];
+        let plan = plan_launch(&spec, &context()).expect("frame mode needs no call seam");
+
+        let window = plan.args.windows(2).collect::<Vec<_>>();
+        assert!(window.contains(&&["--tools".to_string(), String::new()][..]));
+        assert!(window.contains(
+            &&[
+                "--mcp-config".to_string(),
+                "/scratch/run-1/mcp-config.json".to_string()
+            ][..]
+        ));
+        assert!(
+            window.contains(&&["--allowedTools".to_string(), "mcp__metaharness".to_string()][..])
+        );
+        assert!(
+            !plan.args.iter().any(|arg| arg == "Bash"),
+            "there is no Bash to grant or deny: {:?}",
+            plan.args
+        );
+
+        let server = &plan.mcp_config.as_ref().expect("a config")["mcpServers"]["metaharness"];
+        assert_eq!(server["command"], "/usr/local/bin/metaharness");
+        assert_eq!(
+            server["args"],
+            json!([
+                "mcp-serve",
+                "--workspace",
+                "/scratch/run-1/work",
+                "--writable",
+                "--allow-program",
+                "/usr/bin/cargo"
+            ]),
+            "the server serves the child's own cwd, and starts only what the spec declared"
+        );
+    }
+
+    /// `--tools ""` with nothing in their place is a run with no tools, so it is refused instead.
+    #[test]
+    fn an_owned_surface_with_no_server_to_serve_it_is_refused_rather_than_left_toolless() {
+        let mut spec = spec();
+        spec.tool_surface = ToolSurface::Owned;
+        let mut context = context();
+        context.tool_server = None;
+
+        let refusal = plan_launch(&spec, &context).expect_err("no server, no run");
+        assert_eq!(refusal, LaunchRefusal::ToolServerMissing);
+        assert!(refusal.to_string().contains("--tool-surface owned"));
+    }
+
+    /// A `native` run carries no MCP configuration at all, so nothing is written claiming servers
+    /// it never had.
+    #[test]
+    fn a_native_surface_plans_no_mcp_configuration_and_no_flag() {
+        let plan = plan_launch(&spec(), &context()).expect("plans");
+        assert!(plan.mcp_config.is_none());
+        assert!(!plan.args.iter().any(|arg| arg == "--mcp-config"));
+        assert!(!plan.args.iter().any(|arg| arg == "--tools"));
     }
 
     /// A specifier-carrying entry does not auto-approve the whole tool, so it is not the trap

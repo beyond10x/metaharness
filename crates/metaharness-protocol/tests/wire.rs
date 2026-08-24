@@ -219,6 +219,9 @@ fn tool_and_accounting_events() -> Vec<Event> {
             call_id: "call-1".into(),
             name: "Bash".into(),
             input: json!({"command": "cargo test"}),
+            // The neutral answer beside the vendor's name, which is the field a consumer reads:
+            // `Bash` here, `run` on b10x, `tool_invoke` under an owned surface — one `shell`.
+            operations: vec!["shell".into()],
             decision_required: true,
             deadline_ms: Some(5_000),
             seam: Seam::Hook,

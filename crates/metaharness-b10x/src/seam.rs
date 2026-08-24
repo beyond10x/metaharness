@@ -22,11 +22,7 @@ pub struct B10xSeams {
 }
 
 impl B10xSeams {
-    pub fn new(
-        version: Option<String>,
-        model: Option<String>,
-        cwd: Option<String>,
-    ) -> Self {
+    pub fn new(version: Option<String>, model: Option<String>, cwd: Option<String>) -> Self {
         Self {
             version,
             model,
@@ -55,6 +51,7 @@ impl SeamFactory for B10xSeams {
             started: false,
             ended: false,
             census: DecisionCensus::default(),
+            spent_micro_usd: None,
         })
     }
 }
@@ -71,6 +68,12 @@ pub struct B10xSeam {
     started: bool,
     ended: bool,
     census: DecisionCensus,
+    /// What the run has cost so far, in millionths of a US dollar, summed from the loop's own
+    /// per-turn figures.
+    ///
+    /// [`None`] until a turn is priced, and `None` at the end means no rate card covered this run
+    /// — which reaches `session.ended.total_cost_usd` as `null` rather than as a zero.
+    spent_micro_usd: Option<u64>,
 }
 
 impl B10xSeam {
@@ -114,7 +117,10 @@ impl HarnessSeam for B10xSeam {
         let Ok(value) = serde_json::from_str::<Value>(line) else {
             return vec![self.opaque(line, None)];
         };
-        let kind = value.get("kind").and_then(Value::as_str).unwrap_or_default();
+        let kind = value
+            .get("kind")
+            .and_then(Value::as_str)
+            .unwrap_or_default();
         let string = |field: &str| {
             value
                 .get(field)
@@ -140,15 +146,14 @@ impl HarnessSeam for B10xSeam {
                     credential_source: Some("named".to_owned()),
                     output_style: None,
                     cwd: self.cwd.clone(),
-                    offered_tools: value
-                        .get("published_tools")
-                        .and_then(Value::as_array)
-                        .map(|tools| {
+                    offered_tools: value.get("published_tools").and_then(Value::as_array).map(
+                        |tools| {
                             tools
                                 .iter()
                                 .filter_map(|tool| tool.as_str().map(ToOwned::to_owned))
                                 .collect()
-                        }),
+                        },
+                    ),
                     // Absent because the loop has none of these, not because nobody looked.
                     slash_commands: None,
                     skills: None,
@@ -165,6 +170,9 @@ impl HarnessSeam for B10xSeam {
                 request_id: None,
             })],
             "tool-requested" => vec![Emission::untimed(Event::ToolRequested {
+                // Left empty here on purpose: the resolution needs the adapter\'s *published*
+                // rendering, which the loop holds and an adapter must not (design § 8.4 O6).
+                operations: Vec::new(),
                 call_id: string("call_id").unwrap_or_default(),
                 name: string("name").unwrap_or_default(),
                 input: value.get("arguments").cloned().unwrap_or(Value::Null),
@@ -197,11 +205,23 @@ impl HarnessSeam for B10xSeam {
                     thinking_tokens: None,
                     iterations: None,
                     speed: None,
-                    // The gateway relays bytes and reports no price. `None` is the honest answer
-                    // and a zero would be a lie about a run that cost money.
+                    // The loop prices a turn in its own `cost` record, which arrives on the next
+                    // line — after this event is already written. Backfilling it would mean
+                    // buffering the stream to edit an emission that has left, so the figure a
+                    // reader compares arms on is stated once, as the run total on `session.ended`.
                     cost_usd: None,
                 },
             })],
+            // Folded into the run's total and carried across as opaque, on the rule every
+            // unmapped line is carried by. It has no counterpart of its own: `Usage::cost_usd` is
+            // for a slice the vendor priced, and this arrives a line too late to fill it.
+            "cost" => {
+                if let Some(micro) = number("micro_usd") {
+                    self.spent_micro_usd =
+                        Some(self.spent_micro_usd.unwrap_or(0).saturating_add(micro));
+                }
+                vec![self.opaque(line, Some(kind))]
+            }
             "finished" => {
                 self.ended = true;
                 let stop = value.get("stop").cloned().unwrap_or(Value::Null);
@@ -221,7 +241,19 @@ impl HarnessSeam for B10xSeam {
                     duration_api_ms: None,
                     ttft_ms: None,
                     time_to_request_ms: None,
-                    total_cost_usd: None,
+                    // What the run cost at the rates `--prices` declared, summed from the
+                    // loop's own per-turn figures. `null` where no card priced it: the OpenAI
+                    // Responses wire returns no price and neither does the catalogue behind Claude
+                    // Code, which states a figure anyway. A subscription is not a reason for a run
+                    // to be uncosted — but a run nobody gave rates to has no figure to state, and a
+                    // zero would be a lie about one that cost money.
+                    //
+                    // Still not computed by metaharness (design § 4.1, D4): the multiplication is
+                    // the loop's, exactly as Claude Code's own `total_cost_usd` is Claude Code's.
+                    // This reads what the harness said, as it does for every other kind.
+                    total_cost_usd: self.spent_micro_usd.and_then(|micro| {
+                        serde_json::from_str(&b10x_harness_loop::micro_usd_as_decimal(micro)).ok()
+                    }),
                     // The loop refuses a call the published set does not name, and that refusal is
                     // the loop's own. It is not a *permission* denial: nothing was permitted or
                     // withheld, the tool simply was not there.
@@ -334,7 +366,10 @@ mod tests {
             Some("named"),
             "the loop reads no credential it was not pointed at, and the wire says so"
         );
-        assert!(slash_commands.is_none(), "the loop has none, so it states none");
+        assert!(
+            slash_commands.is_none(),
+            "the loop has none, so it states none"
+        );
         assert!(plugins.is_none());
     }
 
@@ -371,7 +406,10 @@ mod tests {
         let line = seam.decision_line("c-1", &Decision::Allow);
         assert!(line.contains("observes and does not decide"), "{line}");
         assert!(
-            seam.control_line(&Command::Halt { reason: "stop".to_owned() }).is_none(),
+            seam.control_line(&Command::Halt {
+                reason: "stop".to_owned()
+            })
+            .is_none(),
             "the loop has no control wire, and `None` is the protocol's word for that"
         );
     }
@@ -397,7 +435,13 @@ mod tests {
         // Even a line that is not JSON at all: a reader that dropped it would be reporting a
         // shorter run than the one that happened.
         let event = one(&mut *seam, "not json");
-        assert!(matches!(event, Event::Opaque { vendor_subtype: None, .. }));
+        assert!(matches!(
+            event,
+            Event::Opaque {
+                vendor_subtype: None,
+                ..
+            }
+        ));
     }
 
     #[test]
@@ -450,7 +494,10 @@ mod tests {
         let mut census = DecisionCensus::default();
         census.abstained = 7;
         seam.set_census(census);
-        let event = one(&mut *seam, r#"{"kind":"finished","stop":{"kind":"completed"}}"#);
+        let event = one(
+            &mut *seam,
+            r#"{"kind":"finished","stop":{"kind":"completed"}}"#,
+        );
         let Event::SessionEnded { census, .. } = event else {
             panic!("a terminal record")
         };
@@ -491,25 +538,35 @@ mod tests {
 /// neutral operation *start a process*, and rendering it here is what lets a consumer ask that
 /// question of every harness in one vocabulary. What the operation admits is still the loop's own
 /// business, and `exec.argv-only` is still true.
+///
+/// # What these names are, now that the model sees three verbs
+///
+/// The right-hand side is the **catalogue entry**, not the tool the model calls. Under the three
+/// verbs every operation travels through `tool_invoke`, so a table mapping operations to tool names
+/// would answer `tool_invoke` six times and lose exactly the distinction a reader wants. The entry
+/// is the answer to *what is a write called here*, and [`metaharness_protocol::Event::ToolRequested`]
+/// carries the operation itself for the reader who needs it per call.
+///
+/// # Read from the catalogue rather than written out again
+///
+/// This table used to be six string literals, and they went stale the day the three verbs landed:
+/// it named `workspace_read`, `workspace_write`, `workspace_edit`, `workspace_list` and
+/// `workspace_grep`, none of which had existed since. Nothing failed, because a rendering table
+/// nobody cross-checks is a document that can only be wrong. It now comes from
+/// [`b10x_harness_tools::entry_names`], which is the same function the catalogue builds itself
+/// from, so the two cannot disagree.
 fn rendering() -> std::collections::BTreeMap<String, Option<String>> {
     use metaharness_protocol::Operation;
+    let entries = b10x_harness_tools::entry_names();
     let mut table: std::collections::BTreeMap<String, Option<String>> = Operation::PARAMETERLESS
         .iter()
         .map(|operation| {
-            let tool = match operation {
-                Operation::FileRead => Some("workspace_read"),
-                Operation::FileWrite => Some("workspace_write"),
-                Operation::FileEdit => Some("workspace_edit"),
-                Operation::DirList => Some("workspace_list"),
-                Operation::Search => Some("workspace_grep"),
-                Operation::Shell => Some("run"),
-                Operation::WebRead
-                | Operation::SkillLoad
-                | Operation::SubagentSpawn
-                | Operation::TaskTodo => None,
-                Operation::McpCall { .. } => None,
-            };
-            (operation.name().to_string(), tool.map(ToString::to_string))
+            let name = operation.name();
+            // `None` for an operation the catalogue has no entry for — no web fetch, no skill
+            // mechanism, no subagents, no todo list. A consumer reading `None` knows the run could
+            // not have done it, where a missing key would only say nobody wrote one down.
+            let entry = entries.get(name).map(|entry| (*entry).to_string());
+            (name.to_string(), entry)
         })
         .collect();
     table.insert("mcp.call".to_string(), None);
@@ -525,16 +582,15 @@ fn rendering() -> std::collections::BTreeMap<String, Option<String>> {
 /// capability document exists to prevent.
 pub fn capabilities() -> metaharness_protocol::Capabilities {
     use metaharness_protocol::{
-        AdapterClass, AdapterId, Capabilities, COMMAND_NAMES, CommandSupport, RefusalCode, Tier,
+        AdapterClass, AdapterId, COMMAND_NAMES, Capabilities, CommandSupport, RefusalCode, Tier,
         TierStatus,
     };
     use std::collections::BTreeMap;
 
-    // Every command refused, and none of them is an oversight: `tool.decide` has nothing to answer
-    // because nothing asks, and `interrupt` and `halt` would need a control wire the loop does not
-    // have. An adapter that claimed them would leave an embedder believing a run could be stopped
-    // through this seam.
-    let commands: BTreeMap<String, CommandSupport> = COMMAND_NAMES
+    // Refused by default, and `tool.decide` stays refused for the reason above: nothing asks, so
+    // there is nothing to answer, and claiming it would let an embedder select a decision mode
+    // that silently does nothing.
+    let mut commands: BTreeMap<String, CommandSupport> = COMMAND_NAMES
         .iter()
         .map(|name| {
             (
@@ -543,6 +599,24 @@ pub fn capabilities() -> metaharness_protocol::Capabilities {
             )
         })
         .collect();
+    // **`interrupt` and `halt` are honoured, and refusing them was a mistake that made this arm
+    // unstartable.** `required_commands` puts both in every list — a run that cannot be stopped is
+    // not a run anyone should start — so refusing them refused the run itself, before an endpoint
+    // or a model was ever read. The arm could not be launched at all.
+    //
+    // The refusal's stated reason was that a stop "would need a control wire the loop does not
+    // have". That was the wrong place to look. metaharness **spawns this child**, so stopping it is
+    // a question about a process it owns, not about a channel into a loop: `Command::Halt` already
+    // ends by killing the process and winding the run up, and it does that without asking the
+    // adapter for anything.
+    //
+    // Both map to the same act here, and that is stated rather than dressed up: a `DirectProvider`
+    // adapter has no finer-grained stop to offer, because there is no channel on which a running
+    // turn could be told to end early. Claiming that `interrupt` leaves the child alive and merely
+    // cancels its turn would be the actual lie.
+    for name in ["interrupt", "halt"] {
+        commands.insert(name.to_string(), CommandSupport::Honoured);
+    }
 
     Capabilities {
         adapter: AdapterId {
@@ -579,23 +653,43 @@ pub fn capabilities() -> metaharness_protocol::Capabilities {
 #[cfg(test)]
 mod rendering_tests {
     #[test]
-    fn every_operation_this_loop_serves_names_the_tool_that_serves_it() {
+    fn every_operation_this_loop_serves_names_the_catalogue_entry_that_serves_it() {
         // The table is what lets a consumer ask *did this run write a file* without knowing whose
         // verb a write is spelled with. An adapter that published none forces every consumer to
         // learn its tool names, which is how a corpus ends up with one vendor's `Bash` in it.
+        //
+        // The literals here are the point of the test and not a duplicate of the source: they are
+        // what pins the table to names that **exist**. The five it held before named tools that had
+        // been gone since the three verbs landed, and the test agreed with them.
         let table = super::rendering();
-        for (operation, tool) in [
-            ("file.read", "workspace_read"),
-            ("file.write", "workspace_write"),
-            ("file.edit", "workspace_edit"),
-            ("dir.list", "workspace_list"),
-            ("search", "workspace_grep"),
+        for (operation, entry) in [
+            ("file.read", "file_read"),
+            ("file.write", "file_write"),
+            ("file.edit", "file_edit"),
+            ("dir.list", "dir_list"),
+            ("search", "search"),
             ("shell", "run"),
         ] {
             assert_eq!(
                 table.get(operation).and_then(Option::as_deref),
-                Some(tool),
+                Some(entry),
                 "{operation}"
+            );
+        }
+    }
+
+    #[test]
+    fn the_table_names_only_entries_the_catalogue_actually_publishes() {
+        // The check the literals above cannot make on their own: whatever this table says, it must
+        // be a name the tool surface answers to. This is the assertion whose absence let five dead
+        // names sit in a published capability document.
+        let published: Vec<&str> = b10x_harness_tools::entry_names().into_values().collect();
+        for (operation, entry) in super::rendering() {
+            let Some(entry) = entry else { continue };
+            assert!(
+                published.contains(&entry.as_str()),
+                "`{operation}` renders to `{entry}`, which the catalogue does not publish: \
+                 {published:?}"
             );
         }
     }
@@ -605,7 +699,13 @@ mod rendering_tests {
         // `None` says the run could not have done it. A missing key would only say nobody wrote
         // one down, and those are different facts about the same run.
         let table = super::rendering();
-        for absent in ["web.read", "skill.load", "subagent.spawn", "task.todo", "mcp.call"] {
+        for absent in [
+            "web.read",
+            "skill.load",
+            "subagent.spawn",
+            "task.todo",
+            "mcp.call",
+        ] {
             assert!(table.contains_key(absent), "{absent} is named");
             assert_eq!(table[absent], None, "{absent} is not served");
         }

@@ -1,0 +1,24 @@
+[package]
+name = "metaharness-tools"
+description = "The owned tool surface, served to a vendor harness over MCP"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+publish = false
+
+[lints]
+workspace = true
+
+[dependencies]
+# The first dependency this workspace has on another repository, and it is deliberate. The
+# alternative was a second implementation of read, write, edit, list, search and a bounded `run` —
+# and with it a second path-containment check, which is the one thing in either tree that must not
+# exist twice. `b10x-harness-tools` depends on `b10x-harness-wire`, serde and nothing else: no
+# substrate, no async runtime, no filesystem beyond `std`. That is what makes it importable here.
+b10x-harness-tools = { path = "../../../harness/crates/harness-tools" }
+b10x-harness-wire = { path = "../../../harness/crates/harness-wire" }
+serde_json = { workspace = true }
+
+[dev-dependencies]
+tempfile = { workspace = true }

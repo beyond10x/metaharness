@@ -4,7 +4,7 @@
 //! onto [`metaharness_protocol::Event`], how a decision reaches it, and what hermetic means for
 //! it. Nothing outside this crate may know any of that.
 //!
-//! Pinned to **2.1.240** ([`PINNED_VERSIONS`]). Every claim this crate makes about that binary is
+//! Pinned to **2.1.241** ([`PINNED_VERSIONS`]). Every claim this crate makes about that binary is
 //! either read from `docs/design/metaharness-protocol-v0.1.md` § 2.7 — where each row carries its
 //! own method — or labelled unverified at the point of use with the `Q` row that would close it.
 //! A string in a binary is weaker than a driven call, and this crate says which it has.
@@ -42,7 +42,7 @@ pub use bridge::{ClaudeSeam, ClaudeSeams};
 pub use hook::{HOOK_WAIT_SECONDS, HookChannelPaths, hook_program};
 pub use launch::{
     CredentialCopy, HOOK_TIMEOUT_SECONDS, LaunchContext, LaunchPlan, LaunchRefusal, LoopbackParams,
-    child_path, hook_program_path, plan_launch, settings_path,
+    child_path, hook_program_path, mcp_config_path, plan_launch, settings_path,
 };
 pub use seam::{HookInput, capabilities, parse_hook_input, render_hook_response, render_operation};
 pub use transcript::TranscriptReader;
@@ -66,9 +66,29 @@ pub const ADAPTER_ID: &str = "claude";
 /// replayed here byte for byte in the free tier. A pin is what the adapter is *tested against*, so it names the binary
 /// whose bytes are committed here, not the one the older § 2.7 rows were read from.
 ///
-/// **The vendor moved again the same afternoon** — `~/.local/share/claude/versions/2.1.241`,
-/// installed 2026-08-23T14:02, and `doctor claude` says *"OFF the adapter's pin"* about it, which
-/// is correct and is the verb doing its job. The pin stays at 2.1.240 because 2.1.240 is the
-/// version this crate holds bytes for. Moving it again is a **capture**, not a search-and-replace:
-/// a pin ahead of the evidence would make every row here a claim about a binary nobody read.
-pub const PINNED_VERSIONS: [&str; 1] = ["2.1.240"];
+/// Moved 2.1.240 → **2.1.241** on 2026-08-24, and this move is the cheap kind. The earlier note
+/// here said moving the pin again was "a **capture**, not a search-and-replace", which read the
+/// rule backwards: `fixtures/golden/README.md` § *"Capture version and pin are two different
+/// facts"* is the governing text, and it says the opposite for a good reason. The golden's
+/// `captured`/`binary` rows are a fact about **those bytes** and are never edited; the pin is what
+/// the adapter is *run* against; and `golden-version-pair` is the single place the two are
+/// compared, where a disagreement is a **named warning that stands until somebody pays for a
+/// re-capture**. So a re-pin is free and honest, and only a re-capture costs money. Holding the pin
+/// behind the installed binary bought nothing and cost every `--hermetic strict` run an H9 gap.
+///
+/// What was read on 2.1.241 before moving it, and what was not:
+///
+/// * **Verified, live** — two runs through this adapter on 2026-08-24 opened, streamed a tool
+///   call, and ended; each opening record reported `claude_code_version` 2.1.241 and was read by
+///   this crate's own transcript reader without a dialect complaint.
+/// * **Verified, from the binary's own help** — every flag the launch builds still exists, and
+///   two of them still say what the design quotes them as saying: `--tools` — *"Use \"\" to
+///   disable all tools"* (V11) — and `--strict-mcp-config` — *"Only use MCP servers from
+///   --mcp-config, ignoring all other MCP configurations"* (H5).
+/// * **Carried over unverified** — the `R8u(e)` parser reading behind V12, read from the 2.1.239
+///   bundle; V4's bare-`--allowedTools` auto-approval, never driven on any version; and Q11's
+///   `""` hook matcher regime. None of these were re-read, and none is claimed to have been.
+///
+/// The golden fixtures stay labelled 2.1.240, because that is the binary whose bytes they are.
+/// `golden-version-pair` therefore warns, by design, and the warning is the outstanding invoice.
+pub const PINNED_VERSIONS: [&str; 1] = ["2.1.241"];

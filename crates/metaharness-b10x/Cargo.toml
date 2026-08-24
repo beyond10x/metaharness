@@ -11,6 +11,16 @@ publish = false
 workspace = true
 
 [dependencies]
+# The catalogue this loop publishes, so `rendering()` is derived from it rather than written out a
+# second time. The second copy had already gone stale: it named `workspace_read` and four siblings
+# that stopped existing when the three verbs landed, and nothing failed when they did. The same
+# cross-repo path dependency `metaharness-tools` takes, and for the same reason — the alternative
+# is a table that drifts silently.
+b10x-harness-tools = { path = "../../../harness/crates/harness-tools" }
+# The crate that defines the record this adapter reads. Taken for `micro_usd_as_decimal`, so the
+# figure this seam puts on the wire is rendered by the same function that rendered it in the loop's
+# own record — two spellings of one number is exactly the disagreement a cost figure must not have.
+b10x-harness-loop = { path = "../../../harness/crates/harness-loop" }
 metaharness-protocol = { path = "../metaharness-protocol" }
 serde = { workspace = true }
 serde_json = { workspace = true }

@@ -375,6 +375,8 @@ impl HarnessSeam for ScriptedSeam {
                 call_id: text_of(&value, "call_id").unwrap_or_default(),
                 name: text_of(&value, "name").unwrap_or_default(),
                 input: value.get("input").cloned().unwrap_or(Value::Null),
+                // The scripted adapter is an adapter: it resolves nothing, and the loop fills it.
+                operations: Vec::new(),
                 decision_required: false,
                 deadline_ms: None,
                 seam: self.seam,

@@ -72,6 +72,19 @@ fn inputs<'a>(spec: &'a RunSpec, pins: &'a [String], plugins: &'a [String]) -> F
         pinned_versions: pins,
         planned_cwd: Some("/scratch/work"),
         declared_plugins: plugins,
+        planned_mcp_servers: &[],
+    }
+}
+
+/// The same, for a launch that configured its own tool server.
+fn inputs_serving<'a>(
+    spec: &'a RunSpec,
+    pins: &'a [String],
+    servers: &'a [String],
+) -> FloorInputs<'a> {
+    FloorInputs {
+        planned_mcp_servers: servers,
+        ..inputs(spec, pins, &[])
     }
 }
 
@@ -155,6 +168,56 @@ fn an_mcp_server_the_launch_did_not_configure_is_a_gap_and_is_named() {
     let h5 = rows.iter().find(|row| row.row == HermeticRow::H5).unwrap();
     assert_eq!(h5.verdict, Verdict::Gap);
     assert!(h5.detail.contains("linear"));
+}
+
+/// H5 asks whether the surface is the one the launch gave — not whether it is empty.
+///
+/// The failure this pins: `--tool-surface owned` configures metaharness's own tool server, and a
+/// row that read every listed server as foreign reported the run's own tools as a hermetic breach.
+/// An owned-surface run on 2026-08-23 failed H5 for exactly that, having done nothing wrong.
+#[test]
+fn the_launchs_own_mcp_server_is_the_expected_surface_and_not_a_breach() {
+    let spec = RunSpec::new(Kind::Claude);
+    let serving = ["metaharness".to_string()];
+    let record = with_record(good_record(), |record| {
+        if let Event::SessionStarted { mcp_servers, .. } = record {
+            *mcp_servers = Some(vec![McpServerRef {
+                name: Some("metaharness".to_string()),
+                status: Some("connected".to_string()),
+            }]);
+        }
+    });
+
+    let rows = hermetic_floor(&[record.clone()], &inputs_serving(&spec, &pins(), &serving));
+    let h5 = rows.iter().find(|row| row.row == HermeticRow::H5).unwrap();
+    assert_eq!(h5.verdict, Verdict::Ok, "{}", h5.detail);
+    assert!(h5.detail.contains("metaharness"), "{}", h5.detail);
+
+    // The same record under a launch that configured nothing is still the gap it always was.
+    let rows = hermetic_floor(&[record], &inputs(&spec, &pins(), &[]));
+    assert_eq!(
+        verdict_of(&rows, HermeticRow::H5),
+        Verdict::Gap,
+        "a server nobody configured is foreign whatever it is called"
+    );
+}
+
+/// A server the launch gave that never appeared is a *different* failure from an extra one: the
+/// model did not have the tools the run believes it published.
+#[test]
+fn a_configured_mcp_server_absent_from_the_record_is_a_gap_that_says_it_is_absent() {
+    let spec = RunSpec::new(Kind::Claude);
+    let serving = ["metaharness".to_string()];
+    let record = with_record(good_record(), |record| {
+        if let Event::SessionStarted { mcp_servers, .. } = record {
+            *mcp_servers = Some(Vec::new());
+        }
+    });
+
+    let rows = hermetic_floor(&[record], &inputs_serving(&spec, &pins(), &serving));
+    let h5 = rows.iter().find(|row| row.row == HermeticRow::H5).unwrap();
+    assert_eq!(h5.verdict, Verdict::Gap);
+    assert!(h5.detail.contains("absent"), "{}", h5.detail);
 }
 
 #[test]
@@ -737,9 +800,13 @@ fn a_run_goes_from_spec_through_plan_and_transcript_to_a_judged_verdict() {
     let log = ScriptedLog::new();
     let mut runner = ScriptedRunner::new(
         vec![
-            ScriptStep::line(
-                r#"{"emit":"session.started","harness_version":"2.1.240","output_style":"default","plugins":[],"mcp_servers":[],"credential_source":"operator-login","inputs_digest":"tree"}"#,
-            ),
+            // The version is read off the pin rather than written out, because this record
+            // stands for "a well-formed run on the version the adapter is pinned to" — and a
+            // literal here means every pin move fails a test about something else entirely.
+            ScriptStep::line(&format!(
+                r#"{{"emit":"session.started","harness_version":"{}","output_style":"default","plugins":[],"mcp_servers":[],"credential_source":"operator-login","inputs_digest":"tree"}}"#,
+                metaharness_claude::PINNED_VERSIONS[0]
+            )),
             ScriptStep::line(
                 r#"{"emit":"tool.requested","call_id":"t1","name":"Bash","input":{"command":"ls"}}"#,
             ),

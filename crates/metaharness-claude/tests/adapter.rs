@@ -26,6 +26,7 @@ fn context() -> LaunchContext {
         inputs_digest: Some(Digest::of(b"inputs")),
         plugins: Vec::new(),
         loopback: None,
+        tool_server: Some(PathBuf::from("/usr/local/bin/metaharness")),
     }
 }
 
@@ -38,9 +39,17 @@ fn spec() -> RunSpec {
 
 #[test]
 fn the_adapter_names_itself_and_its_pin() {
+    // **The one deliberate literal.** Every other assertion about the pin reads `PINNED_VERSIONS`,
+    // so a move shows up here — in a diff a reviewer reads — and nowhere else. Moved
+    // 2.1.240 → 2.1.241 on 2026-08-24; see `PINNED_VERSIONS`' own note for what was re-read on
+    // the new binary and what was carried over unverified.
     assert_eq!(ADAPTER_ID, "claude");
-    assert_eq!(PINNED_VERSIONS, ["2.1.240"]);
-    assert_eq!(capabilities().versions_pinned, vec!["2.1.240".to_string()]);
+    assert_eq!(PINNED_VERSIONS, ["2.1.241"]);
+    assert_eq!(
+        capabilities().versions_pinned,
+        PINNED_VERSIONS.map(ToString::to_string).to_vec(),
+        "what the adapter publishes and what it pins cannot disagree"
+    );
 }
 
 #[test]

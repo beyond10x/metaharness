@@ -12,7 +12,7 @@ use serde::{Deserialize, Serialize};
 
 use crate::command::RefusalCode;
 use crate::frame::Operation;
-use crate::spec::{DecisionMode, RunSpec, ToolSurface};
+use crate::spec::{DecisionMode, RunSpec};
 
 /// Which decision modes an adapter delivers, as the descriptor's own table would state them for
 /// an adapter that had driven all three.
@@ -205,9 +205,12 @@ pub fn required_commands(spec: &RunSpec) -> Vec<&'static str> {
         // mid-session `frame.set` command is a different, undriven thing no spec field asks for.
         needed.push("tool.decide");
     }
-    if spec.tool_surface == ToolSurface::Owned {
-        needed.push("tool.decide");
-    }
+    // `ToolSurface::Owned` deliberately needs **nothing** here, and the absence is the point.
+    // Under strategy C metaharness *runs* the tool: the model reaches an MCP server this process
+    // serves, and no per-call decision travels to the vendor at all. The seam is `Seam::OwnedTool`,
+    // not `Seam::Hook`. Requiring `tool.decide` demanded a control the configuration by definition
+    // does not use — and it had a second cost: it made `needs_call_seam` true, so the launch's own
+    // `guard_shadowing` then refused the argv `build_args` produces.
     needed.sort_unstable();
     needed.dedup();
     needed

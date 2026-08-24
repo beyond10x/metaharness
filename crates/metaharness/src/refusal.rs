@@ -11,7 +11,7 @@
 use std::fmt;
 use std::path::PathBuf;
 
-use metaharness_protocol::{CommandOutcome, Emission, Event, RefusalCode, Refused};
+use metaharness_protocol::{CommandOutcome, Emission, Event, Kind, RefusalCode, Refused};
 
 /// Why metaharness could not do its job. Always exit `2`.
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -57,12 +57,30 @@ pub enum Refusal {
     /// false. Observe mode enforces nothing by construction, so the two together are a frame that
     /// is advertised and not applied — which is worse than either alone.
     ObserveWithFrame,
-    /// `--tool-surface owned` was given.
+    /// `--tool-surface owned` was given for a kind that has no vendor surface to replace.
     ///
-    /// Strategy C means metaharness implements read, write, edit and shell itself, and per-step
-    /// re-listing depends on vendor behaviour nobody has driven (Q1). It is opt-in in the design
-    /// and unbuilt here (design § 7.5).
-    ToolSurfaceOwned,
+    /// Strategy C is **built** now: `metaharness-tools` implements read, write, edit, list, search
+    /// and a bounded `run`, and `mcp-serve` publishes them as three verbs. What it needs from the
+    /// vendor is a way to remove the built-in tools and add ours, and only Claude Code has one
+    /// (`--tools ""` plus `--mcp-config`).
+    ///
+    /// Q1 — per-step tool re-listing — never fires: its own recorded resolution is that strategy C
+    /// is per-session, and an evaluation arm with one fixed toolset for a whole run never re-lists.
+    ToolSurfaceOwned {
+        /// The kind that has no such surface.
+        kind: Kind,
+    },
+    /// `--prices <card>` was given for a kind that prices its own runs.
+    ///
+    /// Claude Code and codex read rates from a catalogue their service delivers and report the
+    /// figure themselves; metaharness passes that figure through and computes nothing (design
+    /// § 4.1, D4). A card handed to one of them could only be ignored — and an operator who
+    /// supplied one would believe the run was priced at the rates they declared when it was
+    /// priced at the vendor's.
+    PricesUnsupported {
+        /// The kind that prices itself.
+        kind: Kind,
+    },
     /// The adapter refused to plan the launch.
     Launch {
         /// What the adapter said, verbatim.
@@ -147,9 +165,10 @@ impl Refusal {
     pub fn code(&self) -> Option<RefusalCode> {
         match self {
             Refusal::Control { refusals } => refusals.first().map(|(_, refused)| refused.code),
-            Refusal::NoAdapter { .. } | Refusal::ToolSurfaceOwned | Refusal::ObserveWithFrame => {
-                Some(RefusalCode::UnsupportedControl)
-            }
+            Refusal::NoAdapter { .. }
+            | Refusal::ToolSurfaceOwned { .. }
+            | Refusal::PricesUnsupported { .. }
+            | Refusal::ObserveWithFrame => Some(RefusalCode::UnsupportedControl),
             _ => None,
         }
     }
@@ -185,10 +204,25 @@ impl fmt::Display for Refusal {
                  operations\" while nothing enforced it (finding F9). Observe a run with no frame, \
                  or enforce the frame with --decisions frame",
             ),
-            Refusal::ToolSurfaceOwned => f.write_str(
-                "--tool-surface owned is refused: it requires metaharness to implement read, \
-                 write, edit and shell itself, and per-step tool re-listing depends on vendor \
-                 behaviour nobody has driven (Q1). Use --tool-surface native",
+            Refusal::ToolSurfaceOwned { kind } => write!(
+                f,
+                "--tool-surface owned is refused for {}: metaharness serves the tools (see \
+                 `metaharness mcp-serve`), but it has no way to take {}'s own tools away and add \
+                 ours. Claude Code has one — `--tools \"\"` plus `--mcp-config` — and codex \
+                 exec does not: dynamicTools is an app-server surface it does not expose. b10x \
+                 already publishes exactly this catalogue in-process, so there is nothing to \
+                 replace. Use --tool-surface native",
+                kind.as_str(),
+                kind.as_str(),
+            ),
+            Refusal::PricesUnsupported { kind } => write!(
+                f,
+                "--prices is refused for {}: it prices its own runs from a catalogue its service \
+                 delivers, and metaharness reports that figure rather than multiplying one out \
+                 (design § 4.1, D4). A card here could only be ignored, leaving the run priced at \
+                 the vendor's rates while the operator believed it was priced at theirs. The b10x \
+                 loop takes one, because nothing behind it returns a price at all",
+                kind.as_str(),
             ),
             Refusal::Launch { detail } => {
                 write!(f, "the adapter refused to plan the launch: {detail}")

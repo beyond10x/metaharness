@@ -39,6 +39,9 @@ pub struct FloorInputs<'a> {
     pub planned_cwd: Option<&'a str>,
     /// The plugin directories the run declared, for H1a's comparison.
     pub declared_plugins: &'a [String],
+    /// The MCP servers this launch configured, for H5's comparison. Empty on every surface but
+    /// `owned`, where it is metaharness's own tool server.
+    pub planned_mcp_servers: &'a [String],
 }
 
 /// How the exit code came out.
@@ -156,10 +159,14 @@ impl AuditReport {
                 row.detail
             );
         }
+        // `abstained` is printed beside the other three and not folded into them. It was
+        // absent from this line until an owned-surface run reported `allowed=0 denied=0
+        // replaced=0` beside three calls that plainly happened — the number the reader needed to
+        // see was the one the line did not carry.
         let _ = writeln!(
             out,
-            "decision census: allowed={} denied={} replaced={}",
-            self.census.allowed, self.census.denied, self.census.replaced
+            "decision census: allowed={} denied={} replaced={} abstained={}",
+            self.census.allowed, self.census.denied, self.census.replaced, self.census.abstained
         );
         for (seam, count) in &self.census.by_seam {
             let _ = writeln!(out, "  by seam    {seam}: {count}");
@@ -168,10 +175,24 @@ impl AuditReport {
             let _ = writeln!(out, "  by decider {decider}: {count}");
         }
         if self.census.allowed + self.census.denied + self.census.replaced == 0 {
-            out.push_str(
-                "  nothing was adjudicated: a census of zero cannot distinguish enforcement \
-                 holding from nothing being attempted\n",
-            );
+            if self.census.abstained == 0 {
+                out.push_str(
+                    "  nothing was adjudicated: a census of zero cannot distinguish enforcement \
+                     holding from nothing being attempted\n",
+                );
+            } else {
+                // The two zeroes mean different things and the reader has to be told which one
+                // this is. Under `--tool-surface owned` the toolset **is** the policy: metaharness
+                // runs the tool, so there is nothing per call to allow or deny, and a run that
+                // reported "nothing was adjudicated" would read as enforcement that never fired.
+                let _ = writeln!(
+                    out,
+                    "  {} call(s) were adjudicated by nobody, and that is the configuration \
+                     rather than a silence: what the run may do is the published tool list, in \
+                     `session.started.offered_tools`",
+                    self.census.abstained
+                );
+            }
         }
         if let Some(auditor) = &self.auditor {
             let _ = writeln!(
@@ -391,6 +412,12 @@ pub fn hermetic_floor(events: &[Event], inputs: &FloorInputs<'_>) -> Vec<RowVerd
     });
 
     // H5 — the MCP surface is exactly what the launch gave. A list, never a count.
+    //
+    // The comparison is against what the launch configured, which is **not** always nothing:
+    // `--tool-surface owned` configures metaharness's own tool server, and a row that read the
+    // record's list as foreign by definition would report the run's own tools as a breach. What
+    // H5 means is unchanged — *the surface is exactly what the launch gave* — and
+    // `--strict-mcp-config` is still what makes the operator's own servers absent from it.
     rows.push(match mcp_servers {
         None => row(
             HermeticRow::H5,
@@ -398,21 +425,53 @@ pub fn hermetic_floor(events: &[Event], inputs: &FloorInputs<'_>) -> Vec<RowVerd
             "the opening record carries no MCP server list, which is unk and never zero: a \
              server the session cannot authenticate to still exists and is still named",
         ),
-        Some(servers) if servers.is_empty() => row(
-            HermeticRow::H5,
-            Verdict::Ok,
-            "the record lists no MCP server, and the launch configured none",
-        ),
         Some(servers) => {
-            let names: Vec<&str> = servers
+            let mut observed: Vec<&str> = servers
                 .iter()
                 .map(|server| server.name.as_deref().unwrap_or("<unnamed>"))
                 .collect();
-            row(
-                HermeticRow::H5,
-                Verdict::Gap,
-                format!("the launch configured no MCP server and the record lists {names:?}"),
-            )
+            observed.sort_unstable();
+            let mut planned: Vec<&str> = inputs
+                .planned_mcp_servers
+                .iter()
+                .map(String::as_str)
+                .collect();
+            planned.sort_unstable();
+
+            if observed == planned {
+                row(
+                    HermeticRow::H5,
+                    Verdict::Ok,
+                    if planned.is_empty() {
+                        "the record lists no MCP server, and the launch configured none".to_owned()
+                    } else {
+                        format!(
+                            "the record lists {observed:?}, which is exactly what the launch \
+                             configured"
+                        )
+                    },
+                )
+            } else {
+                // Named both ways round, because the two failures are different problems: a
+                // server the launch did not give is a foreign surface, and one it gave that never
+                // appeared is a tool surface the model did not actually have.
+                let extra: Vec<&&str> = observed
+                    .iter()
+                    .filter(|name| !planned.contains(name))
+                    .collect();
+                let missing: Vec<&&str> = planned
+                    .iter()
+                    .filter(|name| !observed.contains(name))
+                    .collect();
+                row(
+                    HermeticRow::H5,
+                    Verdict::Gap,
+                    format!(
+                        "the launch configured {planned:?} and the record lists {observed:?} \
+                         (unplanned: {extra:?}, absent: {missing:?})"
+                    ),
+                )
+            }
         }
     });
 
@@ -576,6 +635,7 @@ impl crate::run::Run {
                 pinned_versions: &launch.pinned_versions,
                 planned_cwd: launch.planned_cwd.as_deref(),
                 declared_plugins: &launch.declared_plugins,
+                planned_mcp_servers: &launch.planned_mcp_servers,
             },
         )
     }

@@ -44,7 +44,7 @@
 mod launch;
 mod seam;
 
-pub use launch::{B10xLaunch, argv};
+pub use launch::{B10xLaunch, Credential, argv, child_path, resolve_program};
 pub use seam::{B10xSeam, B10xSeams, capabilities};
 
 /// What this adapter calls itself on the wire.

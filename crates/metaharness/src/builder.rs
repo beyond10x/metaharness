@@ -238,6 +238,13 @@ impl Metaharness {
         self
     }
 
+    /// The rate card this run is priced at. `b10x` only — see [`RunSpec::prices`].
+    #[must_use]
+    pub fn with_prices(mut self, path: impl Into<PathBuf>) -> Self {
+        self.spec.prices = Some(path.into());
+        self
+    }
+
     /// The external auditor, as an argv prefix.
     #[must_use]
     pub fn with_auditor(mut self, prefix: impl Into<String>) -> Self {
@@ -445,13 +452,42 @@ fn start_b10x(
     let attestation = metaharness_protocol::HermeticAttestation::none(spec.hermetic);
     let bridge = seams.build(transcript.clone(), attestation, seam);
 
-    let program = "b10x-harness".to_owned();
-    let args: Vec<String> = spec
-        .prompt
-        .as_ref()
-        .map(|prompt| vec!["run".to_owned(), "--json".to_owned(), "--input".to_owned(), prompt.clone()])
-        .unwrap_or_else(|| vec!["run".to_owned(), "--json".to_owned()]);
-    let env: BTreeMap<String, String> = BTreeMap::new();
+    let mut argv = metaharness_b10x::argv(&b10x_launch(&spec, &cwd)?);
+    // Resolved against the `PATH` the child is given rather than the operator's, so `doctor` and
+    // the spawn agree on which install answered (CT-3), and so the record names the file that ran.
+    let named = argv.remove(0);
+    let child_path = metaharness_b10x::child_path(std::env::var("HOME").ok().as_deref());
+    let program = metaharness_b10x::resolve_program(&named, &child_path)
+        .ok_or_else(|| Refusal::Launch {
+            detail: format!(
+                "`{named}` is not on the PATH this run gives its child ({child_path}). The child's \
+                 environment is constructed rather than inherited (H3), so a binary the operator \
+                 can run is not automatically one the run can: install it there, or name it by \
+                 absolute path"
+            ),
+        })?
+        .display()
+        .to_string();
+    let args = argv;
+    // Constructed, never inherited. `PATH` is the one variable the loop always needs and the one
+    // whose absence made every launch of this arm fail before it read an argument.
+    let mut env: BTreeMap<String, String> = BTreeMap::from([("PATH".to_owned(), child_path)]);
+    if spec.credentials == CredentialSource::ApiKey {
+        // The argv names the variable; this puts it in the child's environment, and without both
+        // halves `--api-key-env` points at something that is not there. Absent from the operator's
+        // environment is refused by name rather than launched unauthenticated: a run that silently
+        // dropped its credential would fail at the first request with the endpoint's word for it,
+        // which is a worse explanation than this one. The Claude adapter refuses the same way for
+        // `ANTHROPIC_API_KEY`.
+        let key = std::env::var(B10X_API_KEY_VARIABLE).map_err(|_| Refusal::Launch {
+            detail: format!(
+                "the run declared credentials: api-key and {B10X_API_KEY_VARIABLE} was not in the \
+                 caller's environment. Set it, or use --credentials none for an endpoint that \
+                 authenticates nobody"
+            ),
+        })?;
+        env.insert(B10X_API_KEY_VARIABLE.to_owned(), key);
+    }
     let view = LaunchPlanView {
         program: &program,
         args: &args,
@@ -469,6 +505,9 @@ fn start_b10x(
     let launch = LaunchFacts {
         planned_cwd: Some(cwd.display().to_string()),
         declared_plugins: Vec::new(),
+        // The b10x loop binds its tools in-process; there is no MCP server to configure and
+        // nothing for one to be compared against.
+        planned_mcp_servers: Vec::new(),
         pinned_versions: metaharness_b10x::PINNED_VERSIONS
             .iter()
             .map(ToString::to_string)
@@ -529,6 +568,7 @@ fn start_claude(
             inputs_digest: None,
             plugins: plugin_trees(&spec),
             loopback: loopback_params(loopback.as_ref()),
+            tool_server: tool_server(),
         };
         let plan = metaharness_claude::plan_launch(&spec, &context).map_err(|refusal| {
             Refusal::Launch {
@@ -579,6 +619,9 @@ fn start_claude(
             // plugin list against what metaharness says it installed, and a declared set taken
             // from the spec would still name a plugin whose copy never happened.
             declared_plugins: declared_plugins(&plan.attestation),
+            // Read off the document the launch actually wrote, so H5 compares the record against
+            // the file the vendor was handed rather than against a second guess at its contents.
+            planned_mcp_servers: configured_mcp_servers(plan.mcp_config.as_ref()),
             pinned_versions: metaharness_claude::PINNED_VERSIONS
                 .iter()
                 .map(ToString::to_string)
@@ -818,6 +861,9 @@ fn start_codex(
         // plugin list the record does not carry leaves H1a `unk` — which is the honest verdict
         // for an installation nobody has watched the vendor pick up.
         declared_plugins: declared_plugins(&plan.attestation),
+        // The codex config writes an empty `[mcp_servers]` table by name, so the launch gives one
+        // and H5 compares against nothing — which is what the table says.
+        planned_mcp_servers: Vec::new(),
         pinned_versions: metaharness_codex::PINNED_VERSIONS
             .iter()
             .map(ToString::to_string)
@@ -889,6 +935,31 @@ fn materialise_codex(
     Ok(())
 }
 
+/// The MCP servers a launch's own configuration document names, for H5.
+///
+/// Read off the document rather than recomputed from the spec: H5 asks whether the surface the
+/// vendor reported is the surface the launch *gave*, and a list derived from the spec would still
+/// name a server whose configuration was never written.
+fn configured_mcp_servers(mcp_config: Option<&serde_json::Value>) -> Vec<String> {
+    mcp_config
+        .and_then(|config| config.get("mcpServers"))
+        .and_then(serde_json::Value::as_object)
+        .map(|servers| servers.keys().cloned().collect())
+        .unwrap_or_default()
+}
+
+/// This binary, so `--tool-surface owned` can name a server for the child to start.
+///
+/// `current_exe` and not a configured path: the server is `metaharness mcp-serve`, so the program
+/// that serves the tools is by construction the same build as the one that planned the run. A
+/// configured path could name an older one, and the tools a run was judged on would then be a
+/// different set from the tools it declared.
+///
+/// `None` when the kernel will not say, which is a refusal at the launch rather than a guess here.
+fn tool_server() -> Option<std::path::PathBuf> {
+    std::env::current_exe().ok()
+}
+
 /// Perform the four pieces of I/O the launch plan names and deliberately does not do.
 ///
 /// | what | why it is here and not in the plan |
@@ -918,6 +989,19 @@ fn materialise(
             })?
             .as_bytes(),
     )?;
+
+    // Written only when the plan carries one, so a `native` run leaves no configuration lying in
+    // the scratch root claiming servers it never had.
+    if let Some(mcp_config) = &plan.mcp_config {
+        std::fs::write(
+            metaharness_claude::mcp_config_path(scratch_root),
+            serde_json::to_string_pretty(mcp_config)
+                .map_err(|error| Refusal::Io {
+                    detail: format!("the MCP configuration could not be rendered: {error}"),
+                })?
+                .as_bytes(),
+        )?;
+    }
 
     let program_path = metaharness_claude::hook_program_path(scratch_root);
     if let Some(parent) = program_path.parent() {
@@ -1139,11 +1223,101 @@ fn resolve_frame(in_memory: Option<Frame>, spec: &RunSpec) -> Result<Option<Fram
 ///
 /// [`Refusal::NoAdapter`] or [`Refusal::ToolSurfaceOwned`].
 pub fn check_spec(spec: &RunSpec) -> Result<(), Refusal> {
-    if spec.tool_surface == ToolSurface::Owned {
-        return Err(Refusal::ToolSurfaceOwned);
+    // Strategy C is built (`metaharness mcp-serve`), so what is left is a question about the
+    // *vendor*: can its built-in tools be taken away and ours put in their place? Claude Code can
+    // (`--tools ""` plus `--mcp-config`). Codex cannot — `dynamicTools` is an app-server surface
+    // `codex exec` does not expose, which its own launch already explains. And b10x publishes this
+    // very catalogue in-process, so there is nothing to replace and the flag would mean nothing.
+    if spec.tool_surface == ToolSurface::Owned && spec.kind != Kind::Claude {
+        return Err(Refusal::ToolSurfaceOwned { kind: spec.kind });
+    }
+    // A rate card is only meaningful where nothing else prices the run. See the variant.
+    if spec.prices.is_some() && spec.kind != Kind::B10x {
+        return Err(Refusal::PricesUnsupported { kind: spec.kind });
     }
     Ok(())
 }
+
+/// The spec, as the argv `b10x-harness run` is actually spawned with.
+///
+/// # Why this replaced an argv written here
+///
+/// This function used to be four words inline — `run --json --input <prompt>` — while
+/// [`metaharness_b10x::argv`] sat beside it, exported, unit-tested and called by nothing. The
+/// inline version named no endpoint, no model and no credential, so **every launch of this arm
+/// died on the loop's own argument parsing before it reached a model**, and the adapter's tests
+/// went on passing because they tested the argv nobody used. One builder now, and the tests below
+/// it are tests of what runs.
+///
+/// # What is refused, and why each is refused rather than defaulted
+///
+/// A missing endpoint or model could be defaulted, and a default would silently point an
+/// evaluation arm at somebody's production API on the run where the operator forgot the flag.
+///
+/// The credential is the interesting one. `b10x-harness` holds no vendor login — there is no
+/// `~/.b10x` to copy — so `--credentials operator-login`, which is the *default*, names nothing at
+/// all here. Refusing it makes the arm say so once; accepting it would launch a run with no
+/// credential under a flag that claims one, which is the failure this whole codebase is built to
+/// avoid. `none` and `api-key` are the two that mean something.
+fn b10x_launch(
+    spec: &RunSpec,
+    cwd: &std::path::Path,
+) -> Result<metaharness_b10x::B10xLaunch, Refusal> {
+    let refuse = |detail: &str| Refusal::Launch {
+        detail: detail.to_owned(),
+    };
+    let base_url = spec.model_endpoint.as_ref().ok_or_else(|| {
+        refuse(
+            "b10x needs --model-endpoint: the loop is pointed at an endpoint by the caller and \
+             has no service of its own to fall back on. A default here would aim an evaluation \
+             arm at somebody's production API the first time the flag was forgotten",
+        )
+    })?;
+    let model = spec.model.as_ref().ok_or_else(|| {
+        refuse("b10x needs --model: the endpoint serves several and the loop picks none")
+    })?;
+
+    let mut launch = metaharness_b10x::B10xLaunch::new(
+        base_url.clone(),
+        model.clone(),
+        cwd,
+        spec.prompt.clone().unwrap_or_default(),
+    );
+    launch = match spec.credentials {
+        // The designed shape for a foreign endpoint: no credential in the child, and the far end
+        // decides. `model_endpoint`'s own documentation requires exactly this.
+        CredentialSource::None => launch,
+        CredentialSource::ApiKey => launch.from_environment(B10X_API_KEY_VARIABLE),
+        CredentialSource::OperatorLogin => {
+            return Err(refuse(
+                "b10x has no operator login to copy — it reads a credential the caller names and \
+                 keeps none of its own. Use --credentials none for a gateway that authenticates \
+                 nobody, or --credentials api-key to pass one through",
+            ));
+        }
+        CredentialSource::Loopback => {
+            return Err(refuse(
+                "the loopback provider is Claude Code only in this milestone (LP-3), and this \
+                 loop already keeps the credential out of metaharness by construction: it is \
+                 pointed at a file or a variable the caller named and this process never sees it",
+            ));
+        }
+    };
+    if let Some(card) = &spec.prices {
+        launch = launch.with_prices(card);
+    }
+    if let Some(turns) = spec.max_turns {
+        launch = launch.with_max_turns(turns);
+    }
+    Ok(launch)
+}
+
+/// The variable `--credentials api-key` points the b10x loop at.
+///
+/// The loop speaks the `OpenAI` Responses wire, and this is that wire's conventional name. Named
+/// here rather than discovered, so a run's credential source is a fact about the launch instead of
+/// a fact about the shell it was started from.
+const B10X_API_KEY_VARIABLE: &str = "OPENAI_API_KEY";
 
 /// The operator's credential file, **named and not read**.
 ///
@@ -2204,5 +2378,144 @@ mod injection_tests {
         );
         assert!(refusal.to_string().contains("F9"), "{refusal}");
         assert_eq!(log.spawns(), 0, "nothing was spawned");
+    }
+}
+
+#[cfg(test)]
+mod b10x_launch_tests {
+    //! The argv arm `native` is actually spawned with.
+    //!
+    //! These are here rather than beside `metaharness_b10x::argv` because the bug they exist for
+    //! was not in that function: it was that nothing called it, and the adapter's own tests went
+    //! on passing while every launch died on the loop's argument parsing.
+
+    use metaharness_protocol::{CredentialSource, Kind, RunSpec};
+
+    use super::{Refusal, b10x_launch, check_spec};
+
+    fn spec() -> RunSpec {
+        let mut spec = RunSpec::new(Kind::B10x);
+        spec.model_endpoint = Some("https://gw.example/v1".to_owned());
+        spec.model = Some("gpt-5.6-sol".to_owned());
+        spec.credentials = CredentialSource::None;
+        spec.prompt = Some("do the thing".to_owned());
+        spec
+    }
+
+    fn argv_of(spec: &RunSpec) -> Vec<String> {
+        metaharness_b10x::argv(&b10x_launch(spec, std::path::Path::new("/work")).expect("planned"))
+    }
+
+    fn value_after(argv: &[String], flag: &str) -> Option<String> {
+        argv.iter()
+            .position(|word| word == flag)
+            .and_then(|at| argv.get(at + 1))
+            .cloned()
+    }
+
+    #[test]
+    fn the_launch_names_the_endpoint_the_model_and_the_tree_it_works_in() {
+        // The regression this file exists for: the argv used to be `run --json --input <prompt>`,
+        // which `b10x-harness` rejects for missing required arguments before it reaches a model.
+        let argv = argv_of(&spec());
+        assert_eq!(argv[0], "b10x-harness");
+        assert_eq!(argv[1], "run");
+        assert_eq!(
+            value_after(&argv, "--base-url"),
+            Some("https://gw.example/v1".to_owned())
+        );
+        assert_eq!(
+            value_after(&argv, "--model"),
+            Some("gpt-5.6-sol".to_owned())
+        );
+        assert_eq!(value_after(&argv, "--workspace"), Some("/work".to_owned()));
+        assert!(argv.contains(&"--json".to_owned()), "{argv:?}");
+    }
+
+    #[test]
+    fn a_rate_card_reaches_the_loop_so_the_arm_states_what_it_cost() {
+        let mut spec = spec();
+        spec.prices = Some("/etc/rates.json".into());
+        assert_eq!(
+            value_after(&argv_of(&spec), "--prices"),
+            Some("/etc/rates.json".to_owned())
+        );
+        assert!(
+            !argv_of(&self::spec()).iter().any(|word| word == "--prices"),
+            "and a run nobody priced names no card"
+        );
+    }
+
+    #[test]
+    fn no_credential_declared_means_no_credential_flag() {
+        let argv = argv_of(&spec());
+        assert!(
+            !argv.iter().any(|word| word.starts_with("--api-key")),
+            "{argv:?}"
+        );
+    }
+
+    #[test]
+    fn an_api_key_run_is_pointed_at_a_variables_name_and_never_its_value() {
+        // metaharness passes a name into an argv; the secret never enters this process.
+        let mut spec = spec();
+        spec.credentials = CredentialSource::ApiKey;
+        assert_eq!(
+            value_after(&argv_of(&spec), "--api-key-env"),
+            Some(super::B10X_API_KEY_VARIABLE.to_owned())
+        );
+    }
+
+    #[test]
+    fn the_default_credential_source_is_refused_by_name_rather_than_launching_without_one() {
+        // `operator-login` is the flag's default and names nothing here: there is no `~/.b10x` to
+        // copy. Accepting it would start a run with no credential under a flag claiming one.
+        let mut spec = spec();
+        spec.credentials = CredentialSource::OperatorLogin;
+        let refusal = b10x_launch(&spec, std::path::Path::new("/work")).expect_err("refused");
+        let said = refusal.to_string();
+        assert!(said.contains("--credentials none"), "{said}");
+        assert!(said.contains("--credentials api-key"), "{said}");
+    }
+
+    #[test]
+    fn a_missing_endpoint_or_model_is_refused_rather_than_defaulted() {
+        // A default endpoint would aim an evaluation arm at somebody's production API the first
+        // time the flag was forgotten.
+        let mut without_endpoint = spec();
+        without_endpoint.model_endpoint = None;
+        let said = b10x_launch(&without_endpoint, std::path::Path::new("/work"))
+            .expect_err("refused")
+            .to_string();
+        assert!(said.contains("--model-endpoint"), "{said}");
+
+        let mut without_model = spec();
+        without_model.model = None;
+        let said = b10x_launch(&without_model, std::path::Path::new("/work"))
+            .expect_err("refused")
+            .to_string();
+        assert!(said.contains("--model"), "{said}");
+    }
+
+    #[test]
+    fn a_rate_card_is_refused_for_a_kind_that_prices_its_own_runs() {
+        // Claude Code and codex read rates from a catalogue their service delivers. A card handed
+        // to one could only be ignored, and the operator would believe their rates were in force.
+        for kind in [Kind::Claude, Kind::Codex] {
+            let mut spec = RunSpec::new(kind);
+            spec.prices = Some("/etc/rates.json".into());
+            let refusal = check_spec(&spec).expect_err("refused");
+            assert!(
+                matches!(refusal, Refusal::PricesUnsupported { .. }),
+                "{kind:?}"
+            );
+            assert!(refusal.to_string().contains("prices its own runs"));
+        }
+        let mut priced = RunSpec::new(Kind::B10x);
+        priced.prices = Some("/etc/rates.json".into());
+        assert!(
+            check_spec(&priced).is_ok(),
+            "b10x is the one that takes one"
+        );
     }
 }

@@ -84,7 +84,13 @@ pub fn installed(kind: Kind) -> Result<Installed, Refusal> {
         // The binary is `b10x-harness`, not `b10x`: the adapter id names the *adapter*, and only
         // for this kind do the two differ. Resolved on the ordinary `PATH` because this loop keeps
         // no vendor home to look inside.
-        Kind::B10x => ("b10x-harness", std::env::var("PATH").unwrap_or_default()),
+        // The `PATH` the *spawn* constructs, not the operator's. Reading the operator's here was
+        // the CT-3 mismatch the Claude adapter warns about, arrived at this kind: a pre-flight that
+        // blesses a binary the run cannot find is not a pre-flight.
+        Kind::B10x => (
+            "b10x-harness",
+            metaharness_b10x::child_path(std::env::var("HOME").ok().as_deref()),
+        ),
     };
     let program = resolve_on(adapter, &child_path)?;
     let program = program.display().to_string();

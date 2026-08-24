@@ -20,6 +20,8 @@ clap = { workspace = true }
 # The `clap` feature carries `RunSpec`'s own `derive(Args)` through, so the `run` verb's flags
 # are the library's option struct and cannot drift from it (design D11).
 metaharness = { path = "../metaharness", features = ["clap"] }
+# The owned tool surface, served on stdio under `mcp-serve`.
+metaharness-tools = { path = "../metaharness-tools" }
 serde_json = { workspace = true }
 
 [dev-dependencies]

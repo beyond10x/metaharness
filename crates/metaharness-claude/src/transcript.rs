@@ -275,6 +275,9 @@ impl TranscriptReader {
                 request_id: request_id.cloned(),
             },
             "tool_use" => Event::ToolRequested {
+                // Left empty here on purpose: the resolution needs the adapter\'s *published*
+                // rendering, which the loop holds and an adapter must not (design § 8.4 O6).
+                operations: Vec::new(),
                 call_id: block
                     .get("id")
                     .and_then(Value::as_str)

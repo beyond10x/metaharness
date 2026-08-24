@@ -276,7 +276,15 @@ mod tests {
         let capabilities = capabilities();
         assert_eq!(capabilities.adapter.id, ADAPTER_ID);
         assert_eq!(capabilities.adapter.class, AdapterClass::Harness);
-        assert_eq!(capabilities.versions_pinned, vec!["2.1.240".to_string()]);
+        // Read off the constant: the pin moves, and a literal here fails a test about the
+        // adapter's *class* every time it does.
+        assert_eq!(
+            capabilities.versions_pinned,
+            crate::PINNED_VERSIONS
+                .iter()
+                .map(ToString::to_string)
+                .collect::<Vec<_>>()
+        );
     }
 
     /// A tier nobody drove is declared unverified, so an embedder that requires it is refused

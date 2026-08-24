@@ -139,6 +139,9 @@ impl CodexSeam {
         );
         self.routes.insert(call_id.clone(), key);
         Some(vec![Emission::untimed(Event::ToolRequested {
+            // Left empty here on purpose: the resolution needs the adapter\'s *published*
+            // rendering, which the loop holds and an adapter must not (design § 8.4 O6).
+            operations: Vec::new(),
             call_id,
             name,
             input,

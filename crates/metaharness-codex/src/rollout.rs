@@ -224,6 +224,9 @@ impl RolloutReader {
                 let input = serde_json::from_str::<Value>(raw)
                     .unwrap_or_else(|_| Value::String(raw.to_string()));
                 vec![Event::ToolRequested {
+                    // Left empty here on purpose: the resolution needs the adapter\'s *published*
+                    // rendering, which the loop holds and an adapter must not (design § 8.4 O6).
+                    operations: Vec::new(),
                     call_id,
                     name,
                     input,

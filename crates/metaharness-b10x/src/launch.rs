@@ -18,7 +18,60 @@
 //!
 //! What is left is an argv and the attestation that says so.
 
-use std::path::Path;
+use std::path::{Path, PathBuf};
+
+/// The `PATH` a b10x child is given, before `HOME`'s own bin directory is prepended.
+///
+/// The child's environment is **constructed, never inherited** (design § 8.1 H3), so without this
+/// there is no `PATH` at all and a bare program name resolves to nothing. That is not hypothetical:
+/// it is what the arm did — `env_clear()` and an empty map — and every launch died with
+/// `No such file or directory` naming nothing.
+const BASE_PATH: &str = "/usr/local/bin:/usr/bin:/bin";
+
+/// The `PATH` a spawned child gets, given the `HOME` it will run with.
+///
+/// Public for the same reason the Claude adapter's is: `doctor` must resolve the binary **the way
+/// the spawn will** (CT-3). Until now it read the *operator's* `PATH` for this kind while the spawn
+/// used none, so a pre-flight could bless a binary the run could not even find.
+#[must_use]
+pub fn child_path(home: Option<&str>) -> String {
+    match home {
+        Some(home) => format!("{home}/.local/bin:{BASE_PATH}"),
+        None => BASE_PATH.to_owned(),
+    }
+}
+
+/// The first executable named `program` on `path`, or `None`.
+///
+/// Resolved at plan time so the launch record names the **file that ran** rather than a word that
+/// was looked up later. A machine holding two installs resolves them differently on two different
+/// `PATH`s, and a record naming only `b10x-harness` cannot tell a reader which one answered.
+///
+/// A program that is already a path is returned as it stands: the caller named a file, and
+/// searching for it would be second-guessing them.
+#[must_use]
+pub fn resolve_program(program: &str, path: &str) -> Option<PathBuf> {
+    if program.contains('/') {
+        return Some(PathBuf::from(program));
+    }
+    path.split(':')
+        .filter(|directory| !directory.is_empty())
+        .map(|directory| Path::new(directory).join(program))
+        .find(|candidate| candidate.is_file())
+}
+
+/// Where the loop is told to read its bearer.
+///
+/// Two variants and no third: the loop refuses to pick a credential up from anywhere it was not
+/// pointed at, so there is nothing to express beyond *this file* and *this variable*.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum Credential {
+    /// `--api-key-file <path>`.
+    File(String),
+    /// `--api-key-env <name>`. The name, never the value — metaharness passes a variable's name
+    /// into an argv and the secret itself never enters this process.
+    Environment(String),
+}
 
 /// One launch of `b10x-harness run`.
 #[derive(Debug, Clone)]
@@ -29,8 +82,16 @@ pub struct B10xLaunch {
     pub base_url: String,
     /// The model the endpoint serves.
     pub model: String,
-    /// The file holding the bearer credential. Named, never ambient.
-    pub api_key_file: String,
+    /// Where the loop reads its bearer.
+    ///
+    /// [`None`] launches it with no credential at all, which is what a run declared
+    /// `--credentials none` is: the request goes out with no `authorization` header and the far
+    /// end decides. Right for a gateway on this machine, and right for a run whose first request
+    /// is meant to be refused.
+    ///
+    /// Either way the credential is **named and never ambient**, and metaharness never holds it:
+    /// this is a path or a variable name in an argv, not a secret passing through this process.
+    pub credential: Option<Credential>,
     /// The tree the read-only tools may see.
     pub workspace: String,
     /// The substrate socket, where the run may write and execute.
@@ -39,16 +100,25 @@ pub struct B10xLaunch {
     pub allow_program: Vec<String>,
     /// Ceiling on model turns.
     pub max_turns: Option<u32>,
+    /// A rate card, so the run's record states what it cost.
+    ///
+    /// The one thing on this launch that has no counterpart on the vendor adapters, and the
+    /// asymmetry is real rather than an omission: Claude Code and codex are priced by a catalogue
+    /// their own service delivers, and this loop is priced by rates somebody declared. Both
+    /// figures are the harness's own; only one of them needs a file.
+    pub prices: Option<String>,
     /// The request.
     pub input: String,
 }
 
 impl B10xLaunch {
-    /// A launch against one endpoint, with the read-only toolset only.
+    /// A launch against one endpoint, with the read-only toolset only and no credential.
+    ///
+    /// The credential is added by [`Self::authenticated`] rather than taken here, so that a
+    /// launch reaching an endpoint unauthenticated is something the caller wrote down.
     pub fn new(
         base_url: impl Into<String>,
         model: impl Into<String>,
-        api_key_file: impl AsRef<Path>,
         workspace: impl AsRef<Path>,
         input: impl Into<String>,
     ) -> Self {
@@ -56,13 +126,37 @@ impl B10xLaunch {
             program: "b10x-harness".to_owned(),
             base_url: base_url.into(),
             model: model.into(),
-            api_key_file: api_key_file.as_ref().display().to_string(),
+            credential: None,
             workspace: workspace.as_ref().display().to_string(),
             substrate: None,
             allow_program: Vec::new(),
             max_turns: None,
+            prices: None,
             input: input.into(),
         }
+    }
+
+    /// The same launch, reading its bearer from this file.
+    #[must_use]
+    pub fn authenticated(mut self, api_key_file: impl AsRef<Path>) -> Self {
+        self.credential = Some(Credential::File(
+            api_key_file.as_ref().display().to_string(),
+        ));
+        self
+    }
+
+    /// The same launch, reading its bearer from this environment variable.
+    #[must_use]
+    pub fn from_environment(mut self, variable: impl Into<String>) -> Self {
+        self.credential = Some(Credential::Environment(variable.into()));
+        self
+    }
+
+    /// The same launch, priced at the rates in this card.
+    #[must_use]
+    pub fn with_prices(mut self, card: impl AsRef<Path>) -> Self {
+        self.prices = Some(card.as_ref().display().to_string());
+        self
     }
 
     /// The same launch, with a confined workspace and the programs it may start.
@@ -98,12 +192,25 @@ pub fn argv(launch: &B10xLaunch) -> Vec<String> {
         launch.base_url.clone(),
         "--model".to_owned(),
         launch.model.clone(),
-        "--api-key-file".to_owned(),
-        launch.api_key_file.clone(),
         "--workspace".to_owned(),
         launch.workspace.clone(),
         "--json".to_owned(),
     ];
+    match &launch.credential {
+        Some(Credential::File(path)) => {
+            argv.push("--api-key-file".to_owned());
+            argv.push(path.clone());
+        }
+        Some(Credential::Environment(variable)) => {
+            argv.push("--api-key-env".to_owned());
+            argv.push(variable.clone());
+        }
+        None => {}
+    }
+    if let Some(card) = &launch.prices {
+        argv.push("--prices".to_owned());
+        argv.push(card.clone());
+    }
     if let Some(socket) = &launch.substrate {
         argv.push("--substrate".to_owned());
         argv.push(socket.clone());
@@ -131,10 +238,17 @@ mod tests {
         B10xLaunch::new(
             "https://gw.example/v1",
             "gpt-5.6-sol",
-            "/run/secrets/key",
             "/work",
             "do the thing",
         )
+        .authenticated("/run/secrets/key")
+    }
+
+    fn value_after(argv: &[String], flag: &str) -> Option<String> {
+        argv.iter()
+            .position(|word| word == flag)
+            .and_then(|at| argv.get(at + 1))
+            .cloned()
     }
 
     #[test]
@@ -146,7 +260,10 @@ mod tests {
     #[test]
     fn the_credential_is_named_and_never_left_to_the_environment() {
         let argv = argv(&launch());
-        let at = argv.iter().position(|word| word == "--api-key-file").expect("named");
+        let at = argv
+            .iter()
+            .position(|word| word == "--api-key-file")
+            .expect("named");
         assert_eq!(argv[at + 1], "/run/secrets/key");
         assert!(
             !argv.iter().any(|word| word == "--api-key-env"),
@@ -159,7 +276,10 @@ mod tests {
     fn a_read_only_launch_names_no_socket_and_no_program() {
         let argv = argv(&launch());
         assert!(!argv.iter().any(|word| word == "--substrate"), "{argv:?}");
-        assert!(!argv.iter().any(|word| word == "--allow-program"), "{argv:?}");
+        assert!(
+            !argv.iter().any(|word| word == "--allow-program"),
+            "{argv:?}"
+        );
     }
 
     #[test]
@@ -168,7 +288,10 @@ mod tests {
             "/run/substrate.sock",
             ["cargo".to_owned(), "protocol".to_owned()],
         ));
-        let at = argv.iter().position(|word| word == "--substrate").expect("named");
+        let at = argv
+            .iter()
+            .position(|word| word == "--substrate")
+            .expect("named");
         assert_eq!(argv[at + 1], "/run/substrate.sock");
         let programs: Vec<&String> = argv
             .iter()
@@ -184,5 +307,38 @@ mod tests {
         let argv = argv(&launch().with_max_turns(8));
         assert_eq!(argv[argv.len() - 2], "--input");
         assert_eq!(argv[argv.len() - 1], "do the thing");
+    }
+
+    #[test]
+    fn a_launch_with_no_credential_names_no_key_file_rather_than_an_empty_one() {
+        // `--credentials none`: the request goes out unauthenticated and the far end decides. An
+        // empty `--api-key-file ""` would be refused by the loop itself, which is a different
+        // outcome from the one the operator asked for.
+        let argv = argv(&B10xLaunch::new(
+            "https://gw.example/v1",
+            "m",
+            "/work",
+            "hi",
+        ));
+        assert!(
+            !argv.iter().any(|word| word == "--api-key-file"),
+            "{argv:?}"
+        );
+    }
+
+    #[test]
+    fn a_priced_launch_carries_the_card_so_the_record_states_what_the_run_cost() {
+        // Without this the b10x arm reaches the matrix with `total_cost_usd: null` beside arms
+        // that state a figure, and the one axis an evaluation programme compares on is missing
+        // for exactly one cell.
+        let priced = argv(&launch().with_prices("/etc/rates.json"));
+        assert_eq!(
+            value_after(&priced, "--prices"),
+            Some("/etc/rates.json".to_owned())
+        );
+        assert!(
+            !argv(&launch()).iter().any(|word| word == "--prices"),
+            "and a launch nobody priced names no card"
+        );
     }
 }

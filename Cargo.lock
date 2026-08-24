@@ -53,6 +53,35 @@ dependencies = [
 ]
 
 [[package]]
+name = "b10x-harness-loop"
+version = "0.1.0"
+dependencies = [
+ "b10x-harness-wire",
+ "serde",
+ "serde_json",
+ "thiserror",
+]
+
+[[package]]
+name = "b10x-harness-tools"
+version = "0.1.0"
+dependencies = [
+ "b10x-harness-wire",
+ "serde",
+ "serde_json",
+]
+
+[[package]]
+name = "b10x-harness-wire"
+version = "0.1.0"
+dependencies = [
+ "serde",
+ "serde_json",
+ "thiserror",
+ "zeroize",
+]
+
+[[package]]
 name = "bitflags"
 version = "2.13.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -114,7 +143,7 @@ dependencies = [
  "heck",
  "proc-macro2",
  "quote",
- "syn",
+ "syn 3.0.3",
 ]
 
 [[package]]
@@ -257,6 +286,7 @@ dependencies = [
  "metaharness-claude",
  "metaharness-codex",
  "metaharness-protocol",
+ "metaharness-tools",
  "rustix",
  "rustls",
  "serde_json",
@@ -268,6 +298,8 @@ dependencies = [
 name = "metaharness-b10x"
 version = "0.1.0"
 dependencies = [
+ "b10x-harness-loop",
+ "b10x-harness-tools",
  "metaharness-protocol",
  "serde",
  "serde_json",
@@ -289,6 +321,7 @@ version = "0.1.0"
 dependencies = [
  "clap",
  "metaharness",
+ "metaharness-tools",
  "serde_json",
  "tempfile",
 ]
@@ -309,6 +342,16 @@ dependencies = [
  "serde",
  "serde_json",
  "sha2",
+]
+
+[[package]]
+name = "metaharness-tools"
+version = "0.1.0"
+dependencies = [
+ "b10x-harness-tools",
+ "b10x-harness-wire",
+ "serde_json",
+ "tempfile",
 ]
 
 [[package]]
@@ -435,7 +478,7 @@ checksum = "e7a5d71263a5a7d47b41f6b3f06ba276f10cc18b0931f1799f710578e2309348"
 dependencies = [
  "proc-macro2",
  "quote",
- "syn",
+ "syn 3.0.3",
 ]
 
 [[package]]
@@ -482,6 +525,17 @@ checksum = "13c2bddecc57b384dee18652358fb23172facb8a2c51ccc10d74c157bdea3292"
 
 [[package]]
 name = "syn"
+version = "2.0.119"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "872831b642d1a07999a962a351ed35b955ea2cfc8f3862091e2a240a84f17297"
+dependencies = [
+ "proc-macro2",
+ "quote",
+ "unicode-ident",
+]
+
+[[package]]
+name = "syn"
 version = "3.0.3"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "53e9bae58849f64dfa4f5d5ae372c8341f7305f82a3868709269343628b659a3"
@@ -502,6 +556,26 @@ dependencies = [
  "once_cell",
  "rustix",
  "windows-sys 0.61.2",
+]
+
+[[package]]
+name = "thiserror"
+version = "2.0.20"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "ec86235f5fcc2a73650310756d2ac5b138a5780bbbdfae3eeccec992c435ba4f"
+dependencies = [
+ "thiserror-impl",
+]
+
+[[package]]
+name = "thiserror-impl"
+version = "2.0.20"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "bc04cd3e1236dd4a98afca4569f2deb3f120e5422a4023be2cb683f8486292af"
+dependencies = [
+ "proc-macro2",
+ "quote",
+ "syn 3.0.3",
 ]
 
 [[package]]
@@ -642,6 +716,20 @@ name = "zeroize"
 version = "1.9.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "e13c156562582aa81c60cb29407084cdb54c4164760106ab78e6c5b0858cf64e"
+dependencies = [
+ "zeroize_derive",
+]
+
+[[package]]
+name = "zeroize_derive"
+version = "1.5.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "3c50655cbb0fe3fc43170059e702f1ce5e19b84cec58dc87b037a09935c2f328"
+dependencies = [
+ "proc-macro2",
+ "quote",
+ "syn 2.0.119",
+]
 
 [[package]]
 name = "zmij"

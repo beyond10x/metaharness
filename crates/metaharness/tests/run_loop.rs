@@ -196,12 +196,18 @@ fn an_in_memory_frame_and_a_frame_document_together_are_refused_by_name() {
 }
 
 #[test]
-fn an_owned_tool_surface_is_refused_because_metaharness_does_not_implement_the_tools() {
-    let refusal = Metaharness::new(Kind::Claude)
-        .with_tool_surface(ToolSurface::Owned)
-        .start(Input::FromSpec)
-        .expect_err("strategy C is not built");
-    assert_eq!(refusal, Refusal::ToolSurfaceOwned);
+fn an_owned_tool_surface_is_refused_for_a_kind_whose_tools_cannot_be_taken_away() {
+    // Not "unbuilt" any more — `metaharness mcp-serve` serves the tools. What is missing is a
+    // vendor surface to put them on, and the refusal names which vendor and why.
+    for kind in [Kind::Codex, Kind::B10x] {
+        let refusal = Metaharness::new(kind)
+            .with_tool_surface(ToolSurface::Owned)
+            .start(Input::FromSpec)
+            .expect_err("no surface to replace");
+        assert_eq!(refusal, Refusal::ToolSurfaceOwned { kind });
+        let said = refusal.to_string();
+        assert!(said.contains(kind.as_str()), "{said}");
+    }
 }
 
 /// A caller with two problems should learn about the one they can fix — and should learn it
@@ -271,6 +277,7 @@ fn every_builder_method_sets_one_field_of_the_one_options_type() {
         .with_audit(true)
         .with_spec_file("expectations.yaml")
         .with_auditor("protocol trace check")
+        .with_prices("rates.json")
         .with_auditor_arg("--advisory")
         .with_auditor_arg("billed-to-the-session");
 
@@ -281,6 +288,7 @@ fn every_builder_method_sets_one_field_of_the_one_options_type() {
         frame: Some("f.yaml".into()),
         decisions: DecisionMode::Ask,
         tool_surface: ToolSurface::Owned,
+        allow_program: Vec::new(),
         credentials: CredentialSource::ApiKey,
         model: Some("sonnet".to_string()),
         model_endpoint: Some("https://llmgw.example".to_string()),
@@ -292,6 +300,7 @@ fn every_builder_method_sets_one_field_of_the_one_options_type() {
         strict_version: true,
         audit: true,
         spec: Some("expectations.yaml".into()),
+        prices: Some("rates.json".into()),
         auditor: Some("protocol trace check".to_string()),
         auditor_args: vec![
             "--advisory".to_string(),
@@ -1119,4 +1128,142 @@ fn a_call_the_turn_ended_on_is_too_late_and_the_run_says_it_was_abandoned() {
         event,
         Event::Warning { code, .. } if code == warning::PENDING_CALL_ABANDONED
     )));
+}
+
+// ---------------------------------------------------------------- one vocabulary, every harness
+
+/// One call, as it arrives on a wire, with an input the caller chooses.
+fn requested_with(tool: &str, input: &str) -> String {
+    format!(r#"{{"emit":"tool.requested","call_id":"c1","name":"{tool}","input":{input}}}"#)
+}
+
+/// Runs one scripted call and answers the `operations` its `tool.requested` carried.
+fn operations_of(surface: ToolSurface, frame: Option<Frame>, line: String) -> Vec<String> {
+    let mut builder = Metaharness::new(Kind::Claude)
+        .with_tool_surface(surface)
+        .with_decisions(DecisionMode::Frame);
+    if let Some(frame) = frame {
+        builder = builder.with_frame(frame);
+    }
+    let mut started = start(
+        builder,
+        vec![
+            ScriptStep::line(INIT),
+            ScriptStep::line(&line),
+            ScriptStep::line(END),
+        ],
+    );
+    started.run.drain().expect("pumps");
+    started
+        .run
+        .events()
+        .iter()
+        .find_map(|event| match event {
+            Event::ToolRequested { operations, .. } => Some(operations.clone()),
+            _ => None,
+        })
+        .expect("the call was recorded")
+}
+
+/// The blindness, closed. Two harness vocabularies, one answer a consumer selects on.
+///
+/// The corpus in `engineering-protocols/conformance/eval/` selected on the **vendor's** tool name,
+/// so it was written in Claude Code's and could not see a b10x run at all. Two patches widened its
+/// write-set with `workspace_write` and `workspace_edit`, which put more vendor names into a
+/// document that should hold none. This field is what ends that.
+#[test]
+fn one_act_reads_as_one_operation_whatever_the_harness_called_the_tool() {
+    assert_eq!(
+        operations_of(
+            ToolSurface::Native,
+            None,
+            requested_with("Write", r#"{"file_path":"a.rs","content":"x"}"#)
+        ),
+        vec!["file.write".to_string()],
+        "native: resolved through the adapter's own published rendering"
+    );
+
+    assert_eq!(
+        operations_of(
+            ToolSurface::Owned,
+            None,
+            requested_with(
+                "mcp__metaharness__tool_invoke",
+                r#"{"name":"file_write","arguments":{"path":"a.rs","text":"x"}}"#
+            )
+        ),
+        vec!["file.write".to_string()],
+        "owned: the entry is inside the call, where no rendering table can see it"
+    );
+}
+
+/// A `native` run must not have an invented `tool_invoke` read as whatever entry it names.
+///
+/// That would launder an unknown call into a recognised operation, in the record a judge reads —
+/// and the tool it claims to be does not exist in that run.
+#[test]
+fn the_verb_road_is_taken_only_by_a_run_that_actually_published_the_verbs() {
+    assert!(
+        operations_of(
+            ToolSurface::Native,
+            None,
+            requested_with(
+                "tool_invoke",
+                r#"{"name":"run","arguments":{"argv":["sh"]}}"#
+            )
+        )
+        .is_empty(),
+        "no operation, because this run had no such tool"
+    );
+}
+
+/// A frame admits a question about the catalogue and still refuses an act it does not admit.
+///
+/// Before this, an owned-surface run under **any** frame denied every call: the verb rendered to
+/// no operation, and the uncovered-tool road is a denial. So the arm that was built to have no
+/// shell also had no file tools, and would have measured as a model that would not do the task.
+#[test]
+fn a_frame_admits_asking_what_tools_exist_and_still_judges_the_act_by_what_it_is() {
+    let mut started = start(
+        Metaharness::new(Kind::Claude)
+            .with_tool_surface(ToolSurface::Owned)
+            .with_decisions(DecisionMode::Frame)
+            .with_frame(frame_admitting(OperationSet::of([Operation::FileRead]))),
+        vec![
+            ScriptStep::line(INIT),
+            ScriptStep::line(&requested_with("mcp__metaharness__tool_search", "{}")),
+            ScriptStep::line(END),
+        ],
+    );
+    started.run.drain().expect("pumps");
+
+    let decided: Vec<&Decision> = started
+        .run
+        .events()
+        .iter()
+        .filter_map(|event| match event {
+            Event::ToolDecided { decision, .. } => Some(decision),
+            _ => None,
+        })
+        .collect();
+    assert!(
+        !decided.is_empty()
+            && decided
+                .iter()
+                .all(|decision| matches!(decision, Decision::Allow)),
+        "listing the catalogue is not an act a frame can narrow: {decided:?}"
+    );
+
+    // …and the act itself is still named, so a denial is a denial *of something*.
+    assert_eq!(
+        operations_of(
+            ToolSurface::Owned,
+            Some(frame_admitting(OperationSet::of([Operation::FileRead]))),
+            requested_with(
+                "mcp__metaharness__tool_invoke",
+                r#"{"name":"file_write","arguments":{"path":"a","text":"x"}}"#
+            )
+        ),
+        vec!["file.write".to_string()]
+    );
 }

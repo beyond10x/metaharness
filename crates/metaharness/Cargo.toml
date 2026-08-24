@@ -15,6 +15,10 @@ clap = ["metaharness-protocol/clap"]
 [dependencies]
 metaharness-protocol = { path = "../metaharness-protocol" }
 metaharness-claude = { path = "../metaharness-claude" }
+# Reading a run back: `resolve_verb` says what a call *was* in the neutral vocabulary, which the
+# loop needs and no adapter can answer — under the owned surface every entry travels through one
+# verb, so the answer is in the call's input rather than in any rendering table.
+metaharness-tools = { path = "../metaharness-tools" }
 metaharness-codex = { path = "../metaharness-codex" }
 metaharness-b10x = { path = "../metaharness-b10x" }
 # The loopback placeholder's nonce — see the workspace manifest for why it is not the clock.

@@ -507,6 +507,7 @@ fn base_context() -> LaunchContext {
         .into_iter()
         .map(|(key, value)| (key.to_string(), value.to_string()))
         .collect(),
+        tool_server: Some(PathBuf::from("/usr/local/bin/metaharness")),
         memory_ancestors: Vec::new(),
         inputs_digest: Some(Digest::of(b"the copied input tree")),
         // No plugin unless a case says so. A synthetic tree, like everything else here: the
@@ -742,29 +743,48 @@ mod tests {
         let outcome = version_pair_outcome(Some("9.9.9"));
         assert!(outcome.is_warning(), "{outcome:?}");
         assert!(outcome.detail.contains("9.9.9"), "{}", outcome.detail);
-        assert!(outcome.detail.contains("2.1.240"), "{}", outcome.detail);
+        assert!(
+            outcome.detail.contains(crate::PINNED_VERSIONS[0]),
+            "{}",
+            outcome.detail
+        );
     }
 
     #[test]
     fn a_recorded_version_on_the_pin_passes_with_nothing_to_say() {
-        let outcome = version_pair_outcome(Some("2.1.240"));
+        let outcome = version_pair_outcome(Some(crate::PINNED_VERSIONS[0]));
         assert!(outcome.passed && outcome.detail.is_empty(), "{outcome:?}");
     }
 
-    /// The pair is reconciled: the committed golden sample was captured from 2.1.240, the pin
-    /// moved to 2.1.240 on 2026-08-23 (amendment a11), and the two now agree.
+    /// The pair is **apart again**, on purpose, and this test is the outstanding invoice.
     ///
-    /// The sample's bytes did not move to make this true — the pin did. This test reads the
-    /// **committed capture**, never the machine's installed binary, so it says the same thing on
-    /// a machine with no `claude` on it at all; that is why the whole C2 tier is free.
+    /// The committed golden is 2.1.240's bytes; the pin moved to 2.1.241 on 2026-08-24 because
+    /// holding it behind the installed binary bought nothing and cost every `--hermetic strict`
+    /// run an H9 gap. `fixtures/golden/README.md` is explicit that this is the cheap direction —
+    /// *"a re-pin is free and honest; only a re-capture costs money"* — and that the disagreement
+    /// must be a **named warning that stands until somebody pays**. So the assertion is that the
+    /// warning is there and names both versions, not that it is absent.
+    ///
+    /// The sample's bytes never move to make a pin true. This test reads the **committed
+    /// capture**, never the machine's installed binary, so it says the same thing on a machine
+    /// with no `claude` on it at all; that is why the whole C2 tier is free.
+    ///
+    /// When a re-capture is paid for, this test flips back to asserting silence.
     #[test]
-    fn the_committed_golden_sample_now_agrees_with_the_pin_and_has_nothing_to_warn_about() {
+    fn the_committed_golden_sample_is_off_the_pin_and_says_so_rather_than_passing_quietly() {
         let outcome = golden_version_pair_vector(GOLDEN_TRANSCRIPT);
+        assert!(outcome.passed, "a warning is not a failure: {outcome:?}");
         assert!(
-            outcome.passed && !outcome.is_warning(),
-            "the recorded capture and the pin disagree again: {outcome:?}"
+            outcome.is_warning(),
+            "the capture is 2.1.240's and the pin is not, so this must not pass quietly: \
+             {outcome:?}"
         );
-        assert!(outcome.detail.is_empty(), "{}", outcome.detail);
+        assert!(outcome.detail.contains("2.1.240"), "{}", outcome.detail);
+        assert!(
+            outcome.detail.contains(crate::PINNED_VERSIONS[0]),
+            "{}",
+            outcome.detail
+        );
     }
 
     /// Regenerate the golden expectation from the committed recorded wire. `#[ignore]`d because

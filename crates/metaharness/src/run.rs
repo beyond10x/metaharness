@@ -21,8 +21,8 @@ use std::io::ErrorKind;
 
 use metaharness_protocol::{
     Capabilities, Command, CommandOutcome, CommandSupport, DecidedBy, Decision, DecisionCensus,
-    DecisionMode, Digest, Emission, Event, EventLine, EventStream, Frame, Operation, RefusalCode,
-    Refused, RunSpec, Seam, TranscriptRef,
+    DecisionMode, Digest, Emission, Event, EventLine, EventStream, Frame, Kind, Operation,
+    RefusalCode, Refused, RunSpec, Seam, ToolSurface, TranscriptRef,
 };
 use serde_json::Value;
 
@@ -177,6 +177,13 @@ impl PendingCall {
 #[derive(Debug, Clone)]
 pub(crate) struct LaunchFacts {
     pub(crate) planned_cwd: Option<String>,
+    /// The MCP servers **this launch itself configured**, for H5's comparison.
+    ///
+    /// Empty for every run until `--tool-surface owned` existed, which is why H5 could once be
+    /// written as "the record must list none". It cannot any more: strategy C configures exactly
+    /// one, and a row that called it foreign would report the run's own tool surface as a
+    /// hermetic breach.
+    pub(crate) planned_mcp_servers: Vec<String>,
     pub(crate) declared_plugins: Vec<String>,
     pub(crate) pinned_versions: Vec<String>,
     pub(crate) transcript: TranscriptRef,
@@ -503,6 +510,40 @@ impl Run {
         line
     }
 
+    /// The same emission with its `operations` filled in.
+    ///
+    /// For a call no seam covered. The adapter leaves the field empty because resolution needs the
+    /// **published rendering**, which is the run's to hold and not the adapter's (design § 8.4 O6);
+    /// this is where the run holds it. An emission that already names its operations is left alone,
+    /// so an adapter that can answer for itself keeps its answer.
+    fn described(&self, emission: Emission) -> Emission {
+        let Event::ToolRequested {
+            operations, name, ..
+        } = &emission.event
+        else {
+            return emission;
+        };
+        if !operations.is_empty() {
+            return emission;
+        }
+        let (name, input) = (
+            name.clone(),
+            match &emission.event {
+                Event::ToolRequested { input, .. } => input.clone(),
+                _ => Value::Null,
+            },
+        );
+        let resolved = self.resolve(&name, &input);
+        if resolved.is_empty() {
+            return emission;
+        }
+        let mut emission = emission;
+        if let Event::ToolRequested { operations, .. } = &mut emission.event {
+            *operations = resolved;
+        }
+        emission
+    }
+
     fn admit(&mut self, emissions: Vec<Emission>) -> std::io::Result<()> {
         for emission in emissions {
             // A `tool.requested` the adapter stamped [`Seam::None`] onto is a **record of a call**
@@ -518,7 +559,11 @@ impl Run {
                     ..
                 }
             ) {
-                self.outbox.push_back(emission);
+                // Described, though not decided. Saying *what a call was* is not adjudicating it,
+                // and this road used to skip the resolution along with the decision — so the one
+                // arm whose whole claim is "the toolset is the policy" reached the matrix with an
+                // empty `operations` on every act, and could not be selected on at all.
+                self.outbox.push_back(self.described(emission));
                 continue;
             }
             if matches!(emission.event, Event::ToolRequested { .. }) {
@@ -547,6 +592,10 @@ impl Run {
             unreachable!("the caller matched a tool.requested")
         };
         let digest = request_digest(&call_id, &name, &input);
+        // Resolved once, here, and carried into every emission below — including the mutated and
+        // repeated paths, so a reader of any `tool.requested` gets the same answer to "what is
+        // this?" whatever else the record says about it.
+        let operations = self.resolve(&name, &input);
 
         if let Some(previous) = self.presented.get(&call_id)
             && *previous != digest
@@ -560,6 +609,7 @@ impl Run {
                     call_id: call_id.clone(),
                     name,
                     input,
+                    operations,
                     decision_required: false,
                     deadline_ms: None,
                     seam,
@@ -622,6 +672,7 @@ impl Run {
                     call_id,
                     name,
                     input,
+                    operations,
                     decision_required: true,
                     deadline_ms: Some(self.deadline_ms),
                     seam: self.seam,
@@ -636,7 +687,7 @@ impl Run {
         // verdict that reads no frame: it allows, and it says the mode did.
         let (decision, by, seam) = match self.spec.decisions {
             DecisionMode::Observe => (Decision::Allow, DecidedBy::Observe, self.seam),
-            DecisionMode::Frame | DecisionMode::Ask => self.frame_verdict(&name),
+            DecisionMode::Frame | DecisionMode::Ask => self.frame_verdict(&name, &input),
         };
         self.outbox.push_back(Emission {
             at,
@@ -644,6 +695,7 @@ impl Run {
                 call_id: call_id.clone(),
                 name: name.clone(),
                 input: input.clone(),
+                operations,
                 decision_required: false,
                 deadline_ms: None,
                 seam,
@@ -668,7 +720,48 @@ impl Run {
         self.write_decision(&call, decision, by, None)
     }
 
-    fn frame_verdict(&mut self, tool: &str) -> (Decision, DecidedBy, Seam) {
+    /// What a call is, in the neutral vocabulary, from its name **and** its input.
+    ///
+    /// # Why the input is needed and a table alone is not enough
+    ///
+    /// A rendering table maps operations to vendor tool names, and [`Run::operation_of_tool`] is
+    /// its inverse. That is the whole answer under `--tool-surface native`, where each operation
+    /// has its own tool. Under `owned` it is not: **every entry travels through one verb**, so a
+    /// table would collapse all six onto `tool_invoke` and lose exactly the distinction a reader
+    /// wants. The entry is inside the call, so resolution takes the call.
+    ///
+    /// The verb road is taken **only** when the run published the verbs. A `native` run whose model
+    /// invented a tool called `tool_invoke` must not have it read as whatever entry it names: that
+    /// would launder an unknown call into a recognised operation, in the record a judge reads.
+    ///
+    /// Two runs publish them, for different reasons. `--tool-surface owned` is metaharness serving
+    /// the catalogue over MCP. **`b10x` is the same catalogue bound in-process** — which is why
+    /// `--tool-surface owned` is refused for that kind as meaningless rather than unsupported. Its
+    /// surface is `native` because there is no vendor surface being replaced, and reading that as
+    /// *no verbs here* left every call on this arm resolving to nothing: the arm reached the matrix
+    /// with an empty `operations` on every act, which is the blindness this field was added to end.
+    fn resolve(&self, tool: &str, input: &Value) -> Vec<String> {
+        let publishes_verbs =
+            self.spec.tool_surface == ToolSurface::Owned || self.spec.kind == Kind::B10x;
+        if publishes_verbs && let Some(resolved) = metaharness_tools::resolve_verb(tool, input) {
+            return match resolved {
+                metaharness_tools::Resolved::Operations(operations) => operations,
+                // A question about the catalogue and an uncovered call both answer empty here.
+                // They are told apart where it matters — `frame_verdict` admits the first and
+                // refuses the second — and the record does not pretend to a distinction its one
+                // field cannot carry.
+                metaharness_tools::Resolved::Catalogue | metaharness_tools::Resolved::Unknown => {
+                    Vec::new()
+                }
+            };
+        }
+        self.operation_of_tool
+            .get(tool)
+            .cloned()
+            .unwrap_or_default()
+    }
+
+    fn frame_verdict(&mut self, tool: &str, input: &Value) -> (Decision, DecidedBy, Seam) {
         let Some(frame) = self.frame.clone() else {
             if !self.warned_no_frame {
                 self.warned_no_frame = true;
@@ -686,7 +779,19 @@ impl Run {
             // claims what is true: metaharness adjudicated nothing here (amendment a3).
             return (Decision::Abstain, DecidedBy::Adapter, Seam::None);
         };
-        let Some(operations) = self.operation_of_tool.get(tool).cloned() else {
+        // Listing the tools you have is not an act a frame can narrow: it touches no file, starts
+        // no process, and outlives nothing. A frame that denied it would be refusing the model
+        // permission to read the list of things it may do — a refusal with no subject — and the
+        // model would then guess arguments instead of asking for them.
+        if self.spec.tool_surface == ToolSurface::Owned
+            && metaharness_tools::resolve_verb(tool, input)
+                == Some(metaharness_tools::Resolved::Catalogue)
+        {
+            return (Decision::Allow, DecidedBy::Frame, self.seam);
+        }
+
+        let operations = self.resolve(tool, input);
+        if operations.is_empty() {
             self.warn(
                 warning::UNCOVERED_TOOL,
                 format!(
@@ -704,7 +809,7 @@ impl Run {
                 DecidedBy::Frame,
                 self.seam,
             );
-        };
+        }
         let operation_name = operations.join("/");
         let admitted = frame
             .operations
