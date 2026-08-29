@@ -242,6 +242,36 @@ pub struct RunSpec {
     #[cfg_attr(feature = "clap", arg(long, value_name = "BASE_URL"))]
     pub model_endpoint: Option<String>,
 
+    /// Which model API the harness speaks under `--model-endpoint`, when the harness has a choice.
+    ///
+    /// Only the b10x loop has one: `openai-responses` and `anthropic-messages` are two different
+    /// endpoints under the same root, and the loop cannot infer which from the URL. The vendor
+    /// harnesses each speak exactly one dialect and are refused this flag by name, rather than
+    /// accepting it and ignoring it.
+    #[cfg_attr(feature = "clap", arg(long, value_name = "WIRE"))]
+    pub model_wire: Option<String>,
+
+    /// A file holding a subscription token, for a route that takes one instead of an API key.
+    ///
+    /// **Not the same credential as [`CredentialSource::ApiKey`], and not interchangeable with
+    /// it:** a subscription token and a key issued to a program travel under different header
+    /// names, so a route given the wrong one answers 401 about authentication and says nothing
+    /// about the header. Named here and never read: metaharness passes the path into an argv and
+    /// the secret does not enter this process.
+    #[cfg_attr(feature = "clap", arg(long, value_name = "FILE"))]
+    pub subscription_token_file: Option<String>,
+
+    /// A variable holding a subscription token. The name, never the value.
+    #[cfg_attr(feature = "clap", arg(long, value_name = "NAME"))]
+    pub subscription_token_env: Option<String>,
+
+    /// A JSON pointer to the token inside the named source, when that source is a JSON document.
+    ///
+    /// Absent means the whole source is the token. Named rather than known: which field a given
+    /// credential store puts its access token in is that store's business.
+    #[cfg_attr(feature = "clap", arg(long, value_name = "POINTER"))]
+    pub subscription_token_pointer: Option<String>,
+
     /// The reasoning effort to ask of the model, in the vendor's own vocabulary.
     ///
     /// Claude Code takes it as `--effort`; codex reads `model_reasoning_effort` from the
@@ -438,6 +468,10 @@ impl RunSpec {
             credentials: CredentialSource::OperatorLogin,
             model: None,
             model_endpoint: None,
+            model_wire: None,
+            subscription_token_file: None,
+            subscription_token_env: None,
+            subscription_token_pointer: None,
             effort: None,
             max_turns: None,
             plugin_dir: Vec::new(),

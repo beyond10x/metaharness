@@ -1355,6 +1355,25 @@ pub fn check_spec(spec: &RunSpec) -> Result<(), Refusal> {
     if confinement_asked_for && spec.kind != Kind::B10x {
         return Err(Refusal::ConfinementUnsupported { kind: spec.kind });
     }
+    // A dialect and a subscription token are the b10x loop's, because it is the only harness with
+    // a choice of wire and the only one metaharness points at a credential rather than copying
+    // one. Refused by name on the others rather than accepted and dropped: a flag that is read
+    // nowhere is a run that differs from what the operator asked for and says so nowhere.
+    let subscription_asked_for = spec.model_wire.is_some()
+        || spec.subscription_token_file.is_some()
+        || spec.subscription_token_env.is_some()
+        || spec.subscription_token_pointer.is_some();
+    if subscription_asked_for && spec.kind != Kind::B10x {
+        return Err(Refusal::Launch {
+            detail: format!(
+                "--model-wire and the --subscription-token flags are the b10x loop's: it \
+                 is the only harness that chooses a dialect and the only one pointed at a \
+                 credential instead of having one copied. {} speaks one wire and holds its own \
+                 login",
+                spec.kind.as_str()
+            ),
+        });
+    }
     // A scope and a preloaded context reach a vendor arm through the frame it is already sealed
     // into. See the variant.
     if (!spec.write_scope.is_empty()
@@ -1365,6 +1384,78 @@ pub fn check_spec(spec: &RunSpec) -> Result<(), Refusal> {
         return Err(Refusal::ScopeUnsupported { kind: spec.kind });
     }
     Ok(())
+}
+
+/// Where the loop is pointed at its bearer, or why the launch is refused instead.
+///
+/// Its own function because it is the one part of a b10x launch with a wrong answer that looks
+/// right: a subscription token and a key issued to a program are both bearers, and a launch that
+/// sent one under the other's header name gets back a 401 naming authentication and not the
+/// header, which reads as "the token is bad" and is not.
+fn b10x_credential(
+    spec: &RunSpec,
+    launch: metaharness_b10x::B10xLaunch,
+) -> Result<metaharness_b10x::B10xLaunch, Refusal> {
+    let refuse = |detail: &str| Refusal::Launch {
+        detail: detail.to_owned(),
+    };
+    Ok(match spec.credentials {
+        // The designed shape for a foreign endpoint: no credential in the child, and the far end
+        // decides. `model_endpoint`'s own documentation requires exactly this.
+        // A named subscription source **is** the credential, so `none` here means "metaharness
+        // copies nothing", not "the run is unauthenticated" — which is exactly what is true: the
+        // loop reads the file itself and this process never holds the token.
+        CredentialSource::None => {
+            match (&spec.subscription_token_file, &spec.subscription_token_env) {
+                (Some(_), Some(_)) => {
+                    return Err(refuse(
+                        "--subscription-token-file and --subscription-token-env name two sources \
+                     for one credential; the loop takes one",
+                    ));
+                }
+                (Some(path), None) => {
+                    launch.with_subscription_file(path, spec.subscription_token_pointer.clone())
+                }
+                (None, Some(name)) => {
+                    launch.with_subscription_env(name, spec.subscription_token_pointer.clone())
+                }
+                (None, None) => {
+                    if spec.subscription_token_pointer.is_some() {
+                        return Err(refuse(
+                            "--subscription-token-pointer points into a source, and none was \
+                         named. Add --subscription-token-file or --subscription-token-env",
+                        ));
+                    }
+                    launch
+                }
+            }
+        }
+        CredentialSource::ApiKey => {
+            if spec.subscription_token_file.is_some() || spec.subscription_token_env.is_some() {
+                return Err(refuse(
+                    "a subscription token and --credentials api-key are two credentials for \
+                     one request, and they travel under different header names. Use \
+                     --credentials none alongside a subscription source: the loop reads it \
+                     itself and metaharness copies nothing",
+                ));
+            }
+            launch.from_environment(B10X_API_KEY_VARIABLE)
+        }
+        CredentialSource::OperatorLogin => {
+            return Err(refuse(
+                "b10x has no operator login to copy — it reads a credential the caller names and \
+                 keeps none of its own. Use --credentials none for a gateway that authenticates \
+                 nobody, or --credentials api-key to pass one through",
+            ));
+        }
+        CredentialSource::Loopback => {
+            return Err(refuse(
+                "the loopback provider is Claude Code only in this milestone (LP-3), and this \
+                 loop already keeps the credential out of metaharness by construction: it is \
+                 pointed at a file or a variable the caller named and this process never sees it",
+            ));
+        }
+    })
 }
 
 /// The spec, as the argv `b10x-harness run` is actually spawned with.
@@ -1412,26 +1503,17 @@ fn b10x_launch(
         cwd,
         spec.prompt.clone().unwrap_or_default(),
     );
-    launch = match spec.credentials {
-        // The designed shape for a foreign endpoint: no credential in the child, and the far end
-        // decides. `model_endpoint`'s own documentation requires exactly this.
-        CredentialSource::None => launch,
-        CredentialSource::ApiKey => launch.from_environment(B10X_API_KEY_VARIABLE),
-        CredentialSource::OperatorLogin => {
-            return Err(refuse(
-                "b10x has no operator login to copy — it reads a credential the caller names and \
-                 keeps none of its own. Use --credentials none for a gateway that authenticates \
-                 nobody, or --credentials api-key to pass one through",
-            ));
-        }
-        CredentialSource::Loopback => {
-            return Err(refuse(
-                "the loopback provider is Claude Code only in this milestone (LP-3), and this \
-                 loop already keeps the credential out of metaharness by construction: it is \
-                 pointed at a file or a variable the caller named and this process never sees it",
-            ));
-        }
-    };
+    launch = b10x_credential(spec, launch)?;
+    if let Some(word) = &spec.model_wire {
+        let wire = metaharness_b10x::Wire::parse(word).ok_or_else(|| {
+            refuse(&format!(
+                "--model-wire {word} names no dialect this loop speaks. It speaks \
+                 openai-responses and anthropic-messages, which are two endpoints under one \
+                 --model-endpoint"
+            ))
+        })?;
+        launch = launch.speaking(wire);
+    }
     // The programs `run` may start, and where it may start them. An empty set publishes no `run`
     // at all, which is the right answer to nobody having named one.
     let programs = spec.allow_program.clone();
@@ -2563,6 +2645,114 @@ mod b10x_launch_tests {
 
     use super::{Refusal, b10x_launch, check_spec};
 
+    /// A subscription token reaches the loop as its own flags, under its own header name.
+    ///
+    /// Regression: the arm could speak only the Responses wire with an `OPENAI_API_KEY`, so the
+    /// only endpoint it could reach was a gateway serving a 32k model, and a driven run died
+    /// mid-state on the context bound rather than on anything the harness did.
+    #[test]
+    fn a_named_subscription_source_and_a_dialect_travel_as_flags_and_the_token_does_not() {
+        let mut spec = RunSpec::new(Kind::B10x);
+        spec.model_endpoint = Some("https://api.anthropic.com/v1".to_owned());
+        spec.model = Some("claude-haiku-4-5-20251001".to_owned());
+        spec.credentials = CredentialSource::None;
+        spec.subscription_token_file = Some("/home/o/.store.json".to_owned());
+        spec.subscription_token_pointer = Some("/claudeAiOauth/accessToken".to_owned());
+        spec.model_wire = Some("anthropic-messages".to_owned());
+
+        let argv = metaharness_b10x::argv(
+            &b10x_launch(&spec, std::path::Path::new("/work")).expect("planned"),
+        );
+        let after = |flag: &str| {
+            argv.iter()
+                .position(|word| word == flag)
+                .map(|at| argv[at + 1].clone())
+        };
+        assert_eq!(
+            after("--oauth-token-file").as_deref(),
+            Some("/home/o/.store.json")
+        );
+        assert_eq!(
+            after("--oauth-token-pointer").as_deref(),
+            Some("/claudeAiOauth/accessToken")
+        );
+        assert_eq!(after("--wire").as_deref(), Some("anthropic-messages"));
+        // The other route's flag is absent, not empty: the two headers are different and a launch
+        // carrying both would present one credential twice.
+        assert!(
+            !argv
+                .iter()
+                .any(|word| word == "--api-key-file" || word == "--api-key-env"),
+            "{argv:?}"
+        );
+    }
+
+    /// Each way of asking for two credentials, or for a dialect that is not one, is named.
+    #[test]
+    fn the_credential_and_the_dialect_are_refused_by_name_rather_than_half_applied() {
+        let base = || {
+            let mut spec = RunSpec::new(Kind::B10x);
+            spec.model_endpoint = Some("https://api.anthropic.com/v1".to_owned());
+            spec.model = Some("m".to_owned());
+            spec.credentials = CredentialSource::None;
+            spec
+        };
+        let said = |spec: &RunSpec| match b10x_launch(spec, std::path::Path::new("/work")) {
+            Err(Refusal::Launch { detail }) => detail,
+            other => panic!("expected a refusal, got {other:?}"),
+        };
+
+        let mut both = base();
+        both.subscription_token_file = Some("/a".to_owned());
+        both.subscription_token_env = Some("B".to_owned());
+        assert!(
+            said(&both).contains("two sources for one credential"),
+            "{}",
+            said(&both)
+        );
+
+        let mut dangling = base();
+        dangling.subscription_token_pointer = Some("/a/b".to_owned());
+        assert!(
+            said(&dangling).contains("none was named"),
+            "{}",
+            said(&dangling)
+        );
+
+        let mut mixed = base();
+        mixed.credentials = CredentialSource::ApiKey;
+        mixed.subscription_token_file = Some("/a".to_owned());
+        assert!(
+            said(&mixed).contains("different header names"),
+            "{}",
+            said(&mixed)
+        );
+
+        let mut nonsense = base();
+        nonsense.model_wire = Some("anthropic-responses".to_owned());
+        assert!(
+            said(&nonsense).contains("names no dialect"),
+            "{}",
+            said(&nonsense)
+        );
+    }
+
+    /// The vendor arms are told the flags are not theirs, instead of dropping them in silence.
+    #[test]
+    fn a_vendor_arm_is_refused_the_wire_and_subscription_flags_by_name() {
+        for kind in [Kind::Claude, Kind::Codex] {
+            let mut spec = RunSpec::new(kind);
+            spec.model_wire = Some("anthropic-messages".to_owned());
+            match check_spec(&spec) {
+                Err(Refusal::Launch { detail }) => {
+                    assert!(detail.contains("b10x loop's"), "{detail}");
+                    assert!(detail.contains(kind.as_str()), "{detail}");
+                }
+                other => panic!("{kind:?} should be refused, got {other:?}"),
+            }
+        }
+    }
+
     fn spec() -> RunSpec {
         let mut spec = RunSpec::new(Kind::B10x);
         spec.model_endpoint = Some("https://gw.example/v1".to_owned());
@@ -2693,15 +2883,32 @@ mod b10x_launch_tests {
     }
 
     #[test]
-    fn an_embedded_run_serves_the_working_directorys_parent() {
-        // The workspace is adopted rather than created, so the root is the tree above it. Naming
-        // the workspace itself would ask substrate to represent a tree it is inside.
+    fn an_embedded_run_serves_the_working_directorys_parent_and_the_flag_carries_no_value() {
+        // The workspace is adopted rather than created, so the root is the tree above it — and the
+        // loop derives that itself from `--workspace`, so the flag is bare.
+        //
+        // Regression: it was sent with the root as a value, which the loop rejects outright. Every
+        // confined launch died on `error: unexpected argument '/scratch' found` with no terminal
+        // record, so the driver saw only "metaharness exited 3" and the run's own transcript held
+        // one warning and nothing else.
         let mut spec = spec();
         spec.substrate_embedded = true;
         let launch = b10x_launch(&spec, std::path::Path::new("/scratch/ws_run")).expect("planned");
+        let argv = metaharness_b10x::argv(&launch);
+        let at = argv
+            .iter()
+            .position(|word| word == "--substrate-embedded")
+            .expect("the flag is present");
+        assert!(
+            argv.get(at + 1).is_none_or(|next| next.starts_with("--")),
+            "the flag takes no value: {argv:?}"
+        );
+        // The root is still on the launch, because the record has to say which tree was served.
         assert_eq!(
-            value_after(&metaharness_b10x::argv(&launch), "--substrate-embedded"),
-            Some("/scratch".to_owned())
+            launch.confinement,
+            Some(metaharness_b10x::Confinement::Embedded(
+                "/scratch".to_owned()
+            ))
         );
     }
 

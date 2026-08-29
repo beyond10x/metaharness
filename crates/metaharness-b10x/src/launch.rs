@@ -69,18 +69,63 @@ pub fn resolve_program(program: &str, path: &str) -> Option<PathBuf> {
 pub enum Confinement {
     /// `--substrate <socket>`: substrate's daemon, which authenticates a peer.
     Daemon(String),
-    /// `--substrate-embedded <root>`: the driver in the loop's own process.
+    /// `--substrate-embedded`: the driver in the loop's own process.
     ///
     /// The root is the workspace's **parent**, because the workspace is adopted rather than
-    /// created. The loop derives the same value from `--workspace` and ignores what is passed
-    /// here; it is stated anyway so the launch record says which tree was served.
+    /// created — and the loop derives it from `--workspace` itself, so the flag carries no value.
+    /// It was passed one until 2026-08-29, which the loop then rejected as an unexpected
+    /// positional argument: every confined launch died on argument parsing before reaching a
+    /// model, with `error: unexpected argument '<root>' found` on stderr and no terminal record.
+    /// The root is still held here, unsent, because the launch record has to say which tree was
+    /// served and the argv no longer does.
     Embedded(String),
+}
+
+/// Which model API the loop is told to speak.
+///
+/// Named rather than defaulted, because the two are different endpoints under the same
+/// `--base-url` and a launch that guessed wrong reaches a 404 that names nothing. [`None`] on a
+/// launch leaves the flag off entirely, which is the loop's own default and not this adapter's
+/// opinion.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum Wire {
+    /// `POST {base-url}/responses`.
+    OpenAiResponses,
+    /// `POST {base-url}/messages`.
+    AnthropicMessages,
+}
+
+impl Wire {
+    /// The word the loop's `--wire` takes.
+    #[must_use]
+    pub fn as_str(self) -> &'static str {
+        match self {
+            Self::OpenAiResponses => "openai-responses",
+            Self::AnthropicMessages => "anthropic-messages",
+        }
+    }
+
+    /// The same word, back, so a caller reading a config file need not spell the match out.
+    #[must_use]
+    pub fn parse(word: &str) -> Option<Self> {
+        match word {
+            "openai-responses" => Some(Self::OpenAiResponses),
+            "anthropic-messages" => Some(Self::AnthropicMessages),
+            _ => None,
+        }
+    }
 }
 
 /// Where the loop is told to read its bearer.
 ///
-/// Two variants and no third: the loop refuses to pick a credential up from anywhere it was not
-/// pointed at, so there is nothing to express beyond *this file* and *this variable*.
+/// Four variants and no fifth: the loop refuses to pick a credential up from anywhere it was not
+/// pointed at, so there is nothing to express beyond *this file* and *this variable* — twice, once
+/// for a key issued to a program and once for a subscription token, because the two travel under
+/// **different header names** and the loop cannot tell them apart from the value.
+///
+/// A pointer accompanies the subscription variants and not the key ones for the same reason: a
+/// subscription store is a JSON document with a token somewhere inside it, and which field is that
+/// store's business rather than something this adapter knows.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum Credential {
     /// `--api-key-file <path>`.
@@ -88,6 +133,21 @@ pub enum Credential {
     /// `--api-key-env <name>`. The name, never the value — metaharness passes a variable's name
     /// into an argv and the secret itself never enters this process.
     Environment(String),
+    /// `--oauth-token-file <path>`, with an optional `--oauth-token-pointer`.
+    SubscriptionFile {
+        /// The document holding the token.
+        path: String,
+        /// A JSON pointer to the token inside it. [`None`] means the file *is* the token.
+        pointer: Option<String>,
+    },
+    /// `--oauth-token-env <name>`, with an optional `--oauth-token-pointer`. The name, never the
+    /// value.
+    SubscriptionEnvironment {
+        /// The variable holding the token.
+        name: String,
+        /// A JSON pointer to the token inside it. [`None`] means the variable *is* the token.
+        pointer: Option<String>,
+    },
 }
 
 /// One launch of `b10x-harness run`.
@@ -109,6 +169,8 @@ pub struct B10xLaunch {
     /// Either way the credential is **named and never ambient**, and metaharness never holds it:
     /// this is a path or a variable name in an argv, not a secret passing through this process.
     pub credential: Option<Credential>,
+    /// Which model API to speak. [`None`] leaves the loop on its own default.
+    pub wire: Option<Wire>,
     /// The tree the read-only tools may see.
     pub workspace: String,
     /// Where the run may write and execute. [`None`] leaves the catalogue read-only.
@@ -154,6 +216,7 @@ impl B10xLaunch {
             base_url: base_url.into(),
             model: model.into(),
             credential: None,
+            wire: None,
             workspace: workspace.as_ref().display().to_string(),
             confinement: None,
             cgroup_root: None,
@@ -181,6 +244,46 @@ impl B10xLaunch {
     #[must_use]
     pub fn from_environment(mut self, variable: impl Into<String>) -> Self {
         self.credential = Some(Credential::Environment(variable.into()));
+        self
+    }
+
+    /// The same launch, reading a subscription token from this file, optionally at a pointer.
+    ///
+    /// Distinct from [`Self::authenticated`] rather than a flag on it: an API key and a
+    /// subscription token are presented under different header names, and a launch that confused
+    /// them produces a 401 naming authentication and not the header, which is the hardest kind of
+    /// failure to read.
+    #[must_use]
+    pub fn with_subscription_file(
+        mut self,
+        path: impl AsRef<Path>,
+        pointer: Option<String>,
+    ) -> Self {
+        self.credential = Some(Credential::SubscriptionFile {
+            path: path.as_ref().display().to_string(),
+            pointer,
+        });
+        self
+    }
+
+    /// The same launch, reading a subscription token from this variable, optionally at a pointer.
+    #[must_use]
+    pub fn with_subscription_env(
+        mut self,
+        name: impl Into<String>,
+        pointer: Option<String>,
+    ) -> Self {
+        self.credential = Some(Credential::SubscriptionEnvironment {
+            name: name.into(),
+            pointer,
+        });
+        self
+    }
+
+    /// The same launch, speaking this model API.
+    #[must_use]
+    pub fn speaking(mut self, wire: Wire) -> Self {
+        self.wire = Some(wire);
         self
     }
 
@@ -265,6 +368,14 @@ impl B10xLaunch {
 ///
 /// `--json` is not optional and is not a caller's choice: the whole adapter reads that record, and
 /// a launch without it would produce a run nothing could observe.
+/// The pointer flag, which the loop accepts only alongside a subscription source.
+fn push_pointer(argv: &mut Vec<String>, pointer: Option<&String>) {
+    if let Some(pointer) = pointer {
+        argv.push("--oauth-token-pointer".to_owned());
+        argv.push(pointer.clone());
+    }
+}
+
 #[must_use]
 pub fn argv(launch: &B10xLaunch) -> Vec<String> {
     let mut argv = vec![
@@ -287,7 +398,21 @@ pub fn argv(launch: &B10xLaunch) -> Vec<String> {
             argv.push("--api-key-env".to_owned());
             argv.push(variable.clone());
         }
+        Some(Credential::SubscriptionFile { path, pointer }) => {
+            argv.push("--oauth-token-file".to_owned());
+            argv.push(path.clone());
+            push_pointer(&mut argv, pointer.as_ref());
+        }
+        Some(Credential::SubscriptionEnvironment { name, pointer }) => {
+            argv.push("--oauth-token-env".to_owned());
+            argv.push(name.clone());
+            push_pointer(&mut argv, pointer.as_ref());
+        }
         None => {}
+    }
+    if let Some(wire) = launch.wire {
+        argv.push("--wire".to_owned());
+        argv.push(wire.as_str().to_owned());
     }
     if let Some(name) = &launch.toolchain {
         argv.push("--toolchain".to_owned());
@@ -314,10 +439,9 @@ pub fn argv(launch: &B10xLaunch) -> Vec<String> {
             argv.push("--substrate".to_owned());
             argv.push(socket.clone());
         }
-        Some(Confinement::Embedded(root)) => {
-            argv.push("--substrate-embedded".to_owned());
-            argv.push(root.clone());
-        }
+        // The root is deliberately not pushed: the loop takes this flag bare and serves the
+        // workspace's parent, which is the same tree.
+        Some(Confinement::Embedded(_)) => argv.push("--substrate-embedded".to_owned()),
         None => {}
     }
     if let Some(root) = &launch.cgroup_root {
