@@ -14,8 +14,8 @@ use metaharness_protocol::{
     HermeticAttestation, HermeticMode, ImposedControl, Kind, Line, McpServerRef, NodeRef,
     Operation, OperationSet, PermissionDenial, PluginRef, RateLimitInfo, RefusalCode, Refused,
     RunId, RunSpec, Seam, StepOutcome, StepRef, SubjectScope, ToolSurface, TranscriptRef, Usage,
-    WorkflowRef, ir_family, parse_command_line, parse_event_line, project, required_commands,
-    warning_code,
+    WithheldTool, WorkflowRef, ir_family, parse_command_line, parse_event_line, project,
+    required_commands, warning_code,
 };
 use serde_json::json;
 
@@ -81,6 +81,12 @@ fn session_events() -> Vec<Event> {
             // What the run could *do*, beside what it was offered — the two come apart entirely
             // behind a surface that publishes three verbs over a catalogue.
             available_operations: Some(vec!["file.read".into(), "shell".into()]),
+            // What the run asked for and the machine would not admit — the question neither list
+            // above can answer, because a withheld tool is missing from both of them.
+            withheld: Some(vec![WithheldTool {
+                tool: "run".into(),
+                reason: "`exec.argv-only` must be true and this machine says nothing.".into(),
+            }]),
             adapter: "claude".into(),
             adapter_class: "harness".into(),
             harness_version: Some("2.1.239".into()),
@@ -517,6 +523,76 @@ fn the_four_fields_amendment_a9_added_survive_the_round_trip() {
     assert_eq!(usage.iterations, Some(3));
     assert_eq!(usage.speed.as_deref(), Some("standard"));
     assert_eq!(usage.cost_usd, Some(0.5));
+}
+
+/// Amendment a12's field, from both sides: a record that names a withheld tool carries it under
+/// the key a reader looks for, and a record that names none says *the harness did not say* rather
+/// than *nothing was withheld*.
+///
+/// Those are two different runs and the difference is the whole reason the field exists. On
+/// 2026-08-29 a driven session whose only legal route was running a program was published a
+/// six-entry catalogue instead of seven — no error, no warning, no fact anywhere in the record —
+/// and the failure was read as a model failure for weeks. A wire that carried the fact but let
+/// silence read as `[]` would have replaced one wrong answer with a confident one.
+#[test]
+fn a_withheld_tool_crosses_the_wire_and_its_silence_is_not_an_empty_list() {
+    let mut stream = EventStream::new(RunId::new("r-1"));
+
+    let line = stream.stamp(Emission::untimed(session_events().remove(0)));
+    let written = serde_json::to_string(&line).expect("serializes");
+    let Event::SessionStarted { withheld, .. } = parse_event_line(&written).expect("parses").event
+    else {
+        panic!("expected session.started");
+    };
+    let named = withheld.expect("the record named one");
+    assert_eq!(named.len(), 1);
+    assert_eq!(
+        named[0].tool, "run",
+        "the entry's own name, never a surface verb's"
+    );
+    assert!(
+        named[0].reason.contains("exec.argv-only"),
+        "the machine's own predicate, passed through rather than paraphrased: {}",
+        named[0].reason
+    );
+
+    // Nothing to say is an explicit `null` and never a missing key (§ 2.1). A producer that
+    // withheld nothing and one that has never heard of the field are different facts, and only
+    // the key being present keeps them apart.
+    let mut quiet = session_events().remove(0);
+    if let Event::SessionStarted { withheld, .. } = &mut quiet {
+        *withheld = None;
+    }
+    let written =
+        serde_json::to_string(&stream.stamp(Emission::untimed(quiet))).expect("serializes");
+    assert!(written.contains(r#""withheld":null"#), "{written}");
+    let Event::SessionStarted { withheld, .. } = parse_event_line(&written).expect("parses").event
+    else {
+        panic!("expected session.started");
+    };
+    assert!(
+        withheld.is_none(),
+        "silence is *the harness did not say*, and reading it as an empty list would assert that \
+         the machine admitted everything it was asked for"
+    );
+
+    // A record written before the field existed carries no key at all. It still parses, and it
+    // parses to the same silence rather than to an empty list.
+    let mut object: serde_json::Value = serde_json::from_str(&written).expect("an object");
+    object
+        .as_object_mut()
+        .expect("an object")
+        .remove("withheld")
+        .expect("the key was there to remove");
+    let older = serde_json::to_string(&object).expect("serializes");
+    let Event::SessionStarted { withheld, .. } = parse_event_line(&older).expect("parses").event
+    else {
+        panic!("expected session.started");
+    };
+    assert!(
+        withheld.is_none(),
+        "an older record is silence, not an empty list"
+    );
 }
 
 /// The projection is total: every event lands in exactly one family or on the control-plane

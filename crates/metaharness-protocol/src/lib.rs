@@ -46,7 +46,7 @@ pub use command::{Command, CommandOutcome, Decision, RefusalCode, Refused};
 pub use conformance::{ConformanceTier, ContractObligations, Obligation, VectorOutcome};
 pub use event::{
     DecidedBy, DecisionCensus, Emission, Event, McpServerRef, PermissionDenial, PluginRef,
-    RateLimitInfo, Seam, StepOutcome, TranscriptRef, Usage, warning_code,
+    RateLimitInfo, Seam, StepOutcome, TranscriptRef, Usage, WithheldTool, warning_code,
 };
 pub use frame::{
     Digest, EntityList, EvidenceLine, FRAME_FORMAT, Frame, FrameDocError, Handoff, Line, NodeRef,

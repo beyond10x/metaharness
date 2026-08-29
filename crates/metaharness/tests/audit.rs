@@ -19,6 +19,9 @@ use metaharness::{
 fn good_record() -> Event {
     Event::SessionStarted {
         available_operations: None,
+        // The vendor states no such thing, so this record does not either. `None` is *it did not
+        // say*, which is what every row of the floor reads it as.
+        withheld: None,
         adapter: "claude".to_string(),
         adapter_class: "harness".to_string(),
         harness_version: Some("2.1.239".to_string()),

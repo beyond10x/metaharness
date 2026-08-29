@@ -118,6 +118,25 @@ pub struct McpServerRef {
     pub status: Option<String>,
 }
 
+/// One tool the run **asked for** and the machine would not admit, with the reason.
+///
+/// A type of this crate's own, on invariant 1: `metaharness-protocol` depends on `clap`, `serde`,
+/// `serde_json` and `sha2`, so the harness's own `Withheld` cannot be imported here however
+/// identical the two shapes are. The wire is the contract between them, not a Rust type.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct WithheldTool {
+    /// The tool the run declared and did not get, under the name the harness publishes it by.
+    ///
+    /// The entry's own name and never a surface verb's, for the reason an approval names the
+    /// entry: a reader decides about `run`, never about `tool_invoke`.
+    pub tool: String,
+    /// The predicate that failed, as the machine stated it — the harness's words, passed through.
+    ///
+    /// Never rewritten here. A reason metaharness paraphrased would be a second description of a
+    /// machine metaharness never probed.
+    pub reason: String,
+}
+
 /// The raw vendor transcript this run was read from.
 ///
 /// Required by design § 8.4 O8: the projection's `transcript_digest` and `source_line`, the
@@ -298,6 +317,39 @@ pub enum Event {
         /// [`None`] means the harness did not say, never that the run could do nothing.
         #[serde(default, skip_serializing_if = "Option::is_none")]
         available_operations: Option<Vec<String>>,
+        /// **What the run asked for and this machine would not admit**, each with the predicate
+        /// that decided.
+        ///
+        /// The third question the opening record has to answer, and neither of the two above can.
+        /// `offered_tools` says what the model was **offered**; `available_operations` says what
+        /// the run could **do**; both describe a set that is *present*, and a tool the machine
+        /// refused to admit is absent from every one of them. So a run that was denied execution
+        /// and a run that never wanted it produce the identical record — which is not a gap in a
+        /// report, it is a gap in the only evidence anybody has afterwards.
+        ///
+        /// On 2026-08-29 that cost weeks. A driven session whose only legal route was running a
+        /// program was published a six-entry catalogue instead of seven — no error, no warning, no
+        /// fact anywhere in the record — hand-wrote files instead, and the failure was read as a
+        /// model failure. It was the machine's: the publication gate had dropped `run` because the
+        /// capability facts it needs were absent, which is the gate working exactly as designed.
+        /// What was missing was never a refusal — putting the tool back in front of the model is
+        /// the thing publication exists to avoid — it was the **fact**, and this field is it.
+        ///
+        /// **[`None`] means the harness did not say, and never that nothing was withheld.** The
+        /// two are different runs and only an adapter that watched the harness can tell them
+        /// apart: a producer that writes this field states `[]` for a run that got everything it
+        /// asked for, and one that has never heard of the field states nothing at all. An adapter
+        /// that read silence as `[]` would be asserting *this machine admitted everything* about a
+        /// vendor it never asked (invariant 3, amendment a4's rule: absence of evidence is not a
+        /// property).
+        ///
+        /// Serialized as an explicit `null` rather than skipped, on § 2.1's rule and amendment
+        /// a9's restatement of it — *an absent field is an explicit `null` and never a missing
+        /// key, so a build that predates the amendment and a vendor that reports nothing stay
+        /// distinguishable.* A missing key is precisely the silence this field exists to end, and
+        /// it would be an odd field that reintroduced it one level up.
+        #[serde(default)]
+        withheld: Option<Vec<WithheldTool>>,
         /// Slash commands the session has.
         slash_commands: Option<Vec<String>>,
         /// Skills the session has.

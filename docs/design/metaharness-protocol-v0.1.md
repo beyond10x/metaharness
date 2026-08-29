@@ -118,6 +118,22 @@
 > adapter holds bytes for, and chasing the installed binary with a search-and-replace is the one
 > move this row forbids — the next move costs a capture, which is a decision with a price on it
 > rather than an edit.
+> **Amendment a12, 2026-08-29**, from a defect that cost weeks rather than from a review: **one
+> more payload field on `session.started` — `withheld`, what the run asked for and the machine
+> would not admit.** `offered_tools` says what the model was offered and `available_operations`
+> says what the run could do; both describe something *present*, so a tool a publication gate
+> dropped is missing from each of them exactly as a tool nobody wanted is. A driven session whose
+> only legal route was running a program was published a six-entry catalogue instead of seven — no
+> error, no warning, nothing anywhere in the record — hand-wrote files instead, and the failure was
+> read as a **model** failure for weeks. It was the machine's: the capability facts the gate needs
+> were absent. What was missing was never a refusal (putting the tool back in front of the model is
+> the thing publication exists to avoid); it was the **fact**, with the predicate that decided.
+> Additive and optional on § 4.1's rules, and **[`None`] is *the harness did not say* and never
+> *nothing was withheld*** — the invariant 3 reading, the same one a4 made for the hermetic rows.
+> The b10x adapter reads it from `b10x-harness --json` and states `None` where the line is silent,
+> because the field is under that repository's `[Unreleased]` and its version string has not moved,
+> so the observed version cannot decide which silence this is. Marked at each point of change, on
+> the same rule as the review's corrections.
 > **Audience:** whoever reviews this for acceptance, and whoever builds it afterwards.
 > **Sources studied:** `beyond10x/engineering-protocols` (public, read-only), and a private
 > agent runtime whose patterns are described here generically and whose names, records and
@@ -411,7 +427,7 @@ visible. The right-hand column is § 4.4's projection.
 
 | event | payload | why it exists | → `trace-ir/1` |
 |---|---|---|---|
-| `session.started` | **every field of `trace-ir/1`'s `SessionStart`** — resolved model, permission mode, credential source, harness version, **output style**, cwd, offered tools, **slash commands**, skills, agents, plugins, MCP servers (list, not count) — plus adapter id and class, the raw-transcript reference (§ 8.4 O8) and the `hermetic` attestation block (§ 8.3) | the opening record is where a class of defect is visible before a turn is spent, and it is the only place that can distinguish *offered* from *called*. The field set is the IR's rather than a shorter one of our own, because a field metaharness omits is an expectation kind that becomes undecidable (review finding **F11**) | `session_start` |
+| `session.started` | **every field of `trace-ir/1`'s `SessionStart`** — resolved model, permission mode, credential source, harness version, **output style**, cwd, offered tools, **slash commands**, skills, agents, plugins, MCP servers (list, not count) — plus adapter id and class, the raw-transcript reference (§ 8.4 O8), the `hermetic` attestation block (§ 8.3) and, **since amendment a12, `withheld`: the tools the run declared that the machine would not admit, each with the predicate that decided** | the opening record is where a class of defect is visible before a turn is spent, and it is the only place that can distinguish *offered* from *called*. The field set is the IR's rather than a shorter one of our own, because a field metaharness omits is an expectation kind that becomes undecidable (review finding **F11**) | `session_start` |
 | `session.ended` | **every field of `trace-ir/1`'s `RunOutcome`** — `is_error`, subtype, stop reason, terminal reason, API error status, `num_turns`, **`duration_ms`, `duration_api_ms`, `ttft_ms`, `time_to_request_ms`**, `total_cost_usd`, `permission_denials`, **`subagents_spawned`**, `usage`, `model_usage` — plus metaharness's own decision census | the terminal record is the source of every resource fact. Same reason as above: omitting the four duration fields and `subagents_spawned` would silently kill `duration.total`, `duration.api`, `ttft`, `time_to_request` and `subagent.spawned` (**F11**) | `run_outcome` |
 
 **Boundaries**
@@ -504,6 +520,46 @@ own number is `session.ended.total_cost_usd` and it stays the vendor's. An adapt
 `thinking_tokens` from `thinking.estimate`, or `tool_use_result` from the result content, would be
 answering a question with a different question's evidence; both are refused by name in the adapters
 that could have done it.
+
+**Amendment a12 — a third question the opening record has to answer, because the first two cannot.**
+No new event; the vocabulary stays at nineteen. `session.started` gains **`withheld`**, a list of
+`{tool, reason}`.
+
+| field | rides on | type | present when |
+|---|---|---|---|
+| `withheld` | `session.started` | a list of `{tool, reason}`, or `null` | the harness states what a run **declared** and the machine would not admit. `b10x-harness` does, from its own capability facts; no vendor harness in this workspace does, and each says `null` rather than `[]` |
+
+**Three fields, three questions, and the third is the one that was silent.** `offered_tools` is
+what the model was **offered**. `available_operations` is what the run could **do**. Both describe
+a set that is *present*, so a tool a publication gate refused to admit is absent from both of them
+in exactly the way a tool nobody wanted is — and the two runs produce an identical record. That is
+not a gap in a report; it is a gap in the only evidence anybody has after the run.
+
+**What it cost.** On 2026-08-29 a driven session whose only legal route was running a program was
+published six catalogue entries instead of seven. No error, no warning, no fact in the record. It
+hand-wrote files instead, and for weeks the failure was read as a model failure. The cause was the
+machine's: the capability facts the gate reads were absent, which is the gate working exactly as
+designed. The missing thing was never a **refusal** — a refusal would put the tool back in front of
+the model, which is what publication exists to prevent — it was the **fact**, plus the predicate
+that decided, in the machine's own words.
+
+**`null` is *the harness did not say*, and never *nothing was withheld*.** Invariant 3 and
+amendment a4's rule, one level down: a producer that writes this field states `[]` for a run that
+got everything it asked for, and a producer that has never heard of the field states nothing at
+all. An adapter that read silence as `[]` would be asserting *this machine admitted everything*
+about a machine it never probed. Which is why the field serializes as an explicit `null` rather
+than being skipped — § 2.1's rule, restated by a9: a missing key is precisely the silence this
+field exists to end.
+
+**The b10x adapter reads silence as silence, and the reason is a version that cannot decide.**
+`b10x-harness` skips its own `withheld` when empty, so an absent key on its wire is either *nothing
+was withheld* or *a build from before the field*. The observed version cannot tell them apart: the
+field is under that repository's `[Unreleased]` and the binary answered `0.1.0` before and after it
+landed — the same failure `emitted_flags` was written for, where `--substrate-embedded` changed
+shape under an unmoved version string. So the adapter states `null`. **The harness's own converter
+answers `[]`**, and that is not a contradiction: it stamps `harness_version` with its *own*
+`CARGO_PKG_VERSION`, so it has already claimed the record as that build's, and that build writes
+the field whenever the loop reports one.
 
 ### 4.2 Decision modes
 

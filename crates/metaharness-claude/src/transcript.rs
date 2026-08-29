@@ -194,6 +194,10 @@ impl TranscriptReader {
             // vendor's tool list into operations is that table's job and an adapter that kept its
             // own copy would be a second owner of one rule (design § 8.4 O6).
             available_operations: None,
+            // The vendor states no such thing: Claude Code's opening record lists the tools it
+            // has and never a tool it wanted and could not have. `None` is *it did not say*, and
+            // an empty list here would be this adapter asserting the machine admitted everything.
+            withheld: None,
             adapter: ADAPTER_ID.to_string(),
             adapter_class: "harness".to_string(),
             harness_version: str_field(record, "claude_code_version"),

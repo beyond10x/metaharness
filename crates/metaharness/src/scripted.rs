@@ -337,6 +337,10 @@ fn strings_of(value: &Value, key: &str) -> Option<Vec<String>> {
 }
 
 impl HarnessSeam for ScriptedSeam {
+    // One arm per event of an authored vocabulary, which is what the real seams look like too —
+    // `B10xSeam::push_line` carries the same allow. Splitting it would put half the wire's
+    // vocabulary in a function whose only reason to exist is a line count.
+    #[allow(clippy::too_many_lines)]
     fn push_line(&mut self, line: &str) -> Vec<Emission> {
         self.line += 1;
         let Ok(value) = serde_json::from_str::<Value>(line) else {
@@ -349,6 +353,8 @@ impl HarnessSeam for ScriptedSeam {
         let event = match emit {
             "session.started" => Event::SessionStarted {
                 available_operations: None,
+                // The claude wire this models names no withheld tool: *it did not say*.
+                withheld: None,
                 adapter: metaharness_claude::ADAPTER_ID.to_string(),
                 adapter_class: "harness".to_string(),
                 harness_version: text_of(&value, "harness_version"),

@@ -5,7 +5,7 @@
 
 use metaharness_protocol::{
     Command, Decision, DecisionCensus, Digest, Emission, Event, HarnessSeam, HermeticAttestation,
-    Seam, SeamFactory, TranscriptRef, Usage,
+    Seam, SeamFactory, TranscriptRef, Usage, WithheldTool,
 };
 use serde_json::Value;
 
@@ -169,6 +169,44 @@ impl HarnessSeam for B10xSeam {
                                 .collect()
                         },
                     ),
+                    // **What the run asked for and the machine would not admit** — the one fact
+                    // the two lists above cannot carry, because a withheld tool is absent from
+                    // both of them exactly as an unwanted one is.
+                    //
+                    // Absent on the line reads as `None`, *the record did not say*, and never as
+                    // an empty list. The loop skips this field when nothing was withheld, so on
+                    // the wire "no key" is either *nothing was withheld* or *a build that predates
+                    // the field*, and nothing here can tell those apart: the observed version
+                    // cannot decide it. `b10x-harness` reports `0.1.0` and the field is under that
+                    // repository's `[Unreleased]`, so the same string answers for a build that
+                    // writes it and one that does not — the failure [`crate::launch::emitted_flags`]
+                    // was written for, where `--substrate-embedded` changed shape under an
+                    // unmoved version. Reading the silence as `[]` would make this adapter assert
+                    // *the machine admitted everything it was asked for* about a run it observed
+                    // and never probed, which is invariant 3 in one line.
+                    withheld: value
+                        .get("withheld")
+                        .and_then(Value::as_array)
+                        .map(|entries| {
+                            entries
+                                .iter()
+                                .map(|entry| WithheldTool {
+                                    // The harness's own words, passed through. A default here is a
+                                    // placeholder and not a claim: a malformed entry still says *one
+                                    // tool was withheld*, which is more than dropping it would.
+                                    tool: entry
+                                        .get("tool")
+                                        .and_then(Value::as_str)
+                                        .unwrap_or_default()
+                                        .to_owned(),
+                                    reason: entry
+                                        .get("reason")
+                                        .and_then(Value::as_str)
+                                        .unwrap_or_default()
+                                        .to_owned(),
+                                })
+                                .collect()
+                        }),
                     // Absent because the loop has none of these, not because nobody looked.
                     slash_commands: None,
                     skills: None,
@@ -428,6 +466,62 @@ mod tests {
             "the loop has none, so it states none"
         );
         assert!(plugins.is_none());
+    }
+
+    #[test]
+    fn a_tool_the_machine_would_not_admit_crosses_by_name_and_carries_the_predicate() {
+        // The silence this closes. Publication works by absence — a tool the machine cannot
+        // confine is never published — and an absence reads identically to a run that never
+        // wanted the tool. On 2026-08-29 a session whose only legal route was running a program
+        // was published six catalogue entries instead of seven, hand-wrote files instead, and the
+        // failure was read as the model's for weeks.
+        let mut seam = seam();
+        let event = one(
+            &mut *seam,
+            r#"{"kind":"started","model":"m","published_tools":["tool_invoke"],"operations":["file.read"],"withheld":[{"tool":"run","reason":"`exec.argv-only` must be true and this machine says nothing."}]}"#,
+        );
+        let Event::SessionStarted {
+            withheld,
+            offered_tools,
+            available_operations,
+            ..
+        } = event
+        else {
+            panic!("an opening record")
+        };
+        let withheld = withheld.expect("the loop said so and the seam carries it");
+        assert_eq!(withheld.len(), 1);
+        assert_eq!(withheld[0].tool, "run");
+        assert!(
+            withheld[0].reason.contains("`exec.argv-only`"),
+            "the machine's own predicate, passed through: {}",
+            withheld[0].reason
+        );
+        // Beside the other two lists and not instead of them: `run` is in neither, which is
+        // exactly why the third field had to exist.
+        assert_eq!(offered_tools, Some(vec!["tool_invoke".to_owned()]));
+        assert_eq!(available_operations, Some(vec!["file.read".to_owned()]));
+    }
+
+    #[test]
+    fn a_line_that_names_no_withheld_tool_is_silence_and_never_an_empty_list() {
+        // The loop skips the field when nothing was withheld, so an absent key is either *nothing
+        // was withheld* or *a build that predates the field* — and the observed version cannot
+        // decide it: `b10x-harness` answers `0.1.0` either way, which is the same failure
+        // `emitted_flags` exists for. `None` says *the record did not say*; `Some(vec![])` would
+        // assert this machine admitted everything, about a machine this adapter never probed.
+        let mut seam = seam();
+        let event = one(
+            &mut *seam,
+            r#"{"kind":"started","model":"m","published_tools":["workspace_read"]}"#,
+        );
+        let Event::SessionStarted { withheld, .. } = event else {
+            panic!("an opening record")
+        };
+        assert!(
+            withheld.is_none(),
+            "absence of evidence is not a property (invariant 3)"
+        );
     }
 
     #[test]

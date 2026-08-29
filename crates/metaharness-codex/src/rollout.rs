@@ -174,6 +174,9 @@ impl RolloutReader {
             // vendor's tool list into operations is that table's job and an adapter that kept its
             // own copy would be a second owner of one rule (design § 8.4 O6).
             available_operations: None,
+            // A rollout's `session_meta` names no tool the run wanted and did not get; the vendor
+            // has no such record. `None` is *it did not say*, never *nothing was withheld*.
+            withheld: None,
             adapter: ADAPTER_ID.to_string(),
             adapter_class: "harness".to_string(),
             harness_version: version.clone(),

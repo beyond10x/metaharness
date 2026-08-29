@@ -5,6 +5,34 @@ was amended and the amendment is named here.
 
 ## [Unreleased]
 
+### Added
+
+- **`session.started` says what the run asked for and the machine would not admit** — `withheld`,
+  a list of `{tool, reason}`, and design amendment **a12**. Two fields already answered two
+  questions: `offered_tools` is what the model was *offered*, `available_operations` is what the
+  run could *do*. Both describe a set that is **present**, so a tool a publication gate refused to
+  admit is missing from each of them in exactly the way a tool nobody wanted is — and the two runs
+  produce an identical record. On 2026-08-29 that cost weeks: a driven session whose only legal
+  route was running a program was published a six-entry catalogue instead of seven, with no error,
+  no warning and no fact anywhere in the record; it hand-wrote the files instead and the failure was
+  read as a **model** failure. It was the machine's. What was missing was never a refusal — putting
+  the tool back in front of the model is the thing publication exists to prevent — it was the
+  **fact**, with the predicate that decided, in the machine's own words.
+  `WithheldTool { tool, reason }` is this crate's own type and not the harness's, on invariant 1:
+  `metaharness-protocol` imports nothing but clap, serde, `serde_json` and sha2, so the wire is the
+  contract between the two repositories rather than a shared Rust type.
+  **`null` is *the harness did not say*, and never *nothing was withheld*** (invariant 3, a4's
+  rule): a producer that writes the field states `[]` for a run that got everything it asked for,
+  and one that has never heard of it states nothing at all. It serializes as an explicit `null`
+  rather than being skipped, on § 2.1's rule — a missing key is precisely the silence the field
+  exists to end. Every vendor adapter states `None` with the reason in one line: the vendor does not
+  say. **The b10x adapter reads silence as silence**, because the observed version cannot decide
+  which silence it is — the field is under `b10x-harness`'s `[Unreleased]` and that binary answered
+  `0.1.0` both before and after it landed, which is the failure `emitted_flags` exists for. The
+  harness's own converter answers `[]` instead, and that is not a disagreement: it stamps
+  `harness_version` with its *own* `CARGO_PKG_VERSION`, so it has already claimed the record as
+  that build's.
+
 ## [0.1.0] — 2026-08-24
 
 First tagged release. The entries below cover everything since the crate was established; the
