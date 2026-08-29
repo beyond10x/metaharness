@@ -1543,6 +1543,12 @@ fn b10x_launch(
     if let Some(driver) = &spec.driver {
         launch = launch.with_driver(driver.display().to_string());
     }
+    // **The same directories the vendor arm is given, on the arm that can now read them.** The
+    // spec field already existed and was already copied and digested by `plugin_trees`, which was
+    // never Claude-gated — what was missing was a loop that could do anything with it.
+    for directory in &spec.plugin_dir {
+        launch = launch.with_plugin_dir(directory.display().to_string());
+    }
     if let Some(name) = &spec.toolchain {
         launch = launch.with_toolchain(name);
     }

@@ -224,13 +224,43 @@ impl HarnessSeam for B10xSeam {
                     // nothing from one too old to say so, whereas no build of this harness has
                     // ever had an MCP client to report.
                     mcp_servers: Some(Vec::new()),
-                    skills: Some(Vec::new()),
+                    // **Read from the record now that the loop has skills to report.** It was a
+                    // hardcoded `[]` on the grounds that this harness had no skills mechanism;
+                    // it has one, so hardcoding would now be asserting *none were offered* about
+                    // a run that may have been offered several. Absent still reads `[]`, because
+                    // the loop always writes the field.
+                    skills: Some(
+                        value
+                            .get("skills")
+                            .and_then(Value::as_array)
+                            .map(|names| {
+                                names
+                                    .iter()
+                                    .filter_map(|name| name.as_str().map(ToOwned::to_owned))
+                                    .collect()
+                            })
+                            .unwrap_or_default(),
+                    ),
                     // Left `None` deliberately: this adapter has not established that the loop
                     // publishes no named agents and no plugins, and `hermetic.installed_plugins`
                     // answers the plugin question elsewhere. Asserting `[]` on an unchecked
                     // belief is the defect being fixed above, not a smaller version of it.
+                    // Read from the record for the same reason `skills` above is: the loop states
+                    // what it published, and a hardcoded value here would be this adapter asserting
+                    // something about a run it observed and never probed.
+                    agents: Some(
+                        value
+                            .get("agents")
+                            .and_then(Value::as_array)
+                            .map(|names| {
+                                names
+                                    .iter()
+                                    .filter_map(|name| name.as_str().map(ToOwned::to_owned))
+                                    .collect()
+                            })
+                            .unwrap_or_default(),
+                    ),
                     slash_commands: None,
-                    agents: None,
                     plugins: None,
                     inputs_digest: None,
                     transcript: self.transcript.clone(),

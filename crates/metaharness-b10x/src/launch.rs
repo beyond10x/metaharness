@@ -185,6 +185,12 @@ pub struct B10xLaunch {
     pub max_turns: Option<u32>,
     /// A build toolchain the run may read, admitted read-only.
     pub toolchain: Option<String>,
+    /// Plugin directories whose `skills/` the run may load by name.
+    ///
+    /// The same flag the vendor arm takes, with the same argument: the loop reads the vendor's
+    /// on-disk skill format, so a comparison hands both arms one directory and neither is given
+    /// instructions the other was not.
+    pub plugin_dir: Vec<String>,
     /// A program on the host the confined run may execute, staged and mounted read-only.
     ///
     /// Separate from [`Self::allow_program`] because they answer different questions: the
@@ -235,6 +241,7 @@ impl B10xLaunch {
             max_turns: None,
             toolchain: None,
             driver: None,
+            plugin_dir: Vec::new(),
             write_scope: Vec::new(),
             context: Vec::new(),
             scope_silent: false,
@@ -379,6 +386,13 @@ impl B10xLaunch {
     #[must_use]
     pub fn with_driver(mut self, path: impl Into<String>) -> Self {
         self.driver = Some(path.into());
+        self
+    }
+
+    /// The same launch, offered the skills under one plugin directory. Repeatable.
+    #[must_use]
+    pub fn with_plugin_dir(mut self, path: impl Into<String>) -> Self {
+        self.plugin_dir.push(path.into());
         self
     }
 
@@ -533,6 +547,10 @@ pub fn argv(launch: &B10xLaunch) -> Vec<String> {
     if let Some(program) = &launch.driver {
         argv.push("--driver".to_owned());
         argv.push(program.clone());
+    }
+    for directory in &launch.plugin_dir {
+        argv.push("--plugin-dir".to_owned());
+        argv.push(directory.clone());
     }
     for rule in &launch.write_scope {
         argv.push("--write-scope".to_owned());

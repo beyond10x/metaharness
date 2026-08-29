@@ -265,9 +265,13 @@ if [ "$ARM" = "b10x" ]; then
   STEPS=$(grep -c 'harness: b10x' "$MAP")
   [ "$STEPS" -ge 1 ] || { say "FAIL: derived map names no b10x step"; exit 1; }
   say "derived map: $STEPS llm step(s) on the b10x arm"
-  # `--plugin-dir` is refused on this arm by name: a plugin is a vendor mechanism and this loop has
-  # none, so it is left off rather than passed and ignored.
+  # **`--plugin-dir` is passed here too, and that is the change.** It was withheld on the grounds
+  # that a plugin is a vendor mechanism and this loop had none — true until the loop learned to read
+  # the skills half of the vendor's on-disk format. Both arms now take the same flag with the same
+  # argument, so neither is given instructions the other was not, which is the only way the two
+  # columns are comparable at all.
   ARM_FLAGS=(
+    --plugin-dir "$WORK/plugin"
     --b10x-endpoint "$B10X_ENDPOINT"
     --b10x-model "$B10X_MODEL"
     --b10x-wire "$B10X_WIRE"

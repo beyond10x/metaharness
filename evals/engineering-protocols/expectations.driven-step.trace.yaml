@@ -107,6 +107,18 @@ expectations:
 
   - id: the-planning-guidance-was-loaded
     statement: the planning guidance reached the model, however this harness delivers it
+    severity: advisory
+    # **Advisory, and it became advisory the day it stopped being able to hold.** This row exists
+    # for a harness with no skills mechanism, which loads the guidance by running the CLI itself.
+    # Once a harness *has* the mechanism the model is handed the skill and never makes that call —
+    # so the row reads `unk` there, and `unk` fails. Measured 2026-08-29: the native arm scored
+    # `ok` on this row before it could offer skills and `unk` immediately after, on a run that was
+    # strictly better informed.
+    #
+    # A row that fails a run for improving is not a gate, so it is kept as a note: it still
+    # distinguishes *loaded by the fallback route* from *never loaded at all* on any arm that has
+    # no mechanism, which is what it was written for. `the-skill-was-offered` is the gate wherever
+    # the mechanism exists, and `the-skill-ran-to-completion` below says whether it was used.
     # **The outcome half of the row above, which is the half that matters to the work.** The native
     # arm has no plugin mechanism and loads the skill by running the CLI itself —
     # `protocol skill load planning` — observed succeeding in every native run inspected on
