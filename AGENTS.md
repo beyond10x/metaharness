@@ -7,6 +7,17 @@ anything another repo verifies is a coordinated migration with an ADR — live i
 
 `README.md` says what metaharness is and how to run one. This file says what must not break.
 
+## Serves
+
+The objectives of the collection this repository moves, by id from `atlas/ROADMAP.md` — the only
+cross-repository roadmap, and the page that says what each id means and which evidence closes it:
+
+- **O3 — any harness, observed and compared.** One interface to many harnesses, one record vocabulary, and the eval that scores two arms on the same work under the same governor.
+- **O6 — self-improvement, built into all of it.** That eval is the measurement a self-improvement loop reads; a column that cannot fail measures nothing.
+
+A change here that moves none of these is a question for the operator, not a task.
+`atlas/scripts/check-map.sh` fails a repository whose `AGENTS.md` names no objective.
+
 ## What this repository owns
 
 One interface to many agent harnesses: emit events, receive steering commands, run hermetically,

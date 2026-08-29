@@ -1,5 +1,7 @@
 # Roadmap — operator-scheduled directions
 
+Serves **O3** and **O6** of `atlas/ROADMAP.md`, the collection's objectives; this page orders the work inside this repository.
+
 Brain-dumped by the operator on 2026-08-22 and recorded here so nothing lives only in a chat.
 Each item is a direction, not a work order; the ones with design questions get a design page
 before code (AGENTS.md's rule). Ordered roughly by how much they de-risk everything else.
