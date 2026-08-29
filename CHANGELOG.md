@@ -7,6 +7,16 @@ was amended and the amendment is named here.
 
 ### Added
 
+- **harness is pinned by git revision.** The four dependencies on `b10x-harness-tools`,
+  `b10x-harness-wire` and `b10x-harness-loop` were `path = "../../../harness/crates/*"` — the
+  sibling checkout, whatever it held; `--locked` locked nothing of it, and every green gate since
+  the adapter was written was green against an unnamed tree. They are now
+  `git = "https://github.com/beyond10x/harness"`, `rev = 3467bf0` (harness `main` on 2026-08-29:
+  the loop that reads skills and agents, which this adapter's `--plugin-dir` and the
+  `skills`/`agents` fields on `session.started` need). `.cargo/config.toml` sets
+  `net.git-fetch-with-cli` so the private repository is fetched with the system git's credential.
+  Invariant 10 holds it. Gate at the pin: 26 suites, 502 passed, exit 0.
+
 - **Skills and named agents reach the native arm, and both arms take the same plugin.** The b10x
   adapter carries `RunSpec.plugin_dir` through to `--plugin-dir`, and the eval passes it to both
   arms. It was withheld from the native one by name, on the grounds that a plugin is a vendor

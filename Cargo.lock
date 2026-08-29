@@ -64,6 +64,7 @@ dependencies = [
 [[package]]
 name = "b10x-harness-loop"
 version = "0.1.0"
+source = "git+https://github.com/beyond10x/harness?rev=3467bf0fd459953babe47a505a364f28a21179f4#3467bf0fd459953babe47a505a364f28a21179f4"
 dependencies = [
  "b10x-harness-wire",
  "serde",
@@ -74,6 +75,7 @@ dependencies = [
 [[package]]
 name = "b10x-harness-tools"
 version = "0.1.0"
+source = "git+https://github.com/beyond10x/harness?rev=3467bf0fd459953babe47a505a364f28a21179f4#3467bf0fd459953babe47a505a364f28a21179f4"
 dependencies = [
  "b10x-harness-wire",
  "globset",
@@ -85,6 +87,7 @@ dependencies = [
 [[package]]
 name = "b10x-harness-wire"
 version = "0.1.0"
+source = "git+https://github.com/beyond10x/harness?rev=3467bf0fd459953babe47a505a364f28a21179f4#3467bf0fd459953babe47a505a364f28a21179f4"
 dependencies = [
  "serde",
  "serde_json",

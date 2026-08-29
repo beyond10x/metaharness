@@ -16,8 +16,13 @@ workspace = true
 # and with it a second path-containment check, which is the one thing in either tree that must not
 # exist twice. `b10x-harness-tools` depends on `b10x-harness-wire`, serde and nothing else: no
 # substrate, no async runtime, no filesystem beyond `std`. That is what makes it importable here.
-b10x-harness-tools = { path = "../../../harness/crates/harness-tools" }
-b10x-harness-wire = { path = "../../../harness/crates/harness-wire" }
+#
+# Pinned by git revision, never by `path`: a path into a sibling checkout builds against whatever
+# is checked out there, and `--locked` cannot lock it (AGENTS.md invariant 10; the same rule
+# harness holds for substrate). The revision is harness `main` at 3467bf0, 2026-08-29 — the
+# skills-and-agents loop the b10x adapter reads (`--plugin-dir`, `skills`/`agents` on `Started`).
+b10x-harness-tools = { git = "https://github.com/beyond10x/harness", rev = "3467bf0fd459953babe47a505a364f28a21179f4" }
+b10x-harness-wire = { git = "https://github.com/beyond10x/harness", rev = "3467bf0fd459953babe47a505a364f28a21179f4" }
 serde_json = { workspace = true }
 
 [dev-dependencies]
