@@ -98,6 +98,87 @@ passed locally on an older one. Run `rustup update` before pushing anything you 
 second chance at, and read the gate's own exit status — never a pipeline's. `task check 2>&1 | tail`
 reports `tail`'s status, not the gate's.
 
+## Live-evaluating our own harness
+
+`evals/engineering-protocols/run-driven.sh` drives a real `protocol drive run` through metaharness
+against a scratch copy of engineering-protocols, on either arm, and scores the transcripts. It is
+how the native harness is compared against a vendor one on the same work.
+
+```console
+EVAL_ARM=b10x   bash evals/engineering-protocols/run-driven.sh   # the native loop
+EVAL_ARM=claude bash evals/engineering-protocols/run-driven.sh   # the vendor, and the default
+```
+
+**This spends real money on a real model.** It is not part of `task check` and must never be put
+there. Do not run two at once — they are isolated by scratch directory, but both build in the same
+target directories and both consume the same budget, and two sessions ran it concurrently on
+2026-08-29 for one answer.
+
+### Before a b10x run, reinstall the binary
+
+The eval resolves `$HOME/.local/bin/b10x-harness` — `EVAL_B10X_BINARY` overrides it — and **refuses
+to start if that file is older than the harness repository's newest commit**, printing the
+`cargo install` line to fix it. It refuses rather than correcting, because the install directory is
+the operator's and a debug build silently replacing a release one changes what every other caller
+on this machine gets. Expect the refusal whenever anyone has pushed to harness; it fired three
+times in one afternoon, once over a docs-only commit, which is the guard being right rather than
+noisy — it cannot know what is in a commit.
+
+The script re-execs itself under `systemd-run --user --scope`. That is not cosmetic: substrate's
+`probe_cgroup` requires the **calling process's own cgroup** to sit inside the configured root, so
+from an ordinary login shell the machine reports no exec facts and the loop publishes six tools
+instead of seven, with no error anywhere.
+
+### Reading the result
+
+`EVAL_EXIT` is 0 only when nothing failed; `unk` counts as a failure. The run prints its scratch
+directory — keep it, it is the whole record:
+
+```
+<scratch>/ws_project/.engineering/runs/EVAL-1/1/transcripts/*.jsonl   metaharness.event/1 streams
+<scratch>/trace-honest.txt, trace-denial.txt                          the per-row verdicts
+<scratch>/drive.log, drive.err                                        the driver's own output
+```
+
+Never read the census by piping the script's stdout through `tail` or `head` — the verdict block is
+long and the interesting lines are in the middle. Redirect to a file and grep it.
+
+### Things that were true and cost a paid run each
+
+- **A flag must be forwarded by every link in the chain**, and the chain is
+  `protocol drive` → `metaharness run <arm>` → the harness binary. `--plugin-dir` was wired through
+  metaharness and the loop and still arrived empty, because engineering-protocols'
+  `b10x_argv` never emitted it. Reading the code did not show this; a paid run did. When a flag
+  does not arrive, check **every** link before suspecting the one you changed.
+- **The b10x adapter writes `content: null` on every `tool.result`.** Any census keyed on
+  `.content` reads 0 on that arm whatever happened. Refusals cross as `warning` with a `code`.
+- **A row that names only vendor tool names decides nothing on the native arm.** Expectation rows
+  union `tools:` with `operations:`; the native arm spells the entry `run` and the operation
+  `shell`, never `command.execute`.
+- **A mechanism row and an outcome row cannot both pass once the mechanism lands.**
+  `the-planning-guidance-was-loaded` asks whether the model ran the CLI's own `skill load`; a
+  harness that *offers* skills hands it over and the call never happens, so the row went `ok`
+  before that landed and `unk` after, on a strictly better-informed run. It is advisory now. A row
+  that fails a run for improving is not a gate.
+- **A census that depends on what a model happens to do is not a census.** The surface-denial
+  column read 1 and 0 on two runs of the same three commits, because nothing in either prompt asked
+  for a program outside the declared set — the 1 came from an unasked-for `rm` cleanup. The
+  `specify` prompt now asks for `run ["env"]` deliberately.
+- **`unk` is not a pass.** An empty selection reads `unk` and never `ok`, on purpose: a step that
+  never made the call cannot satisfy a row by having nothing to judge.
+
+### What the four enforcement tiers are, as flags
+
+The native arm is only comparable when all four are declared; three of them were declared nowhere
+the loop could see until 2026-08-29, and the column measured one tier while reading like four.
+
+| tier | how it reaches the loop |
+|---|---|
+| publication | the machine's own facts — a tool it cannot confine is never published |
+| ceiling | `--approve-up-to <RISK>` (never `--yes`, which approves the destructive class and does not combine with a ceiling) |
+| approver | `--approve auto\|prompt\|deny\|all` |
+| content hook | `--hooks <FILE>`, written per step by the driver |
+
 ## Releases
 
 Cut `CHANGELOG.md` under a version heading at a fully gated `main` commit, then write an annotated
