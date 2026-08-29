@@ -2912,6 +2912,35 @@ mod b10x_launch_tests {
         );
     }
 
+    /// A spawned run writes no session and asks nobody, because it can do neither.
+    ///
+    /// Both were added to the loop after this adapter was written, and both killed every launch
+    /// until the adapter said so. The child's environment is constructed and carries no `HOME`, so
+    /// a run that wanted a session directory refused with `neither XDG_STATE_HOME nor HOME is
+    /// set`; and a child has no terminal, so a run that had to ask about a call above the risk
+    /// ceiling refused that call instead of making it. Neither wrote a terminal record, so the
+    /// driver above saw `metaharness exited 3` for both.
+    #[test]
+    fn a_spawned_run_keeps_no_session_and_asks_nobody() {
+        let argv = argv_of(&spec());
+        assert!(
+            argv.iter().any(|word| word == "--no-session"),
+            "a step's launch must not pick up the previous step's conversation: {argv:?}"
+        );
+        assert!(
+            argv.iter().any(|word| word == "--yes"),
+            "there is no terminal to ask on, and no decision seam on this arm: {argv:?}"
+        );
+        // Neither takes a value; a value here would be read as a positional argument.
+        for flag in ["--no-session", "--yes"] {
+            let at = argv.iter().position(|word| word == flag).expect("present");
+            assert!(
+                argv.get(at + 1).is_none_or(|next| next.starts_with("--")),
+                "{flag} takes no value: {argv:?}"
+            );
+        }
+    }
+
     #[test]
     fn an_unconfined_run_names_no_socket_and_gets_a_read_only_catalogue() {
         let argv = argv_of(&spec());

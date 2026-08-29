@@ -440,6 +440,29 @@ pub fn argv(launch: &B10xLaunch) -> Vec<String> {
         "--workspace".to_owned(),
         launch.workspace.clone(),
         "--json".to_owned(),
+        // **No session file.** The loop's own flag documentation writes this arm's case out: *"for
+        // an evaluation arm that must leave nothing on the machine it ran on … an arm whose runs
+        // must be identically reproducible from their flags cannot have one of them silently pick
+        // up the previous one's state."* A driven step is exactly that — one launch per step, and
+        // the comparison between arms is worthless if step two starts from step one's leftovers.
+        //
+        // It is also what makes the launch survive a child environment with no `HOME`: the loop
+        // keeps sessions under `XDG_STATE_HOME` or `HOME`, and this adapter constructs the child's
+        // environment rather than inheriting one (H3), so a run that wanted a session directory
+        // refused before reaching a model — `neither XDG_STATE_HOME nor HOME is set`, with no
+        // terminal record, which the driver above reads as `metaharness exited 3`.
+        "--no-session".to_owned(),
+        // **Every call the catalogue published, run.** The loop gained a risk ceiling and asks a
+        // person about anything above it; a spawned child has no terminal, so without this it
+        // refuses those calls and says so on stderr instead of running.
+        //
+        // This is the arm's prior semantics stated rather than inherited: what a b10x run may do
+        // is decided *before* it starts, by which entries the catalogue publishes at all — there is
+        // no decision seam on this arm for a ceiling to consult. A ceiling here would be a second,
+        // later decision that no step map asked for, and the arm would then differ from the vendor
+        // arms in two ways at once. If a driven b10x step should ever ask, it becomes a field on
+        // this launch and a line in the step map, not a default hidden here.
+        "--yes".to_owned(),
     ];
     match &launch.credential {
         Some(Credential::File(path)) => {
