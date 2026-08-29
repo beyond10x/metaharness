@@ -46,6 +46,7 @@
 #   EVAL_PRICES             a rate card for `--prices`; without one the run reports tokens, no price
 #   EVAL_MAX_COST_MICRO     spend ceiling in millionths of a dollar, only with EVAL_PRICES (default 5000000 = $5)
 #   EVAL_APPROVE_UP_TO      the approval ceiling for a headless walk (default high: writes and `run` unasked; destructive refused)
+#   EVAL_FLOW_MAP           the step map the projection carries (default: driven.steps.yaml; `none` = the bare workflow)
 #
 # Usage:  bash evals/engineering-protocols/run-native.sh            # everything free, then stop
 #         bash evals/engineering-protocols/run-native.sh --spend    # and walk it
@@ -157,10 +158,24 @@ mkdir -p "$WORK/plugin"
 (cd "$PLUGIN_SRC" && tar -cf - .) | (cd "$WORK/plugin" && tar -xf -)
 [ -f "$WORK/plugin/skills/planning/SKILL.md" ] || { say "FAIL: the copied plugin has no planning skill"; exit 1; }
 MAP="$SCRIPT_DIR/driven.steps.yaml"
+# Which step map the projection carries. The eval's map has `command` steps — the driver's own
+# validator runs — and the native runner (harness design 0003, M1) turns a `command` node into a
+# model turn with no prompt, which the fourth paid walk found: `receive-1` reached the store through
+# the CLI and `receive-2`, the validate command, ended `unstructured` twice and took the section
+# down with it. `EVAL_FLOW_MAP=none` projects the bare workflow — one model step per state, its
+# summary as the prompt — which is the ordering-plus-governor experiment with nothing the runner
+# cannot run. The governor is the same either way.
+FLOW_MAP="${EVAL_FLOW_MAP:-$MAP}"
 
 # --- 3. the flow and the hooks ---------------------------------------------------------------
 FLOW="$WORK/flow.yaml"
-(cd "$TREE" && protocol workflow flow --id adp/default --root "$TREE" --map "$MAP" --max-attempts "$MAX_ATTEMPTS" --out "$FLOW" >/dev/null)
+if [ "$FLOW_MAP" = "none" ]; then
+  (cd "$TREE" && protocol workflow flow --id adp/default --root "$TREE" --max-attempts "$MAX_ATTEMPTS" --out "$FLOW" >/dev/null)
+  say "flow map: none — one model step per state, the state's summary as its prompt"
+else
+  (cd "$TREE" && protocol workflow flow --id adp/default --root "$TREE" --map "$FLOW_MAP" --max-attempts "$MAX_ATTEMPTS" --out "$FLOW" >/dev/null)
+  say "flow map: $FLOW_MAP"
+fi
 # The confined workspace reaches `/usr`, `/bin`, `/lib`, `/lib64` and the workspace, and nothing
 # else: `~/.local/bin/protocol` is not there, so `run ["protocol", …]` died at exit 127 on every
 # call of the third paid walk and the model read it as *the command is wrong*. `--driver` stages
