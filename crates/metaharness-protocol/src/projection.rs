@@ -118,6 +118,16 @@ pub fn ir_family(event: &Event) -> Option<IrFamily> {
 pub fn required_ir_fields(family: IrFamily) -> &'static [&'static str] {
     match family {
         IrFamily::SessionStart => &[
+            // **`withheld` is not in this list, and adding it would be a claim nothing can
+            // fill.** These are `trace-ir/1`'s fields for the family, spelled with the key the
+            // event carries them under; `trace-ir/1`'s `SessionStart` has no `withheld` field at
+            // all, and design § 4.1 puts amendment a12's field beside `adapter`, the transcript
+            // reference and the `hermetic` block — what metaharness carries *in addition to* the
+            // IR's set — none of which is listed here either. The check would also be one that
+            // can never fail: the key is always serialized, as an explicit `null` when the
+            // harness did not say (§ 2.1). So the fact crosses this wire and stops at the IR
+            // boundary, and projecting it is a change the repository that owns the IR makes
+            // first.
             "model",
             "permission_mode",
             "credential_source",

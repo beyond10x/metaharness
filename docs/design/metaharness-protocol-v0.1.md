@@ -561,6 +561,14 @@ answers `[]`**, and that is not a contradiction: it stamps `harness_version` wit
 `CARGO_PKG_VERSION`, so it has already claimed the record as that build's, and that build writes
 the field whenever the loop reports one.
 
+**Where it stops: `trace-ir/1` has no `withheld` field.** The fact crosses this wire and is not
+projectable — § 4.4's structural check lists the IR's fields per family, and `SessionStart`'s do
+not include this one, so the projection carries it no further than the event stream. That is
+stated rather than papered over: an entry added to that list would claim a family was filled from
+a field it cannot receive. Until the repository that owns the IR carries it, the reader of the
+fact is § 9.4's audit report, which prints it beside the census, and any consumer reading the
+event stream directly.
+
 ### 4.2 Decision modes
 
 **Decision D5 — the embedder chooses, per run and overridable per operation, between two modes.**
@@ -1350,7 +1358,7 @@ expectation language.**
 
 | layer | who owns it | always runs? |
 |---|---|---|
-| **the hermetic verdict** — the twelve rows of § 8.1, each `ok` / `gap` / `unk`, with the two advisory rows reported and not gating, plus the decision census (allowed, denied, by seam) | metaharness, built in, no spec file | yes, whenever `--audit` is given |
+| **the hermetic verdict** — the twelve rows of § 8.1, each `ok` / `gap` / `unk`, with the two advisory rows reported and not gating, plus the decision census (allowed, denied, by seam) and, **since amendment a12, what the opening record said this machine would not admit** | metaharness, built in, no spec file | yes, whenever `--audit` is given |
 | **the expectation check** — arbitrary claims about what the run did | an external auditor over `trace-ir/1` | only when `--spec` is given |
 
 The reasons, in order of weight:
@@ -1421,6 +1429,17 @@ fabricates an observation. A caller that wants a run nobody could judge to be re
 
 **The census is always printed.** A report that hides "0 denials" reads as clean when it may mean
 nothing was ever attempted — § 2.2's ambiguity, in a report rather than in a counter.
+
+**And `withheld` is printed beside it (amendment a12), because the census cannot answer what it
+answers.** A tool this machine would not admit was never put in front of the model, so nothing was
+ever refused for it and every denial count stays zero — the same `0` a run that was offered
+everything prints. It is missing from `offered_tools` and `available_operations` too, in exactly
+the way a tool nobody wanted is. One line after the census, in three shapes that are three
+different facts: `withheld: <tool> (<reason>); …` when the record named any, `withheld: none
+declared` when the harness stated it withheld nothing, and `withheld: not stated by the harness`
+when it said nothing at all — including when there is no opening record to have said it. Rendering
+the third as the second would assert that a machine nobody asked admitted everything (invariant 3,
+a4's rule), which is the confusion this field exists to end.
 
 ---
 
