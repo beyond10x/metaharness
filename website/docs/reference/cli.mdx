@@ -21,7 +21,8 @@ Six verbs. Three of them need no model, no network and no credential.
 | `project --events <FILE>` | Project an event stream into `trace-ir/1`. **Refuses with exit 2** — see [Status](../status.mdx). |
 | `audit --transcript <FILE>` | Judge a transcript offline. **Refuses with exit 2**. |
 
-`<KIND>` is `claude` or `codex`.
+`<KIND>` is `claude`, `codex` or `b10x`. The first two are vendors metaharness drives; the third is
+the beyond10x loop, which it observes — see [the b10x adapter](../harnesses/b10x.mdx).
 
 ## `metaharness run`
 
@@ -41,11 +42,22 @@ Six verbs. Three of them need no model, no network and no credential.
 |---|---|---|
 | `--hermetic [off\|on\|strict]` | `off`; bare `--hermetic` means `on` | See [the hermetic contract](../hermetic.mdx). |
 | `--credentials <SOURCE>` | `operator-login` | `operator-login`, `api-key`, `loopback`, or `none`. |
-| `--plugin-dir <DIR>` | *(none)* | Plugin directories to load, **and only these**. Repeatable. |
+| `--plugin-dir <DIR>` | *(none)* | Plugin directories to load, **and only these**. Repeatable. Copied into the scratch tree and digested before the child starts; on `b10x`, handed to the loop as its own `--plugin-dir`. |
 | `--strict-version` | off | Refuse before the run when the installed vendor version is outside the adapter's pin, instead of warning. |
 
 **`--credentials none`** means the run is expected to fail at the first request — and that is
 sometimes exactly what a test wants.
+
+### Model, effort and actor
+
+| Flag | Meaning |
+|---|---|
+| `--model-endpoint <BASE_URL>` | A model gateway, as its **root** URL (no `/v1`); each harness reaches its own dialect under it. |
+| `--model-wire <WIRE>` | Which API the harness speaks under that root — only `b10x` has a choice: `openai-responses` or `anthropic-messages`. |
+| `--subscription-token-file <FILE>`, `--subscription-token-env <NAME>`, `--subscription-token-pointer <POINTER>` | A subscription token for a route that takes one instead of an API key; the pointer selects a field inside a JSON source. Not interchangeable with `--credentials api-key`. |
+| `--effort <LEVEL>` | Reasoning effort in the vendor's vocabulary, passed through and validated by the vendor. |
+| `--actor <ACTOR>` | Who the run's store writes are made *as*, carried to the child as `AEP_ACTOR` — declared, never inherited. |
+| `--retain-dir <DIR>` | Copy the raw vendor wire out of the scratch root before it is deleted. |
 
 **`--credentials api-key`** is a declaration: without it, `ANTHROPIC_API_KEY` is not in the child
 environment at all.
@@ -82,6 +94,32 @@ A specification nobody checked reads exactly like a specification that passed.
 
 `--auditor` takes an **argv prefix**, so a single-word program name is a degenerate prefix and a
 two-word subcommand is not a special case.
+
+After `decision census:`, `--audit` prints what the machine would not admit, in one of three shapes
+because they are three facts: `withheld: <tool> (<reason>); …`, `withheld: none declared`, or
+`withheld: not stated by the harness`. The census cannot say it — a tool that was never admitted was
+never refused, so `denied=0` reads the same on a run that got everything.
+
+### The `b10x` arm
+
+These reach the beyond10x loop and are **refused by name on `claude` and `codex`**: a vendor arm's
+scope travels sealed in `Frame.subjects`, and a flag would be a second, unsealed copy of it.
+
+| Flag | Meaning |
+|---|---|
+| `--hooks <FILE>` | The operator's own programs, consulted by the loop at each call — its only content-level refusal. Named, never discovered. |
+| `--driver <PATH>` | A program the confined run must be able to **start**: staged, mounted read-only, added to the loop's allow-list. Not the same question as `--allow-program`, which says what a `run` may *name*. |
+| `--allow-program <PROGRAM>` | A program the loop's `run` tool may start. Repeatable; empty publishes no `run`. |
+| `--substrate <SOCKET>`, `--substrate-embedded` | Confinement for the loop: a substrate daemon, or its driver held in-process. Never both. |
+| `--cgroup-root <DIR>` | A delegated cgroup subtree; without one no `run` entry is published. |
+| `--toolchain <NAME>` | A build toolchain admitted read-only inside the confined workspace. |
+| `--prices <FILE>` | A rate card, so the record states what the run cost; the loop has no vendor catalogue behind it. |
+| `--write-scope <GLOB=SCOPE>` | `<glob>=allowed\|partial-only\|denied`, ordered, first match wins. The operation is refused, never the run. |
+| `--scope-announce stated\|silent` | Whether the scope is also stated in the instruction; `silent` is an experiment control. |
+| `--context <FILE>` | A file the run is given before it starts; paid on every turn of a stateless loop. A missing file refuses the run. |
+
+What the launch emits, and how the seam reads the record back, is on
+[the b10x adapter](../harnesses/b10x.mdx).
 
 ## `--cwd`: the declaration that trades two rows for real work
 

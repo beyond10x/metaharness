@@ -1,0 +1,121 @@
+---
+id: b10x
+title: b10x — the loop we own
+sidebar_position: 3
+---
+
+# The `b10x` adapter
+
+Pinned to **0.1.0** of `b10x-harness`. Adapter class: `direct_provider` — the loop is this family's
+own, and this adapter **observes it and decides nothing** (invariant 9). A run against another
+`b10x-harness` version is unverified rather than refused.
+
+```bash
+metaharness run b10x -p "…" --model-endpoint https://gateway.example --model-wire anthropic-messages
+metaharness capabilities b10x     # the declaration below; no model, no credential
+metaharness doctor b10x           # resolves the binary the way the spawn will, on the child's PATH
+```
+
+## What a run does
+
+1. Constructs the child's environment rather than inheriting one (H3): `PATH` is
+   `$HOME/.local/bin:/usr/local/bin:/usr/bin:/bin`, and nothing else arrives unnamed.
+2. Resolves `b10x-harness` on that `PATH` at plan time, so the launch record names the file that ran.
+3. Spawns `b10x-harness run --json …` with the flags below. Stdout **is** the record.
+4. Reads the loop's events through the seam into `metaharness.event/1`.
+
+What the vendor adapters spend two thousand lines on does not apply here, and not because this
+adapter is unfinished:
+
+| what a vendor needs | why `b10x-harness` does not |
+|---|---|
+| a scratch home, so ambient config cannot leak in | it reads no config file at all |
+| a hook channel | its decisions are in-process, and this adapter makes none |
+| transcript retrieval | `--json` on stdout is the record |
+| credential isolation | it reads no credential it was not pointed at, by construction |
+
+## Declared capabilities
+
+| Tier | Status |
+|---|---|
+| `registration` | `unverified` |
+| `call` | `unverified` |
+| `turn` | `unverified` |
+| `kill` | `unverified` |
+
+Every tier that implies a decision is `unverified` rather than `delivered`, on purpose: there is no
+registration seam, no hook and no control request, so declaring one delivered would let an
+expectation be satisfied by a seam that is not there.
+
+| Command | Support |
+|---|---|
+| `halt`, `interrupt` | honoured |
+| `tool.decide`, `steer`, `frame.set`, `permission.set`, `message.inject` | refused — `UNSUPPORTED_CONTROL` |
+
+| Decision mode | Status |
+|---|---|
+| `observe` | `delivered` |
+| `ask`, `frame` | `unverified` |
+
+Rendering: `file.read → file_read`, `file.write → file_write`, `file.edit → file_edit`,
+`dir.list → dir_list`, `search → search`, `shell → run`; `mcp.call`, `skill.load`,
+`subagent.spawn`, `task.todo` and `web.read` render to nothing.
+
+The contract checklist is four gaps, in words that say what stands in for each: no recorded launch
+vector (the launch is unit-tested), no byte-exact replay of a captured record (the mapping is covered
+by hand-written lines), no hook input — there is no hook and there will not be one — and no version
+pair. `conformance b10x` therefore has nothing free to run yet.
+
+## The four enforcement tiers reach the loop
+
+On this arm the published toolset **is** the policy. The other three tiers are the operator's, and
+all four travel as flags to the loop rather than as a seam here — a driven run measured with three
+of them switched off would not be a comparison:
+
+| Tier | Flag | What reaches the loop |
+|---|---|---|
+| publication | `--allow-program`, `--substrate`, `--substrate-embedded`, `--cgroup-root`, `--toolchain` | which tools exist at all: `run` only under confinement, and only for a named program |
+| write scope | `--write-scope <glob>=allowed\|partial-only\|denied`, `--scope-announce stated\|silent`, `--context <file>` | ordered rules, first match wins; refused on any other kind (`ScopeUnsupported`), whose scope travels sealed in `Frame.subjects` |
+| ceiling | `--approve-up-to high` — never `--yes`, which approves the destructive class and does not combine with a ceiling | calls above the ceiling are asked, not assumed |
+| content and program | `--hooks <file>`, `--driver <path>` | the operator's content rule, named and never discovered; and a program the confined run must be able to *start* — staged, mounted read-only and added to the loop's own allow-list, so a path on the allow-list the sandbox does not hold no longer dies at `ENOENT` |
+| instructions | `--plugin-dir <dir>`, repeatable | the plugin's `skills/` and `agents/` in the vendor's on-disk format, so both arms of a comparison are handed the same instructions at session start |
+
+## What the seam maps — and what it refuses to claim
+
+| Loop record | Event | Why not `tool.decided` |
+|---|---|---|
+| `hook-ran`, blocked | `warning{code: "hook-refused", message: <the reason>}` | that family says a seam adjudicated the call; this arm has none — consulting programs is what the loop does instead |
+| `hook-ran`, failed | `warning{code: "hook-failed"}` | |
+| `approval-resolved{approved: false}` | `warning{code: "approval-denied"}`, carrying the `call_id` a reader joins to the `tool.requested` | every `DecidedBy` the protocol has is a metaharness-side decider; the loop's own approver is none of them |
+| a tool the run never published | `warning{code: "unpublished-tool"}` | |
+| a proceed, or an approval that said yes | nothing | bookkeeping; one event per approved call would put the stream back where the opaque mapping had it |
+
+The message names the call and invents no cause: the loop's record carries `{call_id, approved}`,
+and the reason lives only in the failed outcome's message. Note for a reader reconciling records:
+`b10x-harness`'s own `events` converter maps the same approval to `tool.decided`. Both paths emit
+`metaharness.event/1`, and one run described through the two differs there.
+
+## `session.started` on this arm
+
+| Field | Value |
+|---|---|
+| `offered_tools`, `available_operations` | read from the loop's opening record |
+| `skills`, `agents` | read from the record, never asserted — the loop can be offered several |
+| `withheld` | read when the record carries it; `null` — *the harness did not say* — from a build too old to write it |
+| `mcp_servers` | `[]`: a standing fact, the loop has no MCP client |
+| `plugins`, `slash_commands` | `null`, deliberately — not established here; `hermetic.installed_plugins` answers the plugin question |
+| `credential_source` | `named` |
+
+## Measured
+
+The driven evaluation, `evals/engineering-protocols/run-driven.sh`, runs one step map on the Claude
+Code arm and on this one, each with `--plugin-dir` on the copied plugin. Paid, and never in the
+gate. The b10x arm on 2026-08-29, in order: 17 pass / 12 fail with `drive exit 1` before the tiers
+reached the loop; 22 / 7 after; 29 / 1 once the census read a program refusal and the adapter stated
+`mcp_servers: []`; 30 / 1 with a row that scored whether the planning guidance arrived rather than
+how; **30 pass / 0 fail, `EVAL_EXIT=0`** once both arms took the plugin. The row that failed along
+the way was `the-skill-was-offered`, which a harness without a skills mechanism cannot satisfy;
+`b10x-harness` has one now.
+
+Sources: `crates/metaharness-b10x/src/lib.rs`, `launch.rs` and `seam.rs`;
+`metaharness capabilities b10x`; the commit messages of the changes named above.

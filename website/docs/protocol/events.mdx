@@ -67,6 +67,7 @@ an expectation kind that becomes undecidable.**
 |---|---|
 | `offered_tools` | Offered is not called, and only this record tells them apart. |
 | `withheld` | What the run **asked for** and the machine would not admit, with the predicate that decided. Offered, could-do and **denied** are three questions, and a denied tool is missing from the other two lists exactly as an unwanted one is. **`null` is *the harness did not say*, never *nothing was withheld*.** |
+| `skills`, `agents` | What the run was handed to follow, and to delegate to, by name. Read from the record on `b10x`; `null` where the vendor does not say — never an asserted `[]`. |
 | `plugins` | [H1a](../hermetic.mdx) |
 | `output_style` | H1b |
 | `credential_source` | H4 |
