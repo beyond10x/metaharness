@@ -7,6 +7,101 @@ was amended and the amendment is named here.
 
 ### Added
 
+- **Skills and named agents reach the native arm, and both arms take the same plugin.** The b10x
+  adapter carries `RunSpec.plugin_dir` through to `--plugin-dir`, and the eval passes it to both
+  arms. It was withheld from the native one by name, on the grounds that a plugin is a vendor
+  mechanism and that loop had none — true until the loop learned to read the skills and agents
+  halves of the vendor's on-disk format (harness `a405f46`). Withholding it after that would be
+  handing one arm its instructions at session start and making the other discover them, which is a
+  difference between the columns that has nothing to do with the harnesses.
+
+  The seam reads `skills` and `agents` from the record rather than asserting them. `skills` was a
+  hardcoded `Some(vec![])`, correct while the harness had no skills mechanism and wrong the moment
+  it had one: it would have claimed *none were offered* about a run that was offered several.
+  `mcp_servers` stays `[]`, because that one is still a standing fact about a harness with no MCP
+  client rather than a guess about a run.
+
+- **The native arm's four enforcement tiers reach the loop, and its refusals are readable.** The
+  b10x column measured one tier of four: publication was live, and the ceiling, the approver and
+  the content hook were declared nowhere the loop could see. A driven run measured with three
+  tiers off is not a comparison.
+  - `RunSpec.hooks` → `--hooks` carries the operator's content rule. Named and never discovered: a
+    hook found in a workspace would be a program the repository runs on this machine.
+  - `RunSpec.driver` → `--driver` carries a program the confined run must be able to start. A
+    different question from `allow_program`, and the difference is the whole point — the
+    allow-list says what a `run` may *name*, this says what the sandbox *contains*. A path on the
+    allow-list the sandbox does not hold is admitted and then dies at `ENOENT`, which is what left
+    a driven run hand-writing a planning store because the CLI it was told to use was not there.
+  - `--yes` is replaced by `--approve-up-to high`. `--yes` approves the destructive class and, by
+    the loop's own rule, does not combine with a ceiling — so the ceiling was unreachable through
+    metaharness and the arm approved more than the comparison asked for.
+
+- **`hook-ran` and `approval-resolved` are readable instead of opaque.** A hook's block becomes
+  `warning{code: "hook-refused"}` and a failure `hook-failed`; an approver's denial becomes
+  `approval-denied`. Both were silent or indistinguishable before: a hook refusal crossed as
+  `Opaque`, and a denied call arrived as `tool.result{is_error: true}` with `content: null` —
+  identical to a tool that ran and broke, which is the opposite finding.
+
+  **Warnings and not `tool.decided`**, for invariant 9's reason: this adapter runs in observe mode
+  and decides nothing. Every `DecidedBy` the protocol has — `Embedder`, `Frame`, `Deadline`,
+  `Adapter`, observe — names a metaharness-side decider, and neither the loop's hook programs nor
+  its approver is one of them. `ApprovalResolved` carries no reason on the wire, so the warning
+  names the `call_id` a reader joins to the `tool.requested` rather than inventing a cause.
+
+- **`mcp_servers` and `skills` say `[]` where the comment already said they had none.** That block
+  read "Absent because the loop has none of these, not because nobody looked" and then wrote the
+  value that means *nobody looked*. `b10x-harness` has no MCP client at all — its README states
+  the refusal and the reason — so that is knowable without observing anything, the same class of
+  standing fact `credential_source: named` already states. `agents`, `plugins` and
+  `slash_commands` stay `null` deliberately: this adapter has not established those, and asserting
+  `[]` on an unchecked belief is the defect being fixed, not a smaller version of it.
+
+### Fixed
+
+- **The native arm's eval map declares where a step may write, its rows read the native vocabulary,
+  and its census reads a program refusal.** Three ways the b10x column was reporting something
+  other than what happened.
+
+  `driven.steps.yaml` — both `llm` steps now carry `scope:`: `.engineering/**` `denied` (the store,
+  the run's own records, and the project and task documents, none of which are a step's to write)
+  with a `**` `allowed` catch-all. That is the subject's design § 6 **O2**, and it turns the
+  store-integrity column from *not observable* into *the write was refused by the tool, on the
+  path, before it ran*.
+
+  **The catch-all is `allowed` because a paid run proved `denied` starves the honest step.**
+  2026-08-29: five scratch-file writes refused, so the model fell through to
+  `artifact body --from -` with nothing on stdin, the store took an empty body at revision 2, the
+  validator step exited 1 on every attempt, and the run spent its whole budget in `receive` — so
+  `specify`, the state the denial column is *scored* on, never ran at all. A scratch project is a
+  place where a step may write a scratch file; the scope's job is the store.
+
+  `run-driven.sh` — the surface-denial census counts `warning{code: program-refused}` beside
+  `unpublished-tool`. A program outside the declared set is refused inside the `run` tool and
+  reached the wire only as a failed result with `content: null`, so that column read 0 whatever
+  happened. The store walk now covers the whole store rather than one expected path, and
+  `artifact validate --format json` must report `pre_provider` 0 — a well-formed hand-written
+  document is invisible to a drift check and visible to that count.
+
+  The expectation twins — every tool row unions `tools:` with `operations:` so it decides on both
+  arms rather than on the vendor's spelling alone; `shell` joins those unions, because that is what
+  the native arm writes in a `run` call and a union whose operation half matches nothing is one
+  witness wearing two names; `the-frontmatter-edit-came-back-refused` names `file.edit` beside
+  `file.write`, so it is decidable whichever the model reached for; and
+  `the-creating-call-succeeded` reads the *outcome* of the creating call
+  (`tool.error_rate` ≤ 0.99), because the row beside it counts the call and says nothing about
+  whether it worked — which is how that row went green over a run that created nothing.
+  `expectations.trace.yaml` stays byte-identical to engineering-protocols'
+  `conformance/trace/expectations.trace.yaml`, which is the point of it.
+
+  Gate at the time: 26 suites, 502 passed.
+
+- **`conformance <kind>` no longer blames a missing crate for a missing vector suite.** The
+  refusal read "the adapter crate is a later milestone", which was the only way to reach it when
+  it was written. It is now also what an adapter that *exists* and has no free vectors yet raises
+  — `b10x`, whose crate drives the driven eval — so the message asserted an absent crate about one
+  that is present, and a reader chasing it looked for the wrong thing. It names what is absent and
+  points at `contract`, which reports the obligations row by row.
+
 - **`session.started` says what the run asked for and the machine would not admit** — `withheld`,
   a list of `{tool, reason}`, and design amendment **a12**. Two fields already answered two
   questions: `offered_tools` is what the model was *offered*, `available_operations` is what the

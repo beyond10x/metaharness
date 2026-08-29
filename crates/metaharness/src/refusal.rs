@@ -199,10 +199,18 @@ impl fmt::Display for Refusal {
     #[allow(clippy::too_many_lines)]
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
+            // **What this used to say stopped being true.** It read "the adapter crate is a
+            // later milestone", which was the only way to reach it when it was written. It is now
+            // also what `conformance_vectors` raises for an adapter that exists and has no vector
+            // suite yet — `b10x`, whose crate drives the driven eval — so the message asserted a
+            // missing crate about a crate that is there, and a reader chasing it looked for the
+            // wrong thing. It now names what is absent rather than guessing why.
             Refusal::NoAdapter { kind } => write!(
                 f,
-                "no adapter for {kind} in this build: the {kind} adapter crate is a later \
-                 milestone, so the run is refused by name rather than degraded"
+                "nothing to run for {kind} in this build: either this build has no {kind} adapter, \
+                 or that adapter has no free conformance vectors yet — `contract` reports its \
+                 obligations row by row. Refused by name rather than reported as zero, which would \
+                 read exactly like a pass"
             ),
             Refusal::FrameUnreadable { path, detail } => write!(
                 f,
