@@ -103,17 +103,37 @@ fn a_search_reaches_the_catalogue_and_a_describe_reaches_one_entry() {
         .iter()
         .filter_map(|tool| tool["name"].as_str())
         .collect();
+    // **The catalogue's own roster, not a copy of it.** What this test is about is that the search
+    // verb reaches the catalogue and answers with the whole of it, in order. Which tools the
+    // harness publishes is the harness's fact, and a hand-copied list asserted it a second time
+    // here — so `find` arriving as a seventh entry turned this red without anything in metaharness
+    // being wrong. Compared against `entry_names`, the function the catalogue builds itself from,
+    // which is the same comparison `metaharness-b10x`'s seam already makes.
+    // As sets, not as sequences: `entry_names` is keyed by operation, so the order it yields is
+    // the operation ids' and not the catalogue's, and asserting on it would pin the wrong thing.
+    let mut published: Vec<&str> = b10x_harness_tools::entry_names().into_values().collect();
+    published.sort_unstable();
+    let mut answered = names.clone();
+    answered.sort_unstable();
     assert_eq!(
-        names,
-        vec![
-            "file_read",
-            "dir_list",
-            "search",
-            "file_write",
-            "file_edit",
-            "run"
-        ]
+        answered, published,
+        "the verb answers the catalogue whole: no entry withheld, none invented"
     );
+    // Not vacuous in the direction that matters: the entries metaharness *maps* must still exist,
+    // and a catalogue that lost one would pass the comparison above by shrinking on both sides.
+    for entry in [
+        "file_read",
+        "dir_list",
+        "search",
+        "file_write",
+        "file_edit",
+        "run",
+    ] {
+        assert!(
+            names.contains(&entry),
+            "metaharness resolves `{entry}` and the catalogue no longer publishes it: {names:?}"
+        );
+    }
 
     let answer = server
         .handle(&request(
