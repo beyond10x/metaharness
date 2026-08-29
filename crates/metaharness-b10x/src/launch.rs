@@ -368,6 +368,58 @@ impl B10xLaunch {
 ///
 /// `--json` is not optional and is not a caller's choice: the whole adapter reads that record, and
 /// a launch without it would produce a run nothing could observe.
+/// Every long flag [`argv`] can emit, and whether it carries a value.
+///
+/// **Derived from a launch with every option set, never listed by hand.** A hand-written list is a
+/// second statement of the same fact, and the two drift the first time a flag is added to `argv`
+/// alone — which is exactly the failure this exists to detect, arrived at from the other side.
+///
+/// The point of it is that [`crate::PINNED_VERSIONS`] is not a pin. `b10x-harness --version`
+/// answered `0.1.0` on 2026-08-29 both before and after `--substrate-embedded` stopped taking a
+/// value, so doctor blessed a binary that rejected the adapter's own argv. A version string the
+/// producer never bumps proves nothing about the interface; the flags do.
+#[must_use]
+pub fn emitted_flags() -> Vec<(String, bool)> {
+    // Values chosen so none of them can be mistaken for a flag by the walk below.
+    let mut launch = B10xLaunch::new("https://endpoint.invalid/v1", "a-model", "/w", "a request")
+        .with_subscription_file("/a/token.json", Some("/at/a/pointer".to_owned()))
+        .speaking(Wire::AnthropicMessages)
+        .with_toolchain("a-toolchain")
+        .with_write_scope("a/glob=allowed")
+        .with_scope_silent()
+        .with_context("a/file")
+        .with_prices("a/card.toml")
+        .with_max_turns(1)
+        .confined_in_process("/root", ["a-program".to_owned()])
+        .with_cgroup_root("/a/subtree");
+    // The daemon socket and the API-key routes are the alternatives to what is set above, and a
+    // single launch cannot hold both halves of a choice. Their flags are collected from a second
+    // launch and merged, so the surface is every flag `argv` *can* emit rather than every flag one
+    // particular launch does.
+    let other = B10xLaunch::new("https://endpoint.invalid/v1", "a-model", "/w", "a request")
+        .from_environment("A_VARIABLE")
+        .confined("/a/socket", ["a-program".to_owned()]);
+    let mut flags: Vec<(String, bool)> = Vec::new();
+    for argv in [argv(&launch), argv(&other), {
+        launch = launch.authenticated("/a/key");
+        argv(&launch)
+    }] {
+        let mut it = argv.iter().peekable();
+        while let Some(word) = it.next() {
+            let Some(name) = word.strip_prefix("--").filter(|rest| !rest.is_empty()) else {
+                continue;
+            };
+            let takes_value = it.peek().is_some_and(|next| !next.starts_with("--"));
+            let name = format!("--{name}");
+            if !flags.iter().any(|(seen, _)| seen == &name) {
+                flags.push((name, takes_value));
+            }
+        }
+    }
+    flags.sort();
+    flags
+}
+
 /// The pointer flag, which the loop accepts only alongside a subscription source.
 fn push_pointer(argv: &mut Vec<String>, pointer: Option<&String>) {
     if let Some(pointer) = pointer {

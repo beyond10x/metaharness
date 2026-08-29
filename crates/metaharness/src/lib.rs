@@ -78,7 +78,7 @@ pub use auditor::{
 pub use builder::{Input, Metaharness, check_spec, start_refusals};
 pub use clock::{Clock, ManualClock, SystemClock};
 pub use custody::{CredentialCustody, CustodyError};
-pub use doctor::{Installed, installed};
+pub use doctor::{FlagFault, Installed, flag_surface, installed};
 pub use loopback::{LoopbackHandle, LoopbackProxy, ProxyReport};
 pub use process::{
     CredentialCopyView, HarnessProcess, LaunchPlanView, ProcessRunner, copy_credentials,

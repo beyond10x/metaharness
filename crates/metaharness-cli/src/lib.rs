@@ -339,19 +339,39 @@ fn verdict(run: &Run) -> i32 {
 }
 
 /// `doctor` — the installed vendor version against the adapter's pin, for free.
+///
+/// Two questions, and the second is the one that catches a producer who never bumps a version:
+/// does the binary the spawn will execute still accept every flag the adapter can send it. A pin
+/// that reads `0.1.0` on both sides of an interface change blesses a launch that dies on argument
+/// parsing, before any of the child's own code runs and therefore before it can say why.
 fn doctor(kind: Kind) -> i32 {
-    match metaharness::installed(kind) {
-        Ok(installed) => {
-            println!("{}", installed.render());
-            if installed.on_pin() {
-                RunExit::Ok.code()
-            } else {
-                // A gap, not a refusal: the question was answered, and the answer is the wrong
-                // version. `2` would say metaharness could not find out.
-                RunExit::Gap.code()
-            }
+    let installed = match metaharness::installed(kind) {
+        Ok(installed) => installed,
+        Err(refusal) => return refuse(&refusal),
+    };
+    println!("{}", installed.render());
+    let faults = match metaharness::flag_surface(kind) {
+        Ok(Some(faults)) => faults,
+        // The vendor kinds have no flag surface worth checking; see `flag_surface`.
+        Ok(None) => Vec::new(),
+        Err(refusal) => return refuse(&refusal),
+    };
+    if faults.is_empty() {
+        println!(
+            "{}: every flag the adapter sends is one the binary declares",
+            installed.adapter
+        );
+    } else {
+        for fault in &faults {
+            println!("{}: {}", installed.adapter, fault.render());
         }
-        Err(refusal) => refuse(&refusal),
+    }
+    if installed.on_pin() && faults.is_empty() {
+        RunExit::Ok.code()
+    } else {
+        // A gap, not a refusal: the question was answered, and the answer is that a run launched
+        // now would not work. `2` would say metaharness could not find out.
+        RunExit::Gap.code()
     }
 }
 

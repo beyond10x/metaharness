@@ -136,6 +136,162 @@ pub fn installed(kind: Kind) -> Result<Installed, Refusal> {
     })
 }
 
+/// A flag the adapter emits that the installed binary will not accept.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum FlagFault {
+    /// The binary's help declares no such flag.
+    Unknown {
+        /// The flag, as the adapter would send it.
+        flag: String,
+    },
+    /// The flag exists and disagrees about whether it carries a value.
+    Arity {
+        /// The flag, as the adapter would send it.
+        flag: String,
+        /// What the adapter sends.
+        adapter_sends_value: bool,
+    },
+}
+
+impl FlagFault {
+    /// The line a person reads.
+    #[must_use]
+    pub fn render(&self) -> String {
+        match self {
+            Self::Unknown { flag } => {
+                format!("{flag}: the adapter sends it and the binary declares no such flag")
+            }
+            Self::Arity {
+                flag,
+                adapter_sends_value: true,
+            } => format!(
+                "{flag}: the adapter sends a value and the binary takes none — clap reads the \
+                 value as an unexpected positional argument and exits before running anything"
+            ),
+            Self::Arity {
+                flag,
+                adapter_sends_value: false,
+            } => format!(
+                "{flag}: the binary takes a value and the adapter sends none — the next flag is \
+                 read as this one's value"
+            ),
+        }
+    }
+}
+
+/// Whether the installed binary accepts every flag the adapter can send it.
+///
+/// # Why a version is not enough
+///
+/// [`installed`] asks the binary its version and compares it to the adapter's pin. That works for a
+/// vendor whose releases are numbered by somebody else. It does not work for `b10x-harness`, whose
+/// version answered `0.1.0` on both sides of an interface change: `--substrate-embedded` stopped
+/// taking a value, the adapter kept sending one, and clap rejected the value as an unexpected
+/// positional argument. The process exited before any of its own code ran, so it wrote **no
+/// terminal record at all** — the driver above saw `metaharness exited 3` and nothing else, and
+/// every confined launch was affected, which is every launch that can write or execute.
+///
+/// This asks the question the version could not: does the interface the adapter *writes* still
+/// exist in the binary the spawn will *execute*. Both halves are derived rather than declared — the
+/// flags from [`metaharness_b10x::emitted_flags`], which walks a maximal `argv`, and the acceptance
+/// from the binary's own `--help`.
+///
+/// [`None`] for the vendor kinds. Their argv is a handful of flags around a vendor's own CLI, and
+/// what they actually depend on — a record's field names, a terminal event's shape — is not
+/// visible in a help text; a check here would report *"nothing wrong"* about the wrong thing.
+///
+/// # Errors
+///
+/// [`Refusal::Io`] when the binary is absent from the child's `PATH` or its help cannot be read.
+pub fn flag_surface(kind: Kind) -> Result<Option<Vec<FlagFault>>, Refusal> {
+    if kind != Kind::B10x {
+        return Ok(None);
+    }
+    let child_path = metaharness_b10x::child_path(std::env::var("HOME").ok().as_deref());
+    let program = resolve_on("b10x-harness", &child_path)?;
+    let program = program.display().to_string();
+    let output = std::process::Command::new(&program)
+        .args(["run", "--help"])
+        .output()
+        .map_err(|error| Refusal::Io {
+            detail: format!("{program} run --help could not be run: {error}"),
+        })?;
+    if !output.status.success() {
+        return Err(Refusal::Io {
+            detail: format!(
+                "{program} run --help exited {}: {}",
+                output
+                    .status
+                    .code()
+                    .map_or_else(|| "on a signal".to_string(), |code| code.to_string()),
+                String::from_utf8_lossy(&output.stderr).trim()
+            ),
+        });
+    }
+    let declared = declared_flags(&String::from_utf8_lossy(&output.stdout));
+    Ok(Some(faults_against(
+        &declared,
+        metaharness_b10x::emitted_flags(),
+    )))
+}
+
+/// The comparison itself, apart from the process that supplies one side of it.
+///
+/// Separated so the faults can be tested against a help text that is written down, rather than
+/// only against whichever binary happens to be installed — a check that can only be exercised by
+/// the machine being right is a check nobody has seen fail.
+fn faults_against(
+    declared: &std::collections::BTreeMap<String, bool>,
+    emitted: Vec<(String, bool)>,
+) -> Vec<FlagFault> {
+    let mut faults = Vec::new();
+    for (flag, adapter_sends_value) in emitted {
+        match declared.get(&flag) {
+            None => faults.push(FlagFault::Unknown { flag }),
+            Some(&takes_value) if takes_value != adapter_sends_value => {
+                faults.push(FlagFault::Arity {
+                    flag,
+                    adapter_sends_value,
+                });
+            }
+            Some(_) => {}
+        }
+    }
+    faults
+}
+
+/// The long flags a clap help text declares, and whether each carries a value.
+///
+/// Only a line whose first non-space characters are the flag itself counts — optionally behind a
+/// `-x, ` short form, which is clap's layout. Prose mentioning a flag mid-sentence is not a
+/// declaration of it, and counting one would read the arity off whatever word followed.
+fn declared_flags(help: &str) -> std::collections::BTreeMap<String, bool> {
+    let mut declared = std::collections::BTreeMap::new();
+    for line in help.lines() {
+        let trimmed = line.trim();
+        let bytes = trimmed.as_bytes();
+        let candidate = if trimmed.starts_with("--") {
+            trimmed
+        } else if bytes.first() == Some(&b'-') && trimmed.get(2..4) == Some(", ") {
+            &trimmed[4..]
+        } else {
+            continue;
+        };
+        let Some(rest) = candidate.strip_prefix("--") else {
+            continue;
+        };
+        let end = rest
+            .find(|c: char| !(c.is_ascii_alphanumeric() || c == '-'))
+            .unwrap_or(rest.len());
+        if end == 0 {
+            continue;
+        }
+        let takes_value = rest[end..].trim_start().starts_with('<');
+        declared.insert(format!("--{}", &rest[..end]), takes_value);
+    }
+    declared
+}
+
 /// The first executable named `program` on the child's `PATH`, in the child's own order.
 ///
 /// A hand-rolled walk rather than a `which` dependency, because the whole point is to use
@@ -179,6 +335,114 @@ fn version_token(reported: &str) -> String {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    /// The two shapes of drift, against a help text rather than against whatever is installed.
+    ///
+    /// The arity case is the one that happened: `b10x-harness` reported `0.1.0` before and after
+    /// `--substrate-embedded` stopped taking a value, so `installed` blessed it. The adapter kept
+    /// sending the root, clap read it as an unexpected positional argument, and the process exited
+    /// before writing any record at all — the driver above saw `metaharness exited 3` and nothing
+    /// else, for every launch that could write or execute.
+    #[test]
+    fn a_flag_the_binary_dropped_and_one_whose_arity_moved_are_each_named() {
+        let help = "\
+Run one request to completion
+
+Usage: b10x-harness run [OPTIONS] --base-url <BASE_URL>
+
+Options:
+      --base-url <BASE_URL>
+          Endpoint origin plus API prefix
+      --substrate-embedded
+          Hold substrate's driver in this process. Use --credentials none with a foreign endpoint.
+  -p, --prompt <PROMPT>
+          The request
+      --json
+          Write one JSON object per line
+";
+        let declared = declared_flags(help);
+        assert_eq!(declared.get("--base-url"), Some(&true));
+        assert_eq!(declared.get("--substrate-embedded"), Some(&false));
+        assert_eq!(declared.get("--prompt"), Some(&true), "behind a short form");
+        assert_eq!(declared.get("--json"), Some(&false));
+        // Prose is not a declaration. `--credentials` is mentioned mid-sentence in a description
+        // and nowhere else; counting it would have read `none` as its arity and, worse, reported
+        // no fault for a flag the binary does not have.
+        assert_eq!(declared.get("--credentials"), None);
+
+        let faults = faults_against(
+            &declared,
+            vec![
+                ("--base-url".to_owned(), true),
+                ("--substrate-embedded".to_owned(), true),
+                ("--wire".to_owned(), true),
+                ("--json".to_owned(), false),
+            ],
+        );
+        assert_eq!(
+            faults,
+            vec![
+                FlagFault::Arity {
+                    flag: "--substrate-embedded".to_owned(),
+                    adapter_sends_value: true,
+                },
+                FlagFault::Unknown {
+                    flag: "--wire".to_owned(),
+                },
+            ]
+        );
+        assert!(faults[0].render().contains("unexpected positional"));
+        assert!(faults[1].render().contains("declares no such flag"));
+    }
+
+    /// The surface is derived from `argv`, so a flag added there cannot be missing here.
+    ///
+    /// Asserted as a floor and a spot-check rather than a list: a list would be the hand-written
+    /// second statement that `emitted_flags` exists to avoid, and it would need editing every time
+    /// a flag was added — which is the moment the check must keep working without being touched.
+    #[test]
+    fn every_flag_argv_can_emit_is_in_the_surface_with_its_arity() {
+        let flags = metaharness_b10x::emitted_flags();
+        let arity = |name: &str| {
+            flags
+                .iter()
+                .find(|(flag, _)| flag == name)
+                .map(|(_, takes)| *takes)
+        };
+        assert_eq!(arity("--substrate-embedded"), Some(false), "{flags:?}");
+        assert_eq!(arity("--wire"), Some(true), "{flags:?}");
+        assert_eq!(arity("--json"), Some(false), "{flags:?}");
+        assert_eq!(arity("--oauth-token-file"), Some(true), "{flags:?}");
+        // Both halves of a choice, which one launch cannot hold at once.
+        assert_eq!(arity("--substrate"), Some(true), "{flags:?}");
+        assert_eq!(arity("--api-key-file"), Some(true), "{flags:?}");
+        assert_eq!(arity("--api-key-env"), Some(true), "{flags:?}");
+        assert!(
+            flags.len() >= 15,
+            "the maximal launch emits the whole surface: {flags:?}"
+        );
+        // Against the real thing: every flag, in the argv it is actually sent in.
+        let argv = metaharness_b10x::argv(&metaharness_b10x::B10xLaunch::new(
+            "https://endpoint.invalid/v1",
+            "a-model",
+            "/w",
+            "a request",
+        ));
+        for word in argv.iter().filter(|word| word.starts_with("--")) {
+            assert!(
+                flags.iter().any(|(flag, _)| flag == word),
+                "{word} is emitted and not in the surface: {flags:?}"
+            );
+        }
+    }
+
+    /// The vendor kinds answer `None` rather than a clean bill they did not earn.
+    #[test]
+    fn a_vendor_kind_has_no_flag_surface_to_check_and_says_so() {
+        for kind in [Kind::Claude, Kind::Codex] {
+            assert_eq!(flag_surface(kind), Ok(None));
+        }
+    }
 
     fn executable_named(dir: &std::path::Path, name: &str, mode: u32) -> std::path::PathBuf {
         use std::os::unix::fs::PermissionsExt as _;
