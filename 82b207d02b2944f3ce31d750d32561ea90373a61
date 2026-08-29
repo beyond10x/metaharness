@@ -1,0 +1,29 @@
+Correction: the stale-binary claim in this message is wrong.
+
+`~/.cargo/bin/b10x-harness` (2026-08-24) is what `command -v` finds on the
+operator's PATH, and it is what this script's old precondition checked. It is
+NOT what ran. `metaharness` resolves the child's program against a PATH it
+constructs itself — `child_path()` in metaharness-b10x is
+`$HOME/.local/bin:BASE_PATH`, deliberately not the operator's, so that `doctor`
+and the spawn agree on which install answered (builder.rs:534, CT-3).
+`~/.local/bin/b10x-harness` was built 2026-08-29 09:47 and there are no harness
+commits after it, so the arm ran a current binary and every b10x result stands
+on that count.
+
+What is true, and was the whole cause: substrate published no `run` because the
+calling process's cgroup was outside the configured root.
+
+Two consequences for the change this commit made:
+
+  * the PATH prepend it adds does nothing for the spawn — metaharness ignores
+    the operator's PATH by design — so it only ever affected `command -v` and
+    the catalogue probe;
+  * worse, it made the probe test a *different* binary from the one that runs,
+    which is the opposite of what a probe is for.
+
+Both are fixed in the commit that follows this note.
+
+The verified facts, so a reader does not have to re-derive them:
+  ~/.cargo/bin/b10x-harness   2026-08-24 15:33  on operator PATH, never spawned
+  ~/.local/bin/b10x-harness   2026-08-29 09:47  resolved by child_path, spawned
+  harness commits after 09:47: none
