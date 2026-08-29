@@ -45,6 +45,7 @@
 #   EVAL_MAX_OUTPUT_TOKENS_PER_TURN  (default 8000)
 #   EVAL_PRICES             a rate card for `--prices`; without one the run reports tokens, no price
 #   EVAL_MAX_COST_MICRO     spend ceiling in millionths of a dollar, only with EVAL_PRICES (default 5000000 = $5)
+#   EVAL_APPROVE_UP_TO      the approval ceiling for a headless walk (default high: writes and `run` unasked; destructive refused)
 #
 # Usage:  bash evals/engineering-protocols/run-native.sh            # everything free, then stop
 #         bash evals/engineering-protocols/run-native.sh --spend    # and walk it
@@ -72,6 +73,12 @@ MAX_DURATION_MS="${EVAL_MAX_DURATION_MS:-1800000}"           # 30 minutes wall c
 MAX_TURNS="${EVAL_MAX_TURNS:-12}"                            # model turns per step
 MAX_OUTPUT_PER_TURN="${EVAL_MAX_OUTPUT_TOKENS_PER_TURN:-8000}"
 MAX_COST_MICRO="${EVAL_MAX_COST_MICRO:-5000000}"             # $5, only with EVAL_PRICES
+# The walk is headless, and the loop's default approver asks a person and refuses when there is
+# none — which is what the second paid walk found: every `run` and `file_write` denied, four steps
+# failed, nothing written. `high` admits writes and `run` of the allowed programs unasked; a
+# `destructive` call still asks, and headless that is still a refusal. The store stays guarded by
+# the `before-call` hook, and exec by substrate's confinement — this is the approver, not the fence.
+APPROVE_UP_TO="${EVAL_APPROVE_UP_TO:-high}"
 TASK_ID="NATIVE-1"
 SPEND=0
 [[ "${1:-}" == "--spend" ]] && SPEND=1
@@ -207,6 +214,7 @@ declare -a RUN=(
   --oauth-token-file "$B10X_TOKEN_FILE" --oauth-token-pointer "$B10X_TOKEN_POINTER"
   --workspace "$PROJECT" --substrate-embedded --cgroup-root "$B10X_CGROUP_ROOT"
   --allow-program protocol --plugin-dir "$WORK/plugin"
+  --approve-up-to "$APPROVE_UP_TO"
   --session-dir "$WORK/sessions" --json
 )
 [ -n "$PRICES" ] && RUN+=(--prices "$PRICES" --max-cost-microunits "$MAX_COST_MICRO")
