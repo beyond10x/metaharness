@@ -580,7 +580,7 @@ commit history and `docs/design/` carry the full reasoning per change.
   driven through 0.144.0. `doctor <kind>` now resolves the vendor binary on **the child's
   `PATH`** (`child_path()`, exported by both adapters) and prints the resolved absolute path, so
   on a machine with two installs it reports the one that will spend the money — here,
-  `/home/timo/.local/bin/codex 0.144.0, OFF the pin`, exit `1`, where it previously said on-pin.
+  `~/.local/bin/codex 0.144.0, OFF the pin`, exit `1`, where it previously said on-pin.
   A `golden-version-pair` vector per adapter reads the recorded golden sample's own version claim
   against the pin: agreement passes silently, disagreement is a **named warning** — rendered as
   `warn` in the vector listing and on stderr beside the `--contract` record, never a silent pass

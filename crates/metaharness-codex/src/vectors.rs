@@ -417,7 +417,7 @@ fn golden_hook_vector(input: &str) -> VectorOutcome {
         tool_use_id: Some("exec-9d0c7ef7-57b5-4ddd-b0ce-b64736b8ee9d".to_string()),
         session_id: Some("01a02c8e-5288-70e2-8458-487f54cbfd7a".to_string()),
         turn_id: Some("01a02c8e-5293-7d63-ae7d-fb2dbf46c68b".to_string()),
-        cwd: Some("/home/timo/.cache/claude-tmp/.tmpXbOIdF/work".to_string()),
+        cwd: Some("/home/operator/work".to_string()),
         permission_mode: Some("bypassPermissions".to_string()),
         hook_event_name: Some("PreToolUse".to_string()),
     };
