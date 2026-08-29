@@ -197,10 +197,11 @@ long and the interesting lines are in the middle. Redirect to a file and grep it
   `/lib64` and the workspace; `~/.local/bin/protocol` is not there and every `run` died at exit
   127 on the third paid native walk, which the model read as *the command is wrong*. `--driver`
   stages the binary at `/toolchain/driver/protocol`, and the prompts have to say that path.
-- **The `transition` hook fires at group boundaries only.** `protocol workflow flow` groups a
-  multi-step state and a retreat span, nothing else, so a bare-workflow walk was governed at `root`
-  and nowhere else (fifth paid walk). Count `hook-ran` at `transition` before believing a walk was
-  governed at every state.
+- **The `transition` hook fires at group boundaries only.** Until engineering-protocols
+  `870894d`, `protocol workflow flow` grouped a multi-step state and a retreat span and nothing
+  else, so a bare-workflow walk was governed at `root` and nowhere else (fifth paid walk). Every
+  state is a section since; still, count `hook-ran` at `transition` — `run-native.sh`'s census
+  prints them per boundary — before believing a walk was governed at every state.
 - **A mechanism row and an outcome row cannot both pass once the mechanism lands.**
   `the-planning-guidance-was-loaded` asks whether the model ran the CLI's own `skill load`; a
   harness that *offers* skills hands it over and the call never happens, so the row went `ok`

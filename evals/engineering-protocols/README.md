@@ -21,7 +21,7 @@ consults the governor once before stopping; on the empty scratch store the engin
 `no specification artifact is declared`, `review.approved`), which is the seam doing its job before
 a cent is spent.
 
-### Results — five paid native walks, Haiku 4.5, 2026-08-29
+### Results — seven paid native walks, Haiku 4.5, 2026-08-29/30
 
 Each walk found one thing and cost the next one nothing. Token figures are the loop's own
 `usage` events; the dollar figure is an estimate from a recalled Haiku 4.5 price list
@@ -33,11 +33,16 @@ Each walk found one thing and cost the next one nothing. Token figures are the l
 | 2 | `TdMnHJ` | headless `auto` approval denied all 6 `run`/`file_write` calls; `receive-1` failed twice | `--approve-up-to high` (`b08749c`) | 13 | 157k / 90k / 4.3k | $0.10 |
 | 3 | `wvolVk` | `run ["protocol", …]` exit 127 — the binary is not in the sandbox; store-integrity hook blocked one hand-written spec | `--driver` stages it at `/toolchain/driver/protocol`; prompts rewritten (`e37ae60`) | 24 | 295k / 218k / 4.5k | $0.12 |
 | 4 | `hW2dlq` | `receive-1` clean — `specification:passkey-login` in the store through the CLI, `validate` clean; `receive-2` (the map's `command` step) is a promptless model turn on the native runner and ended `unstructured` twice | `EVAL_FLOW_MAP=none` (`b6540a8`); harness M2 for real | 29 | 447k / 357k / 7.4k | $0.16 |
-| 5 | `II7pgK` | `receive` and `specify` clean — an epic, a specification and six stories written through the CLI; `decompose` hit 12 turns; the governor was consulted 4 times, all at `root`, because a one-step state is a bare node and not a section | ep `story:every-state-is-a-section` (proposed) | 39 | 626k / 578k / 8.1k | $0.15 |
+| 5 | `II7pgK` | `receive` and `specify` clean — an epic, a specification and six stories written through the CLI; `decompose` hit 12 turns; the governor was consulted 4 times, all at `root`, because a one-step state is a bare node and not a section | ep `870894d`: every state is a section (`story:every-state-is-a-section`, implemented) | 39 | 626k / 578k / 8.1k | $0.15 |
+| 6 | `wBxXji` | the eval's own map again, now on harness M2 (`d75e499`): `receive-2` — `protocol artifact validate` — ran **through the gate** as one `run` call, no model turn, exited 0 inside the sandbox (`valid` on stdout) and was read as *no exit code*: under substrate the `run` result's `exit` is the execution record, not an integer. Governor consulted at 12 boundaries: `root` 2/2, `receive` 4/4 | harness `4d26f00`: the exit is read from either shape | 37 | 265k / 186k / 5.3k | $0.12 |
+| 7 | `hUbOP5` | `receive` clean **twice**, the validator passing as a step; `specify` reached and failed — `specify-1` ended in prose under `answer` 3 of 4 times (Haiku), and the once it passed, `specify-2`'s validator exited 1 and failed the step as it should. Governor consulted at 18 boundaries — `root` 2/2, `receive` 3/3, `specify` 4/4 — every state reached; 3 command steps through the gate; no refusal needed. Found: a re-entered ancestor re-uses its sections' session ids (`<flow-run>.root.receive.1` written twice), so the first attempt's transcript — with the red validator's stderr — is gone | harness story `section-sessions-name-every-attempt` (draft) | 61 | 290k / 152k / 9.0k | $0.20 |
 
-What the five say together: the chain works end to end — hooks (102–127 consultations per walk),
-staging, confinement, approvals, the store reached through the CLI from inside the sandbox — and
-the governor never had to refuse, because every section that reached `leave` had either failed on
+What the seven say together: the chain works end to end — hooks (85–136 consultations per walk),
+staging, confinement, approvals, the store reached through the CLI from inside the sandbox, a
+verifier run by the runner through the same gate and read as the step's verdict (walk 7: one green
+`validate` passed a section, one red one failed it) — and every state the walk reaches is a
+boundary the governor is asked at (walk 7: 18 consultations over three states, against walk 5's 4
+at `root`). The governor never had to refuse, because every section that reached `leave` had either failed on
 its own or was a bare node the loop does not ask about. The two things in the way are the
 runner's (`command` steps as model turns, harness design 0003 M2) and the projection's (only
 grouped states are sections). Neither is the governor's.

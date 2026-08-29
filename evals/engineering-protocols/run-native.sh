@@ -159,12 +159,15 @@ mkdir -p "$WORK/plugin"
 [ -f "$WORK/plugin/skills/planning/SKILL.md" ] || { say "FAIL: the copied plugin has no planning skill"; exit 1; }
 MAP="$SCRIPT_DIR/driven.steps.yaml"
 # Which step map the projection carries. The eval's map has `command` steps — the driver's own
-# validator runs — and the native runner (harness design 0003, M1) turns a `command` node into a
+# validator runs. Under harness design 0003 M1 the native runner turned a `command` node into a
 # model turn with no prompt, which the fourth paid walk found: `receive-1` reached the store through
 # the CLI and `receive-2`, the validate command, ended `unstructured` twice and took the section
-# down with it. `EVAL_FLOW_MAP=none` projects the bare workflow — one model step per state, its
-# summary as the prompt — which is the ordering-plus-governor experiment with nothing the runner
-# cannot run. The governor is the same either way.
+# down with it. Since harness d75e499 (M2) a `command` step is one `run` call through the run's
+# gate — approver, `before-call`, tool — and no model turn; the argv is rewritten below to the
+# mounted driver like every other `protocol` mention. `EVAL_FLOW_MAP=none` still projects the bare
+# workflow — one model step per state, its summary as the prompt. The governor is the same either
+# way, and since engineering-protocols 870894d every state is a section, so it is asked at every
+# state boundary under both.
 FLOW_MAP="${EVAL_FLOW_MAP:-$MAP}"
 
 # --- 3. the flow and the hooks ---------------------------------------------------------------
@@ -279,6 +282,11 @@ say "== census ($WORK/native.jsonl)"
 python3 - "$WORK/native.jsonl" <<'PY'
 import json, sys, collections
 kinds = collections.Counter(); refused = []; hooks = collections.Counter(); finished = None
+# Which boundary each `transition` consultation was about. The `hook-ran` event carries no path;
+# the boundary it decided is the next `group-entered`, `group-left`, `group-repeating` (a leave
+# that led to a retreat) or `transition-refused` in the record, because the loop asks, then
+# crosses or refuses, and emits in that order.
+consulted = collections.Counter(); pending = 0; commands = []
 for line in open(sys.argv[1]):
     line = line.strip()
     if not line: continue
@@ -286,13 +294,26 @@ for line in open(sys.argv[1]):
     except json.JSONDecodeError: continue
     k = e.get("kind"); kinds[k] += 1
     if k == "transition-refused": refused.append(e)
-    if k == "hook-ran": hooks[str(e.get("decision"))] += 1
+    if k == "hook-ran":
+        hooks[str(e.get("decision"))] += 1
+        if e.get("point") == "transition": pending += 1
+    if pending and k in ("group-entered", "group-left", "group-repeating", "transition-refused"):
+        moment = "enter" if k == "group-entered" else "leave" if k in ("group-left", "group-repeating") else e.get("moment")
+        consulted[(e.get("path"), moment)] += pending; pending = 0
+    if k == "tool-requested" and e.get("name") == "run" and str(e.get("call_id", "")).startswith("flow-command-"):
+        commands.append(e)
     if k == "flow-finished": finished = e
 print("events:", ", ".join(f"{k} {n}" for k, n in sorted(kinds.items())))
 print(f"transition-refused: {len(refused)}")
 for r in refused:
     print(f"  - {r.get('path')} {r.get('moment')} attempt {r.get('attempt')}: {r.get('reason')}")
 print("hook decisions:", dict(hooks) or "none")
+print(f"governor consulted at {sum(consulted.values())} boundaries" + (":" if consulted else " (none)"))
+for (path, moment), n in sorted(consulted.items()):
+    print(f"  - {path} {moment}: {n}")
+print(f"command steps run through the gate: {len(commands)}")
+for c in commands:
+    print(f"  - {c.get('call_id')}: {' '.join(c.get('arguments', {}).get('argv', []))}")
 print("flow-finished:", {k: finished[k] for k in ("ran","failed","skipped","retreats","clean")} if finished else "absent — the walk did not finish")
 PY
 say
