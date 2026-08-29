@@ -161,7 +161,22 @@ MAP="$SCRIPT_DIR/driven.steps.yaml"
 # --- 3. the flow and the hooks ---------------------------------------------------------------
 FLOW="$WORK/flow.yaml"
 (cd "$TREE" && protocol workflow flow --id adp/default --root "$TREE" --map "$MAP" --max-attempts "$MAX_ATTEMPTS" --out "$FLOW" >/dev/null)
-say "flow: $FLOW ($(grep -c '^\s*- id:' "$FLOW") node(s))"
+# The confined workspace reaches `/usr`, `/bin`, `/lib`, `/lib64` and the workspace, and nothing
+# else: `~/.local/bin/protocol` is not there, so `run ["protocol", …]` died at exit 127 on every
+# call of the third paid walk and the model read it as *the command is wrong*. `--driver` stages
+# exactly that binary read-only at `/toolchain/driver/protocol` (what the driven arm does, drive.rs
+# `DRIVEN_DRIVER`); the prompts the projection carries say `protocol …`, so they are rewritten to
+# the mounted path, and a context file says the same in one line.
+DRIVER_HOST="$(command -v protocol)"
+DRIVER_MOUNTED="/toolchain/driver/protocol"
+sed -i "s#\`protocol #\`$DRIVER_MOUNTED #g; s#\[\"protocol\", #[\"$DRIVER_MOUNTED\", #g" "$FLOW"
+say "flow: $FLOW ($(grep -c '^\s*- id:' "$FLOW") node(s); \`protocol\` rewritten to $DRIVER_MOUNTED in $(grep -c "$DRIVER_MOUNTED" "$FLOW") place(s))"
+cat > "$WORK/context.md" <<MD
+The \`protocol\` command-line tool is mounted read-only inside this workspace at
+\`$DRIVER_MOUNTED\`. Run it as \`$DRIVER_MOUNTED artifact …\`; the bare name \`protocol\` does not
+resolve here. Its planning store is \`.engineering/planning\` under the workspace root; pass
+\`--store .engineering/planning\` when a verb asks where the plan is.
+MD
 HOOKS="$WORK/hooks.json"
 python3 - "$HOOKS" "$PROJECT" "$TREE" "$MAP" <<'PY'
 import json, sys
@@ -213,7 +228,7 @@ declare -a RUN=(
   --max-duration-ms "$MAX_DURATION_MS" --max-turns "$MAX_TURNS" --max-output-tokens-per-turn "$MAX_OUTPUT_PER_TURN"
   --oauth-token-file "$B10X_TOKEN_FILE" --oauth-token-pointer "$B10X_TOKEN_POINTER"
   --workspace "$PROJECT" --substrate-embedded --cgroup-root "$B10X_CGROUP_ROOT"
-  --allow-program protocol --plugin-dir "$WORK/plugin"
+  --allow-program "$DRIVER_MOUNTED" --driver "$DRIVER_HOST" --context "$WORK/context.md" --plugin-dir "$WORK/plugin"
   --approve-up-to "$APPROVE_UP_TO"
   --session-dir "$WORK/sessions" --json
 )
