@@ -222,6 +222,35 @@ pub struct RunSpec {
     #[cfg_attr(feature = "clap", arg(long, value_name = "ACTOR"))]
     pub actor: Option<String>,
 
+    /// The operator's own programs, consulted at each call — the native loop's `--hooks` file.
+    ///
+    /// **The only content-level refusal this arm has.** The vendor arms answer every call through
+    /// this seam, so an embedder decides them here; the native loop decides in-process and consults
+    /// programs instead, and without one its whole enforcement is which tools the catalogue
+    /// published. That is a path-and-existence answer: it can withhold `file_write` entirely, and
+    /// it cannot say *this* write, to a file the step legitimately needs, changes a field the
+    /// caller owns. A driven run measured with no hook is measured with one tier switched off.
+    ///
+    /// Named and never discovered, exactly as the loop requires: a hook found in the workspace
+    /// would be a program the repository runs on this machine.
+    #[cfg_attr(feature = "clap", arg(long, value_name = "FILE"))]
+    pub hooks: Option<PathBuf>,
+
+    /// A program on this host the confined run may execute, staged and mounted read-only.
+    ///
+    /// **A different question from [`Self::allow_program`], and the difference is the whole
+    /// point.** The allow-list says what a `run` may *name*; this says what the sandbox
+    /// *contains*. A confined run reaches `/usr`, `/bin`, `/lib`, `/lib64` and its workspace, so a
+    /// program allow-listed by absolute host path is admitted and then dies at `ENOENT` — which a
+    /// model reads as a wrong command rather than a missing file, and which left a driven run
+    /// writing a planning store's files directly because the CLI it was told to use was not there.
+    ///
+    /// The harness stages the one file and adds its mounted path to its own allow-list, so naming
+    /// it here is the whole declaration. Native arm only: a vendor harness runs the operator's own
+    /// machine and has nothing to mount into.
+    #[cfg_attr(feature = "clap", arg(long, value_name = "PATH"))]
+    pub driver: Option<PathBuf>,
+
     /// Whose tools the model is offered.
     #[cfg_attr(feature = "clap", arg(long, value_enum, default_value = "native"))]
     pub tool_surface: ToolSurface,
@@ -480,6 +509,8 @@ impl RunSpec {
             frame: None,
             decisions: DecisionMode::Frame,
             actor: None,
+            hooks: None,
+            driver: None,
             tool_surface: ToolSurface::Native,
             allow_program: Vec::new(),
             credentials: CredentialSource::OperatorLogin,

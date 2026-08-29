@@ -359,6 +359,47 @@ impl HarnessSeam for B10xSeam {
             // could read; these were read. And the line itself is not lost: metaharness writes the
             // child's stdout to the run's transcript verbatim, so the raw record still holds every
             // one of them for anyone who wants to look.
+            // **A hook's refusal, made readable — and deliberately not a `tool.decided`.**
+            //
+            // The loop consults the operator's declared programs before a call and reports what
+            // they said. A block is a *refusal*, and until now it crossed here as `Opaque`: the
+            // blocked call reached the record as `tool.result{is_error: true, content: null}`, which
+            // is indistinguishable from a call that failed on its own, so a run whose enforcement
+            // held scored exactly like one where nothing was enforced. The store-integrity hook
+            // could refuse every hand-write and no reader could tell.
+            //
+            // `tool.decided` was the other candidate and is wrong: that family says *a seam
+            // adjudicated this call*, and nothing did — this arm has no decision seam, which is the
+            // whole reason it consults programs. A `warning` is what `unpublished-tool` already is
+            // on this same adapter: the loop refused something itself, nobody asked the driver, and
+            // the record says so in a family a reader can count.
+            //
+            // Only a refusal is emitted. A hook that let the call through is bookkeeping, and
+            // sending it anywhere would put one event per call per point back into the stream.
+            "hook-ran" => {
+                let decision = &value["decision"];
+                match decision["kind"].as_str() {
+                    Some("block") => vec![Emission::untimed(Event::Warning {
+                        code: "hook-refused".to_owned(),
+                        message: decision["reason"]
+                            .as_str()
+                            .unwrap_or("a hook refused the call and gave no reason")
+                            .to_owned(),
+                    })],
+                    // Fail-closed at a call point, so the call did not happen either. Its own code,
+                    // because "the operator's program is broken" and "the operator's program said
+                    // no" are different findings and only one of them is about the run.
+                    Some("failed") => vec![Emission::untimed(Event::Warning {
+                        code: "hook-failed".to_owned(),
+                        message: decision["reason"]
+                            .as_str()
+                            .or_else(|| decision["program"].as_str())
+                            .unwrap_or("a hook could not be consulted")
+                            .to_owned(),
+                    })],
+                    _ => Vec::new(),
+                }
+            }
             "tool-arguments-delta" | "approval-required" | "approval-resolved" | "rates" => {
                 Vec::new()
             }
@@ -416,6 +457,49 @@ mod tests {
             HermeticAttestation::none(HermeticMode::Strict),
             Seam::None,
         )
+    }
+
+    /// A hook's refusal is readable, and a hook that let the call through says nothing.
+    ///
+    /// **The line below is verbatim from a live run** — `b10x-harness run --hooks`, 2026-08-29,
+    /// the store-integrity hook refusing a `file_edit` into `.engineering/planning/`. Before this
+    /// mapping it crossed as `Opaque`, and the blocked call reached the record as
+    /// `tool.result{is_error: true, content: null}` — indistinguishable from a call that failed on
+    /// its own. A run whose enforcement held scored exactly like one where nothing was enforced.
+    ///
+    /// Not `tool.decided`: that family says a seam adjudicated the call, and this arm has no
+    /// decision seam — consulting programs is what it does *instead*. `unpublished-tool` is already
+    /// a loop-side refusal carried as a warning on this same adapter, and this is the same shape.
+    #[test]
+    fn a_hooks_refusal_is_readable_and_its_permission_is_not_noise() {
+        let mut seam = seam();
+        let blocked = r#"{"kind":"hook-ran","point":"before-call","call_id":"toolu_016K","decision":{"kind":"block","reason":"`file_edit` cannot write .engineering/planning/x.md: planning-store files are mutated only through `protocol artifact`."}}"#;
+        match one(seam.as_mut(), blocked) {
+            Event::Warning { code, message } => {
+                assert_eq!(code, "hook-refused");
+                assert!(
+                    message.contains(".engineering/planning/x.md"),
+                    "the reason the model was given is the reason the record carries: {message}"
+                );
+            }
+            other => panic!("a refusal must be readable, not opaque: {other:?}"),
+        }
+
+        // One event per call per hook point would put the stream back where the opaque mapping had
+        // it. A hook that proceeded decided nothing worth counting.
+        let proceeded = r#"{"kind":"hook-ran","point":"before-call","call_id":"toolu_016K","decision":{"kind":"proceed"}}"#;
+        assert!(
+            seam.push_line(proceeded).is_empty(),
+            "a hook that let the call through is bookkeeping"
+        );
+
+        // "the operator's program is broken" and "the operator's program said no" are different
+        // findings, and only one of them is about the run.
+        let failed = r#"{"kind":"hook-ran","point":"before-call","call_id":"toolu_016K","decision":{"kind":"failed","program":"/usr/bin/nope"}}"#;
+        match one(seam.as_mut(), failed) {
+            Event::Warning { code, .. } => assert_eq!(code, "hook-failed"),
+            other => panic!("a hook that could not be consulted is its own finding: {other:?}"),
+        }
     }
 
     fn one(seam: &mut dyn HarnessSeam, line: &str) -> Event {

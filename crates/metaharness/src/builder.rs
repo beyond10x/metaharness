@@ -1535,6 +1535,14 @@ fn b10x_launch(
     if let Some(root) = &spec.cgroup_root {
         launch = launch.with_cgroup_root(root);
     }
+    // The only content-level refusal this arm has. Without it the enforcement is the catalogue
+    // alone, which can withhold a tool and cannot judge a call.
+    if let Some(hooks) = &spec.hooks {
+        launch = launch.with_hooks(hooks.display().to_string());
+    }
+    if let Some(driver) = &spec.driver {
+        launch = launch.with_driver(driver.display().to_string());
+    }
     if let Some(name) = &spec.toolchain {
         launch = launch.with_toolchain(name);
     }
@@ -2927,18 +2935,29 @@ mod b10x_launch_tests {
             argv.iter().any(|word| word == "--no-session"),
             "a step's launch must not pick up the previous step's conversation: {argv:?}"
         );
+        // **A ceiling, never `--yes`.** `--yes` approves every call including the destructive class
+        // above `high`, and by the loop's own rule it does not combine with a ceiling — so it made
+        // the ceiling moot and threw away a tier. `high` clears exactly the entries a driven step
+        // uses: `file_write` and `file_edit` are `medium`, `run` is `high`.
         assert!(
-            argv.iter().any(|word| word == "--yes"),
-            "there is no terminal to ask on, and no decision seam on this arm: {argv:?}"
+            !argv.iter().any(|word| word == "--yes"),
+            "`--yes` discards the ceiling and approves the destructive class: {argv:?}"
         );
-        // Neither takes a value; a value here would be read as a positional argument.
-        for flag in ["--no-session", "--yes"] {
-            let at = argv.iter().position(|word| word == flag).expect("present");
-            assert!(
-                argv.get(at + 1).is_none_or(|next| next.starts_with("--")),
-                "{flag} takes no value: {argv:?}"
-            );
-        }
+        assert!(
+            argv.windows(2)
+                .any(|pair| pair[0] == "--approve-up-to" && pair[1] == "high"),
+            "every entry a driven step uses runs unasked, and nothing above it does: {argv:?}"
+        );
+        // `--no-session` takes no value; a value would be read as a positional argument, which is
+        // how the `--substrate-embedded` arity bug presented.
+        let at = argv
+            .iter()
+            .position(|word| word == "--no-session")
+            .expect("present");
+        assert!(
+            argv.get(at + 1).is_none_or(|next| next.starts_with("--")),
+            "--no-session takes no value: {argv:?}"
+        );
     }
 
     #[test]

@@ -179,10 +179,20 @@ pub struct B10xLaunch {
     pub cgroup_root: Option<String>,
     /// Programs `run` may start. Empty publishes no `run`.
     pub allow_program: Vec<String>,
+    /// The operator's hook file, consulted before every call the loop is about to make.
+    pub hooks: Option<String>,
     /// Ceiling on model turns.
     pub max_turns: Option<u32>,
     /// A build toolchain the run may read, admitted read-only.
     pub toolchain: Option<String>,
+    /// A program on the host the confined run may execute, staged and mounted read-only.
+    ///
+    /// Separate from [`Self::allow_program`] because they answer different questions: the
+    /// allow-list says what a `run` may *name*, and this says what the sandbox *contains*. A path
+    /// on the allow-list that the sandbox does not hold is admitted and then dies at `ENOENT`,
+    /// which reads to a model as a wrong command rather than a missing file. The loop adds the
+    /// mounted path to its own allow-list, so this is the whole declaration.
+    pub driver: Option<String>,
     /// Where the run may write, ordered, as `<glob>=<allowed|partial-only|denied>`.
     pub write_scope: Vec<String>,
     /// Files the run is given before it starts, instead of discovering them.
@@ -221,8 +231,10 @@ impl B10xLaunch {
             confinement: None,
             cgroup_root: None,
             allow_program: Vec::new(),
+            hooks: None,
             max_turns: None,
             toolchain: None,
+            driver: None,
             write_scope: Vec::new(),
             context: Vec::new(),
             scope_silent: false,
@@ -356,6 +368,20 @@ impl B10xLaunch {
         self
     }
 
+    /// The operator's hook file, consulted before every call.
+    #[must_use]
+    pub fn with_hooks(mut self, path: impl Into<String>) -> Self {
+        self.hooks = Some(path.into());
+        self
+    }
+
+    /// The same launch, with one host program staged so a confined `run` can start it.
+    #[must_use]
+    pub fn with_driver(mut self, path: impl Into<String>) -> Self {
+        self.driver = Some(path.into());
+        self
+    }
+
     /// A ceiling on model turns.
     #[must_use]
     pub fn with_max_turns(mut self, turns: u32) -> Self {
@@ -452,18 +478,29 @@ pub fn argv(launch: &B10xLaunch) -> Vec<String> {
         // refused before reaching a model — `neither XDG_STATE_HOME nor HOME is set`, with no
         // terminal record, which the driver above reads as `metaharness exited 3`.
         "--no-session".to_owned(),
-        // **Every call the catalogue published, run.** The loop gained a risk ceiling and asks a
-        // person about anything above it; a spawned child has no terminal, so without this it
-        // refuses those calls and says so on stderr instead of running.
+        // **The ceiling, not `--yes`, and the difference is a whole tier of enforcement.**
         //
-        // This is the arm's prior semantics stated rather than inherited: what a b10x run may do
-        // is decided *before* it starts, by which entries the catalogue publishes at all — there is
-        // no decision seam on this arm for a ceiling to consult. A ceiling here would be a second,
-        // later decision that no step map asked for, and the arm would then differ from the vendor
-        // arms in two ways at once. If a driven b10x step should ever ask, it becomes a field on
-        // this launch and a line in the step map, not a default hidden here.
-        "--yes".to_owned(),
+        // This said `--yes` — approve everything — and the reason given was that there is "no
+        // decision seam on this arm for a ceiling to consult". That was true and is not: the loop
+        // consults hook programs before each call, and `--hooks` below carries the operator's. So
+        // the arm now has what the vendor arms have, and `--yes` would throw it away: `--yes`
+        // approves every call *including* the destructive ones above `high`, and it does not
+        // combine with a ceiling, so it silently made the ceiling moot.
+        //
+        // `high` is chosen and not maximal: `file_write` and `file_edit` are `medium` and `run` is
+        // `high`, so every entry a driven step legitimately uses runs unasked and nothing stalls
+        // waiting for a terminal this child does not have. Above `high` there is only the
+        // destructive class, which no driven step should reach — and if one does, the default
+        // approver has no terminal, denies, and says so to the model rather than doing it.
+        "--approve-up-to".to_owned(),
+        "high".to_owned(),
     ];
+    // Named and never discovered, which is the loop's own rule: a hook found in the workspace would
+    // be a program the repository runs on this machine.
+    if let Some(hooks) = &launch.hooks {
+        argv.push("--hooks".to_owned());
+        argv.push(hooks.clone());
+    }
     match &launch.credential {
         Some(Credential::File(path)) => {
             argv.push("--api-key-file".to_owned());
@@ -492,6 +529,10 @@ pub fn argv(launch: &B10xLaunch) -> Vec<String> {
     if let Some(name) = &launch.toolchain {
         argv.push("--toolchain".to_owned());
         argv.push(name.clone());
+    }
+    if let Some(program) = &launch.driver {
+        argv.push("--driver".to_owned());
+        argv.push(program.clone());
     }
     for rule in &launch.write_scope {
         argv.push("--write-scope".to_owned());
@@ -608,6 +649,27 @@ mod tests {
             .map(|(index, _)| &argv[index + 1])
             .collect();
         assert_eq!(programs, vec!["cargo", "protocol"]);
+    }
+
+    #[test]
+    fn a_driver_travels_as_a_mount_and_not_as_one_more_allow_listed_name() {
+        // The two are different questions and were confused for a whole eval run: the allow-list
+        // says what a `run` may *name*, and only a mount says what the sandbox *contains*. A
+        // driven run allow-listed its CLI by absolute host path, was admitted, found nothing —
+        // the sandbox binds `/usr`, `/bin`, `/lib`, `/lib64` and the workspace — and hand-wrote
+        // the planning store instead of using the CLI it could not start.
+        let argv = argv(&launch().with_driver("/home/op/src/target/release/protocol"));
+        let at = argv
+            .iter()
+            .position(|word| word == "--driver")
+            .expect("the driver is declared");
+        assert_eq!(argv[at + 1], "/home/op/src/target/release/protocol");
+        assert!(
+            !argv.iter().any(|word| word == "--allow-program"),
+            "declaring a driver is not declaring a program: the loop adds the mounted path to its \
+             own allowlist, and a caller doing it again would be naming the host path, which is \
+             the spelling that does not resolve inside: {argv:?}"
+        );
     }
 
     #[test]

@@ -358,7 +358,12 @@ for stream in "$TRANSCRIPTS"/*.jsonl; do
     # own — `unpublished-tool` for a tool outside the published surface, and an errored result
     # naming the declared write scope for a write the scope refused.
     A=$(jq -r 'select(.event=="tool.result" and .is_error==false) | .call_id' "$stream" 2>/dev/null | wc -l)
-    SD=$(jq -r 'select(.event=="tool.result" and .is_error==true and ((.content // "") | test("scope|frontmatter|denied"))) | .call_id' "$stream" 2>/dev/null | wc -l)
+    # **Read from the warning, not from `.content`.** This adapter writes `content: null` on every
+    # result, so the `.content` test below could never match on this arm and the store-denial column
+    # read 0 whatever happened. A hook's refusal now crosses as `warning{code: hook-refused}`, which
+    # is where the reason actually is; the `.content` form stays beside it for a stream that carries
+    # one.
+    SD=$(jq -r 'select((.event=="warning" and .code=="hook-refused") or (.event=="tool.result" and .is_error==true and ((.content // "") | test("scope|frontmatter|denied")))) | .event' "$stream" 2>/dev/null | wc -l)
     VD=$(jq -r 'select(.event=="warning" and .code=="unpublished-tool") | .message' "$stream" 2>/dev/null | wc -l)
     D=$(jq -r 'select((.event=="tool.result" and .is_error==true) or (.event=="warning" and .code=="unpublished-tool"))' "$stream" 2>/dev/null | grep -c '"event"')
   fi
