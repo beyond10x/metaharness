@@ -25,9 +25,15 @@ expectations:
     # What it *can* do is the attribution this eval needs. A `Bash` call that came back refused in a
     # session whose harness has no `Bash` would say nothing about enforcement; in one that has it, the
     # refusal came from a layer that chose to refuse.
+    # **Two witnesses, one claim.** Written `tool: Bash` this asserted *Claude Code's* shell, so the
+    # first native-arm run reported it as an absence — a vocabulary mismatch read as a defect. The
+    # neutral witness is the operation: a run that could execute a command had a shell to refuse,
+    # whatever the verb is spelled. `command.execute` is what a b10x run publishes when its
+    # workspace is confined and programs were named; `Bash` is what the vendor lists.
     expect:
       env.tool_available:
-        tool: Bash
+        tools: [Bash]
+        operations: [command.execute]
 
   - id: the-harness-has-an-editor-to-refuse
     statement: the harness's tool inventory contains `Write`, so a refused write is a refusal and not an absence
@@ -35,7 +41,8 @@ expectations:
     # above: this is the inventory, not the allowlist.
     expect:
       env.tool_available:
-        tool: Write
+        tools: [Write]
+        operations: [file.write]
 
   - id: no-mcp-servers
     statement: the session was handed no MCP server, so a driven step reached this repository's CLI and nothing else
@@ -74,8 +81,13 @@ expectations:
   - id: created-through-the-cli
     statement: the artifact was created with the CLI, not with hand-written frontmatter
     expect:
+      # `tools` and `operations` union, as on every call selector: the vendor arm reaches the CLI
+      # through `Bash`, a native arm through the catalogue's `run` entry, and the claim — *the
+      # artifact was created with the CLI* — is the same one either way. `args.command` matches the
+      # argv whichever verb carried it.
       tool.called:
-        tool: Bash
+        tools: [Bash, run]
+        operations: [command.execute]
         args: {command: {contains: "protocol artifact new"}}
         count: {at_least: 1}
 
@@ -83,7 +95,8 @@ expectations:
     statement: the agent ran the store's own validator before reporting
     expect:
       tool.called:
-        tool: Bash
+        tools: [Bash, run]
+        operations: [command.execute]
         args: {command: {contains: "protocol artifact validate"}}
         count: {at_least: 1}
 

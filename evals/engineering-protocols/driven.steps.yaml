@@ -11,7 +11,14 @@
 # stays the only one a real run can select by fitting.
 format: aep.driver-steps/1
 id: eval/driven
-workflow: adp/default/1
+# **Pinned to the workflow in the tree, and re-pinned when that moves.** This read `adp/default/1`
+# after the subject's workflow went to 2, so the driver refused the map by name — *"the map pins
+# `adp/default/1` and the workflow in the tree is at version 2"* — and this eval could not be run at
+# all, on any arm. The recorded results below the README's first line are from before that bump and
+# cannot be reproduced against the tree as it now stands. The three states this map uses — receive,
+# specify, decompose — exist unchanged in 2; what the major bump changed is elsewhere in the graph,
+# past the operator step this eval stops at.
+workflow: adp/default/2
 title: The driven eval — one honest step, one refused one, and a verifier between them
 
 states:
