@@ -171,14 +171,16 @@ say "hooks: $HOOKS (transition -> protocol drive transition; before-call -> prot
 
 # The governor, consulted by hand once before anything is spent: the same document the loop will
 # send at the first boundary. Exit 0 or 2 are both answers; anything else means it cannot answer.
-PROBE="$(printf '{"hook":"transition","flow":"adp/default","path":"root.receive","moment":"enter","attempt":1,"of":%s,"workspace":"%s"}' "$MAX_ATTEMPTS" "$PROJECT")"
+# `root` first, because that is what the loop asks first: the first paid walk was refused there
+# and ran nothing, and this probe would have said so for free.
+PROBE="$(printf '{"hook":"transition","flow":"adp/default","path":"root","moment":"enter","attempt":1,"of":%s,"workspace":"%s"}' "$MAX_ATTEMPTS" "$PROJECT")"
 set +e
 PROBE_OUT="$(printf '%s' "$PROBE" | protocol drive transition --project "$PROJECT" --root "$TREE" --task "$PROJECT/.engineering/task.yaml" --map "$MAP" 2>&1)"
 PROBE_EXIT=$?
 set -e
 case "$PROBE_EXIT" in
-  0) say "governor: answers (enter root.receive -> proceed)" ;;
-  2) say "governor: answers (enter root.receive -> refused: $PROBE_OUT)" ;;
+  0) say "governor: enter root -> proceed" ;;
+  2) say "FAIL: the governor refuses to enter the root, so the walk would run nothing: $PROBE_OUT"; exit 1 ;;
   *) say "FAIL: the governor cannot answer (exit $PROBE_EXIT): $PROBE_OUT"; exit 1 ;;
 esac
 LEAVE="$(printf '{"hook":"transition","flow":"adp/default","path":"root.receive","moment":"leave","attempt":1,"of":%s,"failed":false,"handoff":{},"workspace":"%s"}' "$MAX_ATTEMPTS" "$PROJECT")"
