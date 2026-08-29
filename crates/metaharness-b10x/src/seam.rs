@@ -400,9 +400,37 @@ impl HarnessSeam for B10xSeam {
                     _ => Vec::new(),
                 }
             }
-            "tool-arguments-delta" | "approval-required" | "approval-resolved" | "rates" => {
-                Vec::new()
+            // **A denial by the loop's own approver, which otherwise arrives as an ordinary
+            // failure.** A denied call already produces `tool-completed{failed:true}` — the loop
+            // turns the refusal into a failed outcome — so on this adapter it reaches a reader as
+            // `tool.result{is_error:true}` and is indistinguishable from a tool that ran and
+            // broke. One of those is the approval tier working and the other is a bug, and a
+            // column that cannot tell them apart cannot score either.
+            //
+            // A `warning`, not `tool.decided`, for the reason invariant 9 gives: this adapter runs
+            // in observe mode and decides nothing. Every `DecidedBy` this protocol has —
+            // `Embedder`, `Frame`, `Deadline`, `Adapter`, observe — names a metaharness-side
+            // decider, and the loop's approver is none of them. Saying `tool.decided` would claim
+            // a seam that is not there, which is the same mistake `hook-ran` avoids above.
+            //
+            // The record carries no reason: `LoopEvent::ApprovalResolved` is `{call_id, approved}`
+            // and the reason goes into the failed outcome's message. So this names the call rather
+            // than inventing a cause, and a reader joins it to the `tool.requested` that names the
+            // tool.
+            "approval-resolved" => {
+                if value["approved"].as_bool() == Some(false) {
+                    let call = value["call_id"].as_str().unwrap_or("an unnamed call");
+                    vec![Emission::untimed(Event::Warning {
+                        code: "approval-denied".to_owned(),
+                        message: format!("the approver denied {call}"),
+                    })]
+                } else {
+                    // An approval that said yes is bookkeeping, exactly as a hook that proceeded
+                    // is: emitting it would put one event per approved call back in the stream.
+                    Vec::new()
+                }
             }
+            "tool-arguments-delta" | "approval-required" | "rates" => Vec::new(),
             // A kind this build does not know. Opaque, and every rule above still applies to it.
             other => vec![self.opaque(line, Some(other))],
         }
@@ -500,6 +528,39 @@ mod tests {
             Event::Warning { code, .. } => assert_eq!(code, "hook-failed"),
             other => panic!("a hook that could not be consulted is its own finding: {other:?}"),
         }
+    }
+
+    /// An approver's denial is readable, and an approval that said yes is not noise.
+    ///
+    /// A denied call already produces `tool-completed{failed: true}` — the loop turns the refusal
+    /// into a failed outcome — so on this adapter it reached a reader as
+    /// `tool.result{is_error: true, content: null}`, identical to a tool that ran and broke. One
+    /// of those is the approval tier working; the other is a bug.
+    ///
+    /// A `warning` and not `tool.decided`, for invariant 9's reason: this adapter runs in observe
+    /// mode and decides nothing. Every `DecidedBy` the protocol has names a metaharness-side
+    /// decider, and the loop's own approver is none of them.
+    #[test]
+    fn an_approvers_denial_does_not_read_as_a_tool_that_broke() {
+        let mut seam = seam();
+        let denied = r#"{"kind":"approval-resolved","call_id":"toolu_01AB","approved":false}"#;
+        match one(seam.as_mut(), denied) {
+            Event::Warning { code, message } => {
+                assert_eq!(code, "approval-denied");
+                assert!(
+                    message.contains("toolu_01AB"),
+                    "`ApprovalResolved` carries no reason, so this names the call a reader joins \
+                     to the `tool.requested` that names the tool: {message}"
+                );
+            }
+            other => panic!("a denial must be readable, not silent: {other:?}"),
+        }
+
+        let allowed = r#"{"kind":"approval-resolved","call_id":"toolu_01AB","approved":true}"#;
+        assert!(
+            seam.push_line(allowed).is_empty(),
+            "an approval that said yes is bookkeeping, exactly as a hook that proceeded is"
+        );
     }
 
     fn one(seam: &mut dyn HarnessSeam, line: &str) -> Event {
