@@ -546,6 +546,24 @@ mod tests {
     /// if it were the operator's.
     #[test]
     fn two_custodies_on_one_file_serialize_and_never_see_a_torn_write() {
+        two_custodies_race_a_writer(Duration::from_millis(1));
+    }
+
+    /// The same vector with a writer 25x slower, which is what makes the fixture provable.
+    ///
+    /// **The reader loop's bound is the thing under test here, not the lock.** With a fixed
+    /// `for 0..200`, 400 lock-acquire-read cycles finish in well under a millisecond, so a writer
+    /// that flips every 50 ms is never observed to flip at all and `seen` holds one token — the
+    /// test then fails its own setup check and reads as a serialization failure, which is what
+    /// made it flaky under load. Slowing the writer turns "sometimes, on a loaded machine" into
+    /// "always", so the bound can be demonstrated rather than argued about: revert the reader loop
+    /// to `for 0..200` and this test fails every run, on an idle machine, in 20 ms.
+    #[test]
+    fn a_slow_writer_is_still_raced_because_the_readers_wait_for_it() {
+        two_custodies_race_a_writer(Duration::from_millis(25));
+    }
+
+    fn two_custodies_race_a_writer(writer_cycle: Duration) {
         let dir = tempfile::TempDir::new().expect("a directory");
         let path = fake_credential(dir.path(), "fake-token-stale");
         let lock = lock_path(&path);
@@ -567,7 +585,7 @@ mod tests {
                     rustix::fs::flock(&handle, rustix::fs::FlockOperation::LockExclusive)
                         .expect("the lock");
                     std::fs::write(&path, b"").expect("the truncation");
-                    std::thread::sleep(Duration::from_millis(1));
+                    std::thread::sleep(writer_cycle);
                     write_credential(
                         &path,
                         if fresh {
@@ -578,7 +596,7 @@ mod tests {
                     );
                     fresh = !fresh;
                     drop(handle);
-                    std::thread::sleep(Duration::from_millis(1));
+                    std::thread::sleep(writer_cycle);
                 }
             })
         };
@@ -593,7 +611,16 @@ mod tests {
                 std::thread::spawn(move || {
                     let custody = CredentialCustody::open(Kind::Claude, &path)
                         .expect("a second handle on one file");
-                    for _ in 0..200 {
+                    // **Bounded by outcome and a deadline, not by an iteration count.** 200 reads
+                    // apiece is 400 lock-acquire-read cycles, which on an idle machine finish
+                    // inside the writer's first 2 ms cycle — so the readers can complete before
+                    // the writer has flipped the token even once, and the `seen.len() >= 2`
+                    // self-check below then fails for a reason that is about scheduling and not
+                    // about serialization. The deadline is generous because it is a backstop
+                    // against a writer that never runs at all, not a timing assumption.
+                    let deadline = std::time::Instant::now() + Duration::from_secs(5);
+                    let mut reads = 0;
+                    loop {
                         // A `stale` no file ever holds, so every read is a "fresh" answer and the
                         // call exercises the locked re-read rather than the equality shortcut.
                         match custody.refreshed("no-file-holds-this") {
@@ -601,6 +628,11 @@ mod tests {
                                 seen.lock().expect("the tally").insert(token);
                             }
                             Err(error) => torn.lock().expect("the tally").push(error.to_string()),
+                        }
+                        reads += 1;
+                        let raced = seen.lock().expect("the tally").len() >= 2;
+                        if reads >= 200 && (raced || std::time::Instant::now() >= deadline) {
+                            break;
                         }
                     }
                 })
@@ -620,8 +652,10 @@ mod tests {
         let seen = seen.lock().expect("the tally");
         assert!(
             seen.len() >= 2,
-            "the writer must actually have raced the readers, or this test proves nothing about \
-             serialization; tokens observed: {seen:?}"
+            "the writer did not rewrite the file once in five seconds, so nothing here was raced \
+             and the assertion above proves nothing about serialization. This is a statement about \
+             the fixture, not about custody: read it as the test failing to set itself up, and \
+             look at the writer thread rather than at the lock. Tokens observed: {seen:?}"
         );
     }
 }
