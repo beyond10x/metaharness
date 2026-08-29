@@ -92,6 +92,14 @@ say() { printf '%s\n' "$*"; }
 if [ "$ARM" = "claude" ]; then
   command -v claude >/dev/null || { say "FAIL: \`claude\` is not on PATH"; exit 1; }
 else
+  # **The arm's binary is the one `metaharness` resolves, which is not the one on your `PATH`.**
+  # `metaharness_b10x::child_path` is `$HOME/.local/bin:<base>` — constructed, deliberately not
+  # inherited, so `doctor` and the spawn agree on which install answered (CT-3). Checking
+  # `command -v b10x-harness` therefore checks the wrong file: on this machine that is
+  # `~/.cargo/bin/b10x-harness`, five days older than the one that runs, and nothing would have
+  # noticed. Name the resolved file and use it everywhere below.
+  B10X_BINARY="${EVAL_B10X_BINARY:-$HOME/.local/bin/b10x-harness}"
+  [ -x "$B10X_BINARY" ] || { say "FAIL: no b10x-harness at $B10X_BINARY, which is where metaharness looks"; exit 1; }
   [ -d "$HARNESS_REPO/crates" ] || { say "FAIL: $HARNESS_REPO is not a harness checkout (set EVAL_HARNESS_REPO)"; exit 1; }
   [ -r "$B10X_TOKEN_FILE" ] || { say "FAIL: no credential at $B10X_TOKEN_FILE (set EVAL_B10X_TOKEN_FILE)"; exit 1; }
 
@@ -129,18 +137,25 @@ say "building protocol-cli (subject) …"
 (cd "$REPO" && cargo build -p protocol-cli --quiet) || { say "FAIL: protocol-cli does not build"; exit 1; }
 say "building metaharness-cli (harness seam) …"
 (cd "$MH_REPO" && cargo build -p metaharness-cli --quiet) || { say "FAIL: metaharness-cli does not build"; exit 1; }
-# **The native arm is built here too, and put ahead of anything installed.**
-# It was not, and `~/.cargo/bin/b10x-harness` — five days old — is what every b10x result before
-# 2026-08-29 was actually measured against. That build still took a value for `--substrate-embedded`,
-# an arity this repo had already fixed, so every confined launch died on clap and the arm was scored
-# on a binary nobody was changing. A subject built from source and a harness taken from PATH is not
-# a comparison; it is two different questions.
+# **The native arm's staleness is checked, not corrected.** A subject built from source and a
+# harness taken from an install directory is two different questions, but the install directory is
+# not this script's to overwrite: `$HOME/.local/bin/b10x-harness` is the operator's file and a
+# release build, and silently replacing it with a debug build from a checkout would change what
+# every *other* caller on this machine gets. So compare, and refuse with the command to run.
 if [ "$ARM" = "b10x" ]; then
-  say "building b10x-harness (native arm) …"
-  (cd "$HARNESS_REPO" && cargo build -p b10x-harness-cli --quiet) \
-    || { say "FAIL: b10x-harness does not build in $HARNESS_REPO"; exit 1; }
+  NEWEST_COMMIT="$(cd "$HARNESS_REPO" && git log -1 --format=%ct 2>/dev/null || echo 0)"
+  BINARY_BUILT="$(stat -c %Y "$B10X_BINARY")"
+  if [ "$NEWEST_COMMIT" -gt "$BINARY_BUILT" ]; then
+    say "FAIL: $B10X_BINARY was built $(date -d "@$BINARY_BUILT" '+%F %T'), older than"
+    say "      $HARNESS_REPO's newest commit $(date -d "@$NEWEST_COMMIT" '+%F %T')."
+    say "      metaharness resolves this file and no other; scoring the arm on it would measure"
+    say "      a harness nobody is changing. Refresh it:"
+    say "        cargo install --path $HARNESS_REPO/crates/harness-cli --root \$HOME/.local --force"
+    exit 1
+  fi
+  say "b10x binary: $B10X_BINARY (built $(date -d "@$BINARY_BUILT" '+%F %T'), newest commit $(date -d "@$NEWEST_COMMIT" '+%F %T'))"
 fi
-export PATH="$REPO/target/debug:$MH_REPO/target/debug:$HARNESS_REPO/target/debug:$PATH"
+export PATH="$REPO/target/debug:$MH_REPO/target/debug:$PATH"
 command -v protocol >/dev/null || { say "FAIL: protocol binary missing after build"; exit 1; }
 command -v metaharness >/dev/null || { say "FAIL: metaharness binary missing after build"; exit 1; }
 
@@ -154,7 +169,7 @@ if [ "$ARM" = "b10x" ]; then
   # other name, and `mktemp`'s dotted suffix is refused by it.
   PROBE_WS="${TMPDIR:-$HOME/.cache/claude-tmp}/ws_probe_$$"
   mkdir -p "$PROBE_WS"
-  PROBE_TOOLS="$(b10x-harness tools --workspace "$PROBE_WS" --substrate-embedded \
+  PROBE_TOOLS="$("$B10X_BINARY" tools --workspace "$PROBE_WS" --substrate-embedded \
     --cgroup-root "$B10X_CGROUP_ROOT" --allow-program protocol 2>/dev/null \
     | jq -r '.catalogue.tools[].name' | paste -sd, -)"
   rmdir "$PROBE_WS" 2>/dev/null || true
