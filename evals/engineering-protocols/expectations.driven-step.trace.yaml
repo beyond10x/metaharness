@@ -88,11 +88,47 @@ expectations:
 
   - id: the-skill-was-offered
     statement: the plugin loaded and offered its skill — `--plugin-dir` reached the session
-    # Also the closest thing to an audit of the hooks having loaded: they ship in the same plugin,
-    # and a session that has the skill has the `hooks/hooks.json` beside it.
+    # **A mechanism row, and it only answers for a harness that has the mechanism.** The native arm
+    # is launched without `--plugin-dir` at all (`run-driven.sh:268-280`, which says why: a plugin
+    # is a vendor mechanism and that loop has none), so this reads `gap` there — not because the
+    # guidance never arrived, but because it arrived another way. `the-planning-guidance-was-loaded`
+    # below is that other way, and the two are kept apart deliberately: *offered* and *loaded* are
+    # two claims, and on 2026-08-29 they disagreed.
+    #
+    # This said it was "also the closest thing to an audit of the hooks having loaded: they ship in
+    # the same plugin". They do not, and had not for some time — `run-driven.sh:245` builds the
+    # plugin as "skills and agents only, since the hooks retired into the driver's policy", and
+    # neither the copied tree nor `integrations/claude-code/` holds a `hooks/` directory. The audit
+    # that comment promised was not happening on either arm. What audits the hooks now is the store
+    # column itself: three `hook-refused` warnings in the record beat a proxy.
     expect:
       env.skill_available:
         skill: engineering-protocols:planning
+
+  - id: the-planning-guidance-was-loaded
+    statement: the planning guidance reached the model, however this harness delivers it
+    # **The outcome half of the row above, which is the half that matters to the work.** The native
+    # arm has no plugin mechanism and loads the skill by running the CLI itself —
+    # `protocol skill load planning` — observed succeeding in every native run inspected on
+    # 2026-08-29. A comparison that scored only the mechanism reported that arm as missing a
+    # capability it delivers by another route.
+    #
+    # `tool.error_rate` rather than `tool.result` or `tool.failed`, for the reasons
+    # `the-creating-call-succeeded` sets out below at length: `result:` cannot reach `is_error` and
+    # reads `unk` on both wires, and `tool.failed: {at_most: 0}` forbids *any* failed call, which
+    # a run that probes `--help` first legitimately has. failed ÷ matched is 1.0 exactly when every
+    # such call failed, so any bound under 1 reads *at least one succeeded*.
+    #
+    # An empty selection reads `unk` and never `ok` (`trace-spec/src/check.rs:995-1002`), so a step
+    # that never loaded the guidance cannot pass this by having nothing to judge. That is also why
+    # this reads `unk` on the vendor arm, which is handed the skill and has no call to make — which
+    # is correct today, and stops being the case if the native harness grows the mechanism.
+    expect:
+      tool.error_rate:
+        tools: [Bash, run]
+        operations: [command.execute, shell]
+        args: {command: {contains: "skill load planning"}}
+        rate: {at_most: 0.99}
 
   # --- what the model did with it -----------------------------------------------------------
 
