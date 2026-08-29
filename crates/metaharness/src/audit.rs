@@ -22,7 +22,7 @@ use std::fmt::Write as _;
 
 use metaharness_protocol::{
     Assertion, CredentialSource, DecidedBy, Decision, DecisionCensus, Event, HermeticAttestation,
-    HermeticRow, RowVerdict, RunSpec, Severity, Verdict,
+    HermeticRow, RowVerdict, RunSpec, Severity, Verdict, WithheldTool,
 };
 
 use crate::auditor::AuditorVerdict;
@@ -92,6 +92,14 @@ pub struct AuditReport {
     /// What metaharness's own seam did. **Always printed**: a report that hides "0 denials"
     /// reads as clean when it may mean nothing was ever attempted (design § 9.4).
     pub census: DecisionCensus,
+    /// What the run declared and this machine would not admit, as the opening record stated it
+    /// (amendment a12). **Always printed**, for the same reason the census is: a reader who sees
+    /// no denial cannot otherwise tell *nothing was refused* from *the tool was never there*.
+    ///
+    /// [`None`] is *the harness did not say* — including a stream with no opening record at all —
+    /// and never *nothing was withheld*. `Some(vec![])` is the harness stating that the run got
+    /// everything it asked for (invariant 3, amendment a4's rule).
+    pub withheld: Option<Vec<WithheldTool>>,
     /// The external auditor's verdict, when one ran.
     pub auditor: Option<AuditorVerdict>,
     /// Whether the harness produced a terminal record at all.
@@ -194,6 +202,25 @@ impl AuditReport {
                 );
             }
         }
+        // Beside the census, because the census cannot answer this: a tool the machine would
+        // not admit was never put in front of the model, so no call was ever refused and every
+        // denial count stays zero. It is absent from `offered_tools` and `available_operations`
+        // in exactly the way a tool nobody wanted is, and the difference between *nothing was
+        // refused* and *the tool was never there* is the whole of amendment a12.
+        match &self.withheld {
+            Some(withheld) if !withheld.is_empty() => {
+                let named: Vec<String> = withheld
+                    .iter()
+                    .map(|entry| format!("{} ({})", entry.tool, entry.reason))
+                    .collect();
+                let _ = writeln!(out, "withheld: {}", named.join("; "));
+            }
+            // The harness said it withheld nothing, which is a statement and not a silence.
+            Some(_) => out.push_str("withheld: none declared\n"),
+            // And a silence is printed as one, never as an empty list: reading it as `[]` would
+            // assert that this machine admitted everything it was asked for (invariant 3).
+            None => out.push_str("withheld: not stated by the harness\n"),
+        }
         if let Some(auditor) = &self.auditor {
             let _ = writeln!(
                 out,
@@ -261,6 +288,23 @@ pub fn decision_census(events: &[Event]) -> DecisionCensus {
             .or_default() += 1;
     }
     census
+}
+
+/// What the opening record said this run asked for and this machine would not admit.
+///
+/// [`None`] is *the harness did not say* and never *nothing was withheld*: the two are different
+/// runs, and an adapter that read silence as `[]` would be asserting that a machine it never
+/// asked admitted everything (invariant 3, amendment a4's rule, design § 4.1 a12). A stream with
+/// no opening record flattens to the same `None` for the same reason — nobody stated anything.
+#[must_use]
+pub fn withheld_tools(events: &[Event]) -> Option<Vec<WithheldTool>> {
+    events
+        .iter()
+        .find_map(|event| match event {
+            Event::SessionStarted { withheld, .. } => Some(withheld.clone()),
+            _ => None,
+        })
+        .flatten()
 }
 
 /// The twelve rows of § 8.1, evaluated from the emitted events.
@@ -667,6 +711,7 @@ impl crate::run::Run {
         Ok(AuditReport {
             rows: self.hermetic_floor(),
             census: decision_census(self.events()),
+            withheld: withheld_tools(self.events()),
             auditor,
             saw_terminal_record: self.saw_terminal_record(),
         })

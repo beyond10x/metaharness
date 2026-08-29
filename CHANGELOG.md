@@ -33,6 +33,24 @@ was amended and the amendment is named here.
   `harness_version` with its *own* `CARGO_PKG_VERSION`, so it has already claimed the record as
   that build's.
 
+- **`--audit` prints what the machine would not admit, beside the census that cannot say it** —
+  one line after `decision census:`, in three shapes because they are three different facts:
+  `withheld: <tool> (<reason>); …` when the opening record named any, `withheld: none declared`
+  when the harness stated it withheld nothing, and `withheld: not stated by the harness` when it
+  said nothing at all. The census is no help here and neither are the tool lists: a tool that was
+  never admitted was never put in front of the model, so no call was refused for it and
+  `denied=0` is the same `0` a run that got everything prints — and it is missing from
+  `offered_tools` and `available_operations` exactly as a tool nobody wanted is. So a reader of an
+  audit report could not tell *nothing was refused* from *the tool was never there*, which is the
+  reading that cost weeks on 2026-08-29. `AuditReport` gains the field and `withheld_tools` reads
+  it off the run's own opening record; a stream with no opening record is *did not say* rather
+  than an empty list, on the same rule (invariant 3, a4). Design § 9.4 amended.
+  **It is not in `required_ir_fields`, and the reason is in `projection.rs`:** `trace-ir/1`'s
+  `SessionStart` has no `withheld` field, so the fact crosses this wire and stops at the IR
+  boundary. Listing it would claim a family was filled from a field it cannot receive, and the
+  check could never fail anyway — the key is always serialized. Projecting it is a change the
+  repository that owns the IR makes first.
+
 ## [0.1.0] — 2026-08-24
 
 First tagged release. The entries below cover everything since the crate was established; the

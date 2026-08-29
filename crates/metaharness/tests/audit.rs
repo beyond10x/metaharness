@@ -7,12 +7,13 @@
 use metaharness::protocol::{
     CredentialSource, DecisionCensus, DecisionMode, Digest, Event, HermeticAttestation,
     HermeticMode, HermeticRow, ImposedControl, Kind, McpServerRef, PluginRef, RunSpec, Severity,
-    TranscriptRef, UnavailableControl, Verdict,
+    TranscriptRef, UnavailableControl, Verdict, WithheldTool,
 };
 use metaharness::{
     AuditReport, AuditorRun, FakeAuditor, FloorInputs, Input, ManualClock, Metaharness, Refusal,
     RunExit, ScriptStep, ScriptedLog, ScriptedRunner, ScriptedSeams, auditor_argv,
     count_verdict_rows, decision_census, exit_without_audit, hermetic_floor, run_auditor,
+    withheld_tools,
 };
 
 /// An opening record whose every observable field is present and correct.
@@ -476,6 +477,7 @@ fn the_two_advisory_rows_are_evaluated_and_do_not_move_the_exit_code() {
     let report = AuditReport {
         rows,
         census: DecisionCensus::default(),
+        withheld: None,
         auditor: None,
         saw_terminal_record: true,
     };
@@ -489,9 +491,17 @@ fn the_two_advisory_rows_are_evaluated_and_do_not_move_the_exit_code() {
 // ---------------------------------------------------------------- exit codes (§ 9.4)
 
 fn report_with(rows: Vec<metaharness::protocol::RowVerdict>) -> AuditReport {
+    report_withholding(rows, None)
+}
+
+fn report_withholding(
+    rows: Vec<metaharness::protocol::RowVerdict>,
+    withheld: Option<Vec<WithheldTool>>,
+) -> AuditReport {
     AuditReport {
         rows,
         census: DecisionCensus::default(),
+        withheld,
         auditor: None,
         saw_terminal_record: true,
     }
@@ -597,6 +607,76 @@ fn the_report_always_prints_the_census_even_when_it_is_zero() {
     assert!(
         rendered.contains("cannot distinguish enforcement holding from nothing being attempted")
     );
+}
+
+// ------------------------------------------------- what the machine would not admit (a12)
+
+/// The census cannot answer this and neither can the tool lists. A tool the machine would not
+/// admit was never put in front of the model, so nothing was ever refused for it and every
+/// denial count stays zero; and it is missing from `offered_tools` and `available_operations` in
+/// exactly the way a tool nobody wanted is. On 2026-08-29 that read as a model failure for weeks.
+#[test]
+fn the_report_names_each_tool_the_machine_would_not_admit_and_the_predicate_that_decided() {
+    let rendered = report_withholding(
+        floor_for(good_record()),
+        Some(vec![
+            WithheldTool {
+                tool: "run".to_string(),
+                reason: "`exec.argv-only` must be true and this machine says nothing.".to_string(),
+            },
+            WithheldTool {
+                tool: "net".to_string(),
+                reason: "no egress fact.".to_string(),
+            },
+        ]),
+    )
+    .render();
+    assert!(
+        rendered.contains(
+            "withheld: run (`exec.argv-only` must be true and this machine says nothing.); \
+             net (no egress fact.)"
+        ),
+        "{rendered}"
+    );
+}
+
+/// The two silences the field exists to keep apart, printed apart. A harness that states `[]`
+/// has said *this run got everything it asked for*; one that states nothing has said nothing,
+/// and printing the second as the first would assert a fact nobody observed (invariant 3).
+#[test]
+fn a_harness_that_withheld_nothing_and_one_that_did_not_say_render_differently() {
+    let declared = report_withholding(floor_for(good_record()), Some(Vec::new())).render();
+    assert!(declared.contains("withheld: none declared"), "{declared}");
+
+    let silent = report_with(floor_for(good_record())).render();
+    assert!(
+        silent.contains("withheld: not stated by the harness"),
+        "{silent}"
+    );
+    assert!(
+        !silent.contains("none declared"),
+        "silence is not an empty list: {silent}"
+    );
+}
+
+/// The line is read off the opening record, and a stream with no opening record states nothing
+/// rather than an empty list.
+#[test]
+fn the_withheld_line_is_read_from_the_opening_record() {
+    assert_eq!(withheld_tools(&[]), None);
+    assert_eq!(withheld_tools(&[good_record()]), None);
+
+    let record = with_record(good_record(), |record| {
+        if let Event::SessionStarted { withheld, .. } = record {
+            *withheld = Some(vec![WithheldTool {
+                tool: "run".to_string(),
+                reason: "the capability facts this gate reads are absent.".to_string(),
+            }]);
+        }
+    });
+    let named = withheld_tools(&[record]).expect("the record named one");
+    assert_eq!(named.len(), 1);
+    assert_eq!(named[0].tool, "run");
 }
 
 #[test]
@@ -859,6 +939,14 @@ fn a_run_goes_from_spec_through_plan_and_transcript_to_a_judged_verdict() {
     assert_eq!(report.rows.len(), 12);
     assert_eq!(report.census.denied, 1);
     assert!(report.render().contains("denied=1"));
+    // a12 travels the whole path: the field is read off this run's own opening record, and the
+    // claude wire that record models names no withheld tool, so the report says *it did not say*.
+    assert_eq!(report.withheld, None);
+    assert!(
+        report
+            .render()
+            .contains("withheld: not stated by the harness")
+    );
     assert!(
         run.transcript().path.is_some(),
         "O8: the bytes are retained"
