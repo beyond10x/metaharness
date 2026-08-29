@@ -134,7 +134,10 @@ through the loop's `transition` hook (atlas ADR 0004). Without `--spend` it does
 assembles the scratch project, projects the flow, writes the hooks file, consults the governor by
 hand at the first boundary, prints the plan — and stops at the one command that spends. It is a
 different experiment from the driven arm (the loop moves the sequencer) and is measured against it
-as tokens, turns, wall-time and, with `EVAL_PRICES`, cost — never as a conformance claim.
+as tokens, turns, wall-time and, with `EVAL_PRICES`, cost — never as a conformance claim. It
+is constrained by default — Opus, 30 minutes wall clock, 2 attempts per section, 12 turns per
+step, and a $5 ceiling once a rate card lets the run price itself — and it is a **test**: the task
+is the eval's synthetic one in a scratch project, and nothing it produces ships anywhere.
 
 ```console
 bash evals/engineering-protocols/run-native.sh            # everything free, then stop

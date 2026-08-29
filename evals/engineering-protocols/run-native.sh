@@ -33,13 +33,18 @@
 #   HARNESS_REPO            the harness checkout, for the freshness check (default: ~/beyond10x/harness)
 #   EVAL_B10X_BINARY        (default: ~/.local/bin/b10x-harness)
 #   EVAL_B10X_ENDPOINT      (default: https://api.anthropic.com/v1)
-#   EVAL_B10X_MODEL         (default: claude-haiku-4-5-20251001)
+#   EVAL_B10X_MODEL         (default: claude-opus-5 — the operator's choice, 2026-08-29)
+#   EVAL_B10X_CONTEXT_WINDOW (default: 200000)
 #   EVAL_B10X_WIRE          (default: anthropic-messages)
 #   EVAL_B10X_TOKEN_FILE    (default: ~/.claude/.credentials.json)
 #   EVAL_B10X_TOKEN_POINTER (default: /claudeAiOauth/accessToken)
 #   EVAL_B10X_CGROUP_ROOT   (default: the user's systemd slice)
-#   EVAL_MAX_ATTEMPTS       the retreat bound on every section (default 3)
+#   EVAL_MAX_ATTEMPTS       the retreat bound on every section (default 2)
+#   EVAL_MAX_DURATION_MS    wall-clock ceiling on the whole walk (default 1800000 = 30 min)
+#   EVAL_MAX_TURNS          model turns per step (default 12)
+#   EVAL_MAX_OUTPUT_TOKENS_PER_TURN  (default 8000)
 #   EVAL_PRICES             a rate card for `--prices`; without one the run reports tokens, no price
+#   EVAL_MAX_COST_MICRO     spend ceiling in millionths of a dollar, only with EVAL_PRICES (default 5000000 = $5)
 #
 # Usage:  bash evals/engineering-protocols/run-native.sh            # everything free, then stop
 #         bash evals/engineering-protocols/run-native.sh --spend    # and walk it
@@ -50,13 +55,23 @@ REPO="${EP_REPO:-$HOME/beyond10x/engineering-protocols}"
 HARNESS_REPO="${HARNESS_REPO:-$HOME/beyond10x/harness}"
 B10X_BINARY="${EVAL_B10X_BINARY:-$HOME/.local/bin/b10x-harness}"
 B10X_ENDPOINT="${EVAL_B10X_ENDPOINT:-https://api.anthropic.com/v1}"
-B10X_MODEL="${EVAL_B10X_MODEL:-claude-haiku-4-5-20251001}"
+B10X_MODEL="${EVAL_B10X_MODEL:-claude-opus-5}"
+B10X_CONTEXT_WINDOW="${EVAL_B10X_CONTEXT_WINDOW:-200000}"
 B10X_WIRE="${EVAL_B10X_WIRE:-anthropic-messages}"
 B10X_TOKEN_FILE="${EVAL_B10X_TOKEN_FILE:-$HOME/.claude/.credentials.json}"
 B10X_TOKEN_POINTER="${EVAL_B10X_TOKEN_POINTER:-/claudeAiOauth/accessToken}"
 B10X_CGROUP_ROOT="${EVAL_B10X_CGROUP_ROOT:-/sys/fs/cgroup/user.slice/user-$(id -u).slice/user@$(id -u).service}"
-MAX_ATTEMPTS="${EVAL_MAX_ATTEMPTS:-3}"
+MAX_ATTEMPTS="${EVAL_MAX_ATTEMPTS:-2}"
 PRICES="${EVAL_PRICES:-}"
+# The constraints. A walk is six sections, each up to MAX_ATTEMPTS attempts, each attempt a
+# conversation: unbounded, that is a bill with no ceiling. These four are ceilings on the **walk**
+# (duration) and on **each step** (turns, output per turn), and a fifth on spend when a rate card
+# makes the run able to price itself — without `--prices` the loop refuses a cost ceiling rather
+# than pretending to honour one.
+MAX_DURATION_MS="${EVAL_MAX_DURATION_MS:-1800000}"           # 30 minutes wall clock
+MAX_TURNS="${EVAL_MAX_TURNS:-12}"                            # model turns per step
+MAX_OUTPUT_PER_TURN="${EVAL_MAX_OUTPUT_TOKENS_PER_TURN:-8000}"
+MAX_COST_MICRO="${EVAL_MAX_COST_MICRO:-5000000}"             # $5, only with EVAL_PRICES
 TASK_ID="NATIVE-1"
 SPEND=0
 [[ "${1:-}" == "--spend" ]] && SPEND=1
@@ -185,17 +200,19 @@ INPUT="$(cat "$PROJECT/.engineering/task.yaml")"
 declare -a RUN=(
   "$B10X_BINARY" workflow run
   --flow "$FLOW" --input "$INPUT" --hooks "$HOOKS" --max-attempts "$MAX_ATTEMPTS"
-  --base-url "$B10X_ENDPOINT" --model "$B10X_MODEL" --wire "$B10X_WIRE"
+  --base-url "$B10X_ENDPOINT" --model "$B10X_MODEL" --wire "$B10X_WIRE" --context-window "$B10X_CONTEXT_WINDOW"
+  --max-duration-ms "$MAX_DURATION_MS" --max-turns "$MAX_TURNS" --max-output-tokens-per-turn "$MAX_OUTPUT_PER_TURN"
   --oauth-token-file "$B10X_TOKEN_FILE" --oauth-token-pointer "$B10X_TOKEN_POINTER"
   --workspace "$PROJECT" --substrate-embedded --cgroup-root "$B10X_CGROUP_ROOT"
   --allow-program protocol --plugin-dir "$WORK/plugin"
   --session-dir "$WORK/sessions" --json
 )
-[ -n "$PRICES" ] && RUN+=(--prices "$PRICES")
+[ -n "$PRICES" ] && RUN+=(--prices "$PRICES" --max-cost-microunits "$MAX_COST_MICRO")
 
 if [ "$SPEND" -eq 0 ]; then
   say
   say "Everything free has run. The walk itself spends money and is not started."
+  say "constraints: model $B10X_MODEL · ${MAX_DURATION_MS}ms wall clock · $MAX_ATTEMPTS attempt(s)/section · $MAX_TURNS turns/step · $MAX_OUTPUT_PER_TURN output tokens/turn$( [ -n "$PRICES" ] && printf ' · $%s spend ceiling' "$(python3 -c "print($MAX_COST_MICRO/1e6)")" || printf ' · no spend ceiling (no EVAL_PRICES)' )"
   say "To walk it (a fresh scratch directory of the same shape, same flow, same governor):"
   say
   say "  bash $SCRIPT_DIR/run-native.sh --spend"
@@ -207,7 +224,7 @@ fi
 
 # --- 5. the walk -----------------------------------------------------------------------------
 [ -r "$B10X_TOKEN_FILE" ] || { say "FAIL: no credential at $B10X_TOKEN_FILE (set EVAL_B10X_TOKEN_FILE)"; exit 1; }
-say "walking (arm native, $MAX_ATTEMPTS attempt(s) per section) …"
+say "walking (arm native, model $B10X_MODEL, $MAX_ATTEMPTS attempt(s) per section, ${MAX_DURATION_MS}ms wall clock, $MAX_TURNS turns/step$( [ -n "$PRICES" ] && printf ', $%s ceiling' "$(python3 -c "print($MAX_COST_MICRO/1e6)")" )) …"
 STARTED=$(date +%s)
 set +e
 "${RUN[@]}" > "$WORK/native.jsonl" 2> "$WORK/native.err"
