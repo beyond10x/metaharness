@@ -291,6 +291,8 @@ fn every_builder_method_sets_one_field_of_the_one_options_type() {
         prompt: Some("p".to_string()),
         frame: Some("f.yaml".into()),
         decisions: DecisionMode::Ask,
+        // Nothing declared an actor, so nothing is carried and the subject keeps its own default.
+        actor: None,
         tool_surface: ToolSurface::Owned,
         allow_program: Vec::new(),
         credentials: CredentialSource::ApiKey,

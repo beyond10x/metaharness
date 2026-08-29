@@ -899,6 +899,15 @@ fn build_env(
             env.insert(key.to_string(), value.clone());
         }
     }
+    // **Declared by the caller, so it cannot be set by the shell that launched us.** The subject
+    // stamps `human:$USER` on a store write unless told otherwise, which makes a driven session's
+    // `artifact move` indistinguishable from a person's. Adding `AEP_ACTOR` to [`INHERITED_KEYS`]
+    // would have carried it — and would have carried the operator's value in any run the driver did
+    // not set one for, which is provenance the surrounding environment can forge. This reads the
+    // spec instead, so the value is the caller's statement and the attestation can call it imposed.
+    if let Some(actor) = &spec.actor {
+        env.insert("AEP_ACTOR".to_string(), actor.clone());
+    }
     env.insert("PATH".to_string(), reduced_path(&env));
     env.insert(
         "TMPDIR".to_string(),
@@ -1404,6 +1413,39 @@ mod tests {
             loopback: None,
             tool_server: Some(PathBuf::from("/usr/local/bin/metaharness")),
         }
+    }
+
+    /// Who the run writes as is the caller's statement, and the operator's shell cannot forge it.
+    ///
+    /// The subject stamps `human:$USER` on a store write unless `AEP_ACTOR` says otherwise, so a
+    /// driven session's `artifact move` reads as a person's. Carrying it on [`INHERITED_KEYS`] was
+    /// the proposed fix and is refused here in the only way that matters: the context below has
+    /// `AEP_ACTOR` set in the operator's environment, and a spec that declares nothing must still
+    /// send nothing. Provenance a surrounding shell can set is not provenance.
+    #[test]
+    fn the_actor_a_run_writes_as_is_declared_and_never_inherited() {
+        let mut world = context();
+        world
+            .inherited_env
+            .insert("AEP_ACTOR".to_string(), "human:someone-else".to_string());
+
+        let mut spec = RunSpec::new(Kind::Claude);
+        spec.prompt = Some("do the thing".to_owned());
+        let plan = plan_launch(&spec, &world).expect("plans");
+        assert!(
+            !plan.env.contains_key("AEP_ACTOR"),
+            "an undeclared actor must not be picked up from the operator's environment: {:?}",
+            plan.env
+        );
+
+        spec.actor = Some("agent:EVAL-1.1".to_owned());
+        let plan = plan_launch(&spec, &world).expect("plans");
+        assert_eq!(
+            plan.env.get("AEP_ACTOR").map(String::as_str),
+            Some("agent:EVAL-1.1"),
+            "the declared actor is what reaches the child: {:?}",
+            plan.env
+        );
     }
 
     /// A plugin directory the caller has "read", with a digest over two invented files.

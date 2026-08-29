@@ -206,6 +206,22 @@ pub struct RunSpec {
     #[cfg_attr(feature = "clap", arg(long, value_enum, default_value = "frame"))]
     pub decisions: DecisionMode,
 
+    /// Who the run's writes are made *as*, carried to the child as `AEP_ACTOR`.
+    ///
+    /// **Declared, never inherited, and that distinction is the whole of it.** The subject's store
+    /// stamps `human:$USER` on an `artifact move` unless something tells it otherwise, so a driven
+    /// session's writes are indistinguishable from a person's. The obvious fix — adding `AEP_ACTOR`
+    /// to the adapter's inherit list — is the wrong one: that list is an allowlist precisely
+    /// because a denylist is a list of the leaks somebody thought of (design § 8.1 H3), and a run
+    /// that inherited this would be journalled as whatever the operator happened to have exported.
+    /// Provenance that can be set by the surrounding shell is not provenance.
+    ///
+    /// So the caller states it, the adapter sets it on a constructed environment, and the
+    /// attestation records it as imposed. `None` sets nothing and the subject keeps its own
+    /// default, which is the honest answer for a run nobody attributed.
+    #[cfg_attr(feature = "clap", arg(long, value_name = "ACTOR"))]
+    pub actor: Option<String>,
+
     /// Whose tools the model is offered.
     #[cfg_attr(feature = "clap", arg(long, value_enum, default_value = "native"))]
     pub tool_surface: ToolSurface,
@@ -463,6 +479,7 @@ impl RunSpec {
             prompt: None,
             frame: None,
             decisions: DecisionMode::Frame,
+            actor: None,
             tool_surface: ToolSurface::Native,
             allow_program: Vec::new(),
             credentials: CredentialSource::OperatorLogin,
