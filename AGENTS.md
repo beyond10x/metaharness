@@ -127,6 +127,20 @@ EVAL_ARM=b10x   bash evals/engineering-protocols/run-driven.sh   # the native lo
 EVAL_ARM=claude bash evals/engineering-protocols/run-driven.sh   # the vendor, and the default
 ```
 
+`evals/engineering-protocols/run-native.sh` is the third shape: the same work walked **natively** —
+`b10x-harness workflow run` over the flow `protocol workflow flow` projects from `adp/default/2`
+with the eval's step map, governed at every section boundary by `protocol drive transition`
+through the loop's `transition` hook (atlas ADR 0004). Without `--spend` it does everything free —
+assembles the scratch project, projects the flow, writes the hooks file, consults the governor by
+hand at the first boundary, prints the plan — and stops at the one command that spends. It is a
+different experiment from the driven arm (the loop moves the sequencer) and is measured against it
+as tokens, turns, wall-time and, with `EVAL_PRICES`, cost — never as a conformance claim.
+
+```console
+bash evals/engineering-protocols/run-native.sh            # everything free, then stop
+bash evals/engineering-protocols/run-native.sh --spend    # and walk it
+```
+
 **This spends real money on a real model.** It is not part of `task check` and must never be put
 there. Do not run two at once — they are isolated by scratch directory, but both build in the same
 target directories and both consume the same budget, and two sessions ran it concurrently on

@@ -10,6 +10,17 @@
 > trace adapter exists in the subject repository. Everything below this line is the original
 > document, kept as the record of the eval's design and its paid results.
 
+## The native walk (2026-08-29)
+
+`run-native.sh` walks the same task without `protocol drive`: `b10x-harness workflow run` over the
+projected flow, `protocol drive transition` as the governor at each section boundary,
+`protocol drive hook` for store integrity at `before-call`. The free path assembles everything and
+consults the governor once before stopping; on the empty scratch store the engine proceeds on
+`leave root.receive` and refuses `leave root.specify`, `leave root.establish_verifiers` and
+`leave root.implement-to-review` in its own words (`specification.satisfied — unobserved`,
+`no specification artifact is declared`, `review.approved`), which is the seam doing its job before
+a cent is spent. **No paid native walk has been run yet**; the table below is the driven arm's.
+
 ## Results — the migrated eval, live (2026-08-22)
 
 | run | verdict | census | F13 parity | cost |
