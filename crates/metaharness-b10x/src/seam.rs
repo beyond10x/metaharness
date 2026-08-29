@@ -207,12 +207,31 @@ impl HarnessSeam for B10xSeam {
                                 })
                                 .collect()
                         }),
-                    // Absent because the loop has none of these, not because nobody looked.
+                    // **The comment here said "the loop has none of these" and the value said
+                    // `null`, which is "nobody looked". Two of them are now what the comment
+                    // always claimed.**
+                    //
+                    // `mcp_servers` and `skills` are facts about the harness, not guesses about
+                    // the run: `b10x-harness` has no MCP client at all — its README states the
+                    // refusal and the reason, that a client of a protocol whose tools nothing here
+                    // confines is not something this loop will be — and it has no skills
+                    // mechanism. "None were offered" is knowable without observing anything, the
+                    // same standing fact `credential_source` above states, and the driven eval's
+                    // `no-mcp-servers` row read `unk` on every native run because of it.
+                    //
+                    // The opposite call from `withheld` below, and the difference is what the
+                    // silence is about: nothing on the wire separates a build that withheld
+                    // nothing from one too old to say so, whereas no build of this harness has
+                    // ever had an MCP client to report.
+                    mcp_servers: Some(Vec::new()),
+                    skills: Some(Vec::new()),
+                    // Left `None` deliberately: this adapter has not established that the loop
+                    // publishes no named agents and no plugins, and `hermetic.installed_plugins`
+                    // answers the plugin question elsewhere. Asserting `[]` on an unchecked
+                    // belief is the defect being fixed above, not a smaller version of it.
                     slash_commands: None,
-                    skills: None,
                     agents: None,
                     plugins: None,
-                    mcp_servers: None,
                     inputs_digest: None,
                     transcript: self.transcript.clone(),
                     hermetic: self.attestation.clone(),
