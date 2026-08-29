@@ -19,7 +19,28 @@ consults the governor once before stopping; on the empty scratch store the engin
 `leave root.receive` and refuses `leave root.specify`, `leave root.establish_verifiers` and
 `leave root.implement-to-review` in its own words (`specification.satisfied — unobserved`,
 `no specification artifact is declared`, `review.approved`), which is the seam doing its job before
-a cent is spent. **No paid native walk has been run yet**; the table below is the driven arm's.
+a cent is spent.
+
+### Results — five paid native walks, Haiku 4.5, 2026-08-29
+
+Each walk found one thing and cost the next one nothing. Token figures are the loop's own
+`usage` events; the dollar figure is an estimate from a recalled Haiku 4.5 price list
+($1/$0.10/$5 per Mtok input/cached/output) — **unverified**, no rate card was given.
+
+| walk | scratch | what stopped it | fixed by | turns | tokens in / cached / out | est. |
+|---|---|---|---|---|---|---|
+| 1 | `IudJuv` | the governor refused `enter root` — a path it could not read; 13 nodes skipped, 0 turns | ep `a255594`: the root is the flow's container, entering it proceeds | 0 | 0 | $0 |
+| 2 | `TdMnHJ` | headless `auto` approval denied all 6 `run`/`file_write` calls; `receive-1` failed twice | `--approve-up-to high` (`b08749c`) | 13 | 157k / 90k / 4.3k | $0.10 |
+| 3 | `wvolVk` | `run ["protocol", …]` exit 127 — the binary is not in the sandbox; store-integrity hook blocked one hand-written spec | `--driver` stages it at `/toolchain/driver/protocol`; prompts rewritten (`e37ae60`) | 24 | 295k / 218k / 4.5k | $0.12 |
+| 4 | `hW2dlq` | `receive-1` clean — `specification:passkey-login` in the store through the CLI, `validate` clean; `receive-2` (the map's `command` step) is a promptless model turn on the native runner and ended `unstructured` twice | `EVAL_FLOW_MAP=none` (`b6540a8`); harness M2 for real | 29 | 447k / 357k / 7.4k | $0.16 |
+| 5 | `II7pgK` | `receive` and `specify` clean — an epic, a specification and six stories written through the CLI; `decompose` hit 12 turns; the governor was consulted 4 times, all at `root`, because a one-step state is a bare node and not a section | ep `story:every-state-is-a-section` (proposed) | 39 | 626k / 578k / 8.1k | $0.15 |
+
+What the five say together: the chain works end to end — hooks (102–127 consultations per walk),
+staging, confinement, approvals, the store reached through the CLI from inside the sandbox — and
+the governor never had to refuse, because every section that reached `leave` had either failed on
+its own or was a bare node the loop does not ask about. The two things in the way are the
+runner's (`command` steps as model turns, harness design 0003 M2) and the projection's (only
+grouped states are sections). Neither is the governor's.
 
 ## Results — the migrated eval, live (2026-08-22)
 

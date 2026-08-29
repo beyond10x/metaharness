@@ -1,6 +1,6 @@
 # AGENTS.md — metaharness
 
-The contract for changing **this** repository. Org-wide rules — the naming convention, the
+The contract for changing **this** repository. Org-wide rules — the naming convention, the language rule (anything that runs is Rust, not Python), the
 former-brand rule (atlas ADR 0001) and its four exemption categories, and the rule that renaming
 anything another repo verifies is a coordinated migration with an ADR — live in
 [`atlas/AGENTS.md`](https://github.com/beyond10x/atlas) and are not restated here.
@@ -190,6 +190,17 @@ long and the interesting lines are in the middle. Redirect to a file and grep it
 - **A row that names only vendor tool names decides nothing on the native arm.** Expectation rows
   union `tools:` with `operations:`; the native arm spells the entry `run` and the operation
   `shell`, never `command.execute`.
+- **The native walk is headless, and the loop's default approver refuses when nobody is there.**
+  `--approve auto` denied every write and `run` on the second paid native walk; `run-native.sh`
+  passes `--approve-up-to high`. The fences are the hooks and the confinement, not the approver.
+- **`--allow-program` admits a name, not bytes.** The sandbox reaches `/usr`, `/bin`, `/lib`,
+  `/lib64` and the workspace; `~/.local/bin/protocol` is not there and every `run` died at exit
+  127 on the third paid native walk, which the model read as *the command is wrong*. `--driver`
+  stages the binary at `/toolchain/driver/protocol`, and the prompts have to say that path.
+- **The `transition` hook fires at group boundaries only.** `protocol workflow flow` groups a
+  multi-step state and a retreat span, nothing else, so a bare-workflow walk was governed at `root`
+  and nowhere else (fifth paid walk). Count `hook-ran` at `transition` before believing a walk was
+  governed at every state.
 - **A mechanism row and an outcome row cannot both pass once the mechanism lands.**
   `the-planning-guidance-was-loaded` asks whether the model ran the CLI's own `skill load`; a
   harness that *offers* skills hands it over and the call never happens, so the row went `ok`
