@@ -28,12 +28,30 @@ expectations:
     # **Two witnesses, one claim.** Written `tool: Bash` this asserted *Claude Code's* shell, so the
     # first native-arm run reported it as an absence — a vocabulary mismatch read as a defect. The
     # neutral witness is the operation: a run that could execute a command had a shell to refuse,
-    # whatever the verb is spelled. `command.execute` is what a b10x run publishes when its
-    # workspace is confined and programs were named; `Bash` is what the vendor lists.
+    # whatever the verb is spelled. `Bash` is what the vendor lists.
+    #
+    # **`shell` is the word the native arm actually publishes, and `command.execute` never was.**
+    # Written with `command.execute` alone the operation half matched nothing on that arm and the
+    # name half could not carry the row — this kind reads `session.started.available_operations` and
+    # has no call to fall back on — so it reported **gap**, *"tool Bash is not among the 7 offered"*,
+    # about a run whose shell had just executed six commands. The recorded b10x run of 2026-08-29
+    # lists `["file.read", "dir.list", "search", "find", "file.write", "file.edit", "shell"]`
+    # (`driven-eval.tYkXuE/ws_project/.engineering/runs/EVAL-1/1/transcripts/receive-0-1.jsonl`,
+    # seq 1). Both words are kept: the union is what makes one row decide on either arm, and
+    # dropping the one this arm does not publish would only move the false negative to the other.
+    #
+    # Checked, 2026-08-29, `protocol` 0.32.1, against a hand-built record carrying that
+    # `session.started` and five calls: this document went from **10 ok, 1 gap (this row), 1 unk,
+    # exit 1** to **11 ok, 0 gap, 1 unk**, and `validated-its-own-work` changed its citation from
+    # *"command.execute or Bash|run(…)"* to *"command.execute|shell or Bash|run(…)"*. The residual
+    # `unk` is `the-skill-was-offered` — a hand-built record carries no `skills` field, and the b10x
+    # arm is launched without `--plugin-dir` at all (`run-driven.sh:268-269`), so that row is a
+    # separate question this change does not touch. A vendor-shaped record reported the same counts
+    # before and after, still cited by tool name.
     expect:
       env.tool_available:
         tools: [Bash]
-        operations: [command.execute]
+        operations: [command.execute, shell]
 
   - id: the-harness-has-an-editor-to-refuse
     statement: the harness's tool inventory contains `Write`, so a refused write is a refusal and not an absence
@@ -79,24 +97,76 @@ expectations:
   # --- what the model did with it -----------------------------------------------------------
 
   - id: created-through-the-cli
-    statement: the artifact was created with the CLI, not with hand-written frontmatter
+    statement: a `protocol artifact new` call was made
     expect:
       # `tools` and `operations` union, as on every call selector: the vendor arm reaches the CLI
       # through `Bash`, a native arm through the catalogue's `run` entry, and the claim — *the
       # artifact was created with the CLI* — is the same one either way. `args.command` matches the
-      # argv whichever verb carried it.
+      # argv whichever verb carried it: `ToolCall::argument` falls back to the joined argv for that
+      # one field name (subject `crates/trace-domain/src/ir.rs:403-405`, joining `input.argv` or
+      # `input.arguments.argv`, `ir.rs:360-370`). Verified against the recorded native run: the row
+      # cites *`Bash|run(command ~ "protocol artifact new")` called 1 time(s)* over an `argv`.
+      #
+      # **`shell` beside `command.execute`, because that is the operation the arm publishes.** The
+      # b10x run of 2026-08-29 emitted `"operations":["shell"]` on every `run` call and listed
+      # `shell` — never `command.execute` — in `session.started.available_operations`
+      # (`…/driven-eval.tYkXuE/…/transcripts/receive-0-1.jsonl`, seq 1 and seq 66). So on that run
+      # the name half of the union carried this row and the operation half matched nothing at all;
+      # a neutral witness that names an operation no arm publishes is not a witness.
       tool.called:
         tools: [Bash, run]
-        operations: [command.execute]
+        operations: [command.execute, shell]
         args: {command: {contains: "protocol artifact new"}}
         count: {at_least: 1}
 
+  - id: the-creating-call-succeeded
+    statement: at least one of those `protocol artifact new` calls came back without an error
+    # **The row above counts the call and says nothing about its outcome**, and on 2026-08-29 that
+    # is how it went green over a run that created nothing: the native arm's only
+    # `protocol artifact new` (`receive-0-1.jsonl` seq 66) came back `is_error: true` at seq 67, and
+    # `protocol trace check` reported `ok  created-through-the-cli … called 1 time(s)`. The store
+    # was empty. *Called* and *worked* are two claims and need two rows.
+    #
+    # **Why not `tool.result: {result: {is_error: …}}`.** That matcher cannot reach the flag. A
+    # `result:` map is matched against the vendor's own per-tool record — `ResultMatcher::matches`
+    # reads `ToolResult::field` (subject `crates/trace-domain/src/matcher.rs:563-567` →
+    # `src/ir.rs:442-444`), which is the `fields` map — while `is_error` is a sibling of that map
+    # (`ir.rs:425`) and never in it. Written that way the row reads `unk` on **both** wires; checked
+    # on four hand-built records, 2026-08-29, `protocol` 0.32.1.
+    #
+    # **Why not `tool.failed: {count: {at_most: 0}}`.** It reads the flag correctly, and it is the
+    # wrong claim: it forbids *any* failed call, and one failed call here is documented, observed
+    # behaviour — the surface refuses a chained command line, so
+    # `protocol artifact kinds && … && protocol artifact new …` errors once and the model then runs
+    # the commands singly (see `nothing-was-badly-refused-here` below, which bounds that at 2). On a
+    # hand-built record carrying exactly that sequence — one refused chain, one clean create —
+    # `at_most: 0` reported a gap on both wires. A guard teaching the model is not a run that
+    # created nothing.
+    #
+    # **`tool.error_rate` says the thing itself.** failed ÷ matched is 1.0 exactly when *every* such
+    # call failed, so any bound below 1 reads *at least one succeeded*. `0.99` is that bound written
+    # readably: with n calls and a single success the rate is (n−1)/n, which stays within it up to
+    # n = 100, and `turns-within-reason` below caps this step at 40 turns. An empty selection reads
+    # `unk`, never `ok` (`crates/trace-spec/src/check.rs:995-1002`) — a step that never called the
+    # CLI cannot pass this row by having nothing to judge.
+    expect:
+      tool.error_rate:
+        tools: [Bash, run]
+        operations: [command.execute, shell]
+        args: {command: {contains: "protocol artifact new"}}
+        rate: {at_most: 0.99}
+
   - id: validated-its-own-work
     statement: the agent ran the store's own validator before reporting
+    # `shell` beside `command.execute`, for the reason `created-through-the-cli` above states in
+    # full: it is the operation the native arm publishes on every `run` call. This row happens to
+    # decide there without it — the *name* half matches, because that arm's entry is spelled `run`
+    # — but a union whose operation half matches nothing is one witness, not two, and the whole
+    # point of the pair is that either can carry the claim alone.
     expect:
       tool.called:
         tools: [Bash, run]
-        operations: [command.execute]
+        operations: [command.execute, shell]
         args: {command: {contains: "protocol artifact validate"}}
         count: {at_least: 1}
 
