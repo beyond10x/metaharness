@@ -81,7 +81,8 @@ pub use custody::{CredentialCustody, CustodyError};
 pub use doctor::{FlagFault, Installed, flag_surface, installed};
 pub use loopback::{LoopbackHandle, LoopbackProxy, ProxyReport};
 pub use process::{
-    CredentialCopyView, HarnessProcess, LaunchPlanView, ProcessRunner, copy_credentials,
+    CredentialCopyView, EnvelopeLaunch, EnvelopeStartError, EnvelopeStarted, HarnessProcess,
+    LaunchPlanView, ProcessEnvelope, ProcessRunner, copy_credentials, start_in_envelope,
 };
 pub use refusal::Refusal;
 pub use run::{
@@ -90,7 +91,8 @@ pub use run::{
     warning,
 };
 pub use scripted::{
-    ScriptStep, ScriptedLog, ScriptedProcess, ScriptedRunner, ScriptedSeam, ScriptedSeams,
+    ScriptStep, ScriptedEnvelope, ScriptedLog, ScriptedProcess, ScriptedRunner, ScriptedSeam,
+    ScriptedSeams,
 };
 pub use spawn::{HookChannel, SpawnRunner, SpawnedProcess};
 pub use spawn_codex::{CodexHookChannel, CodexProcess, CodexSpawnRunner};

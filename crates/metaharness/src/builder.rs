@@ -640,9 +640,9 @@ fn start_b10x(
             why: "the ancestor walk from the scratch cwd found an ambient memory file".to_owned(),
         });
     }
-    attestation.unavailable.push(UnavailableControl {
+    attestation.imposed.push(ImposedControl {
         row: HermeticRow::H6,
-        why: "the direct-provider launch copies no operator login; its credential is a caller-named source or none".to_owned(),
+        how: "the direct-provider launch copies no operator login; its only credential source is the caller-named source, or none".to_owned(),
     });
     attestation.imposed.sort_by_key(|control| control.row);
     attestation.unavailable.sort_by_key(|control| control.row);

@@ -1,0 +1,2 @@
+{"kind":"turn-started","turn":1}
+{"kind":"finished","stop":{"kind":"cancelled","reason":"the caller cancelled"},"turns":1}

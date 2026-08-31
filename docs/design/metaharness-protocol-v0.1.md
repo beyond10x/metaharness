@@ -146,6 +146,12 @@
 > setting; vendor adapters still owe their record of those ambient vendor surfaces. Two unedited
 > `provider_emulated` excerpts pin the enforcement outcomes this distinction exists to preserve:
 > an unpublished call and an approval denial both become readable refusals and failed tool outcomes.
+> **Amendment a14, 2026-08-31**, from auditing that direct-provider launch: **H6 names credential
+> carriage, not the vendor-specific act of copying one operator-login file.** Vendor adapters keep
+> the one-file, per-spawn rule. A direct-provider adapter instead imposes zero operator-login
+> copies and one caller-named source or none. The former wording made a fully known, stronger
+> posture permanently `unavailable`; the row now records either adapter-class-specific
+> imposition and remains advisory because neither is visible in the provider record.
 > **Audience:** whoever reviews this for acceptance, and whoever builds it afterwards.
 > **Sources studied:** `beyond10x/engineering-protocols` (public, read-only), and a private
 > agent runtime whose patterns are described here generically and whose names, records and
@@ -1080,7 +1086,7 @@ when its unobservability is a property of the mechanism rather than of the run.
 | H3 | the environment is constructed, not inherited | an explicit allowlist; everything else dropped — including `ANTHROPIC_BASE_URL`, `ANTHROPIC_MODEL`, `HTTP(S)_PROXY`, `CLAUDE_CODE_*`, `DISABLE_*`, `SSH_AUTH_SOCK`, `GIT_*`, and `PATH` reduced to a stated set | **launch:** the constructed child environment, as a value, before spawning (§ 8.4 O7) | n/a — launch assertion | **gating** |
 | H4 | no API key unless declared | `ANTHROPIC_API_KEY` is not in the allowlist unless the run declares `credentials: api_key` | record: credential source in the opening record | absent ⇒ `unk` | **gating** |
 | H5 | MCP surface is exactly what the launch gave | `--strict-mcp-config`, always | record: the MCP server **list** — length and names | list absent ⇒ `unk`, **never zero** | **gating** |
-| H6 | credentials are one file, copied | one file into the scratch home, nothing else, **re-copied immediately before every spawn** (amendment a1) | **not directly assertable in any record.** The evidence is the effect: H1a, H4, H5 | — | **advisory**, and § 8.3 says why an attestation is not evidence |
+| H6 | credential carriage is exactly declared | vendor adapters: one file into the scratch home, nothing else, **re-copied immediately before every spawn** (amendment a1); direct-provider adapters: no operator login is copied and the only source is the caller-named source or none (**amendment a14**) | **not directly assertable in any record.** The evidence is the effect: H1a, H4, H5 | — | **advisory**, and § 8.3 says why an attestation is not evidence |
 | H7 | the working directory is ours | a directory metaharness created; `--add-dir` never passed. **a6: under an operator-named `--cwd` this row is attested unavailable, never claimed** — and **a6.1: its reason states that the vendor sandbox was widened to that tree** (codex: `sandbox_mode = "workspace-write"`), because a run that may change the operator's repository must say so in its own record and not only in a scratch config file | record: `cwd` in the opening record | absent ⇒ `unk` | **gating** |
 | H8 | hooks and customizations are not skipped | an argv **denylist**: neither `--bare` nor **`--safe-mode`**, and neither `CLAUDE_CODE_SAFE_MODE` nor `CLAUDE_CODE_SIMPLE` in the child environment | launch: the argv and environment as values | n/a — launch assertion | **gating** |
 | H9 | the vendor version is the pinned one | `doctor` before the run | record: the harness version in the opening record | absent ⇒ `unk` | **gating** |
@@ -1156,6 +1162,16 @@ against. Three ways out were considered and the choice is stated with what it do
 (a) and (b) are alternatives; (a)+(c) is what v0.1 does. What remains unfixed is stated rather
 than hidden: a session longer than the remaining token lifetime still dies, and metaharness turns
 that from an unexplained failure into a named event.
+
+**H6 gained a direct-provider specialization** (amendment a14, 2026-08-31). The original row
+described only vendor harnesses, whose operator login is copied into a scratch home. A loop that
+talks to the provider directly has no operator login to copy: it accepts one caller-named source
+at call time or accepts none. Reporting that stronger, fully known launch posture as
+`unavailable` produced a permanent advisory gap even though metaharness knew exactly what
+crossed the boundary. The control is therefore credential carriage being exactly declared; the
+vendor one-file rule and the direct-provider zero-copy rule are its two adapter-class-specific
+impositions. It remains advisory because neither mechanism proves carriage in the provider's own
+record.
 
 ### 8.2 What hermetic does not mean
 

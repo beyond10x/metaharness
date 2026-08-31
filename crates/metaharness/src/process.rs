@@ -12,7 +12,13 @@
 //! by the same runner without this trait learning either adapter's name.
 
 use std::collections::BTreeMap;
+use std::fmt;
 use std::path::Path;
+
+use metaharness_protocol::{
+    EnvelopeAssessment, HermeticMode, ProcessEnvelopeMeasurement, SealedProcessEnvelope,
+    assess_envelope,
+};
 
 /// One credential file the runner must copy before it spawns.
 ///
@@ -77,6 +83,113 @@ pub trait ProcessRunner {
     /// Whatever the platform said. A refusal to spawn is exit `2`: metaharness could not do its
     /// job.
     fn start(&mut self, plan: &LaunchPlanView) -> std::io::Result<Box<dyn HarnessProcess>>;
+}
+
+/// A confinement provider supplied by the embedder.
+///
+/// The provider implements the mechanism outside this repository. It receives the same launch
+/// plan as a plain runner plus the immutable envelope request, and returns measurements taken at
+/// the child boundary.
+pub trait ProcessEnvelope {
+    /// Start the child inside the sealed envelope.
+    ///
+    /// # Errors
+    ///
+    /// Whatever the platform or confinement provider said.
+    fn start(
+        &mut self,
+        envelope: &SealedProcessEnvelope,
+        plan: &LaunchPlanView,
+    ) -> std::io::Result<EnvelopeLaunch>;
+}
+
+/// The child and facts returned by a [`ProcessEnvelope`] provider.
+pub struct EnvelopeLaunch {
+    /// The started child.
+    pub process: Box<dyn HarnessProcess>,
+    /// Facts measured at the child boundary. `None` means nobody found out.
+    pub measurement: Option<ProcessEnvelopeMeasurement>,
+}
+
+/// A child admitted after its envelope evidence was assessed.
+pub struct EnvelopeStarted {
+    /// The started child.
+    pub process: Box<dyn HarnessProcess>,
+    /// The comparison retained for the run record and audit.
+    pub assessment: EnvelopeAssessment,
+}
+
+/// Why an enveloped child was not admitted.
+#[derive(Debug)]
+pub enum EnvelopeStartError {
+    /// The sealed request was changed after sealing.
+    InvalidSeal,
+    /// Strict mode requires a complete matching measurement.
+    StrictEvidence {
+        /// The mismatch or absence that caused the refusal.
+        assessment: EnvelopeAssessment,
+    },
+    /// The confinement provider could not start the child.
+    Io(std::io::Error),
+}
+
+impl fmt::Display for EnvelopeStartError {
+    fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            EnvelopeStartError::InvalidSeal => {
+                formatter.write_str("process envelope digest does not match its request")
+            }
+            EnvelopeStartError::StrictEvidence { assessment } => write!(
+                formatter,
+                "strict process envelope refused non-matching evidence: {assessment:?}"
+            ),
+            EnvelopeStartError::Io(error) => write!(formatter, "process envelope failed: {error}"),
+        }
+    }
+}
+
+impl std::error::Error for EnvelopeStartError {
+    fn source(&self) -> Option<&(dyn std::error::Error + 'static)> {
+        match self {
+            EnvelopeStartError::Io(error) => Some(error),
+            EnvelopeStartError::InvalidSeal | EnvelopeStartError::StrictEvidence { .. } => None,
+        }
+    }
+}
+
+impl From<std::io::Error> for EnvelopeStartError {
+    fn from(error: std::io::Error) -> Self {
+        EnvelopeStartError::Io(error)
+    }
+}
+
+/// Start through an envelope and apply the strict evidence rule in one place.
+///
+/// A strict run kills a child whose measurements are absent or disagree before returning a named
+/// refusal. Other modes retain the gap or unknown assessment for the audit.
+///
+/// # Errors
+///
+/// Refuses an invalid seal, a provider failure, or non-matching evidence in strict mode.
+pub fn start_in_envelope(
+    port: &mut dyn ProcessEnvelope,
+    envelope: &SealedProcessEnvelope,
+    plan: &LaunchPlanView,
+    mode: HermeticMode,
+) -> Result<EnvelopeStarted, EnvelopeStartError> {
+    if !envelope.digest_intact() {
+        return Err(EnvelopeStartError::InvalidSeal);
+    }
+    let mut launch = port.start(envelope, plan)?;
+    let assessment = assess_envelope(envelope, launch.measurement.as_ref());
+    if mode == HermeticMode::Strict && assessment != EnvelopeAssessment::Matched {
+        launch.process.kill()?;
+        return Err(EnvelopeStartError::StrictEvidence { assessment });
+    }
+    Ok(EnvelopeStarted {
+        process: launch.process,
+        assessment,
+    })
 }
 
 /// A started child, as a line stream and a line sink.

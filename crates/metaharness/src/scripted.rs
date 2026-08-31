@@ -18,11 +18,13 @@ use std::rc::Rc;
 
 use metaharness_protocol::{
     Command, Decision, DecisionCensus, Digest, Emission, Event, HermeticAttestation, McpServerRef,
-    PluginRef, Seam, TranscriptRef, Usage,
+    PluginRef, ProcessEnvelopeMeasurement, SealedProcessEnvelope, Seam, TranscriptRef, Usage,
 };
 use serde_json::Value;
 
-use crate::process::{HarnessProcess, LaunchPlanView, ProcessRunner};
+use crate::process::{
+    EnvelopeLaunch, HarnessProcess, LaunchPlanView, ProcessEnvelope, ProcessRunner,
+};
 use metaharness_protocol::HarnessSeam;
 
 /// One step of a script.
@@ -174,6 +176,50 @@ impl ProcessRunner for ScriptedRunner {
             exit_code: Some(0),
             stderr: self.stderr.clone(),
         }))
+    }
+}
+
+/// A scripted [`ProcessEnvelope`] provider.
+///
+/// It launches the same deterministic child as [`ScriptedRunner`] and returns the measurement the
+/// test supplied. The provider records each sealed digest so a vector can prove exactly which
+/// request crossed the port.
+#[derive(Debug, Clone)]
+pub struct ScriptedEnvelope {
+    runner: ScriptedRunner,
+    measurement: Option<ProcessEnvelopeMeasurement>,
+    digests: Rc<RefCell<Vec<Digest>>>,
+}
+
+impl ScriptedEnvelope {
+    /// A provider returning this measurement, or withholding it when `None`.
+    #[must_use]
+    pub fn new(runner: ScriptedRunner, measurement: Option<ProcessEnvelopeMeasurement>) -> Self {
+        Self {
+            runner,
+            measurement,
+            digests: Rc::new(RefCell::new(Vec::new())),
+        }
+    }
+
+    /// Digests received by the port, in launch order.
+    #[must_use]
+    pub fn digests(&self) -> Vec<Digest> {
+        self.digests.borrow().clone()
+    }
+}
+
+impl ProcessEnvelope for ScriptedEnvelope {
+    fn start(
+        &mut self,
+        envelope: &SealedProcessEnvelope,
+        plan: &LaunchPlanView,
+    ) -> std::io::Result<EnvelopeLaunch> {
+        self.digests.borrow_mut().push(envelope.digest().clone());
+        Ok(EnvelopeLaunch {
+            process: self.runner.start(plan)?,
+            measurement: self.measurement.clone(),
+        })
     }
 }
 

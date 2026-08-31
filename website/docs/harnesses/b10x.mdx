@@ -6,14 +6,14 @@ sidebar_position: 3
 
 # The `b10x` adapter
 
-Pinned to **0.8.0** of `b10x-harness`. Adapter class: `direct_provider` — the loop is this family's
+Pinned to **0.9.1** of `b10x-harness`. Adapter class: `direct_provider` — the loop is this family's
 own, and this adapter **observes it and decides nothing** (invariant 9). A run against another
 `b10x-harness` version is unverified rather than refused.
 
 ```bash
 metaharness run b10x --decisions observe -p "…" --model-endpoint https://gateway.example --model-wire anthropic-messages
 metaharness capabilities b10x     # the declaration below; no model, no credential
-metaharness conformance b10x --contract  # 3 deterministic checks, no model or credential
+metaharness conformance b10x --contract  # 7 deterministic checks, no model or credential
 metaharness doctor b10x           # resolves the binary the way the spawn will, on the child's PATH
 ```
 

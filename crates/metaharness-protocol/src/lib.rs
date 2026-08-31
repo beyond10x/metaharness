@@ -29,6 +29,7 @@
 mod capability;
 mod command;
 mod conformance;
+mod envelope;
 mod event;
 mod frame;
 mod framing;
@@ -44,6 +45,11 @@ pub use capability::{
 };
 pub use command::{Command, CommandOutcome, Decision, RefusalCode, Refused};
 pub use conformance::{ConformanceTier, ContractObligations, Obligation, VectorOutcome};
+pub use envelope::{
+    CredentialChannel, EnvelopeAssessment, EnvelopeMismatch, MountAccess, NetworkPolicy,
+    ProcessBounds, ProcessEnvelopeMeasurement, ProcessEnvelopeRequest, SealedProcessEnvelope,
+    StagedExecutable, assess_envelope,
+};
 pub use event::{
     DecidedBy, DecisionCensus, Emission, Event, McpServerRef, PermissionDenial, PluginRef,
     RateLimitInfo, Seam, StepOutcome, TranscriptRef, Usage, WithheldTool, warning_code,

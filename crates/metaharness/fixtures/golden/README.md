@@ -28,7 +28,7 @@ byte.
 |---|---|
 | `contract-result-claude.json` | `checked: 24` — 7 launch, 3 synthesised replays, 3 golden (CT-2/CT-3), 8 control, 3 spawn |
 | `contract-result-codex.json` | `checked: 17` — **6 launch**, 4 synthesised replays, 3 golden, **4 spawn**. Was `10` until 2026-08-23, when the launch face CT-4 recorded as a named gap was filled (+6: two of them the loopback door's, LP-4) and the spawn tier gained the allow round trip (+1) |
-| `contract-result-b10x.json` | `checked: 3` — one recorded launch, one byte-exact recorded loop replay, one capture-banner/version-pin pair. The hook-input row is N/A because the observe-only adapter has no metaharness hook seam |
+| `contract-result-b10x.json` | `checked: 7` — one recorded launch, one byte-exact recorded loop replay, one capture-banner/version-pin pair and four provider-emulated enforcement outcomes (unpublished tool, approval denial, budget stop and cancellation). The hook-input row is N/A because the observe-only adapter has no metaharness hook seam |
 
 The adapters' counts differ and always will: they are counts of *that adapter's* vectors, not a
 score. Codex carries no `control` tier of its own — those seven vectors are metaharness's own
@@ -47,7 +47,7 @@ thing to fix.
 ## Re-recording
 
 1. Make the change that moves the record, and know which field it moves and why.
-2. `cargo test -p metaharness --test contract_golden regenerate -- --ignored` — it rebuilds both
+2. `cargo test -p metaharness --test contract_golden regenerate -- --ignored` — it rebuilds all
    files through the library path, offline, from the same vectors the CLI runs.
 3. Read the diff: it is one line per adapter, and every changed field is a claim.
 4. Update the counts in the table above, the vector-count pins that moved

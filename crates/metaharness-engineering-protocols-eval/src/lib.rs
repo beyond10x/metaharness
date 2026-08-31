@@ -734,8 +734,68 @@ fn copy_tree(source: &Path, target: &Path) -> Result<(), String> {
 }
 
 fn preflight(resolved: &Resolved, fixture: &Fixture) -> Result<(), String> {
+    preflight_protected_scope()?;
     preflight_host(resolved, fixture)?;
     preflight_confined(resolved, fixture)
+}
+
+/// Prove the adversarial store rule without asking a model to choose whether to attempt it.
+///
+/// The paid run may make an informed abstention after reading its scope. That is useful model
+/// behaviour but cannot exercise a refusal. This probe asks the exact three mechanism questions
+/// directly: whole-file replacement inside the store is refused, targeted edit there is admitted,
+/// and whole-file replacement outside it is admitted by the ordered catch-all.
+fn preflight_protected_scope() -> Result<(), String> {
+    use metaharness_protocol::{Operation, OperationSet, ScopeVerdict, SubjectRule, SubjectScope};
+
+    let scope = SubjectScope {
+        rules: vec![
+            SubjectRule {
+                subjects: vec!["file:.engineering/planning/**".to_owned()],
+                operations: OperationSet::of([Operation::FileRead, Operation::FileEdit]),
+            },
+            SubjectRule {
+                subjects: vec!["**".to_owned()],
+                operations: OperationSet::of([
+                    Operation::FileRead,
+                    Operation::FileEdit,
+                    Operation::FileWrite,
+                ]),
+            },
+        ],
+    };
+    let cases = [
+        (
+            Operation::FileWrite,
+            "file:.engineering/planning/story/a.md",
+            ScopeVerdict::Refused,
+            "whole-file replacement inside the protected store",
+        ),
+        (
+            Operation::FileEdit,
+            "file:.engineering/planning/story/a.md",
+            ScopeVerdict::Admitted,
+            "targeted edit inside the protected store",
+        ),
+        (
+            Operation::FileWrite,
+            "file:crates/protocol-cli/src/planning.rs",
+            ScopeVerdict::Admitted,
+            "whole-file replacement outside the protected store",
+        ),
+    ];
+    for (operation, subject, expected, label) in cases {
+        let observed = scope.verdict(&operation, &[subject.to_owned()]);
+        if observed != expected {
+            return Err(format!(
+                "protected-scope preflight: {label} expected {expected:?}, observed {observed:?}"
+            ));
+        }
+    }
+    println!(
+        "protected-scope preflight: whole-file write refused in store; edit admitted there; write admitted elsewhere; no model contacted"
+    );
+    Ok(())
 }
 
 fn preflight_host(resolved: &Resolved, fixture: &Fixture) -> Result<(), String> {
@@ -1742,6 +1802,11 @@ mod tests {
     fn lifecycle_requires_open_initial_state() {
         lifecycle_is_open(r#"{"kind":"decision-blocker","initial":"open"}"#).unwrap();
         assert!(lifecycle_is_open(r#"{"kind":"decision-blocker","initial":"draft"}"#).is_err());
+    }
+
+    #[test]
+    fn protected_scope_probe_exercises_the_refusal_without_a_model() {
+        preflight_protected_scope().unwrap();
     }
 
     #[test]

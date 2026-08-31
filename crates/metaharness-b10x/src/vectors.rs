@@ -23,6 +23,8 @@ pub const CONTRACT_OBLIGATIONS: ContractObligations = ContractObligations {
         "golden-loop-record",
         "provider-emulated-unpublished-tool",
         "provider-emulated-approval-denied",
+        "provider-emulated-budget-stop",
+        "provider-emulated-cancellation",
     ]),
     recorded_hook_input: Obligation::Gap(
         "not applicable: b10x is an observe-only direct-provider adapter and has no metaharness \
@@ -41,6 +43,11 @@ const UNPUBLISHED_EXPECTED: &str =
 const APPROVAL_DENIED: &str = include_str!("../fixtures/enforcement/approval-denied.jsonl");
 const APPROVAL_DENIED_EXPECTED: &str =
     include_str!("../fixtures/enforcement/approval-denied.expected.jsonl");
+const BUDGET_STOP: &str = include_str!("../fixtures/enforcement/budget-stop.jsonl");
+const BUDGET_STOP_EXPECTED: &str =
+    include_str!("../fixtures/enforcement/budget-stop.expected.jsonl");
+const CANCELLED: &str = include_str!("../fixtures/enforcement/cancelled.jsonl");
+const CANCELLED_EXPECTED: &str = include_str!("../fixtures/enforcement/cancelled.expected.jsonl");
 
 /// Every free vector this adapter carries.
 #[must_use]
@@ -57,6 +64,16 @@ pub fn conformance_vectors() -> Vec<VectorOutcome> {
             "provider-emulated-approval-denied",
             APPROVAL_DENIED,
             APPROVAL_DENIED_EXPECTED,
+        ),
+        enforcement_vector(
+            "provider-emulated-budget-stop",
+            BUDGET_STOP,
+            BUDGET_STOP_EXPECTED,
+        ),
+        enforcement_vector(
+            "provider-emulated-cancellation",
+            CANCELLED,
+            CANCELLED_EXPECTED,
         ),
         golden_version_pair_vector(GOLDEN_VERSION),
     ]
@@ -254,6 +271,8 @@ mod tests {
         for (name, input) in [
             ("unpublished.expected.jsonl", UNPUBLISHED),
             ("approval-denied.expected.jsonl", APPROVAL_DENIED),
+            ("budget-stop.expected.jsonl", BUDGET_STOP),
+            ("cancelled.expected.jsonl", CANCELLED),
         ] {
             let path = format!("{}/fixtures/enforcement/{name}", env!("CARGO_MANIFEST_DIR"));
             std::fs::write(path, golden_replay(input)).expect("the expectation is written");

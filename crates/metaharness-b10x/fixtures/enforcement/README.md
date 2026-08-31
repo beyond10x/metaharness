@@ -11,6 +11,12 @@ asked for `shell.exec`, a name the run never published; the loop refused it and 
 embedded substrate and `--approve deny`. The write was published, reached the approval gate, was
 denied, and returned a failed outcome to the model. `note.md` was absent after the run.
 
+`budget-stop.jsonl` used `flat-tool` with `--max-turns 1`. The read completed, then the binding
+turn ceiling ended the run as an outcome with the exact limit and turn count.
+
+`cancelled.jsonl` used `slow`; SIGINT reached the loop while its first provider-emulated stream
+was open. The terminal record says `cancelled` after one started turn and no answer arrived.
+
 Only the enforcement-bearing lines are retained. This avoids pinning timestamps and context
 digests which do not participate in the mapping under test; every retained line is byte-for-byte
 from the released binary's output.

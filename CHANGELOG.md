@@ -3,7 +3,34 @@
 What changed. The design document carries *why*; where code and design disagreed, the design
 was amended and the amendment is named here.
 
-## [Unreleased]
+## [0.4.0] — 2026-08-31
+
+### Added
+
+- **Sandbox inversion now has its first executable contract layer.** A harness-neutral sealed
+  process-envelope request names runtime roots, writable paths, staged executable digests,
+  constructed environment, credential channel, network reach and bounds. An injected
+  `ProcessEnvelope` port returns measured child-boundary facts; exact comparisons preserve
+  withheld evidence as unknown, and strict mode kills and refuses a child whose measurement is
+  absent or wider than requested. Scripted vectors prove stable sealing, matching evidence,
+  named write-surface mismatch and absence without spawning a vendor process.
+- **The engineering-protocols eval preflight now adversarially exercises the protected-store
+  rule without a model.** It requires whole-file replacement inside the planning store to be
+  refused, targeted edit there to be admitted, and whole-file replacement outside it to remain
+  admitted under the ordered catch-all. Paid arms may still abstain after reading the boundary;
+  the free probe guarantees the refusal mechanism itself was exercised first.
+- **The b10x contract now checks seven free vectors.** Provider-emulated budget exhaustion and
+  operator cancellation join the launch, replay, version, unpublished-tool and approval-denial
+  checks. Both are selected, unedited lines from deterministic local `0.9.1 --json` captures.
+
+### Fixed
+
+- **Direct-provider H6 provenance is no longer reported as unavailable.** H6 now names exact
+  credential carriage: vendor adapters keep the one-file-per-spawn rule, while b10x attests that
+  no operator login is copied and its only source is caller-named or none. The row remains
+  advisory because neither mechanism is visible in a provider record.
+- **The public b10x documentation now names the released 0.9.1 pin and all seven contract checks.**
+  It no longer reports the original 0.8.0/three-vector launch state after the adapter was re-pinned.
 
 ## [0.3.0] — 2026-08-31
 

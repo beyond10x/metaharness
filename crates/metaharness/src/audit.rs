@@ -530,7 +530,7 @@ pub fn hermetic_floor(events: &[Event], inputs: &FloorInputs<'_>) -> Vec<RowVerd
         }
     });
 
-    // H6 — credentials are one file, copied. Effect, and advisory.
+    // H6 — credential carriage is exactly declared. Effect, and advisory.
     rows.push(attested(HermeticRow::H6, hermetic));
 
     // H7 — the working directory is ours.

@@ -83,7 +83,7 @@ pub enum HermeticRow {
     H4,
     /// The MCP surface is exactly what the launch gave.
     H5,
-    /// Credentials are one file, copied.
+    /// Credential carriage is exactly what the run declared.
     H6,
     /// The working directory is ours.
     H7,
@@ -143,7 +143,7 @@ impl HermeticRow {
             HermeticRow::H3 => "the environment is constructed, not inherited",
             HermeticRow::H4 => "no API key unless the run declared one",
             HermeticRow::H5 => "the MCP surface is exactly what the launch gave",
-            HermeticRow::H6 => "credentials are one file, copied",
+            HermeticRow::H6 => "credential carriage is exactly declared",
             HermeticRow::H7 => "the working directory is ours",
             HermeticRow::H8 => "hooks and customizations are not skipped",
             HermeticRow::H9 => "the vendor version is the pinned one",
@@ -155,8 +155,8 @@ impl HermeticRow {
     /// Whether this row's verdict moves the exit code.
     ///
     /// H2 and H6 are advisory, and the reason is the mechanism rather than the run: the absence
-    /// of allow rules that would shadow the seam is not observable in any record, and a
-    /// credential copy leaves no trace of its own — its evidence is H1a, H4 and H5 holding.
+    /// of allow rules that would shadow the seam is not observable in any record, and credential
+    /// carriage leaves no trace of its own — its evidence is H1a, H4 and H5 holding.
     #[must_use]
     pub fn severity(&self) -> Severity {
         match self {

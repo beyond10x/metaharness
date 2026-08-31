@@ -14,6 +14,7 @@ path = "src/main.rs"
 [dependencies]
 clap = { workspace = true, features = ["env"] }
 metaharness-b10x = { path = "../metaharness-b10x" }
+metaharness-protocol = { path = "../metaharness-protocol" }
 rustix = { workspace = true }
 serde_json = { workspace = true }
 tempfile = { workspace = true }
