@@ -5,6 +5,46 @@ was amended and the amendment is named here.
 
 ## [Unreleased]
 
+## [0.3.0] — 2026-08-31
+
+### Changed
+
+- **The b10x adapter is pinned to released harness 0.9.1 at revision `b626120`.** Its golden loop
+  was recaptured from that exact binary against the deterministic local Responses endpoint. The
+  opening record now carries the loop's credential class (`api-key:environment` in the capture)
+  instead of the adapter literal `named`, and the launch supplies the exact binary's version,
+  model and cwd to the observer rather than leaving those launch facts stale.
+- **The b10x contract now checks five free vectors.** Two `provider_emulated` enforcement excerpts
+  pin the released loop's unpublished-tool refusal and approval denial, including the failed
+  outcome returned to the model. They are selected unedited lines from real `0.9.1 --json`
+  captures; timestamps and unrelated context digests are deliberately not retained.
+- **Pi 0.80.3 and OpenCode 1.4.7 now have contract-first adapter crates without being advertised as
+  runnable kinds.** Each pins the installed version, records a byte-exact scratch-home launch and
+  fills the launch/version obligations. Their model-backed JSON wire and blocking per-call seam
+  remain explicit contract gaps; runtime dispatch, doctor and capabilities therefore do not name
+  them yet.
+- **Sandbox inversion has a boundary design.** Metaharness owns a sealed process-envelope policy
+  and consumes measured facts through an injected port; substrate remains the execution mechanism
+  and is not imported. Credential bytes stay outside the envelope, network reaches only a declared
+  model proxy, and strict hermetic claims require measured request/result agreement.
+
+### Fixed
+
+- **Eval repository and harness paths are resolved before a child changes directory.** Relative
+  `--ep-repo`, `--harness-repo` and `--b10x-binary` values now become canonical paths during
+  preflight, so a later scratch-workspace cwd cannot reinterpret an operator-supplied checkout.
+- **`metaharness run b10x --hermetic strict --audit` can now pass on evidence the direct-provider
+  launch actually supplies.** The builder queries the resolved executable before launch and makes
+  `--strict-version` a real refusal; records the scratch config home, constructed environment,
+  explicit-or-absent hooks and clean scratch ancestry as imposed controls; and names operator cwd
+  and the absence of an operator login as unavailable controls rather than pretending they were
+  imposed. The constructed toolchain environment carries `RUSTUP_HOME` and `CARGO_HOME`, never
+  `HOME`, so project-memory discovery is not reopened to make Rust available.
+- **The hermetic audit no longer treats inapplicable vendor settings as missing evidence on a
+  direct-provider loop.** With no declared plugin directory, the absence of an ambient plugin
+  registry satisfies H1a; a loop with no output-style setting satisfies H1b. Vendor adapters keep
+  their existing evidence requirements.
+
 ## [0.2.2] — 2026-08-31
 
 ### Added

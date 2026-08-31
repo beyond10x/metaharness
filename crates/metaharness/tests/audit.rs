@@ -133,6 +133,35 @@ fn a_clean_opening_record_makes_every_row_ok() {
 }
 
 #[test]
+fn a_direct_provider_with_no_plugin_or_style_surface_states_non_applicability() {
+    let spec = RunSpec {
+        credentials: CredentialSource::ApiKey,
+        ..RunSpec::new(Kind::B10x)
+    };
+    let record = with_record(good_record(), |record| {
+        if let Event::SessionStarted {
+            adapter,
+            adapter_class,
+            credential_source,
+            output_style,
+            plugins,
+            ..
+        } = record
+        {
+            *adapter = "b10x".to_owned();
+            *adapter_class = "direct_provider".to_owned();
+            *credential_source = Some("api-key:environment".to_owned());
+            *output_style = None;
+            *plugins = None;
+        }
+    });
+    let rows = hermetic_floor(&[record], &inputs(&spec, &pins(), &[]));
+    assert_eq!(verdict_of(&rows, HermeticRow::H1a), Verdict::Ok);
+    assert_eq!(verdict_of(&rows, HermeticRow::H1b), Verdict::Ok);
+    assert_eq!(verdict_of(&rows, HermeticRow::H4), Verdict::Ok);
+}
+
+#[test]
 fn a_run_with_no_opening_record_is_unk_everywhere_and_never_ok() {
     let spec = RunSpec::new(Kind::Claude);
     let rows = hermetic_floor(&[], &inputs(&spec, &pins(), &[]));

@@ -320,6 +320,7 @@ pub fn hermetic_floor(events: &[Event], inputs: &FloorInputs<'_>) -> Vec<RowVerd
         .find(|event| matches!(event, Event::SessionStarted { .. }));
 
     let Some(Event::SessionStarted {
+        adapter_class,
         harness_version,
         credential_source,
         output_style,
@@ -346,13 +347,18 @@ pub fn hermetic_floor(events: &[Event], inputs: &FloorInputs<'_>) -> Vec<RowVerd
     let mut rows = Vec::with_capacity(HermeticRow::ALL.len());
 
     // H1a — plugins are exactly the declared set.
-    rows.push(match plugins {
-        None => row(
+    rows.push(match (adapter_class.as_str(), plugins) {
+        ("direct_provider", None) if inputs.declared_plugins.is_empty() => row(
+            HermeticRow::H1a,
+            Verdict::Ok,
+            "the direct-provider loop has no ambient plugin registry and this run declared no plugin directory",
+        ),
+        (_, None) => row(
             HermeticRow::H1a,
             Verdict::Unk,
             "the opening record carries no plugin list, and a missing list is not an empty one",
         ),
-        Some(loaded) => {
+        (_, Some(loaded)) => {
             let mut names: Vec<String> = loaded
                 .iter()
                 .filter_map(|plugin| plugin.name.clone())
@@ -377,18 +383,23 @@ pub fn hermetic_floor(events: &[Event], inputs: &FloorInputs<'_>) -> Vec<RowVerd
     });
 
     // H1b — the output style is the default.
-    rows.push(match output_style.as_deref() {
-        None => row(
+    rows.push(match (adapter_class.as_str(), output_style.as_deref()) {
+        ("direct_provider", None) => row(
+            HermeticRow::H1b,
+            Verdict::Ok,
+            "the direct-provider loop exposes no output-style setting, so there is no operator style to inherit",
+        ),
+        (_, None) => row(
             HermeticRow::H1b,
             Verdict::Unk,
             "the opening record carries no output style",
         ),
-        Some("default" | "null" | "") => row(
+        (_, Some("default" | "null" | "")) => row(
             HermeticRow::H1b,
             Verdict::Ok,
             "the output style is the default",
         ),
-        Some(other) => row(
+        (_, Some(other)) => row(
             HermeticRow::H1b,
             Verdict::Gap,
             format!("the output style is {other:?}, which is the operator's and not the default"),

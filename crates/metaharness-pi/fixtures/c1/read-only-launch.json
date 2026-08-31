@@ -1,0 +1,30 @@
+{
+  "args": [
+    "/opt/pi/bin/pi",
+    "--mode",
+    "json",
+    "--print",
+    "--no-session",
+    "--no-extensions",
+    "--no-skills",
+    "--no-prompt-templates",
+    "--no-themes",
+    "--no-context-files",
+    "--no-approve",
+    "--offline",
+    "--tools",
+    "read,grep,find,ls",
+    "--provider",
+    "anthropic",
+    "--model",
+    "claude-opus-5",
+    "inspect the tree"
+  ],
+  "env": {
+    "PATH": "/usr/local/bin:/usr/bin:/bin",
+    "PI_CODING_AGENT_DIR": "/scratch/run/config",
+    "PI_CODING_AGENT_SESSION_DIR": "/scratch/run/sessions",
+    "PI_OFFLINE": "1"
+  },
+  "program": "/opt/pi/bin/pi"
+}

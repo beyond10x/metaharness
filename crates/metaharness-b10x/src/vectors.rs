@@ -19,7 +19,11 @@ use crate::{B10xLaunch, B10xSeams, PINNED_VERSIONS, argv, base_environment};
 pub const CONTRACT_OBLIGATIONS: ContractObligations = ContractObligations {
     adapter: crate::ADAPTER_ID,
     launch: Obligation::Filled(&["c1-observe-launch"]),
-    recorded_wire: Obligation::Filled(&["golden-loop-record"]),
+    recorded_wire: Obligation::Filled(&[
+        "golden-loop-record",
+        "provider-emulated-unpublished-tool",
+        "provider-emulated-approval-denied",
+    ]),
     recorded_hook_input: Obligation::Gap(
         "not applicable: b10x is an observe-only direct-provider adapter and has no metaharness \
          hook or decision seam; inventing hook input would contradict the adapter's boundary",
@@ -31,6 +35,12 @@ const LAUNCH_EXPECTED: &str = include_str!("../fixtures/c1/observe-launch.json")
 const GOLDEN_LOOP: &str = include_str!("../fixtures/golden/loop.jsonl");
 const GOLDEN_LOOP_EXPECTED: &str = include_str!("../fixtures/golden/loop.expected.jsonl");
 const GOLDEN_VERSION: &str = include_str!("../fixtures/golden/version.txt");
+const UNPUBLISHED: &str = include_str!("../fixtures/enforcement/unpublished.jsonl");
+const UNPUBLISHED_EXPECTED: &str =
+    include_str!("../fixtures/enforcement/unpublished.expected.jsonl");
+const APPROVAL_DENIED: &str = include_str!("../fixtures/enforcement/approval-denied.jsonl");
+const APPROVAL_DENIED_EXPECTED: &str =
+    include_str!("../fixtures/enforcement/approval-denied.expected.jsonl");
 
 /// Every free vector this adapter carries.
 #[must_use]
@@ -38,8 +48,31 @@ pub fn conformance_vectors() -> Vec<VectorOutcome> {
     vec![
         launch_vector(),
         golden_loop_vector(GOLDEN_LOOP),
+        enforcement_vector(
+            "provider-emulated-unpublished-tool",
+            UNPUBLISHED,
+            UNPUBLISHED_EXPECTED,
+        ),
+        enforcement_vector(
+            "provider-emulated-approval-denied",
+            APPROVAL_DENIED,
+            APPROVAL_DENIED_EXPECTED,
+        ),
         golden_version_pair_vector(GOLDEN_VERSION),
     ]
+}
+
+fn enforcement_vector(id: &str, input: &str, expected: &str) -> VectorOutcome {
+    let observed = golden_replay(input);
+    if observed == expected {
+        VectorOutcome::passed(id, ConformanceTier::C2)
+    } else {
+        VectorOutcome::failed(
+            id,
+            ConformanceTier::C2,
+            first_difference(expected, &observed),
+        )
+    }
 }
 
 fn launch_vector() -> VectorOutcome {
@@ -100,7 +133,7 @@ fn reader() -> Box<dyn HarnessSeam> {
     let mut attestation = HermeticAttestation::none(HermeticMode::Strict);
     attestation.decisions = DecisionMode::Observe;
     B10xSeams::new(
-        Some("0.8.0".to_owned()),
+        Some("0.9.1".to_owned()),
         Some("b10x-emulated".to_owned()),
         Some("/scratch/run/work".to_owned()),
     )
@@ -213,5 +246,17 @@ mod tests {
             env!("CARGO_MANIFEST_DIR")
         );
         std::fs::write(path, golden_replay(GOLDEN_LOOP)).expect("the expectation is written");
+    }
+
+    #[test]
+    #[ignore = "writes the normalized enforcement expectations from captured loop records"]
+    fn regenerate_the_enforcement_event_streams() {
+        for (name, input) in [
+            ("unpublished.expected.jsonl", UNPUBLISHED),
+            ("approval-denied.expected.jsonl", APPROVAL_DENIED),
+        ] {
+            let path = format!("{}/fixtures/enforcement/{name}", env!("CARGO_MANIFEST_DIR"));
+            std::fs::write(path, golden_replay(input)).expect("the expectation is written");
+        }
     }
 }

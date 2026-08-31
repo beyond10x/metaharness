@@ -1,0 +1,3 @@
+{"kind":"tool-requested","call_id":"call_b10x_001","name":"shell.exec","arguments":{"cmd":"id"}}
+{"kind":"warning","code":"unpublished-tool","message":"the model called `shell.exec`, which this run never published"}
+{"kind":"tool-completed","call_id":"call_b10x_001","failed":true}

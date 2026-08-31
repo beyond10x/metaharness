@@ -18,9 +18,9 @@ use std::path::{Path, PathBuf};
 use std::sync::Arc;
 
 use metaharness_protocol::{
-    Capabilities, CredentialSource, DecisionMode, Digest, EventStream, Frame, HermeticMode, Kind,
-    PluginContent, PluginInstall, PluginTree, Refused, RunId, RunSpec, ScopeAnnounce, Seam,
-    ToolSurface, TranscriptRef, tree_digest,
+    Capabilities, CredentialSource, DecisionMode, Digest, EventStream, Frame, HermeticMode,
+    HermeticRow, ImposedControl, Kind, PluginContent, PluginInstall, PluginTree, Refused, RunId,
+    RunSpec, ScopeAnnounce, Seam, ToolSurface, TranscriptRef, UnavailableControl, tree_digest,
 };
 
 use crate::clock::{Clock, SystemClock};
@@ -526,12 +526,8 @@ fn start_b10x(
     // and every `tool.requested` this adapter emits says `nobody adjudicated this` in the same
     // breath.
     let seam = Seam::None;
-    // The attestation is honest about being empty: metaharness imposed nothing on this launch
-    // because there was nothing to impose. An attestation claiming controls it did not apply is
-    // the one document a reader has no way to check.
     let mut attestation = metaharness_protocol::HermeticAttestation::none(spec.hermetic);
     attestation.decisions = DecisionMode::Observe;
-    let bridge = seams.build(transcript.clone(), attestation, seam);
 
     let mut argv = metaharness_b10x::argv(&b10x_launch(&spec, &cwd)?);
     let home = std::env::var("HOME").ok();
@@ -555,6 +551,21 @@ fn start_b10x(
         })?
         .display()
         .to_string();
+    let observed_version = b10x_version(&program);
+    if spec.strict_version
+        && !observed_version
+            .as_ref()
+            .is_some_and(|version| metaharness_b10x::PINNED_VERSIONS.contains(&version.as_str()))
+    {
+        return Err(Refusal::Launch {
+            detail: format!(
+                "--strict-version requires one of {:?}; {} reported {}",
+                metaharness_b10x::PINNED_VERSIONS,
+                program,
+                observed_version.as_deref().unwrap_or("no readable version")
+            ),
+        });
+    }
     // Constructed, never inherited. `PATH` is the one variable the loop always needs and the one
     // whose absence made every launch of this arm fail before it read an argument. The base also
     // points profile discovery at scratch: harness 0.8.0 reads `$XDG_CONFIG_HOME/b10x/harness.toml`,
@@ -583,12 +594,64 @@ fn start_b10x(
         // Without this the child refuses at once — "neither `RUSTUP_HOME` nor a home directory
         // says where the Rust toolchain is" — which is the right refusal and was not reaching
         // anybody until `NO_TERMINAL_RECORD` started carrying the child's stderr.
-        for variable in ["RUSTUP_HOME", "HOME"] {
+        for variable in ["RUSTUP_HOME", "CARGO_HOME"] {
             if let Ok(value) = std::env::var(variable) {
                 env.insert(variable.to_owned(), value);
             }
         }
     }
+    attestation.imposed.extend([
+        ImposedControl {
+            row: HermeticRow::H2,
+            how: format!(
+                "XDG_CONFIG_HOME={} is inside this run's scratch tree",
+                config_home.display()
+            ),
+        },
+        ImposedControl {
+            row: HermeticRow::H3,
+            how: "the child environment is constructed from PATH, scratch XDG_CONFIG_HOME and only explicitly declared credential or toolchain variables".to_owned(),
+        },
+        ImposedControl {
+            row: HermeticRow::H8,
+            how: if spec.hooks.is_some() {
+                "the operator's hook file is named explicitly with --hooks; the loop performs no ambient hook discovery".to_owned()
+            } else {
+                "no hook file was declared, and the loop performs no ambient hook discovery".to_owned()
+            },
+        },
+    ]);
+    if spec.cwd.is_some() {
+        attestation.unavailable.push(UnavailableControl {
+            row: HermeticRow::H11,
+            why: format!(
+                "the operator named {}, so its project instructions are deliberately discoverable",
+                cwd.display()
+            ),
+        });
+    } else if memory_ancestors(&cwd).is_empty() {
+        attestation.imposed.push(ImposedControl {
+            row: HermeticRow::H11,
+            how: "the ancestor walk from the scratch cwd found no CLAUDE.md and no AGENTS.md, and HOME is absent from the child environment".to_owned(),
+        });
+    } else {
+        attestation.unavailable.push(UnavailableControl {
+            row: HermeticRow::H11,
+            why: "the ancestor walk from the scratch cwd found an ambient memory file".to_owned(),
+        });
+    }
+    attestation.unavailable.push(UnavailableControl {
+        row: HermeticRow::H6,
+        why: "the direct-provider launch copies no operator login; its credential is a caller-named source or none".to_owned(),
+    });
+    attestation.imposed.sort_by_key(|control| control.row);
+    attestation.unavailable.sort_by_key(|control| control.row);
+    seams.observe_launch(
+        observed_version,
+        spec.model.clone().unwrap_or_default(),
+        cwd.display().to_string(),
+    );
+    let bridge = seams.build(transcript.clone(), attestation, seam);
     let view = LaunchPlanView {
         program: &program,
         args: &argv,
@@ -633,6 +696,25 @@ fn start_b10x(
         scratch: Some(scratch),
         loopback: None,
     }))
+}
+
+/// The exact executable's own version token, before a model request can be made.
+///
+/// [`None`] is retained for scripted runners whose fake program is deliberately not installed;
+/// a real `--strict-version` run refuses that absence above. The command receives no run
+/// environment or credential and therefore cannot observe either.
+fn b10x_version(program: &str) -> Option<String> {
+    let output = std::process::Command::new(program)
+        .arg("--version")
+        .output()
+        .ok()?;
+    if !output.status.success() {
+        return None;
+    }
+    String::from_utf8_lossy(&output.stdout)
+        .split_whitespace()
+        .find(|word| word.starts_with(|character: char| character.is_ascii_digit()))
+        .map(ToOwned::to_owned)
 }
 
 /// This adapter observes and never adjudicates; every other decision mode would claim a seam it

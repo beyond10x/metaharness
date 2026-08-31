@@ -134,6 +134,18 @@
 > because the field is under that repository's `[Unreleased]` and its version string has not moved,
 > so the observed version cannot decide which silence this is. Marked at each point of change, on
 > the same rule as the review's corrections.
+> **Amendment a13, 2026-08-31**, from making the direct-provider arm pass the same strict audit it
+> emits: **launch facts are observations, and a vendor-only setting is not evidence owed by a loop
+> that has no such setting.** The b10x builder now queries the exact resolved executable before any
+> model request, refuses `--strict-version` when its banner is absent or off-pin, and supplies that
+> version together with the requested model and actual cwd to the observer. The loop's own opening
+> record supplies the credential class; the adapter no longer replaces it with `named`. H2, H3,
+> H8 and scratch H11 are imposed from the constructed launch, while an operator cwd and the fact
+> that no operator login was copied are stated unavailable. H1a and H1b are satisfied for the
+> direct-provider class when no plugin directory was declared and the loop exposes no output-style
+> setting; vendor adapters still owe their record of those ambient vendor surfaces. Two unedited
+> `provider_emulated` excerpts pin the enforcement outcomes this distinction exists to preserve:
+> an unpublished call and an approval denial both become readable refusals and failed tool outcomes.
 > **Audience:** whoever reviews this for acceptance, and whoever builds it afterwards.
 > **Sources studied:** `beyond10x/engineering-protocols` (public, read-only), and a private
 > agent runtime whose patterns are described here generically and whose names, records and

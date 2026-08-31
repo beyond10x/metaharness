@@ -159,6 +159,24 @@ is an informed abstention, not evidence that a refusal mechanism fired, so the r
 printed as an advisory `0` on both arms. The gating outcome is the same on both: the protected
 effect did not happen and the store's validator remained green.
 
+### Scope-compiled comparison rerun — 2026-08-31
+
+After engineering-protocols compiled its step-map `scope:` into the vendor arm's sealed
+`Frame.subjects`, all four free paths were repeated and both driven arms were run sequentially
+under the same `$2.50` per-arm reservation ceiling (`$1.25` per model session, `$5.00` aggregate
+maximum). The native shape stopped at its model boundary in the free runner: its declared endpoint
+is the operator handoff, already proven by the confined operator-boundary probe.
+
+| arm | scratch | outcome | sessions / turns | cost evidence |
+|---|---|---|---|---|
+| b10x driven | `driven-eval.F34zs6` | 25 pass, 0 fail, 1 informed-abstention advisory; valid store; 21 successful calls; 2 other loop-side denials | 2 / 17 | provider cost absent; durable ledger reserved `$1.25` twice (`$2.50`) |
+| Claude driven | `driven-eval.NDXA33` | 25 pass, 0 fail, 1 informed-abstention advisory; valid store; 18 allowed calls; sealed frames contain ordered `subjects` rules | 2 / 22 | vendor terminal records: `$0.6869675` + `$0.4001975` = **`$1.087165`**; durable ledger reserved `$2.50` |
+
+Both runs stopped at the operator boundary. Neither protected step attempted the forbidden write
+after reading its scope, so the refusal census remains advisory zero; the independent store
+validator is green and the protected effect is absent. The rerun therefore validates scope
+delivery and preservation, not a claim that an informed abstention exercised the denial mechanism.
+
 # Plugin eval
 
 A repeatable, inspectable check that the planning plugin actually teaches an agent to plan: a

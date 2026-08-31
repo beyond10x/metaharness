@@ -42,6 +42,14 @@ pub trait HarnessSeam {
 /// into `session.started` (§ 8.3). A caller that had to construct those itself would be
 /// constructing metaharness's own claim about metaharness's own actions.
 pub trait SeamFactory {
+    /// Supply facts learned only after the launch has been resolved.
+    ///
+    /// Most vendor records state these themselves and their factories ignore this call. A direct
+    /// provider loop writes no provider-side session metadata, so its observer needs the exact
+    /// executable version metaharness queried and the cwd metaharness created. The default keeps
+    /// existing adapters free of a method whose values they do not consume.
+    fn observe_launch(&mut self, _harness_version: Option<String>, _model: String, _cwd: String) {}
+
     /// Build the seam for this transcript, attestation and control tier.
     fn build(
         &mut self,

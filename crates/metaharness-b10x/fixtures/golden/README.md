@@ -1,6 +1,6 @@
 # Golden b10x sample — recorded loop wire (adapter contract CT-2)
 
-These are the bytes the released `b10x-harness` 0.8.0 binary wrote during one controlled run
+These are the bytes the released `b10x-harness` 0.9.1 binary wrote during one controlled run
 against harness's deterministic local OpenAI Responses endpoint. This is `provider_emulated`
 evidence, never `vendor_live`: it tests the adapter against the real loop record without claiming
 that a live provider was contacted.
@@ -10,7 +10,7 @@ that a live provider was contacted.
 | fact | value |
 |---|---|
 | captured | 2026-08-31 |
-| binary | `b10x-harness 0.8.0`, released commit `45fdccb07b2f36c16e695465385b7915921dfe0e` |
+| binary | `b10x-harness 0.9.1`, released commit `b62612091374b205245ce9a5c16b27217279a567` |
 | endpoint | harness's deterministic `fake_responses` `flat-tool` scenario, loopback only |
 | run shape | constructed child environment, no `HOME`, scratch workspace, named synthetic API-key variable, `--no-session`, one `file_read` call |
 | reviewed | no credential, account identifier, machine path or endpoint address occurs in the committed bytes; `profiles: []` proves the capture did not apply an ambient permission profile |

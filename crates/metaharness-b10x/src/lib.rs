@@ -70,11 +70,11 @@ pub const ADAPTER_CLASS: &str = "direct_provider";
 /// Pinned for the reason the other adapters pin: every version-specific claim in here — the field
 /// names of the loop record, the shape of its terminal event — was observed against these, and a
 /// run against another is unverified rather than wrong.
-pub const PINNED_VERSIONS: [&str; 1] = ["0.8.0"];
+pub const PINNED_VERSIONS: [&str; 1] = ["0.9.1"];
 
 /// The immutable harness source revision this adapter is built against.
 ///
 /// The version identifies the released CLI; the revision identifies the Rust crates Cargo
 /// resolves. Both are checked by the engineering-protocols eval before it trusts an installed
 /// binary, so a filesystem timestamp is never mistaken for provenance.
-pub const HARNESS_REVISION: &str = "45fdccb07b2f36c16e695465385b7915921dfe0e";
+pub const HARNESS_REVISION: &str = "b62612091374b205245ce9a5c16b27217279a567";

@@ -29,11 +29,13 @@ way it closed is the argument for the shape: an absence nobody could see became 
 then a deliberate count movement with the diff read.
 
 **The b10x adapter now meets that standard too (2026-08-31).** Its free contract has one recorded
-C1 launch, one byte-exact recorded loop replay and one version-pair vector; its hook-input row is a
-reasoned N/A because this observe-only adapter has no metaharness hook seam. The resulting
-`contract_result` is pinned as bytes at `checked: 3`. The launch recording also caught and closed
-ambient profile discovery by putting `XDG_CONFIG_HOME` in scratch, and corrected the opening
-attestation from the generic `frame` default to `observe`.
+C1 launch, one byte-exact recorded loop replay, two `provider_emulated` enforcement excerpts and
+one version-pair vector; its hook-input row is a reasoned N/A because this observe-only adapter has
+no metaharness hook seam. The resulting `contract_result` is pinned as bytes at `checked: 5`. The
+launch recording also caught and closed ambient profile discovery by putting `XDG_CONFIG_HOME` in
+scratch, corrected the opening attestation from the generic `frame` default to `observe`, and the
+strict audit now consumes the resolved binary's version and the loop's credential class rather
+than adapter literals.
 
 ## 2. More harnesses: pi, opencode
 
@@ -46,6 +48,14 @@ Whichever of the two comes first inherits CT-4's acceptance clause: it declares 
 filling `ContractObligations` — a launch vector, a recorded transcript/rollout vector, a recorded
 hook-input vector, a version pair — and `contract_obligations(kind)` will not compile until it
 does. The clause originally named flux as a third; § 3 struck it.
+
+**Contract-first slice built, 2026-08-31.** `metaharness-pi` pins Pi 0.80.3 and
+`metaharness-opencode` pins OpenCode 1.4.7. Each has a recorded C1 scratch-home launch and an
+observed version-pair vector, and each declares the model-backed JSON wire and blocking hook input
+as gaps. Neither is a `Kind` yet: the compiler-enforced dispatch clause applies when those two
+recorded faces close, rather than letting an incomplete crate become a command somebody can spend
+through. The locally verified facts and next probes are in
+`docs/research/2026-08-31-*-adapter-surface.md`.
 
 ## 3. metaharness usage ≡ flux usage — **narrowed by the operator, 2026-08-23**
 
@@ -72,3 +82,9 @@ each vendor has. Interacts with the loopback provider (`loopback-provider-v0.1.m
 that blocks all egress except the loopback proxy would make "the model API is the only network"
 an attestable row. Needs its own design page; the a6 `--cwd` declaration and the credential
 custody both change shape under it.
+
+**Designed, 2026-08-31.** `docs/design/sandbox-inversion-v0.1.md` chooses an injected, typed
+`ProcessEnvelope` boundary: metaharness owns and seals policy, while a substrate-backed provider
+outside this repository performs confinement and returns measured facts. This repository does not
+grow a substrate dependency or duplicate namespace code in every adapter. The first implementation
+slice is protocol values plus a scripted port; no runtime confinement is claimed yet.

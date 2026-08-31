@@ -1,0 +1,4 @@
+{"kind":"tool-requested","call_id":"call_b10x_001","name":"file_write","arguments":{"path":"note.md","text":"written by the harness\n"},"subjects":["file:note.md"]}
+{"kind":"approval-required","call_id":"call_b10x_001","name":"file_write"}
+{"kind":"approval-resolved","call_id":"call_b10x_001","approved":false}
+{"kind":"tool-completed","call_id":"call_b10x_001","failed":true}

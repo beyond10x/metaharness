@@ -16,11 +16,11 @@ workspace = true
 # that stopped existing when the three verbs landed, and nothing failed when they did. The same
 # cross-repo path dependency `metaharness-tools` takes, and for the same reason — the alternative
 # is a table that drifts silently.
-b10x-harness-tools = { git = "https://github.com/beyond10x/harness", rev = "45fdccb07b2f36c16e695465385b7915921dfe0e" }
+b10x-harness-tools = { git = "https://github.com/beyond10x/harness", rev = "b62612091374b205245ce9a5c16b27217279a567" }
 # The crate that defines the record this adapter reads. Taken for `micro_usd_as_decimal`, so the
 # figure this seam puts on the wire is rendered by the same function that rendered it in the loop's
 # own record — two spellings of one number is exactly the disagreement a cost figure must not have.
-b10x-harness-loop = { git = "https://github.com/beyond10x/harness", rev = "45fdccb07b2f36c16e695465385b7915921dfe0e" }
+b10x-harness-loop = { git = "https://github.com/beyond10x/harness", rev = "b62612091374b205245ce9a5c16b27217279a567" }
 metaharness-protocol = { path = "../metaharness-protocol" }
 serde = { workspace = true }
 serde_json = { workspace = true }

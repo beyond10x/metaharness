@@ -527,10 +527,12 @@ fn resolve(args: &CommonArgs) -> Result<Resolved, String> {
         .ep_repo
         .clone()
         .unwrap_or_else(|| collection.join("engineering-protocols"));
+    let ep_repo = canonical_existing(&ep_repo, "engineering-protocols repository")?;
     let harness_repo = args
         .harness_repo
         .clone()
         .unwrap_or_else(|| collection.join("harness"));
+    let harness_repo = canonical_existing(&harness_repo, "harness repository")?;
     let b10x_binary = args.b10x_binary.clone().or_else(|| {
         home.as_ref()
             .map(|path| path.join(".local/bin/b10x-harness"))
@@ -538,6 +540,7 @@ fn resolve(args: &CommonArgs) -> Result<Resolved, String> {
     let b10x_binary = b10x_binary.ok_or_else(|| {
         "HOME is unset; name the installed harness with `--b10x-binary`".to_owned()
     })?;
+    let b10x_binary = canonical_existing(&b10x_binary, "b10x-harness binary")?;
     let scratch_root = args.scratch_root.clone().unwrap_or_else(cache_root);
     let uid = current_uid()?;
     let cgroup_root = args.cgroup_root.clone().unwrap_or_else(|| {
@@ -555,6 +558,11 @@ fn resolve(args: &CommonArgs) -> Result<Resolved, String> {
         cgroup_root,
         protocol,
     })
+}
+
+fn canonical_existing(path: &Path, label: &str) -> Result<PathBuf, String> {
+    path.canonicalize()
+        .map_err(|error| format!("resolve {label} at {}: {error}", path.display()))
 }
 
 fn cache_root() -> PathBuf {

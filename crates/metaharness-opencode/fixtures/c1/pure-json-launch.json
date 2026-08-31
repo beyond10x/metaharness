@@ -1,0 +1,21 @@
+{
+  "args": [
+    "/opt/opencode/bin/opencode",
+    "run",
+    "--format",
+    "json",
+    "--pure",
+    "--model",
+    "anthropic/claude-opus-5",
+    "--dir",
+    "/scratch/ws_run",
+    "inspect the tree"
+  ],
+  "env": {
+    "PATH": "/usr/local/bin:/usr/bin:/bin",
+    "XDG_CACHE_HOME": "/scratch/run/cache",
+    "XDG_CONFIG_HOME": "/scratch/run/config",
+    "XDG_DATA_HOME": "/scratch/run/data"
+  },
+  "program": "/opt/opencode/bin/opencode"
+}

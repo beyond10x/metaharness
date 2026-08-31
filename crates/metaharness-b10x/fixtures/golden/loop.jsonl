@@ -1,8 +1,8 @@
-{"kind":"started","model":"b10x-emulated","published_tools":["file_read","dir_list","search","find"],"operations":["file.read","dir.list","search","find"],"withheld":[],"skills":[],"agents":[],"profiles":[],"credential_source":"named"}
+{"kind":"started","model":"b10x-emulated","published_tools":["file_read","dir_list","search","find"],"operations":["file.read","dir.list","search","find"],"withheld":[],"skills":[],"agents":[],"profiles":[],"context":[{"id":"harness.instructions","kind":"harness_instructions","trust":"harness","cache":"session","bytes":620,"sha256":"964b8884c8a2e27ba0d8290a3e916ebe70ed51466c99889becc3114f4cffae36"},{"id":"environment.workspace","kind":"environment","trust":"machine","cache":"session","captured_at":"2026-08-31T18:21:12Z","bytes":106,"sha256":"1439ed965c789811496189ca9ff037dac5f38fc84c485e28c6f266840739b4df"}],"toolchains":[],"credential_source":"api-key:environment"}
 {"kind":"turn-started","turn":1}
 {"kind":"tool-arguments-delta","call_id":"call_b10x_001","delta":"{\"path\":\"README.md\"}"}
 {"kind":"usage","model":"b10x-emulated","input_tokens":42,"output_tokens":8,"cached_input_tokens":7}
-{"kind":"tool-requested","call_id":"call_b10x_001","name":"file_read","arguments":{"path":"README.md"}}
+{"kind":"tool-requested","call_id":"call_b10x_001","name":"file_read","arguments":{"path":"README.md"},"subjects":["file:README.md"]}
 {"kind":"tool-completed","call_id":"call_b10x_001","failed":false}
 {"kind":"turn-started","turn":2}
 {"kind":"text-delta","text":"The file says:"}

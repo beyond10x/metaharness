@@ -33,6 +33,14 @@ impl B10xSeams {
 }
 
 impl SeamFactory for B10xSeams {
+    fn observe_launch(&mut self, harness_version: Option<String>, model: String, cwd: String) {
+        if harness_version.is_some() {
+            self.version = harness_version;
+        }
+        self.model = Some(model);
+        self.cwd = Some(cwd);
+    }
+
     fn build(
         &mut self,
         transcript: TranscriptRef,
@@ -146,9 +154,11 @@ impl HarnessSeam for B10xSeam {
                     session_id: None,
                     model: string("model").or_else(|| self.model.clone()),
                     permission_mode: None,
-                    // Never ambient. `b10x-harness` reads no credential it was not pointed at, and
-                    // this is that fact travelling onto the wire rather than a guess.
-                    credential_source: Some("named".to_owned()),
+                    // The loop distinguishes an API key, OAuth token, no credential and a
+                    // provider-defaulted source without carrying a path, variable name or secret.
+                    // Passing its value through is what lets H4 verify the declaration; the old
+                    // hardcoded `named` proved only that this adapter knew the CLI had flags.
+                    credential_source: string("credential_source"),
                     output_style: None,
                     cwd: self.cwd.clone(),
                     // The catalogue behind the verbs, which is the only thing that differs from
@@ -625,7 +635,7 @@ mod tests {
         let mut seam = seam();
         let event = one(
             &mut *seam,
-            r#"{"kind":"started","model":"gpt-5.6-sol","published_tools":["workspace_read","run"]}"#,
+            r#"{"kind":"started","model":"gpt-5.6-sol","published_tools":["workspace_read","run"],"credential_source":"api-key:environment"}"#,
         );
         let Event::SessionStarted {
             adapter,
@@ -633,6 +643,7 @@ mod tests {
             harness_version,
             offered_tools,
             credential_source,
+            cwd,
             slash_commands,
             plugins,
             ..
@@ -652,9 +663,10 @@ mod tests {
         );
         assert_eq!(
             credential_source.as_deref(),
-            Some("named"),
-            "the loop reads no credential it was not pointed at, and the wire says so"
+            Some("api-key:environment"),
+            "the loop's own credential class crosses instead of an adapter literal"
         );
+        assert_eq!(cwd.as_deref(), Some("/work"));
         assert!(
             slash_commands.is_none(),
             "the loop has none, so it states none"
