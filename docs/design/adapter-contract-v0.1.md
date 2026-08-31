@@ -6,7 +6,7 @@ conformance tiers this builds on) and to `engineering-protocols`' `contract-test
 whose vocabulary this reuses. The first slice (LP-equivalent CT-1) is built alongside this page;
 **CT-2 and CT-3 are built** (2026-08-23 — one recorded capture run per adapter, then the version
 pair reconciled and Q18 closed by protocol amendment a8), and **CT-4 is built** (2026-08-23 — the
-authoring shape, both adapters declaring through it, and the record itself pinned as bytes). The
+authoring shape, every adapter declaring through it, and the record itself pinned as bytes). The
 milestone table is closed.
 
 ## The idea, in the operator's words
@@ -114,13 +114,44 @@ round trip in the spawn tier), regenerated through the `#[ignore]`d `regenerate_
 with the diff read — one line, one field. Claude's record did not move: `checked: 20`, unchanged.
 The consumer reading these bytes is told, which is the other half of the rule.
 
+### The direct-provider adapter fills the same contract without inventing a hook — 2026-08-31
+
+`b10x` is the first adapter added after CT-4 and the first whose far side is a loop this collection
+owns rather than a vendor harness. It still owes both faces of the mapping. Three deterministic
+vectors now pay the applicable rows: `c1-observe-launch` records the executable, argv and whole
+child environment; `golden-loop-record` replays a real `b10x-harness 0.8.0 --json` record byte for
+byte; `golden-version-pair` compares the capture's version banner with `PINNED_VERSIONS`. The
+capture used harness's loopback-only deterministic Responses endpoint, so its evidence label is
+`provider_emulated`, never `vendor_live`.
+
+The loop record has no version field. CT-3 therefore pairs it with `b10x-harness --version` captured
+from the same installed binary; adding a version field to the fixture would forge a fact the wire
+did not state. The recorded-hook row remains a reasoned N/A: this adapter is observe-only and has
+no metaharness decision hook. Fabricating hook input to make four rows say `Filled` would violate
+the adapter boundary the contract is meant to protect.
+
+The launch vector found two real drifts before the first golden was accepted. Harness 0.8.0 reads
+an optional profile from the config home, so the b10x child now gets a scratch `XDG_CONFIG_HOME`
+even when toolchain discovery requires `HOME`; otherwise the operator's `[default]` permission
+profile silently changes the eval arm. And the opening attestation now says `decisions: observe`
+instead of inheriting `HermeticAttestation::none`'s generic `frame` default. The golden was captured
+only after both launch claims were true.
+
+That mode is explicit at launch. `frame` and `ask` would claim a per-call control seam this adapter
+does not own, so b10x refuses both and tells the caller to pass `--decisions observe`. The generic
+capability check accepts that delivered mode without requiring `tool.decide`: vendor adapters
+implement observe by allowing each hook request, while the direct-provider adapter observes calls
+whose records already say `decision_required: false` and `seam: none`. Treating the two mechanisms
+as identical made the only truthful b10x mode impossible to start.
+
 ### The record is pinned as bytes, because a consumer reads bytes
 
 `engineering-protocols` ingests `conformance <kind> --contract` as evidence, and the two repositories
 share a vocabulary and no code — the same gap the frame document has, closed the same way. Each
-adapter's record is committed as the exact stdout of a live run
+adapter's record is committed as the exact stdout of its deterministic conformance run
 (`crates/metaharness/fixtures/golden/contract-result-<kind>.json`, recorded 2026-08-23 at CT-1..3 +
-a9), and `crates/metaharness/tests/contract_golden.rs` rebuilds it through the real
+a9 for the vendor adapters and 2026-08-31 for b10x), and
+`crates/metaharness/tests/contract_golden.rs` rebuilds it through the real
 `contract_result(kind, &conformance_vectors(kind))` and compares byte for byte, key order included.
 
 Key order is part of the contract and not an implementation detail: nothing in the code asks

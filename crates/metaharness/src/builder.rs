@@ -457,11 +457,12 @@ impl Metaharness {
 /// # Why this is a fifth the size of the other two
 ///
 /// Not because it is unfinished. The five things that cost `start_claude` and `start_codex` their
-/// hundred lines each — a scratch `HOME` so ambient config cannot leak in, a copied plugin tree, a
-/// hook channel the seam answers on, retrieval of a transcript the vendor wrote somewhere else, and
-/// custody of a credential this process must hold and proxy — are all answered by what
-/// `b10x-harness` already is. It reads no config file, has no plugin mechanism, decides in-process,
-/// writes its record to stdout, and reads a credential file the caller named.
+/// hundred lines each — a scratch `HOME`, a copied plugin tree, a hook channel the seam answers on,
+/// retrieval of a transcript the vendor wrote somewhere else, and custody of a credential this
+/// process must hold and proxy — are all answered by what `b10x-harness` already is. It gets a
+/// scratch `XDG_CONFIG_HOME` so its optional profile file cannot arrive ambiently, takes plugin
+/// directories by name, decides in-process, writes its record to stdout, and reads a credential
+/// file the caller named.
 ///
 /// What is left is an argv and a pipe.
 ///
@@ -480,6 +481,7 @@ fn start_b10x(
     clock: Box<dyn Clock>,
 ) -> Result<Run, Refusal> {
     let capabilities = metaharness_b10x::capabilities();
+    guard_b10x_decision_mode(&capabilities, &spec)?;
     let refusals = start_refusals(&capabilities, &spec);
     if !refusals.is_empty() {
         return Err(Refusal::Control { refusals });
@@ -527,14 +529,21 @@ fn start_b10x(
     // The attestation is honest about being empty: metaharness imposed nothing on this launch
     // because there was nothing to impose. An attestation claiming controls it did not apply is
     // the one document a reader has no way to check.
-    let attestation = metaharness_protocol::HermeticAttestation::none(spec.hermetic);
+    let mut attestation = metaharness_protocol::HermeticAttestation::none(spec.hermetic);
+    attestation.decisions = DecisionMode::Observe;
     let bridge = seams.build(transcript.clone(), attestation, seam);
 
     let mut argv = metaharness_b10x::argv(&b10x_launch(&spec, &cwd)?);
+    let home = std::env::var("HOME").ok();
+    let config_home = scratch.path().join("config");
+    let mut env = metaharness_b10x::base_environment(home.as_deref(), &config_home);
     // Resolved against the `PATH` the child is given rather than the operator's, so `doctor` and
     // the spawn agree on which install answered (CT-3), and so the record names the file that ran.
     let named = argv.remove(0);
-    let child_path = metaharness_b10x::child_path(std::env::var("HOME").ok().as_deref());
+    let child_path = env
+        .get("PATH")
+        .expect("the b10x base environment always carries PATH")
+        .clone();
     let program = metaharness_b10x::resolve_program(&named, &child_path)
         .ok_or_else(|| Refusal::Launch {
             detail: format!(
@@ -547,8 +556,9 @@ fn start_b10x(
         .display()
         .to_string();
     // Constructed, never inherited. `PATH` is the one variable the loop always needs and the one
-    // whose absence made every launch of this arm fail before it read an argument.
-    let mut env: BTreeMap<String, String> = BTreeMap::from([("PATH".to_owned(), child_path)]);
+    // whose absence made every launch of this arm fail before it read an argument. The base also
+    // points profile discovery at scratch: harness 0.8.0 reads `$XDG_CONFIG_HOME/b10x/harness.toml`,
+    // and inheriting the operator's `[default]` profile would silently change this run's policy.
     if spec.credentials == CredentialSource::ApiKey {
         // The argv names the variable; this puts it in the child's environment, and without both
         // halves `--api-key-env` points at something that is not there. Absent from the operator's
@@ -623,6 +633,23 @@ fn start_b10x(
         scratch: Some(scratch),
         loopback: None,
     }))
+}
+
+/// This adapter observes and never adjudicates; every other decision mode would claim a seam it
+/// does not have.
+fn guard_b10x_decision_mode(capabilities: &Capabilities, spec: &RunSpec) -> Result<(), Refusal> {
+    let status = capabilities.decision_mode(spec.decisions);
+    if status == metaharness_protocol::TierStatus::Delivered {
+        return Ok(());
+    }
+    Err(Refusal::Launch {
+        detail: format!(
+            "the run asked for --decisions {} and the b10x adapter declares that mode {status:?}; \
+             b10x is observe-only, so pass --decisions observe rather than claiming a decision \
+             seam this adapter does not have",
+            spec.decisions.as_str()
+        ),
+    })
 }
 
 fn start_claude(
@@ -2657,7 +2684,7 @@ mod b10x_launch_tests {
 
     use metaharness_protocol::{CredentialSource, Kind, RunSpec};
 
-    use super::{Refusal, b10x_launch, check_spec};
+    use super::{Refusal, b10x_launch, check_spec, guard_b10x_decision_mode, start_refusals};
 
     /// A subscription token reaches the loop as its own flags, under its own header name.
     ///
@@ -2774,6 +2801,22 @@ mod b10x_launch_tests {
         spec.credentials = CredentialSource::None;
         spec.prompt = Some("do the thing".to_owned());
         spec
+    }
+
+    #[test]
+    fn b10x_accepts_only_its_delivered_observe_mode_and_needs_no_decision_channel() {
+        let capabilities = metaharness_b10x::capabilities();
+        let frame = spec();
+        let refusal = guard_b10x_decision_mode(&capabilities, &frame).expect_err("frame refused");
+        assert!(refusal.to_string().contains("observe-only"), "{refusal}");
+
+        let mut observe = spec();
+        observe.decisions = metaharness_protocol::DecisionMode::Observe;
+        guard_b10x_decision_mode(&capabilities, &observe).expect("observe is delivered");
+        assert!(
+            start_refusals(&capabilities, &observe).is_empty(),
+            "a direct-provider observation has no decision line to send"
+        );
     }
 
     fn argv_of(spec: &RunSpec) -> Vec<String> {

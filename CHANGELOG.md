@@ -5,6 +5,32 @@ was amended and the amendment is named here.
 
 ## [Unreleased]
 
+## [0.2.2] — 2026-08-31
+
+### Added
+
+- **`conformance b10x` is now a real, free adapter contract.** It records the executable, argv and
+  complete base child environment (C1), replays a captured `b10x-harness 0.8.0 --json` loop record
+  byte for byte (C2), and reconciles the capture's version banner with the adapter pin (CT-3). The
+  capture is `provider_emulated` evidence from harness's deterministic local Responses endpoint;
+  no live provider, credential or model cost is involved. Its `contract_result` is pinned as bytes
+  with `checked: 3`, and b10x now participates in the same symmetry tests as Claude and Codex. The
+  hook-input obligation stays a reasoned N/A because this adapter observes and has no metaharness
+  decision seam.
+
+### Fixed
+
+- **A b10x run no longer inherits the operator's default permission profile.** Harness 0.8.0 added
+  `$XDG_CONFIG_HOME/b10x/harness.toml`; toolchain launches still passed `HOME`, so the supposedly
+  constructed environment could silently load `[default]`. The child now gets a scratch
+  `XDG_CONFIG_HOME`, pinned by the C1 vector. Its opening hermetic attestation also states
+  `decisions: observe` instead of inheriting the generic `frame` default.
+- **The delivered b10x observation mode is launchable without inventing a decision channel.** The
+  generic capability check no longer requires `tool.decide` when an adapter explicitly delivers
+  observe with no command seam. b10x now refuses launches in the misleading `frame` default or
+  `ask` mode by name; callers must say `--decisions observe`, matching every emitted call's
+  `decision_required: false` and `seam: none`.
+
 ## [0.2.1] — 2026-08-31
 
 ### Changed

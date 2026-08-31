@@ -109,7 +109,8 @@ pub use vectors::{
 /// The adapter ids this build carries, in the order the CLI lists them.
 ///
 /// Published as a value so a caller can ask what exists rather than discovering by refusal.
-pub const ADAPTERS: [&str; 2] = [
+pub const ADAPTERS: [&str; 3] = [
     metaharness_claude::ADAPTER_ID,
     metaharness_codex::ADAPTER_ID,
+    metaharness_b10x::ADAPTER_ID,
 ];

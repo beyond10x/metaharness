@@ -1,0 +1,11 @@
+{"kind":"started","model":"b10x-emulated","published_tools":["file_read","dir_list","search","find"],"operations":["file.read","dir.list","search","find"],"withheld":[],"skills":[],"agents":[],"profiles":[],"credential_source":"named"}
+{"kind":"turn-started","turn":1}
+{"kind":"tool-arguments-delta","call_id":"call_b10x_001","delta":"{\"path\":\"README.md\"}"}
+{"kind":"usage","model":"b10x-emulated","input_tokens":42,"output_tokens":8,"cached_input_tokens":7}
+{"kind":"tool-requested","call_id":"call_b10x_001","name":"file_read","arguments":{"path":"README.md"}}
+{"kind":"tool-completed","call_id":"call_b10x_001","failed":false}
+{"kind":"turn-started","turn":2}
+{"kind":"text-delta","text":"The file says:"}
+{"kind":"text-delta","text":" hello harness"}
+{"kind":"usage","model":"b10x-emulated","input_tokens":42,"output_tokens":4,"cached_input_tokens":7}
+{"kind":"finished","stop":{"kind":"completed"},"turns":2}

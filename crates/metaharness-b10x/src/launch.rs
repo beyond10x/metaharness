@@ -10,14 +10,15 @@
 //!
 //! | what a vendor needs | why `b10x-harness` does not |
 //! |---|---|
-//! | a scratch home, so ambient config cannot leak in | it reads no config file at all |
-//! | a copied plugin tree | it has no plugin mechanism |
+//! | a scratch home, so ambient config cannot leak in | a scratch `XDG_CONFIG_HOME` isolates its profile file |
+//! | a copied plugin tree | plugin directories are named explicitly on argv |
 //! | a hook channel | its decisions are in-process, and this adapter makes none |
 //! | transcript retrieval | `--json` on stdout **is** the record |
 //! | credential isolation | it reads no credential it was not pointed at, by construction |
 //!
 //! What is left is an argv and the attestation that says so.
 
+use std::collections::BTreeMap;
 use std::path::{Path, PathBuf};
 
 /// The `PATH` a b10x child is given, before `HOME`'s own bin directory is prepended.
@@ -39,6 +40,24 @@ pub fn child_path(home: Option<&str>) -> String {
         Some(home) => format!("{home}/.local/bin:{BASE_PATH}"),
         None => BASE_PATH.to_owned(),
     }
+}
+
+/// The environment every b10x child starts from.
+///
+/// `XDG_CONFIG_HOME` is always a scratch directory chosen by metaharness. Harness 0.8.0 added
+/// profiles under the operator's config home; keeping only a constructed `PATH` stopped being
+/// enough at that point, because a run that also needed `HOME` for toolchain discovery silently
+/// loaded the operator's `[default]` permission profile. The scratch config root keeps profiles
+/// absent unless the launch names their effects explicitly on argv.
+#[must_use]
+pub fn base_environment(home: Option<&str>, config_home: &Path) -> BTreeMap<String, String> {
+    BTreeMap::from([
+        ("PATH".to_owned(), child_path(home)),
+        (
+            "XDG_CONFIG_HOME".to_owned(),
+            config_home.display().to_string(),
+        ),
+    ])
 }
 
 /// The first executable named `program` on `path`, or `None`.
@@ -600,6 +619,25 @@ pub fn argv(launch: &B10xLaunch) -> Vec<String> {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn the_base_environment_is_closed_and_profiles_live_in_scratch() {
+        let env = base_environment(Some("/operator"), Path::new("/scratch/run/config"));
+        assert_eq!(
+            env.get("PATH").map(String::as_str),
+            Some("/operator/.local/bin:/usr/local/bin:/usr/bin:/bin")
+        );
+        assert_eq!(
+            env.get("XDG_CONFIG_HOME").map(String::as_str),
+            Some("/scratch/run/config")
+        );
+        assert!(
+            !env.contains_key("HOME"),
+            "HOME is admitted separately only when a declared toolchain needs it; profile \
+             discovery is already pinned to scratch before then"
+        );
+        assert_eq!(env.len(), 2, "no ambient variable joins the child");
+    }
 
     fn launch() -> B10xLaunch {
         B10xLaunch::new(

@@ -28,6 +28,13 @@ is closed as of 2026-08-23** — six recorded C1 expectations, `checked: 10 → 
 way it closed is the argument for the shape: an absence nobody could see became a declared gap,
 then a deliberate count movement with the diff read.
 
+**The b10x adapter now meets that standard too (2026-08-31).** Its free contract has one recorded
+C1 launch, one byte-exact recorded loop replay and one version-pair vector; its hook-input row is a
+reasoned N/A because this observe-only adapter has no metaharness hook seam. The resulting
+`contract_result` is pinned as bytes at `checked: 3`. The launch recording also caught and closed
+ambient profile discovery by putting `XDG_CONFIG_HOME` in scratch, and corrected the opening
+attestation from the generic `frame` default to `observe`.
+
 ## 2. More harnesses: pi, opencode
 
 Two further adapter crates on the same pattern as `metaharness-codex` (research record first,

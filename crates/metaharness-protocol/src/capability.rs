@@ -172,9 +172,23 @@ impl Capabilities {
     pub fn refusals_for(&self, spec: &RunSpec) -> Vec<(&'static str, RefusalCode)> {
         required_commands(spec)
             .into_iter()
-            .filter_map(|name| match self.support(name) {
-                CommandSupport::Refused(code) => Some((name, code)),
-                CommandSupport::Honoured => None,
+            .filter_map(|name| {
+                // Observe is a mode, not necessarily a command channel. Vendor adapters deliver
+                // it by answering every hook call, so they also honour `tool.decide`; the b10x
+                // direct-provider adapter delivers it by publishing a governed toolset and
+                // recording every call under `Seam::None`, so there is deliberately no decision
+                // line to send. The delivered mode is the contract in both cases. Requiring one
+                // implementation mechanism made the only truthful b10x mode unstartable.
+                if name == "tool.decide"
+                    && spec.decisions == DecisionMode::Observe
+                    && self.decision_mode(DecisionMode::Observe) == TierStatus::Delivered
+                {
+                    return None;
+                }
+                match self.support(name) {
+                    CommandSupport::Refused(code) => Some((name, code)),
+                    CommandSupport::Honoured => None,
+                }
             })
             .collect()
     }
@@ -191,11 +205,10 @@ pub fn required_commands(spec: &RunSpec) -> Vec<&'static str> {
         needed.push("tool.decide");
     }
     if spec.decisions == DecisionMode::Observe {
-        // Observe mode answers **every** call at the seam, in metaharness's own voice. It sends
-        // no `tool.decide` command — the adapter answers — but it needs the same channel a
-        // launch-time frame needs and for the same reason: the decision is written per call. An
-        // adapter that cannot honour `tool.decide` cannot observe either, and finding that out
-        // at the first call would be finding it out after the money was spent.
+        // Vendor observe modes answer every call at their seam and therefore need the same
+        // channel as `tool.decide`. [`Capabilities::refusals_for`] waives this implementation
+        // mechanism when the adapter declares observe delivered without a command channel — the
+        // direct-provider case, where no call is adjudicated and `Seam::None` is the observation.
         needed.push("tool.decide");
     }
     if spec.frame.is_some() {

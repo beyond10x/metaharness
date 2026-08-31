@@ -35,6 +35,7 @@ use metaharness::{conformance_vectors, contract_result};
 /// wrote, not a value it happened to hold.
 const CLAUDE_GOLDEN: &str = include_str!("../fixtures/golden/contract-result-claude.json");
 const CODEX_GOLDEN: &str = include_str!("../fixtures/golden/contract-result-codex.json");
+const B10X_GOLDEN: &str = include_str!("../fixtures/golden/contract-result-b10x.json");
 
 /// The six keys, in the one order the record is serialised in.
 ///
@@ -124,6 +125,18 @@ fn the_codex_contract_record_is_the_bytes_the_consumer_reads() {
     );
 }
 
+/// The direct-provider adapter's record is pinned by the same consumer-facing bytes.
+#[test]
+fn the_b10x_contract_record_is_the_bytes_the_consumer_reads() {
+    let emitted = emit(Kind::B10x);
+    assert_eq!(
+        emitted,
+        B10X_GOLDEN,
+        "{}",
+        drift(B10X_GOLDEN, &emitted, Kind::B10x)
+    );
+}
+
 /// The keys arrive in one order, and that order is part of the record.
 ///
 /// Byte-exactness above already catches a reordering; this test exists so that the *failure* names
@@ -132,7 +145,11 @@ fn the_codex_contract_record_is_the_bytes_the_consumer_reads() {
 /// binary prints, and the consumer would be the one to find out.
 #[test]
 fn the_records_keys_are_serialised_in_one_pinned_order() {
-    for (kind, golden) in [(Kind::Claude, CLAUDE_GOLDEN), (Kind::Codex, CODEX_GOLDEN)] {
+    for (kind, golden) in [
+        (Kind::Claude, CLAUDE_GOLDEN),
+        (Kind::Codex, CODEX_GOLDEN),
+        (Kind::B10x, B10X_GOLDEN),
+    ] {
         for text in [golden.to_string(), emit(kind)] {
             let mut seen: Vec<(usize, &str)> = KEY_ORDER
                 .iter()
@@ -163,7 +180,11 @@ fn the_records_keys_are_serialised_in_one_pinned_order() {
 /// that had been regenerated over a red run would otherwise publish the red as the new normal.
 #[test]
 fn the_committed_records_are_green_runs_that_checked_something() {
-    for (kind, golden) in [(Kind::Claude, CLAUDE_GOLDEN), (Kind::Codex, CODEX_GOLDEN)] {
+    for (kind, golden) in [
+        (Kind::Claude, CLAUDE_GOLDEN),
+        (Kind::Codex, CODEX_GOLDEN),
+        (Kind::B10x, B10X_GOLDEN),
+    ] {
         let record: serde_json::Value = serde_json::from_str(golden).expect("the record parses");
         assert_eq!(record["kind"], "contract_result");
         assert_eq!(record["consumer"], metaharness::protocol::EVENT_FORMAT);
@@ -205,6 +226,7 @@ fn regenerate_the_contract_records() {
     for (kind, name) in [
         (Kind::Claude, "contract-result-claude.json"),
         (Kind::Codex, "contract-result-codex.json"),
+        (Kind::B10x, "contract-result-b10x.json"),
     ] {
         let path = format!("{}/fixtures/golden/{name}", env!("CARGO_MANIFEST_DIR"));
         std::fs::write(&path, emit(kind)).expect("the record is written");

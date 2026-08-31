@@ -22,7 +22,7 @@ use metaharness::protocol::{ContractObligations, Kind, Obligation};
 use metaharness::{ADAPTERS, conformance_vectors, contract_obligations, contract_result};
 
 /// Every kind this build carries. The length assertion below is what keeps it honest.
-const KINDS: [Kind; 2] = [Kind::Claude, Kind::Codex];
+const KINDS: [Kind; 3] = [Kind::Claude, Kind::Codex, Kind::B10x];
 
 /// Read one adapter's declaration, its real vectors and its real provider string, and report what
 /// the declaration promised and the run did not deliver.
@@ -50,6 +50,19 @@ fn the_claude_adapter_fills_the_contract_authoring_shape() {
 fn the_codex_adapter_fills_the_contract_authoring_shape() {
     let unmet = unmet(Kind::Codex);
     assert!(unmet.is_empty(), "{unmet:#?}");
+}
+
+/// The direct-provider adapter fills every applicable row. Its hook row remains a named N/A:
+/// adding a hook would violate the observe-only boundary rather than improve contract coverage.
+#[test]
+fn the_b10x_adapter_fills_every_applicable_contract_row() {
+    let unmet = unmet(Kind::B10x);
+    assert!(unmet.is_empty(), "{unmet:#?}");
+    let declared = contract_obligations(Kind::B10x).expect("the adapter exists");
+    let Obligation::Gap(reason) = declared.recorded_hook_input else {
+        panic!("b10x must not claim a hook input for a seam it does not have")
+    };
+    assert!(reason.contains("not applicable"), "{reason}");
 }
 
 /// The asymmetry CT-4 found, now closed — and pinned closed, so re-opening it is deliberate too.

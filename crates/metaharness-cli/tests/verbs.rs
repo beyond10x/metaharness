@@ -149,6 +149,11 @@ fn conformance_for_codex_runs_its_replay_vectors_and_passes() {
     assert_eq!(code_of(&["metaharness", "conformance", "codex"]), 0);
 }
 
+#[test]
+fn conformance_for_b10x_runs_its_recorded_contract_and_passes() {
+    assert_eq!(code_of(&["metaharness", "conformance", "b10x"]), 0);
+}
+
 /// CT-1: `--contract` emits the record and still carries the verdict in the exit code. The
 /// record's shape is pinned in the library test; here the flag's own contract — parses, runs
 /// free, exits on the same verdict — is what is asserted.
@@ -160,6 +165,10 @@ fn conformance_contract_flag_runs_free_and_carries_the_verdict() {
     );
     assert_eq!(
         code_of(&["metaharness", "conformance", "claude", "--contract"]),
+        0
+    );
+    assert_eq!(
+        code_of(&["metaharness", "conformance", "b10x", "--contract"]),
         0
     );
 }

@@ -32,22 +32,26 @@
 //! conversation and calls a model API"* — which carried a *not in v0.1* note because nothing had
 //! ever been one. This is the first.
 //!
-//! # What the loop does not have, written as `null`
+//! # What the loop reports, and what it does not have
 //!
-//! No slash commands, no skills, no subagents, no MCP servers, no permission mode. Those are not
-//! unobserved — they do not exist, and a field invented for them would be a claim about a run
-//! nobody made. `hermetic.installed_plugins` is `[]` for the same reason and is a *fact*: this loop
-//! has no plugin mechanism for anything to be installed into.
+//! Skills and named agents are read from the opening record: the loop gained both after this
+//! adapter was introduced, so hardcoding empty lists would now assert something about a run that
+//! may have been offered several. It still has no MCP client, slash-command surface or vendor
+//! permission mode. Those absences are standing facts; fields this adapter has not established
+//! remain `null` rather than being guessed empty.
 
 #![allow(missing_docs)]
 
 mod launch;
 mod seam;
+mod vectors;
 
 pub use launch::{
-    B10xLaunch, Confinement, Credential, Wire, argv, child_path, emitted_flags, resolve_program,
+    B10xLaunch, Confinement, Credential, Wire, argv, base_environment, child_path, emitted_flags,
+    resolve_program,
 };
 pub use seam::{B10xSeam, B10xSeams, capabilities};
+pub use vectors::{CONTRACT_OBLIGATIONS, conformance_vectors};
 
 /// What this adapter calls itself on the wire.
 pub const ADAPTER_ID: &str = "b10x";
@@ -74,36 +78,3 @@ pub const PINNED_VERSIONS: [&str; 1] = ["0.8.0"];
 /// resolves. Both are checked by the engineering-protocols eval before it trusts an installed
 /// binary, so a filesystem timestamp is never mistaken for provenance.
 pub const HARNESS_REVISION: &str = "45fdccb07b2f36c16e695465385b7915921dfe0e";
-
-/// What this adapter's contract owes, and what it does not yet pay.
-///
-/// **Every row a gap, in words that say what stands in for it.** The checklist is not a formality:
-/// a consumer reads it to know what a `contract_result` from this adapter can be trusted to mean,
-/// and an adapter that filled a row it had not earned would be exactly the false confidence the
-/// document exists to prevent.
-///
-/// The four rows are also, read together, an accurate description of how young this adapter is:
-/// there is no recorded launch vector, no byte-exact replay of a captured loop record, no hook
-/// input at all — the loop has no hook — and no version pair, because nothing has yet compared a
-/// captured record's own version claim against the pin.
-pub const CONTRACT_OBLIGATIONS: metaharness_protocol::ContractObligations =
-    metaharness_protocol::ContractObligations {
-        adapter: ADAPTER_ID,
-        launch: metaharness_protocol::Obligation::Gap(
-            "the launch is unit-tested in `launch.rs` and has no recorded C1 vector, so a consumer \
-             cannot read an argv-and-environment guarantee off this adapter's contract record",
-        ),
-        recorded_wire: metaharness_protocol::Obligation::Gap(
-            "no captured `b10x-harness --json` record is replayed byte-exact yet; the mapping is \
-             covered by hand-written lines in `seam.rs`, which proves the projection and not that \
-             a real run produces the lines it was written against",
-        ),
-        recorded_hook_input: metaharness_protocol::Obligation::Gap(
-            "there is no hook and there will not be one: this adapter observes and decides nothing, \
-             so the row is permanently not applicable rather than outstanding",
-        ),
-        version_pair: metaharness_protocol::Obligation::Gap(
-            "nothing has compared a captured record's own version claim against `PINNED_VERSIONS`, \
-             so a run against a `b10x-harness` other than the pin is unverified rather than refused",
-        ),
-    };

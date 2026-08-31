@@ -6,20 +6,23 @@ sidebar_position: 3
 
 # The `b10x` adapter
 
-Pinned to **0.1.0** of `b10x-harness`. Adapter class: `direct_provider` — the loop is this family's
+Pinned to **0.8.0** of `b10x-harness`. Adapter class: `direct_provider` — the loop is this family's
 own, and this adapter **observes it and decides nothing** (invariant 9). A run against another
 `b10x-harness` version is unverified rather than refused.
 
 ```bash
-metaharness run b10x -p "…" --model-endpoint https://gateway.example --model-wire anthropic-messages
+metaharness run b10x --decisions observe -p "…" --model-endpoint https://gateway.example --model-wire anthropic-messages
 metaharness capabilities b10x     # the declaration below; no model, no credential
+metaharness conformance b10x --contract  # 3 deterministic checks, no model or credential
 metaharness doctor b10x           # resolves the binary the way the spawn will, on the child's PATH
 ```
 
 ## What a run does
 
 1. Constructs the child's environment rather than inheriting one (H3): `PATH` is
-   `$HOME/.local/bin:/usr/local/bin:/usr/bin:/bin`, and nothing else arrives unnamed.
+   `$HOME/.local/bin:/usr/local/bin:/usr/bin:/bin`, and `XDG_CONFIG_HOME` points at scratch so an
+   operator profile cannot arrive ambiently. Toolchain and credential variables arrive only when
+   declared.
 2. Resolves `b10x-harness` on that `PATH` at plan time, so the launch record names the file that ran.
 3. Spawns `b10x-harness run --json …` with the flags below. Stdout **is** the record.
 4. Reads the loop's events through the seam into `metaharness.event/1`.
@@ -29,7 +32,7 @@ adapter is unfinished:
 
 | what a vendor needs | why `b10x-harness` does not |
 |---|---|
-| a scratch home, so ambient config cannot leak in | it reads no config file at all |
+| a scratch home, so ambient config cannot leak in | scratch `XDG_CONFIG_HOME` isolates its optional profile file |
 | a hook channel | its decisions are in-process, and this adapter makes none |
 | transcript retrieval | `--json` on stdout is the record |
 | credential isolation | it reads no credential it was not pointed at, by construction |
@@ -57,14 +60,18 @@ expectation be satisfied by a seam that is not there.
 | `observe` | `delivered` |
 | `ask`, `frame` | `unverified` |
 
+`--decisions observe` is required on a run. The CLI's cross-adapter default is `frame`, but letting
+b10x inherit it would claim a decision seam this direct-provider adapter does not have.
+
 Rendering: `file.read → file_read`, `file.write → file_write`, `file.edit → file_edit`,
 `dir.list → dir_list`, `search → search`, `shell → run`; `mcp.call`, `skill.load`,
 `subagent.spawn`, `task.todo` and `web.read` render to nothing.
 
-The contract checklist is four gaps, in words that say what stands in for each: no recorded launch
-vector (the launch is unit-tested), no byte-exact replay of a captured record (the mapping is covered
-by hand-written lines), no hook input — there is no hook and there will not be one — and no version
-pair. `conformance b10x` therefore has nothing free to run yet.
+The contract runs three deterministic vectors: a recorded executable/argv/environment launch, a
+byte-exact replay of a real 0.8.0 loop record, and the captured version banner against the pin. The
+record came from harness's loopback-only deterministic endpoint and is `provider_emulated`, never
+`vendor_live`. The fourth checklist row, hook input, is a reasoned N/A: there is no metaharness hook
+and adding one would violate this adapter's observe-only boundary.
 
 ## The four enforcement tiers reach the loop
 
@@ -117,5 +124,5 @@ how; **30 pass / 0 fail, `EVAL_EXIT=0`** once both arms took the plugin. The row
 the way was `the-skill-was-offered`, which a harness without a skills mechanism cannot satisfy;
 `b10x-harness` has one now.
 
-Sources: `crates/metaharness-b10x/src/lib.rs`, `launch.rs` and `seam.rs`;
+Sources: `crates/metaharness-b10x/src/lib.rs`, `launch.rs`, `seam.rs` and `vectors.rs`;
 `metaharness capabilities b10x`; the commit messages of the changes named above.

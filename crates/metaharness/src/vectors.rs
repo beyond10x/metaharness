@@ -495,12 +495,7 @@ pub fn conformance_vectors(kind: Kind) -> Result<Vec<VectorOutcome>, Refusal> {
             vectors.extend(crate::spawn_codex_vectors::spawn_vectors());
             Ok(vectors)
         }
-        // **Refused rather than empty**, which is this function's own rule: a conformance run
-        // reporting zero vectors reads exactly like one that passed. This adapter has no vector
-        // suite yet, and `CONTRACT_OBLIGATIONS` says so row by row.
-        Kind::B10x => Err(Refusal::NoAdapter {
-            kind: Kind::B10x.as_str().to_owned(),
-        }),
+        Kind::B10x => Ok(metaharness_b10x::conformance_vectors()),
     }
 }
 
@@ -592,8 +587,11 @@ mod tests {
     /// with the pin in the provider and the vendor-tier failures called out as breaking.
     #[test]
     fn conformance_emits_a_contract_result_with_the_pin_in_the_provider() {
-        for (kind, expected_provider_prefix) in [(Kind::Claude, "claude "), (Kind::Codex, "codex ")]
-        {
+        for (kind, expected_provider_prefix) in [
+            (Kind::Claude, "claude "),
+            (Kind::Codex, "codex "),
+            (Kind::B10x, "b10x "),
+        ] {
             let vectors = conformance_vectors(kind).expect("the adapter exists");
             let record = contract_result(kind, &vectors).expect("a record");
             assert_eq!(record["kind"], "contract_result");
