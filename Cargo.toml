@@ -8,10 +8,11 @@ members = [
     "crates/metaharness-b10x",
     "crates/metaharness-tools",
     "crates/metaharness-cli",
+    "crates/metaharness-engineering-protocols-eval",
 ]
 
 [workspace.package]
-version = "0.1.0"
+version = "0.2.0"
 edition = "2024"
 license = "Apache-2.0"
 repository = "https://github.com/beyond10x/metaharness"

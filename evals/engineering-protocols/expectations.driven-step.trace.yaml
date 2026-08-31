@@ -44,9 +44,8 @@ expectations:
     # `session.started` and five calls: this document went from **10 ok, 1 gap (this row), 1 unk,
     # exit 1** to **11 ok, 0 gap, 1 unk**, and `validated-its-own-work` changed its citation from
     # *"command.execute or Bash|run(…)"* to *"command.execute|shell or Bash|run(…)"*. The residual
-    # `unk` is `the-skill-was-offered` — a hand-built record carries no `skills` field, and the b10x
-    # arm is launched without `--plugin-dir` at all (`run-driven.sh:268-269`), so that row is a
-    # separate question this change does not touch. A vendor-shaped record reported the same counts
+    # `unk` is `the-skill-was-offered` — a hand-built record carries no `skills` field, so that row
+    # is a separate question this change does not touch. A vendor-shaped record reported the same counts
     # before and after, still cited by tool name.
     expect:
       env.tool_available:
@@ -88,15 +87,12 @@ expectations:
 
   - id: the-skill-was-offered
     statement: the plugin loaded and offered its skill — `--plugin-dir` reached the session
-    # **A mechanism row, and it only answers for a harness that has the mechanism.** The native arm
-    # is launched without `--plugin-dir` at all (`run-driven.sh:268-280`, which says why: a plugin
-    # is a vendor mechanism and that loop has none), so this reads `gap` there — not because the
-    # guidance never arrived, but because it arrived another way. `the-planning-guidance-was-loaded`
-    # below is that other way, and the two are kept apart deliberately: *offered* and *loaded* are
-    # two claims, and on 2026-08-29 they disagreed.
+    # **A mechanism row.** Both arms now receive the same plugin: the native loop learned to read
+    # its skills and agents, so withholding it would make the comparison unequal. A historical
+    # native record may still read `gap`; a new one must carry the offered skill.
     #
     # This said it was "also the closest thing to an audit of the hooks having loaded: they ship in
-    # the same plugin". They do not, and had not for some time — `run-driven.sh:245` builds the
+    # the same plugin". They do not, and had not for some time — the runner copies the
     # plugin as "skills and agents only, since the hooks retired into the driver's policy", and
     # neither the copied tree nor `integrations/claude-code/` holds a `hooks/` directory. The audit
     # that comment promised was not happening on either arm. What audits the hooks now is the store

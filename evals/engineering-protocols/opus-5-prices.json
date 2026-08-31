@@ -1,0 +1,12 @@
+{
+  "source": "https://www.anthropic.com/claude/opus and https://www.anthropic.com/pricing; Opus 5 global standard list prices read 2026-08-31; cache creation uses the default five-minute rate",
+  "as_of": "2026-08-31",
+  "models": {
+    "claude-opus-5": {
+      "input_usd_per_mtok": 5.0,
+      "cached_input_usd_per_mtok": 0.5,
+      "cache_creation_input_usd_per_mtok": 6.25,
+      "output_usd_per_mtok": 25.0
+    }
+  }
+}

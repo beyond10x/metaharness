@@ -118,30 +118,37 @@ reports `tail`'s status, not the gate's.
 
 ## Live-evaluating our own harness
 
-`evals/engineering-protocols/run-driven.sh` drives a real `protocol drive run` through metaharness
-against a scratch copy of engineering-protocols, on either arm, and scores the transcripts. It is
-how the native harness is compared against a vendor one on the same work.
+`engineering-protocols-eval driven` drives a real `protocol drive run` through metaharness against
+a scratch copy of engineering-protocols, on either arm, and scores the transcripts. It is how the
+native harness is compared against a vendor one on the same work. The runner is the Rust binary in
+`crates/metaharness-engineering-protocols-eval`; both arms use its shared fixture and preflight.
+The Claude fixture carries the source-built `protocol` binary under `.engineering/toolchain` and
+its derived map names that file. Letting Claude resolve an ambient install while b10x receives the
+source-built staged driver compares two protocol versions rather than two harnesses.
 
 ```console
-EVAL_ARM=b10x   bash evals/engineering-protocols/run-driven.sh   # the native loop
-EVAL_ARM=claude bash evals/engineering-protocols/run-driven.sh   # the vendor, and the default
+cargo run -p metaharness-engineering-protocols-eval -- driven --arm b10x
+cargo run -p metaharness-engineering-protocols-eval -- driven --arm claude
 ```
 
-`evals/engineering-protocols/run-native.sh` is the third shape: the same work walked **natively** —
+`engineering-protocols-eval native` is the third shape: the same work walked **natively** —
 `b10x-harness workflow run` over the flow `protocol workflow flow` projects from `adp/default/2`
 with the eval's step map, governed at every section boundary by `protocol drive transition`
 through the loop's `transition` hook (atlas ADR 0004). Without `--spend` it does everything free —
-assembles the scratch project, projects the flow, writes the hooks file, consults the governor by
-hand at the first boundary, prints the plan — and stops at the one command that spends. It is a
+assembles the scratch project, proves the subject lifecycle is visible through a command executed
+inside substrate, projects the flow, writes the hooks file, consults the governor by hand at the
+first boundary, prints the plan — and stops at the one command that spends. It is a
 different experiment from the driven arm (the loop moves the sequencer) and is measured against it
-as tokens, turns, wall-time and, with `EVAL_PRICES`, cost — never as a conformance claim. It
+as tokens, turns, wall-time and cost — never as a conformance claim. It
 is constrained by default — Opus, 30 minutes wall clock, 2 attempts per section, 12 turns per
-step, and a $5 ceiling once a rate card lets the run price itself — and it is a **test**: the task
-is the eval's synthetic one in a scratch project, and nothing it produces ships anywhere.
+step — and it is a **test**: the task is the eval's synthetic one in a scratch project, and nothing
+it produces ships anywhere. A paid run additionally requires `--spend`, `METAHARNESS_LIVE=1`, an
+exact `--budget-usd`, and the checked-in rate card (or an explicit replacement).
 
 ```console
-bash evals/engineering-protocols/run-native.sh            # everything free, then stop
-bash evals/engineering-protocols/run-native.sh --spend    # and walk it
+cargo run -p metaharness-engineering-protocols-eval -- native
+METAHARNESS_LIVE=1 cargo run -p metaharness-engineering-protocols-eval -- \
+  native --spend --budget-usd 5.00
 ```
 
 **This spends real money on a real model.** It is not part of `task check` and must never be put
@@ -159,15 +166,15 @@ on this machine gets. Expect the refusal whenever anyone has pushed to harness; 
 times in one afternoon, once over a docs-only commit, which is the guard being right rather than
 noisy — it cannot know what is in a commit.
 
-The script re-execs itself under `systemd-run --user --scope`. That is not cosmetic: substrate's
+The runner re-execs itself under `systemd-run --user --scope`. That is not cosmetic: substrate's
 `probe_cgroup` requires the **calling process's own cgroup** to sit inside the configured root, so
 from an ordinary login shell the machine reports no exec facts and the loop publishes six tools
 instead of seven, with no error anywhere.
 
 ### Reading the result
 
-`EVAL_EXIT` is 0 only when nothing failed; `unk` counts as a failure. The run prints its scratch
-directory — keep it, it is the whole record:
+The process exit is 0 only when nothing failed; `unk` counts as a failure. The runner prints its
+scratch directory — keep it, it is the whole record:
 
 ```
 <scratch>/ws_project/.engineering/runs/EVAL-1/1/transcripts/*.jsonl   metaharness.event/1 streams
@@ -175,7 +182,7 @@ directory — keep it, it is the whole record:
 <scratch>/drive.log, drive.err                                        the driver's own output
 ```
 
-Never read the census by piping the script's stdout through `tail` or `head` — the verdict block is
+Never read the census by piping the runner's stdout through `tail` or `head` — the verdict block is
 long and the interesting lines are in the middle. Redirect to a file and grep it.
 
 ### Things that were true and cost a paid run each
@@ -191,7 +198,7 @@ long and the interesting lines are in the middle. Redirect to a file and grep it
   union `tools:` with `operations:`; the native arm spells the entry `run` and the operation
   `shell`, never `command.execute`.
 - **The native walk is headless, and the loop's default approver refuses when nobody is there.**
-  `--approve auto` denied every write and `run` on the second paid native walk; `run-native.sh`
+  `--approve auto` denied every write and `run` on the second paid native walk; the Rust runner
   passes `--approve-up-to high`. The fences are the hooks and the confinement, not the approver.
 - **`--allow-program` admits a name, not bytes.** The sandbox reaches `/usr`, `/bin`, `/lib`,
   `/lib64` and the workspace; `~/.local/bin/protocol` is not there and every `run` died at exit
@@ -200,7 +207,7 @@ long and the interesting lines are in the middle. Redirect to a file and grep it
 - **The `transition` hook fires at group boundaries only.** Until engineering-protocols
   `870894d`, `protocol workflow flow` grouped a multi-step state and a retreat span and nothing
   else, so a bare-workflow walk was governed at `root` and nowhere else (fifth paid walk). Every
-  state is a section since; still, count `hook-ran` at `transition` — `run-native.sh`'s census
+  state is a section since; still, count `hook-ran` at `transition` — the runner's census
   prints them per boundary — before believing a walk was governed at every state.
 - **A mechanism row and an outcome row cannot both pass once the mechanism lands.**
   `the-planning-guidance-was-loaded` asks whether the model ran the CLI's own `skill load`; a
