@@ -19,10 +19,10 @@ workspace = true
 #
 # Pinned by git revision, never by `path`: a path into a sibling checkout builds against whatever
 # is checked out there, and `--locked` cannot lock it (AGENTS.md invariant 10; the same rule
-# harness holds for substrate). The revision is harness `main` at 3467bf0, 2026-08-29 — the
-# skills-and-agents loop the b10x adapter reads (`--plugin-dir`, `skills`/`agents` on `Started`).
-b10x-harness-tools = { git = "https://github.com/beyond10x/harness", rev = "3467bf0fd459953babe47a505a364f28a21179f4" }
-b10x-harness-wire = { git = "https://github.com/beyond10x/harness", rev = "3467bf0fd459953babe47a505a364f28a21179f4" }
+# harness holds for substrate). The revision is the released harness 0.8.0 commit `45fdccb`,
+# 2026-08-31 — the operator-step boundary plus the skills-and-agents loop this adapter reads.
+b10x-harness-tools = { git = "https://github.com/beyond10x/harness", rev = "45fdccb07b2f36c16e695465385b7915921dfe0e" }
+b10x-harness-wire = { git = "https://github.com/beyond10x/harness", rev = "45fdccb07b2f36c16e695465385b7915921dfe0e" }
 serde_json = { workspace = true }
 
 [dev-dependencies]

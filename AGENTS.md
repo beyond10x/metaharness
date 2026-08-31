@@ -156,15 +156,20 @@ there. Do not run two at once — they are isolated by scratch directory, but bo
 target directories and both consume the same budget, and two sessions ran it concurrently on
 2026-08-29 for one answer.
 
-### Before a b10x run, reinstall the binary
+### Before a b10x run, use the pinned release
 
-The eval resolves `$HOME/.local/bin/b10x-harness` — `EVAL_B10X_BINARY` overrides it — and **refuses
-to start if that file is older than the harness repository's newest commit**, printing the
-`cargo install` line to fix it. It refuses rather than correcting, because the install directory is
-the operator's and a debug build silently replacing a release one changes what every other caller
-on this machine gets. Expect the refusal whenever anyone has pushed to harness; it fired three
-times in one afternoon, once over a docs-only commit, which is the guard being right rather than
-noisy — it cannot know what is in a commit.
+The eval resolves `$HOME/.local/bin/b10x-harness` — `EVAL_B10X_BINARY` overrides it — and requires
+two exact identities before it trusts that binary: the harness checkout's `HEAD` is the git
+revision `metaharness-b10x` pins, and the installed binary's `--version` banner is that release's
+version. It never compares modification times. A timestamp says only when bytes were copied: a
+stale binary touched today looks new, while a correct install predating a docs-only commit looks
+old. The refusal prints the checkout, release, revision and `cargo install` line needed to make
+them agree.
+
+The eval refuses rather than correcting, because the install directory is the operator's and a
+debug build silently replacing a release one changes what every other caller on this machine gets.
+The harness release version is immutable, so the banner identifies the CLI contract while the git
+revision identifies the Rust crates this workspace compiled.
 
 The runner re-execs itself under `systemd-run --user --scope`. That is not cosmetic: substrate's
 `probe_cgroup` requires the **calling process's own cgroup** to sit inside the configured root, so

@@ -7,7 +7,7 @@
 use std::env;
 use std::ffi::OsStr;
 use std::fs::{self, File};
-use std::io::{self, Write as _};
+use std::io::Write as _;
 use std::path::{Path, PathBuf};
 use std::process::{Command, ExitStatus, Stdio};
 use std::time::Instant;
@@ -206,6 +206,7 @@ fn run(cli: Cli) -> Result<i32, String> {
         EvalCommand::Preflight(common) => {
             let resolved = resolve(&common)?;
             ensure_cgroup_scope(&resolved)?;
+            check_native_binary(&resolved)?;
             let fixture = prepare(&resolved, "preflight", TASK_ID)?;
             preflight(&resolved, &fixture)?;
             println!(
@@ -820,7 +821,7 @@ fn preflight_confined(resolved: &Resolved, fixture: &Fixture) -> Result<(), Stri
         .arg("--flow")
         .arg(&flow)
         .arg("--input")
-        .arg(input)
+        .arg(&input)
         .arg("--base-url")
         .arg("http://127.0.0.1:9")
         .arg("--model")
@@ -882,6 +883,112 @@ fn preflight_confined(resolved: &Resolved, fixture: &Fixture) -> Result<(), Stri
         ));
     }
     println!("confined lifecycle preflight: decision-blocker starts open; no model contacted");
+    preflight_operator_boundary(resolved, fixture, &input)?;
+    Ok(())
+}
+
+fn preflight_operator_boundary(
+    resolved: &Resolved,
+    fixture: &Fixture,
+    input: &str,
+) -> Result<(), String> {
+    const REASON: &str = "The deterministic eval is ready for operator review.";
+    let flow = fixture.work.join("operator-preflight.yaml");
+    fs::write(
+        &flow,
+        format!(
+            "id: operator-boundary-preflight\nroot:\n  id: root\n  nodes:\n    - id: review\n      run:\n        state: preflight\n        kind: operator\n        prompt: {REASON}\n"
+        ),
+    )
+    .map_err(|error| format!("write operator preflight flow: {error}"))?;
+    let mut command = Command::new(&resolved.b10x_binary);
+    command
+        .arg("workflow")
+        .arg("run")
+        .arg("--flow")
+        .arg(&flow)
+        .arg("--input")
+        .arg(input)
+        // Port 9 is deliberately closed. Exit zero therefore proves the operator step did not
+        // become a provider turn, without standing up an endpoint that could hide a request.
+        .arg("--base-url")
+        .arg("http://127.0.0.1:9")
+        .arg("--model")
+        .arg("operator-preflight-no-model")
+        .arg("--wire")
+        .arg("anthropic-messages")
+        .arg("--workspace")
+        .arg(&fixture.project)
+        .arg("--substrate-embedded")
+        .arg("--cgroup-root")
+        .arg(&resolved.cgroup_root)
+        .arg("--no-session")
+        .arg("--json");
+    let result = output(&mut command, None)?;
+    fs::write(
+        fixture.work.join("operator-preflight.jsonl"),
+        &result.stdout,
+    )
+    .map_err(|error| format!("write operator preflight record: {error}"))?;
+    fs::write(fixture.work.join("operator-preflight.err"), &result.stderr)
+        .map_err(|error| format!("write operator preflight stderr: {error}"))?;
+    if !result.status.success() {
+        return Err(format!(
+            "operator boundary preflight failed with {}: {}",
+            result.status.code().unwrap_or(1),
+            result.stderr.trim()
+        ));
+    }
+    let events = result
+        .stdout
+        .lines()
+        .filter(|line| !line.trim().is_empty())
+        .map(|line| {
+            serde_json::from_str::<Value>(line)
+                .map_err(|error| format!("parse operator preflight event: {error}: {line}"))
+        })
+        .collect::<Result<Vec<_>, _>>()?;
+    let paused = events
+        .iter()
+        .filter(|event| event.get("kind").and_then(Value::as_str) == Some("flow-paused"))
+        .collect::<Vec<_>>();
+    if paused.len() != 1
+        || paused[0].get("path").and_then(Value::as_str) != Some("root.review")
+        || paused[0].get("reason").and_then(Value::as_str) != Some(REASON)
+        || paused[0].get("reached").and_then(Value::as_u64) != Some(1)
+        || paused[0].get("failed").and_then(Value::as_u64) != Some(0)
+        || events
+            .last()
+            .and_then(|event| event.get("kind"))
+            .and_then(Value::as_str)
+            != Some("flow-paused")
+    {
+        return Err(format!(
+            "operator boundary preflight did not end in the one declared handoff: {}",
+            result.stdout
+        ));
+    }
+    for forbidden in [
+        "step-finished",
+        "node-skipped",
+        "group-repeating",
+        "group-left",
+        "flow-finished",
+        "tool-requested",
+        "approval-required",
+        "hook-ran",
+    ] {
+        if events
+            .iter()
+            .any(|event| event.get("kind").and_then(Value::as_str) == Some(forbidden))
+        {
+            return Err(format!(
+                "operator boundary preflight emitted forbidden event `{forbidden}`: {}",
+                result.stdout
+            ));
+        }
+    }
+    println!("operator boundary preflight: one flow-paused handoff, exit 0; no model contacted");
     Ok(())
 }
 
@@ -935,32 +1042,41 @@ fn check_native_binary(resolved: &Resolved) -> Result<(), String> {
             resolved.harness_repo.display()
         ));
     }
-    let newest = output(
+    let checkout = output(
         Command::new("git")
             .current_dir(&resolved.harness_repo)
-            .arg("log")
-            .arg("-1")
-            .arg("--format=%ct"),
+            .arg("rev-parse")
+            .arg("HEAD"),
         None,
     )?;
-    let newest: u64 = newest
-        .stdout
-        .trim()
-        .parse()
-        .map_err(|error| format!("parse harness commit time: {error}"))?;
-    let built = fs::metadata(&resolved.b10x_binary)
-        .and_then(|metadata| metadata.modified())
-        .and_then(|time| {
-            time.duration_since(std::time::UNIX_EPOCH)
-                .map_err(io::Error::other)
-        })
-        .map_err(|error| format!("read b10x binary timestamp: {error}"))?
-        .as_secs();
-    if newest > built {
-        return Err(format!(
-            "{} is older than the harness checkout; refresh it with `cargo install --path {}/crates/harness-cli --root $HOME/.local --force`",
-            resolved.b10x_binary.display(),
+    let version = output(Command::new(&resolved.b10x_binary).arg("--version"), None)?;
+    validate_native_pin(checkout.stdout.trim(), version.stdout.trim()).map_err(|reason| {
+        format!(
+            "{reason}; refresh the checkout to harness {} at {} and install it with `cargo install --path {}/crates/harness-cli --root $HOME/.local --force`",
+            metaharness_b10x::PINNED_VERSIONS[0],
+            metaharness_b10x::HARNESS_REVISION,
             resolved.harness_repo.display()
+        )
+    })?;
+    println!(
+        "native harness pin: {} at {}",
+        metaharness_b10x::PINNED_VERSIONS[0],
+        metaharness_b10x::HARNESS_REVISION
+    );
+    Ok(())
+}
+
+fn validate_native_pin(checkout_revision: &str, binary_banner: &str) -> Result<(), String> {
+    if checkout_revision != metaharness_b10x::HARNESS_REVISION {
+        return Err(format!(
+            "harness checkout is at {checkout_revision}, expected pinned revision {}",
+            metaharness_b10x::HARNESS_REVISION
+        ));
+    }
+    let expected = format!("b10x-harness {}", metaharness_b10x::PINNED_VERSIONS[0]);
+    if binary_banner != expected {
+        return Err(format!(
+            "installed harness reports `{binary_banner}`, expected `{expected}`"
         ));
     }
     Ok(())
@@ -1618,6 +1734,19 @@ mod tests {
     fn lifecycle_requires_open_initial_state() {
         lifecycle_is_open(r#"{"kind":"decision-blocker","initial":"open"}"#).unwrap();
         assert!(lifecycle_is_open(r#"{"kind":"decision-blocker","initial":"draft"}"#).is_err());
+    }
+
+    #[test]
+    fn native_binary_provenance_is_exact_and_not_a_timestamp() {
+        validate_native_pin(
+            metaharness_b10x::HARNESS_REVISION,
+            &format!("b10x-harness {}", metaharness_b10x::PINNED_VERSIONS[0]),
+        )
+        .unwrap();
+        assert!(validate_native_pin("newer-but-different", "b10x-harness 0.8.0").is_err());
+        assert!(
+            validate_native_pin(metaharness_b10x::HARNESS_REVISION, "b10x-harness 0.7.1").is_err()
+        );
     }
 
     #[test]

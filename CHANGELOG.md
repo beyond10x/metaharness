@@ -5,6 +5,32 @@ was amended and the amendment is named here.
 
 ## [Unreleased]
 
+## [0.2.1] — 2026-08-31
+
+### Changed
+
+- **The b10x adapter and owned tool surface are pinned to harness 0.8.0 at released commit
+  `45fdccb`.** The adapter's version claim moves with the git dependencies. The
+  engineering-protocols eval now requires both that exact checkout revision and the installed
+  `b10x-harness 0.8.0` banner; it no longer treats filesystem modification time as binary
+  provenance.
+
+- **The Claude golden event preserves the captured per-model cost's exact decimal spelling.**
+  Harness 0.8.0's wire dependency enables `serde_json` arbitrary-precision numbers in the unified
+  binary, so the flattened event retains `0.0010919999999999999` instead of shortening the same
+  `f64` to `0.001092`. The repository-owned golden generator re-pinned that one wire-visible
+  number; no vendor record was recaptured and its numeric value is unchanged.
+
+### Fixed
+
+- **The native eval stops where its map says a person takes over.** Walk 11's apparent
+  budget/turn stop was downstream damage: the old harness treated `decompose`'s `operator` step
+  as another model session, ran past the intended terminus and spent in `establish_verifiers`.
+  Harness 0.8.0 makes the operator handoff an exit-0 `flow-paused` boundary. The eval's free
+  confined preflight now repeats that proof against a closed endpoint and requires exactly one
+  terminal pause with no tool, approval, hook or completion event, so the closure needs no paid
+  rerun.
+
 ## [0.2.0] — 2026-08-31
 
 ### Added
