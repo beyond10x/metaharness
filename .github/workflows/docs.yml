@@ -1,8 +1,6 @@
-# The public documentation site: build on every PR, publish from main.
-#
-# Publishing uses the GitHub Pages deployment API rather than a gh-pages branch push, so the
-# built site is never a commit in this repository's history.
-name: docs
+# Atlas-classified former Pages workflow: repository-owned validation only; deployment authority is forbidden.
+# Builds the public Docusaurus source on every pull request; Website owns public delivery.
+name: Documentation validation
 
 on:
   push:
@@ -11,9 +9,6 @@ on:
       - 'website/**'
       - '.github/workflows/docs.yml'
   pull_request:
-    paths:
-      - 'website/**'
-      - '.github/workflows/docs.yml'
   workflow_dispatch:
 
 permissions:
@@ -25,13 +20,16 @@ concurrency:
 
 jobs:
   build:
+    name: Build Docusaurus
     runs-on: ubuntu-latest
     defaults:
       run:
         working-directory: website
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-node@v4
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@249970729cb0ef3589644e2896645e5dc5ba9c38 # v6
         with:
           node-version: 22
           cache: npm
@@ -39,21 +37,3 @@ jobs:
       - run: npm ci
       # A broken link is a build failure, not a warning: onBrokenLinks is `throw`.
       - run: npm run build
-      - uses: actions/upload-pages-artifact@v3
-        if: github.ref == 'refs/heads/main' && github.event_name != 'pull_request'
-        with:
-          path: website/build
-
-  deploy:
-    needs: build
-    if: github.ref == 'refs/heads/main' && github.event_name != 'pull_request'
-    runs-on: ubuntu-latest
-    permissions:
-      pages: write
-      id-token: write
-    environment:
-      name: github-pages
-      url: ${{ steps.deployment.outputs.page_url }}
-    steps:
-      - id: deployment
-        uses: actions/deploy-pages@v4

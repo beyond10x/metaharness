@@ -111,3 +111,9 @@ cargo run -p metaharness-cli -- doctor claude
 - [`evals/README.md`](evals/README.md) — what the evals cover and what they cost.
 - [`AGENTS.md`](AGENTS.md) — working agreements for anyone, human or agent, changing this repo.
 - Published docs: <https://beyond10x.github.io/metaharness/>
+
+<!-- b10x-docs:start -->
+## Documentation
+
+[Metaharness documentation](https://beyond10x.github.io/docs/metaharness/) · [Start](https://beyond10x.github.io/) · [Ecosystem](https://beyond10x.github.io/ecosystem/) · [Impact](https://beyond10x.github.io/changes/) · [Releases](https://beyond10x.github.io/releases/)
+<!-- b10x-docs:end -->
