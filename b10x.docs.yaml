@@ -1,4 +1,4 @@
-schema: b10x-docs/v1
+schema: b10x-docs/v2
 repository:
   id: metaharness
   url: https://github.com/beyond10x/metaharness
@@ -21,6 +21,13 @@ surfaces:
       - {label: Source, url: https://github.com/beyond10x/metaharness, kind: source}
     relationships:
       - {target: harness/docs, kind: drives}
+    adoption:
+      label: Observe a harness run
+      url: https://beyond10x.github.io/metaharness/docs/quickstart
+      mode: source-build
+      estimatedMinutes: 15
+      prerequisites: [Rust toolchain, A supported harness]
+      outcome: Drive a harness through one interface and inspect its normalized event stream.
     accent: "#4dc4e6"
     mark: website/static/img/logo.svg
-    shell: {integration: docusaurus, revision: 0cbd1f1b6951fec95767332e3a1792f838feb62d}
+    shell: {integration: docusaurus, revision: 73aefe1ca268cc853ed38fb23478454496462a03}
