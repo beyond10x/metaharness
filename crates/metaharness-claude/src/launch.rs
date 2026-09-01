@@ -619,9 +619,10 @@ pub fn plan_launch(spec: &RunSpec, context: &LaunchContext) -> Result<LaunchPlan
     let credential_copies = credential_copies(spec, context, &config_home)?;
     let plugin_installs = plugin_installs(spec, context)?;
     let mcp_config = build_mcp_config(spec, context)?;
+    let prompt = spec.with_agent_execution_context(prompt);
     let args = build_args(
         spec,
-        prompt,
+        &prompt,
         &context.scratch_root.join(SETTINGS_FILE),
         &plugin_installs,
         mcp_config
@@ -1627,7 +1628,16 @@ mod tests {
     fn print_mode_asks_for_stream_json_and_the_verbose_the_vendor_requires() {
         let plan = plan();
         assert_eq!(plan.args[0], "-p");
-        assert_eq!(plan.args[1], "do the thing");
+        assert!(
+            plan.args[1].ends_with("\n\ndo the thing"),
+            "{}",
+            plan.args[1]
+        );
+        assert!(
+            plan.args[1].contains("execution_path=metaharness-driven"),
+            "{}",
+            plan.args[1]
+        );
         assert!(plan.args.contains(&"--output-format".to_string()));
         assert!(plan.args.contains(&"stream-json".to_string()));
         assert!(plan.args.contains(&"--verbose".to_string()));

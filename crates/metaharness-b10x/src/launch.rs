@@ -498,6 +498,8 @@ pub fn argv(launch: &B10xLaunch) -> Vec<String> {
         launch.model.clone(),
         "--workspace".to_owned(),
         launch.workspace.clone(),
+        "--execution-path".to_owned(),
+        "metaharness".to_owned(),
         "--json".to_owned(),
         // **No session file.** The loop's own flag documentation writes this arm's case out: *"for
         // an evaluation arm that must leave nothing on the machine it ran on … an arm whose runs
@@ -660,6 +662,11 @@ mod tests {
     fn a_launch_is_always_observable_because_the_record_is_not_optional() {
         let argv = argv(&launch());
         assert!(argv.contains(&"--json".to_owned()), "{argv:?}");
+        assert_eq!(
+            value_after(&argv, "--execution-path").as_deref(),
+            Some("metaharness"),
+            "the native loop must see that an outer observer launched it: {argv:?}"
+        );
     }
 
     #[test]

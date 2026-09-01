@@ -3,7 +3,33 @@
 What changed. The design document carries *why*; where code and design disagreed, the design
 was amended and the amendment is named here.
 
-## [Unreleased]
+## [0.4.2] — 2026-09-01
+
+### Added
+
+- **Agent-visible execution context.** Claude and Codex tasks state that metaharness drives them,
+  which inner harness runs, whether cwd is scratch or operator-named, hermetic and decision modes,
+  that confinement remains the inner harness's, and that metaharness does not place them inside
+  Substrate. The b10x adapter passes `--execution-path metaharness`, so the native loop emits its
+  own machine-trust context including whichever Substrate boundary Harness actually activates.
+
+### Changed
+
+- The b10x adapter and owned tool surface now pin released harness `0.10.2` at commit
+  `c1493a7`; its additive launch vector includes the execution-path declaration. The retained
+  provider-emulated transcript remains labelled as a `0.9.1` capture and produces the existing
+  named version-pair warning until deliberately recaptured.
+- Compatible dependencies were refreshed, including `sha2 0.11`.
+- The rejected sandbox-inversion rollout is now recorded as such. The released neutral scripted
+  envelope contract remains historical evidence, but Metaharness imports no Substrate crate,
+  owns no independent Substrate pin, and does not route vendor adapters through an outer sandbox.
+
+### Fixed
+
+- The migrated free/native AEP preflight and paid native command now declare only the process-write
+  subtree their confined `aep` invocation needs. Harness's read-only-by-default process policy no
+  longer turns the expected planning-store write into a failed workflow, and no broader workspace
+  write is granted.
 
 ## [0.4.1] — 2026-09-01
 

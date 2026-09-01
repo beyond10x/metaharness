@@ -6,7 +6,7 @@ sidebar_position: 3
 
 # The `b10x` adapter
 
-Pinned to **0.9.1** of `b10x-harness`. Adapter class: `direct_provider` — the loop is this family's
+Pinned to **0.10.2** of `b10x-harness`. Adapter class: `direct_provider` — the loop is this family's
 own, and this adapter **observes it and decides nothing** (invariant 9). A run against another
 `b10x-harness` version is unverified rather than refused.
 
@@ -24,7 +24,9 @@ metaharness doctor b10x           # resolves the binary the way the spawn will, 
    operator profile cannot arrive ambiently. Toolchain and credential variables arrive only when
    declared.
 2. Resolves `b10x-harness` on that `PATH` at plan time, so the launch record names the file that ran.
-3. Spawns `b10x-harness run --json …` with the flags below. Stdout **is** the record.
+3. Spawns `b10x-harness run --execution-path metaharness --json …` with the flags below. The flag
+   gives the inner agent attributable context about the outer observer and grants no authority.
+   Stdout **is** the record.
 4. Reads the loop's events through the seam into `metaharness.event/1`.
 
 What the vendor adapters spend two thousand lines on does not apply here, and not because this
@@ -67,11 +69,12 @@ Rendering: `file.read → file_read`, `file.write → file_write`, `file.edit �
 `dir.list → dir_list`, `search → search`, `shell → run`; `mcp.call`, `skill.load`,
 `subagent.spawn`, `task.todo` and `web.read` render to nothing.
 
-The contract runs three deterministic vectors: a recorded executable/argv/environment launch, a
-byte-exact replay of a real 0.8.0 loop record, and the captured version banner against the pin. The
-record came from harness's loopback-only deterministic endpoint and is `provider_emulated`, never
-`vendor_live`. The fourth checklist row, hook input, is a reasoned N/A: there is no metaharness hook
-and adding one would violate this adapter's observe-only boundary.
+The contract runs seven deterministic vectors: a recorded executable/argv/environment launch, a
+byte-exact replay of the retained 0.9.1 loop record, four enforcement records (unpublished tool,
+approval denial, budget stop and cancellation), and the captured version banner against the pin.
+The records came from harness's loopback-only deterministic endpoint and are `provider_emulated`,
+never `vendor_live`. The fourth checklist row, hook input, is a reasoned N/A: there is no
+metaharness hook and adding one would violate this adapter's observe-only boundary.
 
 ## The four enforcement tiers reach the loop
 

@@ -81,10 +81,13 @@ own flag description says it is placed in the system prompt.
 
 Naming these is the honest alternative to a contract that quietly overstates its reach.
 
-## What the contract does not yet claim
+## What the contract does not claim
 
-Network isolation. The rows above are per-vendor knobs, and messing with each harness's own
-sandboxing is tedious and vendor-specific. The planned alternative is **sandbox inversion** — wrap
-the inner harness in a sandbox metaharness owns and disable the harness's own sandbox inside it —
-which would turn H3, H7, H11 and network isolation into impositions metaharness can actually make.
-It has a roadmap slot, not an implementation.
+Metaharness does not place Claude Code or Codex inside an outer Substrate sandbox. Sandbox
+inversion was rejected for production implementation; the neutral scripted `ProcessEnvelope`
+contract retained from `0.4.0` is evidence vocabulary, not a runtime provider. The vendor's own
+launch remains responsible for its confinement, while Metaharness observes and mediates calls.
+
+The agent-visible execution context says `confinement=inner-harness` and
+`substrate=not-used-by-metaharness` on those paths. Network isolation and outer mount enforcement
+therefore remain unclaimed; absence is `unk`, never a successful confinement result.

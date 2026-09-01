@@ -42,6 +42,15 @@ Each command builds a retained scratch fixture whose copied protocol tree is
 `decision-blocker`. The preflight is green only when that artifact starts at `open`; the permissive
 fallback's `draft` is therefore caught before a model is contacted.
 
+### Free native observation — Harness 0.10.2, 2026-09-01
+
+The protected-store and host lifecycle preflights pass against Harness `0.10.2` at `c1493a7`.
+The confined workflow then stops before any model request because Harness withholds `run`: the
+delegated user cgroup reports no `exec.resource-usage` object when its block-I/O counter is absent.
+That is the expected admission result, not a skipped test and not permission to weaken the
+measurement request. No paid arm was run. The next free comparison needs a delegated cgroup that
+serves CPU, memory, process and block-I/O accounting together.
+
 ### Results — eleven paid native walks, Haiku 4.5 and Opus 5, 2026-08-29/31
 
 Each walk found one thing and cost the next one nothing. Token figures are the loop's own

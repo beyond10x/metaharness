@@ -1,7 +1,7 @@
 {
   "args": [
     "-p",
-    "state the workflow you are in",
+    "<execution-context>\nexecution_path=metaharness-driven\ninner_harness=claude\nworkspace=metaharness-scratch\nhermetic=strict\nconfinement=inner-harness\nsubstrate=not-used-by-metaharness\ndecision_mode=frame\nimplication=metaharness applies the sealed frame before each mediated call\n</execution-context>\n\nstate the workflow you are in",
     "--output-format",
     "stream-json",
     "--verbose",

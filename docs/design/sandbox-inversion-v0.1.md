@@ -1,7 +1,9 @@
 # Sandbox inversion — design v0.1
 
-Status: accepted for staged implementation by the operator on 2026-08-31. This document decides
-the boundary and evidence model; it does not claim the runtime envelope is built.
+Status: rejected for production implementation by the operator on 2026-09-01. The scripted,
+harness-neutral contract released in `0.4.0` remains as historical evidence vocabulary; it does
+not authorize a Substrate adapter, an outer vendor sandbox, or adapter migration. The proposal is
+retained below so the rejected boundary is not rediscovered as unfinished work.
 
 ## 1. Outcome
 
@@ -16,15 +18,14 @@ flag or constructing a mount list is not evidence that the child was confined.
 
 ## 2. Boundary decision
 
-Metaharness owns the envelope policy and its attestation vocabulary. It does not implement Linux
+Metaharness owns the historical envelope attestation vocabulary. It does not implement Linux
 namespaces, Landlock, containers or a filesystem sandbox in this repository: sandboxed execution
-belongs to substrate, and importing substrate would invert the component boundary recorded in
-`AGENTS.md`.
+belongs to Substrate, and Metaharness owns no independent Substrate pin (Atlas ADR 0019).
 
 The mechanism enters through an injected `ProcessEnvelope` port supplied by the embedder. The port
-takes a sealed value and returns a child process plus measured facts. A production integration may
-be backed by substrate; tests use a scripted port. No adapter imports the mechanism and no adapter
-may widen the sealed request.
+takes a sealed value and returns a child process plus measured facts. Tests use a scripted port;
+there is no production provider. No adapter imports the mechanism and no adapter may widen the
+sealed request.
 
 This rejects both tempting shortcuts:
 
@@ -94,13 +95,9 @@ which admitted call the embedder approves.
 
 1. Add the protocol values and a scripted `ProcessEnvelope` port; prove digest, mismatch refusal
    and absence-as-unknown without spawning a process.
-2. Implement one substrate-backed provider outside this repository and drive the negative mount,
-   write and network probes.
-3. Migrate one vendor adapter behind an opt-in flag. Compare its normalized stream and tool
-   decisions with the existing launch; only confinement facts may differ.
-4. Migrate the second vendor and remove the opt-in after both strict audits pass.
+2. ~~Implement a production provider and drive negative mount, write and network probes.~~ Rejected.
+3. ~~Migrate one vendor adapter behind an opt-in flag.~~ Rejected.
+4. ~~Migrate the second vendor and remove the opt-in.~~ Rejected.
 
-The design is not delivered by a successful model answer. Its exit evidence is a free adversarial
-suite showing that an undeclared file, executable and network destination are each unreachable,
-that the declared workspace remains usable, and that the attestation changes to `gap` when any
-measured fact is withheld.
+The released scripted contract continues to prove digest stability, request/result mismatch and
+absence-as-unknown. It makes no claim that a real vendor process was placed inside that envelope.

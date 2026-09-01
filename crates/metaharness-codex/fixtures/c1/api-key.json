@@ -9,7 +9,7 @@
     "--model",
     "a-model",
     "--",
-    "state the workflow you are in"
+    "<execution-context>\nexecution_path=metaharness-driven\ninner_harness=codex\nworkspace=metaharness-scratch\nhermetic=strict\nconfinement=inner-harness\nsubstrate=not-used-by-metaharness\ndecision_mode=frame\nimplication=metaharness applies the sealed frame before each mediated call\n</execution-context>\n\nstate the workflow you are in"
   ],
   "config": "# metaharness scratch CODEX_HOME. Generated per run; edited by nobody.\n\n# The seam is the only thing that may refuse a call. `codex exec` on 0.145.0 has no\n# --ask-for-approval flag, so the posture is a config key or nothing, and the operator's\n# own default is `on-request` — which in a headless run means a call can be turned away\n# by a prompt nobody is there to answer, before the hook ever sees it. `never` makes the\n# hook the one thing that decides, so a denial is attributable to metaharness.\napproval_policy = \"never\"\n\n# The vendor's own floor beneath the seam, and Claude Code has no counterpart for it\n# (design § 7.4, V17). It is **not** a constant: it is what the run's cwd declaration\n# decides, because on this vendor the two are one setting.\n#\n# The cwd is scratch, so the child can write nothing at all: it reads, and the seam\n# decides the rest.\nsandbox_mode = \"read-only\"\n\n# H5: the MCP surface is exactly what this launch gave, which is nothing.\n[mcp_servers]\n\n# The control seam (design § 7.1, call tier). 0.145.0 reads its hooks from this table\n# and not from a hooks.json, which is a plugin manifest's file.\n[[hooks.PreToolUse]]\n\n[[hooks.PreToolUse.hooks]]\ntype = \"command\"\ncommand = \"/scratch/run-1/hooks/pretooluse\"\ntimeout = 60\n",
   "credential_copies": [],

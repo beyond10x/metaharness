@@ -102,7 +102,7 @@ Each is a direction, not a work order. Ordered roughly by how much it de-risks e
 | 1 | **Contract-test every adapter mapping — built.** `conformance <kind> --contract` emits byte-pinned `contract_result` evidence, and every adapter declares obligations through one checked shape. Claude and Codex pin both vendor faces and their version pair. b10x now pins its launch, real loop record, captured version banner and four provider-emulated enforcement outcomes (`checked: 7`); its hook-input row is an explicit N/A because the observe-only adapter has no metaharness hook seam. CT-4 first exposed Codex's absent launch face (`checked: 10 → 17`) and now exposed b10x's ambient-profile and wrong-attestation launch drifts before its contract was accepted. |
 | 2 | **More harnesses: `pi`, `opencode`** — same pattern, research record first, live proof last. Whichever comes first fills the contract checklist before it is believed. |
 | 3 | **metaharness usage ≡ flux usage** — UX parity with `flux run --stream-json`. A `metaharness-flux` adapter is **refused**: nothing flux-related is embedded here. |
-| 4 | **Sandbox inversion** — wrap the inner harness in a sandbox *metaharness* owns and disable the vendor's own inside it. One enforcement surface, vendor-independent, and H3/H7/H11 plus network isolation become impositions metaharness can actually make. |
+| 4 | **Sandbox inversion — rejected.** The `0.4.0` scripted contract remains as historical evidence vocabulary, but no production provider, Substrate dependency, or vendor-adapter migration is planned. |
 
 ### Why contract testing, concretely
 

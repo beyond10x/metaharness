@@ -8,6 +8,8 @@
     "b10x-emulated",
     "--workspace",
     "/scratch/run/work",
+    "--execution-path",
+    "metaharness",
     "--json",
     "--no-session",
     "--approve-up-to",

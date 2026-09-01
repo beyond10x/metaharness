@@ -1040,7 +1040,10 @@ fn the_run_is_launched_with_the_argv_the_adapter_planned() {
         .expect("starts");
     let argv = &log.launched()[0];
     assert_eq!(argv[0], "claude");
-    assert!(argv.contains(&"tidy up".to_string()));
+    assert!(
+        argv.iter().any(|arg| arg.ends_with("\n\ntidy up")),
+        "{argv:?}"
+    );
 }
 
 // ---------------------------------------------------------------- the real adapter seam

@@ -83,8 +83,8 @@ that blocks all egress except the loopback proxy would make "the model API is th
 an attestable row. Needs its own design page; the a6 `--cwd` declaration and the credential
 custody both change shape under it.
 
-**Designed, 2026-08-31.** `docs/design/sandbox-inversion-v0.1.md` chooses an injected, typed
-`ProcessEnvelope` boundary: metaharness owns and seals policy, while a substrate-backed provider
-outside this repository performs confinement and returns measured facts. This repository does not
-grow a substrate dependency or duplicate namespace code in every adapter. The first implementation
-slice is protocol values plus a scripted port; no runtime confinement is claimed yet.
+**Rejected for production implementation, 2026-09-01.** The neutral scripted
+`ProcessEnvelope` contract released in `0.4.0` remains as historical evidence vocabulary and keeps
+its absence-as-unknown and mismatch tests. Metaharness will not add a Substrate dependency, a
+production outer-envelope provider, or vendor-adapter routing through one. Claude and Codex remain
+under their documented inner-harness confinement; b10x confinement remains Harness's boundary.

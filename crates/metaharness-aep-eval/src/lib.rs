@@ -18,6 +18,8 @@ use serde_json::{Value, json};
 const TASK_ID: &str = "EVAL-1";
 const NATIVE_TASK_ID: &str = "NATIVE-1";
 const DRIVER_MOUNTED: &str = "/toolchain/driver/aep";
+const PREFLIGHT_PROCESS_WRITE_SUBTREE: &str = ".engineering/preflight-planning";
+const NATIVE_PROCESS_WRITE_SUBTREE: &str = ".engineering/planning";
 const LIVE_ENV: &str = "METAHARNESS_LIVE";
 const SCOPED_ENV: &str = "METAHARNESS_EVAL_SCOPED";
 
@@ -323,6 +325,8 @@ fn native(args: NativeArgs) -> Result<i32, String> {
         .arg(DRIVER_MOUNTED)
         .arg("--driver")
         .arg(&resolved.protocol)
+        .arg("--process-write-subtree")
+        .arg(NATIVE_PROCESS_WRITE_SUBTREE)
         .arg("--context")
         .arg(&context)
         .arg("--plugin-dir")
@@ -887,7 +891,7 @@ fn preflight_confined(resolved: &Resolved, fixture: &Fixture) -> Result<(), Stri
     fs::write(
         &flow,
         format!(
-            "id: lifecycle-preflight\nroot:\n  id: root\n  nodes:\n    - id: lifecycle\n      run:\n        state: preflight\n        kind: command\n        command: [\"{DRIVER_MOUNTED}\", \"artifact\", \"new\", \"decision-blocker\", \"confined-preflight\", \"--title\", \"Confined lifecycle preflight\", \"--store\", \".engineering/preflight-planning\", \"--format\", \"json\"]\n"
+            "id: lifecycle-preflight\nroot:\n  id: root\n  nodes:\n    - id: lifecycle\n      run:\n        state: preflight\n        kind: command\n        command: [\"{DRIVER_MOUNTED}\", \"artifact\", \"new\", \"decision-blocker\", \"confined-preflight\", \"--title\", \"Confined lifecycle preflight\", \"--store\", \"{PREFLIGHT_PROCESS_WRITE_SUBTREE}\", \"--format\", \"json\"]\n"
         ),
     )
     .map_err(|error| format!("write confined preflight flow: {error}"))?;
@@ -916,6 +920,8 @@ fn preflight_confined(resolved: &Resolved, fixture: &Fixture) -> Result<(), Stri
         .arg(DRIVER_MOUNTED)
         .arg("--driver")
         .arg(&resolved.protocol)
+        .arg("--process-write-subtree")
+        .arg(PREFLIGHT_PROCESS_WRITE_SUBTREE)
         .arg("--approve-up-to")
         .arg("high")
         .arg("--no-session")
@@ -941,7 +947,7 @@ fn preflight_confined(resolved: &Resolved, fixture: &Fixture) -> Result<(), Stri
             .arg("artifact")
             .arg("list")
             .arg("--store")
-            .arg(".engineering/preflight-planning")
+            .arg(PREFLIGHT_PROCESS_WRITE_SUBTREE)
             .arg("--format")
             .arg("json"),
         None,

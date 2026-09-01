@@ -635,7 +635,8 @@ pub fn plan_launch(spec: &RunSpec, context: &LaunchContext) -> Result<LaunchPlan
     let config_home = context.scratch_root.join(CONFIG_HOME);
     let credential_copies = credential_copies(spec, context, &config_home)?;
     let plugin_installs = plugin_installs(spec, context, &config_home)?;
-    let args = build_args(spec, prompt);
+    let prompt = spec.with_agent_execution_context(prompt);
+    let args = build_args(spec, &prompt);
     guard_arguments(&args)?;
     let env = build_env(spec, context, &config_home)?;
     let hook = build_hook(&hook_program_path(&context.scratch_root));
@@ -1661,7 +1662,12 @@ mod tests {
             assert!(plan.args.contains(&flag.to_string()), "{flag}");
         }
         assert_eq!(plan.args[plan.args.len() - 2], "--");
-        assert_eq!(plan.args[plan.args.len() - 1], "do the thing");
+        let prompt = &plan.args[plan.args.len() - 1];
+        assert!(prompt.ends_with("\n\ndo the thing"), "{prompt}");
+        assert!(
+            prompt.contains("execution_path=metaharness-driven"),
+            "{prompt}"
+        );
     }
 
     /// `--ephemeral` would leave the run with no session file, which is the record this adapter

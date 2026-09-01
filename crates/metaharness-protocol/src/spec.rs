@@ -540,4 +540,64 @@ impl RunSpec {
             auditor_args: Vec::new(),
         }
     }
+
+    /// Prefix a task with the execution boundary the agent is actually running under.
+    ///
+    /// This is context, never authority. The adapters still enforce their own launch plans and
+    /// metaharness still owns the decision seam. Stating the split prevents an agent from assuming
+    /// that the vendor's own confinement and metaharness observation are one mechanism. Metaharness
+    /// does not place vendor harnesses inside a Substrate process envelope.
+    #[must_use]
+    pub fn with_agent_execution_context(&self, task: &str) -> String {
+        let hermetic = match self.hermetic {
+            HermeticMode::Off => "off",
+            HermeticMode::On => "on",
+            HermeticMode::Strict => "strict",
+        };
+        let workspace = if self.cwd.is_some() {
+            "operator-named"
+        } else {
+            "metaharness-scratch"
+        };
+        let decisions = match self.decisions {
+            DecisionMode::Ask => "metaharness asks the embedder before each mediated call",
+            DecisionMode::Frame => "metaharness applies the sealed frame before each mediated call",
+            DecisionMode::Observe => "metaharness records calls but does not narrow them",
+        };
+        format!(
+            "<execution-context>\nexecution_path=metaharness-driven\ninner_harness={}\nworkspace={}\nhermetic={}\nconfinement=inner-harness\nsubstrate=not-used-by-metaharness\ndecision_mode={}\nimplication={}\n</execution-context>\n\n{}",
+            self.kind.as_str(),
+            workspace,
+            hermetic,
+            self.decisions.as_str(),
+            decisions,
+            task
+        )
+    }
+}
+
+#[cfg(test)]
+mod execution_context_tests {
+    use super::*;
+
+    #[test]
+    fn a_vendor_agent_sees_who_drives_decides_and_owns_confinement() {
+        let mut spec = RunSpec::new(Kind::Codex);
+        spec.decisions = DecisionMode::Ask;
+        spec.hermetic = HermeticMode::Strict;
+        let prompt = spec.with_agent_execution_context("do the work");
+
+        assert!(
+            prompt.contains("execution_path=metaharness-driven"),
+            "{prompt}"
+        );
+        assert!(prompt.contains("inner_harness=codex"), "{prompt}");
+        assert!(prompt.contains("confinement=inner-harness"), "{prompt}");
+        assert!(
+            prompt.contains("substrate=not-used-by-metaharness"),
+            "{prompt}"
+        );
+        assert!(prompt.contains("decision_mode=ask"), "{prompt}");
+        assert!(prompt.ends_with("do the work"), "{prompt}");
+    }
 }
