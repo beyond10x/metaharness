@@ -161,7 +161,7 @@ row L6 "$R"
 # ---- L7 -----------------------------------------------------------------------------------------
 # The surface constraint, on the working tree. `.engineering/` is carved out and **printed**: it is
 # the driven run's own record — the task document, the specification, the nine tasks, the run
-# directory — and it is written by `protocol drive` rather than by this change. A carve-out that is
+# directory — and it is written by `aep drive` rather than by this change. A carve-out that is
 # not shown is a carve-out that hides the next thing that lands in it.
 R=0
 if ! have git; then

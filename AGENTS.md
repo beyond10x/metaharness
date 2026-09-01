@@ -119,11 +119,11 @@ reports `tail`'s status, not the gate's.
 
 ## Live-evaluating our own harness
 
-`aep-eval driven` drives a real `protocol drive run` through metaharness against
+`aep-eval driven` drives a real `aep drive run` through metaharness against
 a scratch copy of AEP, on either arm, and scores the transcripts. It is how the
 native harness is compared against a vendor one on the same work. The runner is the Rust binary in
 `crates/metaharness-aep-eval`; both arms use its shared fixture and preflight.
-The Claude fixture carries the source-built `protocol` binary under `.engineering/toolchain` and
+The Claude fixture carries the source-built `aep` binary under `.engineering/toolchain` and
 its derived map names that file. Letting Claude resolve an ambient install while b10x receives the
 source-built staged driver compares two protocol versions rather than two harnesses.
 
@@ -133,8 +133,8 @@ cargo run -p metaharness-aep-eval -- driven --arm claude
 ```
 
 `aep-eval native` is the third shape: the same work walked **natively** —
-`b10x-harness workflow run` over the flow `protocol workflow flow` projects from `adp/default/2`
-with the eval's step map, governed at every section boundary by `protocol drive transition`
+`b10x-harness workflow run` over the flow `aep workflow flow` projects from `adp/default/2`
+with the eval's step map, governed at every section boundary by `aep drive transition`
 through the loop's `transition` hook (atlas ADR 0004). Without `--spend` it does everything free —
 assembles the scratch project, proves the subject lifecycle is visible through a command executed
 inside substrate, projects the flow, writes the hooks file, consults the governor by hand at the
@@ -194,7 +194,7 @@ long and the interesting lines are in the middle. Redirect to a file and grep it
 ### Things that were true and cost a paid run each
 
 - **A flag must be forwarded by every link in the chain**, and the chain is
-  `protocol drive` → `metaharness run <arm>` → the harness binary. `--plugin-dir` was wired through
+  `aep drive` → `metaharness run <arm>` → the harness binary. `--plugin-dir` was wired through
   metaharness and the loop and still arrived empty, because AEP'
   `b10x_argv` never emitted it. Reading the code did not show this; a paid run did. When a flag
   does not arrive, check **every** link before suspecting the one you changed.
@@ -207,11 +207,11 @@ long and the interesting lines are in the middle. Redirect to a file and grep it
   `--approve auto` denied every write and `run` on the second paid native walk; the Rust runner
   passes `--approve-up-to high`. The fences are the hooks and the confinement, not the approver.
 - **`--allow-program` admits a name, not bytes.** The sandbox reaches `/usr`, `/bin`, `/lib`,
-  `/lib64` and the workspace; `~/.local/bin/protocol` is not there and every `run` died at exit
+  `/lib64` and the workspace; `~/.local/bin/aep` is not there and every `run` died at exit
   127 on the third paid native walk, which the model read as *the command is wrong*. `--driver`
-  stages the binary at `/toolchain/driver/protocol`, and the prompts have to say that path.
+  stages the binary at `/toolchain/driver/aep`, and the prompts have to say that path.
 - **The `transition` hook fires at group boundaries only.** Until AEP
-  `870894d`, `protocol workflow flow` grouped a multi-step state and a retreat span and nothing
+  `870894d`, `aep workflow flow` grouped a multi-step state and a retreat span and nothing
   else, so a bare-workflow walk was governed at `root` and nowhere else (fifth paid walk). Every
   state is a section since; still, count `hook-ran` at `transition` — the runner's census
   prints them per boundary — before believing a walk was governed at every state.

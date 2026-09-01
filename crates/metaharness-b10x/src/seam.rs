@@ -560,7 +560,7 @@ mod tests {
     #[test]
     fn a_hooks_refusal_is_readable_and_its_permission_is_not_noise() {
         let mut seam = seam();
-        let blocked = r#"{"kind":"hook-ran","point":"before-call","call_id":"toolu_016K","decision":{"kind":"block","reason":"`file_edit` cannot write .engineering/planning/x.md: planning-store files are mutated only through `protocol artifact`."}}"#;
+        let blocked = r#"{"kind":"hook-ran","point":"before-call","call_id":"toolu_016K","decision":{"kind":"block","reason":"`file_edit` cannot write .engineering/planning/x.md: planning-store files are mutated only through `aep artifact`."}}"#;
         match one(seam.as_mut(), blocked) {
             Event::Warning { code, message } => {
                 assert_eq!(code, "hook-refused");

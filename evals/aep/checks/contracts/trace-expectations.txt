@@ -14,18 +14,18 @@
 # the expectation's `expect:` block; `-` where the kind's shape is the whole claim.
 # Every row is `gate`: R12 says "at least these gating expectations", and T2 checks the word.
 
-expectations.decomposer.trace.yaml	never-ran-a-move	tool.absent	Bash	protocol artifact move	gate
-expectations.decomposer.trace.yaml	created-through-the-cli	tool.called	Bash	protocol artifact new	gate
-expectations.decomposer.trace.yaml	validated-its-own-work	tool.called	Bash	protocol artifact validate	gate
+expectations.decomposer.trace.yaml	never-ran-a-move	tool.absent	Bash	aep artifact move	gate
+expectations.decomposer.trace.yaml	created-through-the-cli	tool.called	Bash	aep artifact new	gate
+expectations.decomposer.trace.yaml	validated-its-own-work	tool.called	Bash	aep artifact validate	gate
 expectations.decomposer.trace.yaml	never-hand-wrote-an-artifact	tool.absent	Write	.engineering/planning	gate
 expectations.decomposer.trace.yaml	nothing-was-refused	permission.denied	-	exactly	gate
 expectations.decomposer.trace.yaml	the-decomposer-was-offered	env.agent_available	-	aep-planning:decomposer	gate
 expectations.decomposer.trace.yaml	a-subagent-ran	subagent.spawned	-	at_least	gate
 
-expectations.plan-reviewer.trace.yaml	never-ran-a-move	tool.absent	Bash	protocol artifact move	gate
-expectations.plan-reviewer.trace.yaml	never-created-an-artifact	tool.absent	Bash	protocol artifact new	gate
-expectations.plan-reviewer.trace.yaml	never-related-an-artifact	tool.absent	Bash	protocol artifact relate	gate
-expectations.plan-reviewer.trace.yaml	read-the-store-through-the-cli	tool.called	Bash	protocol artifact	gate
+expectations.plan-reviewer.trace.yaml	never-ran-a-move	tool.absent	Bash	aep artifact move	gate
+expectations.plan-reviewer.trace.yaml	never-created-an-artifact	tool.absent	Bash	aep artifact new	gate
+expectations.plan-reviewer.trace.yaml	never-related-an-artifact	tool.absent	Bash	aep artifact relate	gate
+expectations.plan-reviewer.trace.yaml	read-the-store-through-the-cli	tool.called	Bash	aep artifact	gate
 expectations.plan-reviewer.trace.yaml	nothing-was-refused	permission.denied	-	exactly	gate
 expectations.plan-reviewer.trace.yaml	the-reviewer-was-offered	env.agent_available	-	aep-planning:plan-reviewer	gate
 expectations.plan-reviewer.trace.yaml	a-subagent-ran	subagent.spawned	-	at_least	gate

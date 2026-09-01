@@ -17,7 +17,7 @@ use serde_json::{Value, json};
 
 const TASK_ID: &str = "EVAL-1";
 const NATIVE_TASK_ID: &str = "NATIVE-1";
-const DRIVER_MOUNTED: &str = "/toolchain/driver/protocol";
+const DRIVER_MOUNTED: &str = "/toolchain/driver/aep";
 const LIVE_ENV: &str = "METAHARNESS_LIVE";
 const SCOPED_ENV: &str = "METAHARNESS_EVAL_SCOPED";
 
@@ -37,7 +37,7 @@ pub enum EvalCommand {
     Preflight(CommonArgs),
     /// Let b10x-harness walk the projected workflow itself.
     Native(NativeArgs),
-    /// Let protocol drive the workflow through either harness arm.
+    /// Let AEP drive the workflow through either harness arm.
     Driven(DrivenArgs),
 }
 
@@ -117,7 +117,7 @@ pub struct NativeArgs {
     pub flow_map: Option<PathBuf>,
 }
 
-/// Which harness answers protocol drive's model steps.
+/// Which harness answers AEP drive's model steps.
 #[derive(Clone, Copy, Debug, Eq, PartialEq, ValueEnum)]
 pub enum DrivenArm {
     /// The native b10x loop observed by metaharness.
@@ -555,7 +555,7 @@ fn resolve(args: &CommonArgs) -> Result<Resolved, String> {
             "/sys/fs/cgroup/user.slice/user-{uid}.slice/user@{uid}.service"
         ))
     });
-    let protocol = aep_repo.join("target/debug/protocol");
+    let protocol = aep_repo.join("target/debug/aep");
     Ok(Resolved {
         repo,
         aep_repo,
@@ -599,7 +599,10 @@ fn current_uid() -> Result<u32, String> {
 
 fn build_protocol(resolved: &Resolved) -> Result<(), String> {
     require_dir(&resolved.aep_repo.join("workflows"), "AEP checkout")?;
-    println!("building protocol-cli from {}", resolved.aep_repo.display());
+    println!(
+        "building the aep command from {}",
+        resolved.aep_repo.display()
+    );
     checked(
         Command::new("cargo")
             .current_dir(&resolved.aep_repo)
@@ -609,7 +612,7 @@ fn build_protocol(resolved: &Resolved) -> Result<(), String> {
             .arg("--quiet"),
         None,
     )?;
-    require_file(&resolved.protocol, "protocol binary")
+    require_file(&resolved.protocol, "aep binary")
 }
 
 fn build_metaharness(resolved: &Resolved) -> Result<(), String> {
@@ -659,7 +662,7 @@ fn prepare(resolved: &Resolved, prefix: &str, task_id: &str) -> Result<Fixture, 
     }
     fs::create_dir_all(project.join(".engineering/planning"))
         .map_err(|error| format!("create planning store: {error}"))?;
-    let claude_protocol = project.join(".engineering/toolchain/protocol");
+    let claude_protocol = project.join(".engineering/toolchain/aep");
     fs::create_dir_all(
         claude_protocol
             .parent()
@@ -668,7 +671,7 @@ fn prepare(resolved: &Resolved, prefix: &str, task_id: &str) -> Result<Fixture, 
     .map_err(|error| format!("create fixture toolchain: {error}"))?;
     fs::copy(&resolved.protocol, &claude_protocol).map_err(|error| {
         format!(
-            "copy source-built protocol to {}: {error}",
+            "copy source-built aep to {}: {error}",
             claude_protocol.display()
         )
     })?;
@@ -1188,8 +1191,8 @@ fn rewrite_driver_paths(flow: &Path) -> Result<(), String> {
     let document = fs::read_to_string(flow)
         .map_err(|error| format!("read projected flow {}: {error}", flow.display()))?;
     let document = document
-        .replace("`protocol ", &format!("`{DRIVER_MOUNTED} "))
-        .replace("[\"protocol\", ", &format!("[\"{DRIVER_MOUNTED}\", "));
+        .replace("`aep ", &format!("`{DRIVER_MOUNTED} "))
+        .replace("[\"aep\", ", &format!("[\"{DRIVER_MOUNTED}\", "));
     fs::write(flow, document)
         .map_err(|error| format!("rewrite projected flow {}: {error}", flow.display()))
 }
@@ -1199,7 +1202,7 @@ fn write_context(work: &Path) -> Result<PathBuf, String> {
     fs::write(
         &path,
         format!(
-            "The `protocol` command-line tool is mounted read-only at `{DRIVER_MOUNTED}`. Run it as `{DRIVER_MOUNTED} artifact …`; the bare name does not resolve here. The planning store is `.engineering/planning`.\n"
+            "The `aep` command-line tool is mounted read-only at `{DRIVER_MOUNTED}`. Run it as `{DRIVER_MOUNTED} artifact …`; the bare name does not resolve here. The planning store is `.engineering/planning`.\n"
         ),
     )
     .map_err(|error| format!("write context: {error}"))?;
@@ -1302,18 +1305,18 @@ fn derive_b10x_map(source: &Path, target: &Path) -> Result<(), String> {
 }
 
 fn derive_claude_map(source: &Path, target: &Path) -> Result<(), String> {
-    const LOCAL_DRIVER: &str = "./.engineering/toolchain/protocol";
+    const LOCAL_DRIVER: &str = "./.engineering/toolchain/aep";
     let document = fs::read_to_string(source)
         .map_err(|error| format!("read step map {}: {error}", source.display()))?;
-    let needles = document.matches("`protocol ").count();
+    let needles = document.matches("`aep ").count();
     if needles == 0 {
-        return Err("step map carries no model-facing `protocol` invocation".to_owned());
+        return Err("step map carries no model-facing `aep` invocation".to_owned());
     }
-    let derived = document.replace("`protocol ", &format!("`{LOCAL_DRIVER} "));
+    let derived = document.replace("`aep ", &format!("`{LOCAL_DRIVER} "));
     fs::write(target, derived)
         .map_err(|error| format!("write derived map {}: {error}", target.display()))?;
     println!(
-        "derived Claude map: {needles} protocol reference(s) use the source-built workspace driver"
+        "derived Claude map: {needles} aep reference(s) use the source-built workspace driver"
     );
     Ok(())
 }
@@ -1331,11 +1334,7 @@ fn inspect_driven(
         .join(format!(".engineering/runs/{TASK_ID}/1"));
     let transcripts = run_dir.join("transcripts");
     let mut rows = Vec::new();
-    row(
-        &mut rows,
-        "protocol drive run exits 0",
-        drive_status.success(),
-    );
+    row(&mut rows, "aep drive run exits 0", drive_status.success());
     let cursor = read_json(&run_dir.join("cursor.json")).unwrap_or(Value::Null);
     let status = cursor.get("status").and_then(Value::as_str).unwrap_or("?");
     row(
@@ -1883,13 +1882,13 @@ mod tests {
         let target = directory.path().join("derived.yaml");
         fs::write(
             &source,
-            "prompt: run `protocol artifact kinds`\nrun: [protocol, artifact, validate]\n",
+            "prompt: run `aep artifact kinds`\nrun: [aep, artifact, validate]\n",
         )
         .unwrap();
         derive_claude_map(&source, &target).unwrap();
         assert_eq!(
             fs::read_to_string(target).unwrap(),
-            "prompt: run `./.engineering/toolchain/protocol artifact kinds`\nrun: [protocol, artifact, validate]\n"
+            "prompt: run `./.engineering/toolchain/aep artifact kinds`\nrun: [aep, artifact, validate]\n"
         );
     }
 }

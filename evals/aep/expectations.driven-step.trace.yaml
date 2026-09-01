@@ -141,7 +141,7 @@ expectations:
   # --- what the model did with it -----------------------------------------------------------
 
   - id: created-through-the-cli
-    statement: a `protocol artifact new` call was made
+    statement: a `aep artifact new` call was made
     expect:
       # `tools` and `operations` union, as on every call selector: the vendor arm reaches the CLI
       # through `Bash`, a native arm through the catalogue's `run` entry, and the claim — *the
@@ -149,7 +149,7 @@ expectations:
       # argv whichever verb carried it: `ToolCall::argument` falls back to the joined argv for that
       # one field name (subject `crates/trace-domain/src/ir.rs:403-405`, joining `input.argv` or
       # `input.arguments.argv`, `ir.rs:360-370`). Verified against the recorded native run: the row
-      # cites *`Bash|run(command ~ "protocol artifact new")` called 1 time(s)* over an `argv`.
+      # cites *`Bash|run(command ~ "aep artifact new")` called 1 time(s)* over an `argv`.
       #
       # **`shell` beside `command.execute`, because that is the operation the arm publishes.** The
       # b10x run of 2026-08-29 emitted `"operations":["shell"]` on every `run` call and listed
@@ -160,14 +160,14 @@ expectations:
       tool.called:
         tools: [Bash, run]
         operations: [command.execute, shell]
-        args: {command: {contains: "protocol artifact new"}}
+        args: {command: {contains: "aep artifact new"}}
         count: {at_least: 1}
 
   - id: the-creating-call-succeeded
-    statement: at least one of those `protocol artifact new` calls came back without an error
+    statement: at least one of those `aep artifact new` calls came back without an error
     # **The row above counts the call and says nothing about its outcome**, and on 2026-08-29 that
     # is how it went green over a run that created nothing: the native arm's only
-    # `protocol artifact new` (`receive-0-1.jsonl` seq 66) came back `is_error: true` at seq 67, and
+    # `aep artifact new` (`receive-0-1.jsonl` seq 66) came back `is_error: true` at seq 67, and
     # `protocol trace check` reported `ok  created-through-the-cli … called 1 time(s)`. The store
     # was empty. *Called* and *worked* are two claims and need two rows.
     #
@@ -181,7 +181,7 @@ expectations:
     # **Why not `tool.failed: {count: {at_most: 0}}`.** It reads the flag correctly, and it is the
     # wrong claim: it forbids *any* failed call, and one failed call here is documented, observed
     # behaviour — the surface refuses a chained command line, so
-    # `protocol artifact kinds && … && protocol artifact new …` errors once and the model then runs
+    # `aep artifact kinds && … && aep artifact new …` errors once and the model then runs
     # the commands singly (see `nothing-was-badly-refused-here` below, which bounds that at 2). On a
     # hand-built record carrying exactly that sequence — one refused chain, one clean create —
     # `at_most: 0` reported a gap on both wires. A guard teaching the model is not a run that
@@ -197,7 +197,7 @@ expectations:
       tool.error_rate:
         tools: [Bash, run]
         operations: [command.execute, shell]
-        args: {command: {contains: "protocol artifact new"}}
+        args: {command: {contains: "aep artifact new"}}
         rate: {at_most: 0.99}
 
   - id: validated-its-own-work
@@ -211,7 +211,7 @@ expectations:
       tool.called:
         tools: [Bash, run]
         operations: [command.execute, shell]
-        args: {command: {contains: "protocol artifact validate"}}
+        args: {command: {contains: "aep artifact validate"}}
         count: {at_least: 1}
 
   - id: no-subagents
@@ -230,7 +230,7 @@ expectations:
   - id: nothing-was-badly-refused-here
     statement: the honest step was not fighting the guardrails
     # A bound and not `exactly: 0`, and the reason is an observation rather than a hedge. The surface
-    # hook refuses a **chained** command line — `protocol artifact kinds && echo --- && protocol …`
+    # hook refuses a **chained** command line — `aep artifact kinds && echo --- && protocol …`
     # is two commands wearing one name — and a model habitually batches shell calls that way. The
     # first real run was refused once for exactly that and then ran the commands singly, which is a
     # guard teaching rather than a guard failing. Observed 1; the bound is 2.

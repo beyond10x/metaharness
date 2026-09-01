@@ -8,7 +8,7 @@ source "$(dirname "${BASH_SOURCE[0]}")/lib.sh"
 
 declare_row F1 "two builds produce two directories, both outside /tmp, each path printed"
 declare_row F2 "the fixture's store lists 7 artifacts, each at its committed source status"
-declare_row F3 "protocol artifact validate exits 0 inside the fixture"
+declare_row F3 "aep artifact validate exits 0 inside the fixture"
 declare_row F4 "git status --porcelain is empty, and the build fails loudly when it is not"
 declare_row F5 "git log --oneline shows exactly one commit"
 declare_row F6 "the baseline has one row per artifact, and one mutated file changes exactly one row"
@@ -51,7 +51,7 @@ row F1 "$R"
 # Field by field, not counted: seven files at seven statuses is the fixture's whole point, and a
 # count is green against seven artifacts that all moved.
 STORE="$S1_FIXTURE/.engineering/planning"
-LISTED="$(cd "$S1_FIXTURE" && protocol artifact list --store "$STORE" --format json 2>/dev/null)"
+LISTED="$(cd "$S1_FIXTURE" && aep artifact list --store "$STORE" --format json 2>/dev/null)"
 R=0
 if ! have jq; then
   R=1; why "jq is not on PATH — F2 compares statuses field by field and will not guess"
@@ -70,7 +70,7 @@ fi
 row F2 "$R"
 
 # ---- F3 -----------------------------------------------------------------------------------------
-VALIDATE_OUT="$(cd "$S1_FIXTURE" && protocol artifact validate --store "$STORE" 2>&1)" && R=0 || R=$?
+VALIDATE_OUT="$(cd "$S1_FIXTURE" && aep artifact validate --store "$STORE" 2>&1)" && R=0 || R=$?
 [ "$R" -eq 0 ] || why "$VALIDATE_OUT"
 row F3 "$R"
 
@@ -124,12 +124,12 @@ row F6 "$R"
 # The specification's invariant, asserted rather than assumed. Both halves again: the fixture is
 # clean of the initial status *and* the build refuses one that is not.
 R=0
-# `protocol artifact lifecycle story` opens with `story starts at draft`. Read, never assumed —
+# `aep artifact lifecycle story` opens with `story starts at draft`. Read, never assumed —
 # which is the same discipline D3 is held to by S6.
-INITIAL="$(cd "$S1_FIXTURE" && protocol artifact lifecycle story 2>/dev/null \
+INITIAL="$(cd "$S1_FIXTURE" && aep artifact lifecycle story 2>/dev/null \
   | sed -n 's/^story starts at //p' | head -1)"
 if [ -z "$INITIAL" ]; then
-  R=1; why "could not read the story lifecycle's initial status from \`protocol artifact lifecycle story\`"
+  R=1; why "could not read the story lifecycle's initial status from \`aep artifact lifecycle story\`"
 else
   OFFENDERS="$(grep -l "^status: $INITIAL\$" "$STORE"/*/*.md 2>/dev/null)"
   [ -z "$OFFENDERS" ] || { R=1; why "the fixture already holds '$INITIAL': $OFFENDERS"; }

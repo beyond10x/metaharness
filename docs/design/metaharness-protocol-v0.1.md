@@ -251,7 +251,7 @@ and all four are load-bearing here:
    sessions of a governed run. The row is nonetheless kept **advisory** in the specification,
    because it asserts a model behaviour (that something forbidden was attempted at all) on top of
    an undocumented harness detail; the gating evidence stays in the hook-decision log and in
-   `protocol artifact validate`.
+   `aep artifact validate`.
 
 And two limits, stated by the same code:
 
@@ -265,7 +265,7 @@ And two limits, stated by the same code:
   `permission.denied` is a whole-run count and *"`0` cannot distinguish enforcement holding from
   nothing being attempted, so a run in which nothing forbidden was tried audits nothing."* Getting
   the deliberate-denial case right took two attempts: the first asked for a hand-edited `status:`
-  and the model legally used `protocol artifact move` instead, so the guard was never exercised.
+  and the model legally used `aep artifact move` instead, so the guard was never exercised.
 
 ### 2.3 The embedder metaharness must serve
 
@@ -1558,7 +1558,7 @@ that gets both ignored. The attribution rule is the one the sources already use:
 
 A sixth, which is a **finding rather than a requirement**: `drivers/development/default.yaml` states
 that no development profile grants `command.execute`, so a driven `llm` step holds no shell — and
-the planning skill's entire surface is `protocol artifact …`, every verb of which is a shell
+the planning skill's entire surface is `aep artifact …`, every verb of which is a shell
 command. `AEP` resolved that with a capability grant plus a hook constraint. Under
 metaharness the same resolution is expressible without a second mechanism: the frame admits `shell`
 and the embedder's `ask` policy holds it to one program and two verbs, in Rust, with the reason fed
@@ -1572,7 +1572,7 @@ list of available entities*; the run then does the one thing that entity admits.
 which workflow governs this task, which artifact kind this request becomes, which runbook this alert
 matches, which handler this intent routes to — and `AEP` already contains an
 instance of it: the planning skill's *"Discover, do not memorise"* rule, where the entity list comes
-from `protocol artifact kinds` and `protocol artifact lifecycle <kind>` **at use time**, because
+from `aep artifact kinds` and `aep artifact lifecycle <kind>` **at use time**, because
 *"a prose copy of a validated document is a copy that goes stale."*
 
 Three steps, three frames.

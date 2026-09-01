@@ -5,8 +5,12 @@ was amended and the amendment is named here.
 
 ## [Unreleased]
 
+## [0.4.1] — 2026-09-01
+
 - Renamed the repository-owned evaluator to `metaharness-aep-eval`, moved its fixtures to
   `evals/aep`, and sourced the `aep-planning` plugin from the standalone Agent Plugins repository.
+- Drive the evaluation through AEP's canonical `aep` executable and workspace-local toolchain
+  path; `protocol` remains an AEP compatibility concern rather than the authored evaluation path.
 
 ## [0.4.0] — 2026-08-31
 

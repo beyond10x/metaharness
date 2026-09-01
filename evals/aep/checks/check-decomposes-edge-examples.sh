@@ -8,7 +8,7 @@ source "$(dirname "${BASH_SOURCE[0]}")/lib.sh"
 DECOMPOSER="$PLUGIN_DIR/agents/decomposer.md"
 SKILL="$PLUGIN_DIR/skills/planning/SKILL.md"
 
-declare_row E1 "neither file contains derived_from:epic: in a protocol artifact new example"
+declare_row E1 "neither file contains derived_from:epic: in a aep artifact new example"
 declare_row E2 "both files contain decomposes:epic: in the example that previously read derived_from"
 declare_row E3 "the diff against the pre-task revision is the relation token and nothing else"
 declare_row E4 "the corrected command creates a story carrying decomposes: epic:…, and validate exits 0"
@@ -19,7 +19,7 @@ for f in "$DECOMPOSER" "$SKILL"; do
 done
 
 # ---- E1 -----------------------------------------------------------------------------------------
-# Scoped to a `protocol artifact new` example, not to the whole file: `derived_from` is a legitimate
+# Scoped to a `aep artifact new` example, not to the whole file: `derived_from` is a legitimate
 # relation, and a rule that forbade the word would forbid the vocabulary.
 R=0
 for f in "$DECOMPOSER" "$SKILL"; do
@@ -80,7 +80,7 @@ else
     R=1; why "the two files teach more than one epic edge: $(tr '\n' ' ' <<< "$TOKEN")"
   else
     REL="${TOKEN#--relate }"; REL="${REL%:epic:}"
-    OUT="$(cd "$WORK" && protocol artifact new story e4-probe --store "$STORE" \
+    OUT="$(cd "$WORK" && aep artifact new story e4-probe --store "$STORE" \
       --title "E4 probe" --relate "$REL:epic:passkey-sign-in" 2>&1)" || {
       R=1; why "the taught command was refused: $OUT"
     }
@@ -91,7 +91,7 @@ else
     else
       R=1; why "no story was created at $FILE"
     fi
-    VOUT="$(cd "$WORK" && protocol artifact validate --store "$STORE" 2>&1)" \
+    VOUT="$(cd "$WORK" && aep artifact validate --store "$STORE" 2>&1)" \
       || { R=1; why "validate exited non-zero after the taught command: $VOUT"; }
   fi
 fi

@@ -57,7 +57,7 @@ POST1="$WORK/post-stage-1"
 cp -R "$FIXTURE" "$POST1"
 STORE="$POST1/.engineering/planning"
 for slug in device-binding cross-device-sign-in; do
-  (cd "$POST1" && protocol artifact new story "$slug" --store "$STORE" \
+  (cd "$POST1" && aep artifact new story "$slug" --store "$STORE" \
     --title "Replay story $slug" --relate decomposes:epic:passkey-sign-in) >/dev/null 2>&1
 done
 
@@ -117,7 +117,7 @@ only_these_moved "$BASE_TABLE" "$WORK/v4.txt" P1; row V4 $?
 # P3's reference is the **post-stage-1** status set, not the fixture baseline — so the status this
 # moves is one of the two stories stage 1 created.
 V5_STORE="$WORK/v5"; cp -R "$POST1" "$V5_STORE"
-(cd "$V5_STORE" && protocol artifact move story:device-binding \
+(cd "$V5_STORE" && aep artifact move story:device-binding \
   --store "$V5_STORE/.engineering/planning" --to proposed) >/dev/null 2>&1
 git -C "$V5_STORE" add -A >/dev/null 2>&1
 git -C "$V5_STORE" -c user.email=check@localhost -c user.name=check commit -q -m "v5 probe" >/dev/null 2>&1

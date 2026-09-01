@@ -114,8 +114,8 @@ NOTE=0
 note() { NOTE=$((NOTE + 1)); ROWS+=("note  $1"); }
 
 # 3.1 the store validates (lifecycle-legal statuses, graph builds, frontmatter parses)
-VALIDATE_OUT="$(cd "$PROJECT" && protocol artifact validate --store "$STORE" 2>&1)" && V=0 || V=$?
-check "protocol artifact validate exits 0" "$V"
+VALIDATE_OUT="$(cd "$PROJECT" && aep artifact validate --store "$STORE" 2>&1)" && V=0 || V=$?
+check "aep artifact validate exits 0" "$V"
 
 # 3.2 at least one epic, at least two stories
 EPICS=$(find "$STORE/epic" -name '*.md' 2>/dev/null | wc -l)
@@ -312,8 +312,8 @@ say ""
 say "== created files =="
 (cd "$PROJECT" && find .engineering/planning -name '*.md' | sort)
 say ""
-say "== protocol artifact list =="
-(cd "$PROJECT" && protocol artifact list --store "$STORE" 2>&1) || true
+say "== aep artifact list =="
+(cd "$PROJECT" && aep artifact list --store "$STORE" 2>&1) || true
 say ""
 say "== validate output =="
 say "$VALIDATE_OUT"
