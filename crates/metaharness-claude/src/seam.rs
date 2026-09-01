@@ -41,7 +41,7 @@ use crate::{ADAPTER_ID, PINNED_VERSIONS};
 /// Three tiers are delivered and one is not:
 ///
 /// * **registration** — `--allowedTools` / `--tools` at launch decide the offered set, and
-///   `--tools ""` disables the whole built-in set (V11). In daily use in `engineering-protocols`.
+///   `--tools ""` disables the whole built-in set (V11). In daily use in `AEP`.
 /// * **call** — the `PreToolUse` command hook, blocking, matcher `""`.
 /// * **turn** — [`TierStatus::Unverified`]. The flags exist; the composition that would carry a
 ///   frame into a running session between turns has not been driven here, so `frame.set` and
@@ -198,7 +198,7 @@ pub fn render_hook_response(decision: &Decision) -> Value {
 
 /// What the vendor hands the `PreToolUse` hook on stdin.
 ///
-/// The field set is the one the working hooks in `engineering-protocols` read
+/// The field set is the one the working hooks in `AEP` read
 /// (`hooks/lib.sh`, `hooks/store-integrity.sh`): `tool_name`, `tool_input`, `session_id` — plus
 /// [`HookInput::tool_use_id`], which those hooks never needed and this seam cannot work without.
 #[derive(Debug, Clone, PartialEq)]

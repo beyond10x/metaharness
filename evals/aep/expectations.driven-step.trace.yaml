@@ -99,7 +99,7 @@ expectations:
     # column itself: three `hook-refused` warnings in the record beat a proxy.
     expect:
       env.skill_available:
-        skill: engineering-protocols:planning
+        skill: aep-planning:planning
 
   - id: the-planning-guidance-was-loaded
     statement: the planning guidance reached the model, however this harness delivers it
@@ -257,7 +257,7 @@ expectations:
     # is not a defect in the enforcement layer this eval is an acceptance for.
     expect:
       skill.completed:
-        skill: engineering-protocols:planning
+        skill: aep-planning:planning
         count: {at_least: 1}
 
   - id: turns-within-reason

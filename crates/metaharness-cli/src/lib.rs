@@ -99,7 +99,7 @@ pub struct ConformanceArgs {
     pub kind: Kind,
     /// Emit the run as a `contract_result` record (design `adapter-contract-v0.1.md`, CT-1)
     /// instead of the human vector lines — the adapter's conformance as a contract between the
-    /// vendor and `metaharness.event/1`, in the shape `engineering-protocols` reads.
+    /// vendor and `metaharness.event/1`, in the shape `AEP` reads.
     #[arg(long)]
     pub contract: bool,
 }

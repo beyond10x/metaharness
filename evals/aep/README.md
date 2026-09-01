@@ -1,7 +1,8 @@
-> **Migrated from `engineering-protocols/integrations/claude-code/eval/`, 2026-08-22, under that
+> **Migrated from `AEP/integrations/claude-code/eval/`, 2026-08-22, under that
 > repository's `epic:metaharness-migration`.** The eval logic, its recorded transcripts, contracts
-> and result tables live here now; the subject stays the engineering-protocols checkout named by
-> `EP_REPO` (default `~/beyond10x/engineering-protocols`). What changed in the move:
+> and result tables live here now; the subject stays the AEP checkout named by
+> `AEP_REPO` (default `~/beyond10x/aep`), while `AGENTPLUGINS_REPO` supplies the focused
+> `aep-planning` plugin. What changed in the move:
 > The repository's Rust eval runner drives the subject's `protocol drive run`, whose every `llm` step now spawns
 > through `metaharness run claude` in ask mode — the scratch config home, credential copy and env
 > hygiene left this eval for metaharness itself, and the denial census reads `tool.decided`
@@ -12,7 +13,7 @@
 
 ## The native walk (2026-08-29)
 
-`engineering-protocols-eval native` walks the same task without `protocol drive`: `b10x-harness workflow run` over the
+`aep-eval native` walks the same task without `protocol drive`: `b10x-harness workflow run` over the
 projected flow, `protocol drive transition` as the governor at each section boundary,
 `protocol drive hook` for store integrity at `before-call`. The free path assembles everything and
 consults the governor once before stopping; on the empty scratch store the engine proceeds on
@@ -30,10 +31,10 @@ the walk cannot begin without an enforceable cost ceiling.
 The shared free preflight is the entry point for all three shapes:
 
 ```console
-cargo run -p metaharness-engineering-protocols-eval -- preflight
-cargo run -p metaharness-engineering-protocols-eval -- native
-cargo run -p metaharness-engineering-protocols-eval -- driven --arm b10x
-cargo run -p metaharness-engineering-protocols-eval -- driven --arm claude
+cargo run -p metaharness-aep-eval -- preflight
+cargo run -p metaharness-aep-eval -- native
+cargo run -p metaharness-aep-eval -- driven --arm b10x
+cargo run -p metaharness-aep-eval -- driven --arm claude
 ```
 
 Each command builds a retained scratch fixture whose copied protocol tree is
@@ -161,7 +162,7 @@ effect did not happen and the store's validator remained green.
 
 ### Scope-compiled comparison rerun — 2026-08-31
 
-After engineering-protocols compiled its step-map `scope:` into the vendor arm's sealed
+After AEP compiled its step-map `scope:` into the vendor arm's sealed
 `Frame.subjects`, all four free paths were repeated and both driven arms were run sequentially
 under the same `$2.50` per-arm reservation ceiling (`$1.25` per model session, `$5.00` aggregate
 maximum). The native shape stopped at its model boundary in the free runner: its declared endpoint
@@ -231,7 +232,7 @@ passed *unconditionally* when it was. The claims it carries include:
   tool call with a name and an argument matcher, not a string found somewhere in the file;
 * the terminal record is clean: `is_error: false`, `terminal_reason: completed`, no API error
   status, zero permission denials;
-* the init event lists exactly one plugin, `engineering-protocols`. The run gets a scratch
+* the init event lists exactly one plugin, `AEP`. The run gets a scratch
   `CLAUDE_CONFIG_DIR` holding only a copy of your login credentials, so your own plugins, skills
   and output style cannot leak in (before this existed, five of them did). **That is isolation,
   not hermeticity, and the difference is a directory boundary**: account-level MCP servers come
@@ -314,13 +315,13 @@ what the reviewer saw) and `timeline.txt`. `EVAL_REVIEW_MODEL` overrides the rev
 
 The second eval, and the one that judges a different thing. The historical plugin eval above
 evaluated **the plugin alone**: one headless agent, one prompt, one store, no workflow.
-`engineering-protocols-eval driven` evaluates **the layer above it** — `protocol drive` holding the workflow, a model session per `llm`
+`aep-eval driven` evaluates **the layer above it** — `protocol drive` holding the workflow, a model session per `llm`
 step, the plugin's hooks as the driver's enforcement arm, and the driver's own verifiers deciding
 afterwards whether enforcement held.
 
 ```console
-cargo run -p metaharness-engineering-protocols-eval -- driven --arm b10x
-cargo run -p metaharness-engineering-protocols-eval -- driven --arm claude
+cargo run -p metaharness-aep-eval -- driven --arm b10x
+cargo run -p metaharness-aep-eval -- driven --arm claude
 ```
 
 Not in `task check`, for the same reason as its neighbour: it calls the API and costs money.

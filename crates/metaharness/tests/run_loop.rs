@@ -1188,7 +1188,7 @@ fn operations_of(surface: ToolSurface, frame: Option<Frame>, line: &str) -> Vec<
 
 /// The blindness, closed. Two harness vocabularies, one answer a consumer selects on.
 ///
-/// The corpus in `engineering-protocols/conformance/eval/` selected on the **vendor's** tool name,
+/// The corpus in `AEP/conformance/eval/` selected on the **vendor's** tool name,
 /// so it was written in Claude Code's and could not see a b10x run at all. Two patches widened its
 /// write-set with `workspace_write` and `workspace_edit`, which put more vendor names into a
 /// document that should hold none. This field is what ends that.

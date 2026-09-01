@@ -36,7 +36,7 @@ title: A driven `llm` step was refused the two things the guardrails forbid
 #
 # **`trace-spec/1` has no per-arm applicability key, and this document does not invent one.** An
 # expectation is `id`, `statement`, `severity`, `on_unknown`, `expect` and nothing else
-# (`engineering-protocols` `crates/trace-domain/src/raw.rs:137-153`, `deny_unknown_fields` at
+# (`AEP` `crates/trace-domain/src/raw.rs:137-153`, `deny_unknown_fields` at
 # `:138`), and `on_unknown` chooses only between `unknown` and `gap` (`:174-184`). No `arms:`,
 # `applies_to:` or `when:` exists, so a row cannot be marked not-applicable here — adding one is a
 # change to the format's own repository, not to this file.

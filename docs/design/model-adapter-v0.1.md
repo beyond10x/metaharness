@@ -2,9 +2,9 @@
 
 Status: **proposed**; **MA-0 is done and the endpoint slice of MA-1 is built** (2026-08-23,
 operator-directed: "how can we configure so metaharness → codex|claude → the gateway").
-MA-V1–V4 all verified — first against a local recording stub, then live against a real
-vLLM-class gateway (`llm.dev.former organization.com`, one model `qwen3.8-27b`, both dialect doors, no
-auth) — and `--model-endpoint <root>` + `--effort <level>` are `RunSpec` options: claude gets
+MA-V1–V4 all verified — first against a local recording stub, then live against a private
+vLLM-class gateway (one model `qwen3.8-27b`, both dialect doors, no auth) — and
+`--model-endpoint <root>` + `--effort <level>` are `RunSpec` options: claude gets
 `ANTHROPIC_BASE_URL` plus a **placeholder** key (never a credential), codex a
 `model_providers.metaharness_endpoint` entry (`{root}/v1`, `wire_api = "responses"`, no
 `env_key`), both **requiring `credentials: none`** and refusing an operator credential by name.

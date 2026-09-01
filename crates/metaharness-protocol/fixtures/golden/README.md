@@ -1,7 +1,7 @@
 # Golden sample — a frame minted by the other side of the seam
 
 `metaharness-frame-canonical.json` is **not synthesised here**. It is the document
-`engineering-protocols` mints and hands this repository across a process boundary as
+`AEP` mints and hands this repository across a process boundary as
 `--frame <file>`, copied in byte for byte. It exists so that the two repositories, which share a
 vocabulary and no code, are compared by something other than good intentions.
 
@@ -17,7 +17,7 @@ continued agreement with `frame.rs` is closed only by the metaharness-side repla
 | fact | value |
 |---|---|
 | recorded | 2026-08-23 |
-| minted by | `engineering-protocols`, `crates/protocol-cli` — its driver's own `frame_document` path, for one deterministic `llm` step. Not typed by hand |
+| minted by | `AEP`, `crates/protocol-cli` — its driver's own `frame_document` path, for one deterministic `llm` step. Not typed by hand |
 | minter's copy | `crates/protocol-cli/fixtures/metaharness-frame-canonical.json` in that repository |
 | file sha256 | `ef897a58a624848aad942d69d2745b431f2eaad5180cd0f5b2e1c8975adcb93b` — verified equal to the minter's copy at the time of the record |
 | sealed digest | `43a6f845a21f3475569323950a9d276bfed3df11979adc3edf18878da6963a12`, stated inside the document and re-derived by `Frame::computed_digest` from its contents |
@@ -40,7 +40,7 @@ Re-sealing the document to make the suite green would delete the only evidence e
 
 ## Re-recording
 
-1. Have `engineering-protocols` re-mint its fixture through `protocol-cli`'s own driver path — never
+1. Have `AEP` re-mint its fixture through `protocol-cli`'s own driver path — never
    by editing the JSON, which would make the file evidence of nothing.
 2. Copy it here byte for byte and check `sha256sum` against that repository's copy.
 3. Update the two hashes in the table above **and** the pinned digest in `tests/frame_golden.rs`,

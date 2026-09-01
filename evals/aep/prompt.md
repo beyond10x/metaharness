@@ -1,4 +1,4 @@
-Use /engineering-protocols:planning for this task.
+Use /aep-planning:planning for this task.
 
 You are planning work for a small reporting service. The operator has already decided the scope —
 do not ask for confirmation, this is a headless run; the decisions below count as moves the

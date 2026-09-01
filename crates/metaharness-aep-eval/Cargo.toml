@@ -1,6 +1,6 @@
 [package]
-name = "metaharness-engineering-protocols-eval"
-description = "The repository-owned engineering-protocols evaluation runner."
+name = "metaharness-aep-eval"
+description = "The repository-owned AEP evaluation runner."
 version.workspace = true
 edition.workspace = true
 license.workspace = true
@@ -8,7 +8,7 @@ repository.workspace = true
 rust-version.workspace = true
 
 [[bin]]
-name = "engineering-protocols-eval"
+name = "aep-eval"
 path = "src/main.rs"
 
 [dependencies]

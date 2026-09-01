@@ -20,7 +20,7 @@
 //!
 //! * **It spawns nothing.** [`plan_launch`] returns the command line, the child environment, the
 //!   settings document, the hook definition and the copy list as *values*, because
-//!   `engineering-protocols` asserts its own argv rather than trusting it *"because every one of
+//!   `AEP` asserts its own argv rather than trusting it *"because every one of
 //!   the failures would be silent"* (design § 8.4 O7). [`hook_program`] is the same rule applied
 //!   to the seam's executable: the program is a value this crate renders and a caller places.
 //! * **It reads no clock.** Every event's timestamp is the one the vendor recorded, passed

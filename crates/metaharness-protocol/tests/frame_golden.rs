@@ -1,6 +1,6 @@
 //! The frame the other side of the seam mints, read by the consumer that would refuse it.
 //!
-//! `engineering-protocols` drives runs through this workspace and hands every `llm` step a sealed
+//! `AEP` drives runs through this workspace and hands every `llm` step a sealed
 //! `metaharness.frame/1` document as a file, because it is public, this repository is not, and no
 //! Cargo dependency may cross between them. The two share a vocabulary and no code — which means
 //! nothing but a committed artifact can tell them apart from two implementations that have quietly

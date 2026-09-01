@@ -2,7 +2,7 @@
 //!
 //! [`plan_launch`] is a pure function. It reads no file, no clock and no environment of its own:
 //! everything it needs arrives in [`LaunchContext`], and everything it decides leaves as a value
-//! on [`LaunchPlan`]. That is design § 8.4 O7, and the reason is the one `engineering-protocols`
+//! on [`LaunchPlan`]. That is design § 8.4 O7, and the reason is the one `AEP`
 //! gives for asserting three properties of its own argv rather than leaving them as notes —
 //! *"because every one of the failures would be silent"*.
 //!

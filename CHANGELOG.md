@@ -3,6 +3,11 @@
 What changed. The design document carries *why*; where code and design disagreed, the design
 was amended and the amendment is named here.
 
+## [Unreleased]
+
+- Renamed the repository-owned evaluator to `metaharness-aep-eval`, moved its fixtures to
+  `evals/aep`, and sourced the `aep-planning` plugin from the standalone Agent Plugins repository.
+
 ## [0.4.0] — 2026-08-31
 
 ### Added
@@ -129,7 +134,7 @@ was amended and the amendment is named here.
 ### Added
 
 - **The engineering-protocols comparison has one Rust runner and a mandatory free preflight.**
-  `engineering-protocols-eval` owns the shared fixture for the native, b10x-driven and
+  `aep-eval` owns the shared fixture for the native, b10x-driven and
   Claude-driven shapes, holds paid runs to one at a time, and crosses the paid boundary only when
   `--spend`, `METAHARNESS_LIVE=1` and exact USD caps agree. The copied protocol tree now lives at
   `ws_project/.engineering/protocols`, inside substrate's mounted workspace. Before any model can

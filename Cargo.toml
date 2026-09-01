@@ -10,7 +10,7 @@ members = [
     "crates/metaharness-opencode",
     "crates/metaharness-tools",
     "crates/metaharness-cli",
-    "crates/metaharness-engineering-protocols-eval",
+    "crates/metaharness-aep-eval",
 ]
 
 [workspace.package]

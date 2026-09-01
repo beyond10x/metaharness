@@ -644,6 +644,18 @@ dependencies = [
 ]
 
 [[package]]
+name = "metaharness-aep-eval"
+version = "0.4.0"
+dependencies = [
+ "clap",
+ "metaharness-b10x",
+ "metaharness-protocol",
+ "rustix",
+ "serde_json",
+ "tempfile",
+]
+
+[[package]]
 name = "metaharness-b10x"
 version = "0.4.0"
 dependencies = [
@@ -681,18 +693,6 @@ version = "0.4.0"
 dependencies = [
  "metaharness-protocol",
  "serde_json",
-]
-
-[[package]]
-name = "metaharness-engineering-protocols-eval"
-version = "0.4.0"
-dependencies = [
- "clap",
- "metaharness-b10x",
- "metaharness-protocol",
- "rustix",
- "serde_json",
- "tempfile",
 ]
 
 [[package]]

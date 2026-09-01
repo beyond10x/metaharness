@@ -40,7 +40,8 @@ Each is a claim that can be checked. Breaking one is a design change, not a refa
 4. **Every adapter claim about a vendor binary is pinned to a version and verified against it, or
    labelled unverified.** A vendor surface nobody has driven is documented as undriven.
 5. **Nothing under `evals/` runs in `task check`.** A paid run is never part of a gate. The subject
-   checkout is `EP_REPO` (default `~/beyond10x/engineering-protocols`).
+   checkout is `AEP_REPO` (default `~/beyond10x/aep`); its focused planning plugin comes from
+   `AGENTPLUGINS_REPO` (default `~/beyond10x/agentplugins`).
 6. **Nothing under `website/` runs in `task check`**, and the built site is never committed —
    publishing goes through the Pages deployment API, so `build/` never enters history. CI builds the
    site on every PR that touches it (`.github/workflows/docs.yml`); a broken link fails that build
@@ -78,7 +79,7 @@ boundary; changing any of it is its own change with its own review.
   embedder, through the protocol — never once at launch. A decision path that answers without
   consulting the embedder is a silent allow.
 - **`metaharness.frame/1` is a cross-repository contract.** The frame is minted by
-  `engineering-protocols`' driver and consumed here: digest-verified on load, and refused **by name**
+  `AEP`' driver and consumed here: digest-verified on load, and refused **by name**
   when unreadable, untagged, misshapen or edited after sealing. Never widen that reader to accept a
   document failing any of the four checks, and never reorder tag → shape → digest. The other side
   pins the same bytes; changing the format is a coordinated migration under the atlas rule, not an
@@ -96,7 +97,7 @@ boundary; changing any of it is its own change with its own review.
 | An agent loop of our own — turn assembly, tool round trips, budgets | `harness` |
 | Sandboxed execution, confinement, the operation ledger | `substrate` |
 | Terminating LLM requests, model routing, backends | `llmgw` |
-| The methodology specification, workflows, evidence semantics | `engineering-protocols` |
+| The methodology specification, workflows, evidence semantics | `AEP` |
 
 metaharness drives a loop; it does not have one. The `metaharness-b10x` adapter *observes* the b10x
 harness and does not implement it.
@@ -118,20 +119,20 @@ reports `tail`'s status, not the gate's.
 
 ## Live-evaluating our own harness
 
-`engineering-protocols-eval driven` drives a real `protocol drive run` through metaharness against
-a scratch copy of engineering-protocols, on either arm, and scores the transcripts. It is how the
+`aep-eval driven` drives a real `protocol drive run` through metaharness against
+a scratch copy of AEP, on either arm, and scores the transcripts. It is how the
 native harness is compared against a vendor one on the same work. The runner is the Rust binary in
-`crates/metaharness-engineering-protocols-eval`; both arms use its shared fixture and preflight.
+`crates/metaharness-aep-eval`; both arms use its shared fixture and preflight.
 The Claude fixture carries the source-built `protocol` binary under `.engineering/toolchain` and
 its derived map names that file. Letting Claude resolve an ambient install while b10x receives the
 source-built staged driver compares two protocol versions rather than two harnesses.
 
 ```console
-cargo run -p metaharness-engineering-protocols-eval -- driven --arm b10x
-cargo run -p metaharness-engineering-protocols-eval -- driven --arm claude
+cargo run -p metaharness-aep-eval -- driven --arm b10x
+cargo run -p metaharness-aep-eval -- driven --arm claude
 ```
 
-`engineering-protocols-eval native` is the third shape: the same work walked **natively** —
+`aep-eval native` is the third shape: the same work walked **natively** —
 `b10x-harness workflow run` over the flow `protocol workflow flow` projects from `adp/default/2`
 with the eval's step map, governed at every section boundary by `protocol drive transition`
 through the loop's `transition` hook (atlas ADR 0004). Without `--spend` it does everything free —
@@ -146,8 +147,8 @@ it produces ships anywhere. A paid run additionally requires `--spend`, `METAHAR
 exact `--budget-usd`, and the checked-in rate card (or an explicit replacement).
 
 ```console
-cargo run -p metaharness-engineering-protocols-eval -- native
-METAHARNESS_LIVE=1 cargo run -p metaharness-engineering-protocols-eval -- \
+cargo run -p metaharness-aep-eval -- native
+METAHARNESS_LIVE=1 cargo run -p metaharness-aep-eval -- \
   native --spend --budget-usd 5.00
 ```
 
@@ -194,7 +195,7 @@ long and the interesting lines are in the middle. Redirect to a file and grep it
 
 - **A flag must be forwarded by every link in the chain**, and the chain is
   `protocol drive` → `metaharness run <arm>` → the harness binary. `--plugin-dir` was wired through
-  metaharness and the loop and still arrived empty, because engineering-protocols'
+  metaharness and the loop and still arrived empty, because AEP'
   `b10x_argv` never emitted it. Reading the code did not show this; a paid run did. When a flag
   does not arrive, check **every** link before suspecting the one you changed.
 - **The b10x adapter writes `content: null` on every `tool.result`.** Any census keyed on
@@ -209,7 +210,7 @@ long and the interesting lines are in the middle. Redirect to a file and grep it
   `/lib64` and the workspace; `~/.local/bin/protocol` is not there and every `run` died at exit
   127 on the third paid native walk, which the model read as *the command is wrong*. `--driver`
   stages the binary at `/toolchain/driver/protocol`, and the prompts have to say that path.
-- **The `transition` hook fires at group boundaries only.** Until engineering-protocols
+- **The `transition` hook fires at group boundaries only.** Until AEP
   `870894d`, `protocol workflow flow` grouped a multi-step state and a retreat span and nothing
   else, so a bare-workflow walk was governed at `root` and nowhere else (fifth paid walk). Every
   state is a section since; still, count `hook-ran` at `transition` — the runner's census

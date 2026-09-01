@@ -370,7 +370,7 @@ fn user(record: &Record, source_line: u64) -> Vec<Event> {
     // The per-tool result record is a sibling of the *record*, not of the block, so it is read
     // here and handed down. Claude Code at 2.1.240 writes one `tool_result` block per user
     // record; where a record carried more, the sibling is carried onto each rather than dropped,
-    // which is what the `stream-json` reader in `engineering-protocols` does with the same bytes.
+    // which is what the `stream-json` reader in `AEP` does with the same bytes.
     // Two readers of one run disagreeing about it would be worse than either answer.
     let tool_use_result = record
         .get("tool_use_result")

@@ -75,6 +75,6 @@ pub const PINNED_VERSIONS: [&str; 1] = ["0.9.1"];
 /// The immutable harness source revision this adapter is built against.
 ///
 /// The version identifies the released CLI; the revision identifies the Rust crates Cargo
-/// resolves. Both are checked by the engineering-protocols eval before it trusts an installed
+/// resolves. Both are checked by the AEP eval before it trusts an installed
 /// binary, so a filesystem timestamp is never mistaken for provenance.
 pub const HARNESS_REVISION: &str = "b62612091374b205245ce9a5c16b27217279a567";

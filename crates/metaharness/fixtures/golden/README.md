@@ -4,7 +4,7 @@ The three `contract-result-<kind>.json` files are **not written by hand**. Each 
 the exact line `metaharness conformance <kind> --contract` printed on stdout, redirected into the
 tree, trailing newline included — the bytes an outside consumer reads as evidence.
 
-They exist because the record's shape crosses a repository boundary. `engineering-protocols` is
+They exist because the record's shape crosses a repository boundary. `AEP` is
 public and this workspace is not, so no crate dependency may pass between them; what passes is the
 `contract_result` **vocabulary** (`{checked, failed, breaking_changes, provider, consumer}`, design
 `docs/design/adapter-contract-v0.1.md`). A vocabulary with no committed sample is a shape both sides

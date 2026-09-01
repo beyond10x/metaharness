@@ -478,7 +478,7 @@ fn an_absent_payload_field_is_null_and_not_missing() {
 /// Amendment a9's four fields, from the seam's side: each is carried where the vendor reported it
 /// and each survives the round trip under the key a reader looks for.
 ///
-/// The four exist because `engineering-protocols`' gap register recorded four expectation kinds
+/// The four exist because `AEP`' gap register recorded four expectation kinds
 /// that could not be decided about a driven run — `skill.completed`, `tokens.thinking`,
 /// `iterations` and a `cost.total` scoped to one model — with the entry *"not this repository's to
 /// close: it is four fields at the seam"*. This is the test that says the seam carries them.

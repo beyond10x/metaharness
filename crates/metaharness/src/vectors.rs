@@ -539,7 +539,7 @@ pub fn all_passed(vectors: &[VectorOutcome]) -> bool {
 
 /// An adapter's conformance run, as a `contract_result` record.
 ///
-/// The reuse `engineering-protocols`' `contract-testing` principle asks for, made concrete
+/// The reuse `AEP`' `contract-testing` principle asks for, made concrete
 /// without a dependency crossing the boundary: metaharness emits the *shape* EP defines —
 /// `{checked, failed, breaking_changes, provider, consumer}` — so a consumer reads an adapter's
 /// conformance as a contract between the vendor and the protocol wire (design

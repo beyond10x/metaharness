@@ -66,7 +66,7 @@
 > the resolved absolute path, and the adapter contract carries a `golden-version-pair` vector
 > whose off-pin answer is a named warning (Q18's row carries the record).
 > **Amendment a9, 2026-08-23**, from a consumer's gap register rather than from a build: **four
-> payload fields, all additive and all optional.** `engineering-protocols` reads this wire as a
+> payload fields, all additive and all optional.** `AEP` reads this wire as a
 > transcript, and its register records *"Four expectation kinds cannot be decided about a driven
 > run, because the seam's wire does not carry what they read"* — `skill.completed`, which reads the
 > vendor's per-tool result record; `tokens.thinking`, `iterations` and `speed`, which had no key in
@@ -153,7 +153,7 @@
 > posture permanently `unavailable`; the row now records either adapter-class-specific
 > imposition and remains advisory because neither is visible in the provider record.
 > **Audience:** whoever reviews this for acceptance, and whoever builds it afterwards.
-> **Sources studied:** `beyond10x/engineering-protocols` (public, read-only), and a private
+> **Sources studied:** `beyond10x/aep` (public, read-only), and a private
 > agent runtime whose patterns are described here generically and whose names, records and
 > postures are not reproduced.
 > **Verification date:** 2026-08-22, against `claude` **2.1.239** and `codex-cli` **0.145.0**.
@@ -517,7 +517,7 @@ run's outcome rests on. **Q13.**
 them.** No new event: the vocabulary stays at nineteen. What changed is that `tool.result` and
 `Usage` were each missing a key a reader needed, and a reader with no key does not get a wrong
 answer — it gets `unk`, forever, for a question the vendor had already answered in its own record.
-The motivation is a consumer's, recorded in `engineering-protocols`' gap register: *"Four
+The motivation is a consumer's, recorded in `AEP`' gap register: *"Four
 expectation kinds cannot be decided about a driven run, because the seam's wire does not carry what
 they read … not this repository's to close: it is four fields at the seam."*
 
@@ -812,7 +812,7 @@ run therefore requires the decision channel (`tool.decide`), not the mid-session
 command, which remains undriven and refused (§ 7.3).
 
 **Both sides of this format are now pinned to one artifact (2026-08-23).** Until then the seam was
-held together by two readings of the paragraphs above: `engineering-protocols` mints these
+held together by two readings of the paragraphs above: `AEP` mints these
 documents, cannot link this workspace, and tests its minter against a **transcription** of
 `frame.rs` — so a drift in either the minter or the reader was invisible until a driven run died at
 its first step with the session already paid for. The document its driver mints for one
@@ -956,7 +956,7 @@ against, and the pin names the binary the adapter is tested against today.
 
 | mechanism | tier | status | what it delivers |
 |---|---|---|---|
-| `--allowedTools` / `--tools` at launch | registration | **proven** (in daily use in `engineering-protocols`) | the offered set, fixed for the session. `--tools ""` disables the entire built-in set (V11) |
+| `--allowedTools` / `--tools` at launch | registration | **proven** (in daily use in `AEP`) | the offered set, fixed for the session. `--tools ""` disables the entire built-in set (V11) |
 | **`PreToolUse` hook, matcher `""`, calling back into metaharness** | **call (blocking)** | **mechanism and 1:1 parity: measured — under narrow matchers.** The wire, the deny-with-reason and the 11-for-11 `permission_denials` were observed with matchers `Edit\|Write\|NotebookEdit` and `Bash` (`integrations/claude-code/hooks/hooks.json`), never with `""`. **Matcher `""` itself is a vendor doc string (V8) and undriven**, and it changes the regime: a child process per `Read`, `Glob`, `Grep`, `WebFetch`, `TodoWrite` and every MCP call, with the latency and timeout budget that implies. **Timeout behaviour is Q10, not V7** | **the default seam**, and the one row in this table whose status was overstated in the first draft (review findings **F13**, **F7**) |
 | `can_use_tool` control request over `--input-format stream-json` | call (blocking) | **verified present** (V1, V2); **shadowed** by bare `--allowedTools` entries, by settings allow rules and by `bypassPermissions` (V4, the vendor's own strings); **mutually exclusive** with `--permission-prompt-tool` (V5) | offered only under a posture where nothing shadows it; otherwise `SHADOWED` (§ 6.1). Its advantage over the hook is that it needs no child process and no on-disk plugin |
 | `--permission-prompt-tool <mcp tool>` | call (blocking) | **exists** on 2.1.239 and is **absent from `--help`** (V6); undriven here | not used in v0.1. An undocumented flag is not a foundation, and it excludes `can_use_tool` |
@@ -992,7 +992,7 @@ Pinned to **0.145.0**.
 | strategy | how the narrowing happens | cost | v0.1 |
 |---|---|---|---|
 | **A — narrow at the decision seam** | offered set is the union over steps; the hook denies anything outside the current frame | the model sees and attempts tools it may not use; each attempt is a turn and a denial | **the default.** It works on both adapters today with no unverified behaviour |
-| **B — relaunch per step** | one session per step, offered set exactly the step's operations | loses conversation continuity and prompt cache; this is what `engineering-protocols`' driver does today, and it is why a step's input is *"a function of persisted state"* | supported, and the only strategy that makes the *offered* set per-step on Claude Code today |
+| **B — relaunch per step** | one session per step, offered set exactly the step's operations | loses conversation continuity and prompt cache; this is what `AEP`' driver does today, and it is why a step's input is *"a function of persisted state"* | supported, and the only strategy that makes the *offered* set per-step on Claude Code today |
 | **C — own the tool surface** | `--tools ""` plus a metaharness MCP server whose tool list **is** the step's operations; on Codex, `dynamicTools` | metaharness must implement read, write, edit, shell. That is owning half the harness, and it changes what "the vendor keeps its loop" means | **opt-in, behind `--tool-surface owned`, and not the v0.1 default.** Per-step re-listing on Claude Code depends on unverified `list_changed` behaviour (Q1) |
 
 Strategy C's payoff is stated because it is large: under it the race window of § 7.2 does not exist
@@ -1052,7 +1052,7 @@ Five rules, each with the failure it prevents:
 At `session.started` the adapter compares the **offered** tool list from the vendor's own opening
 record against the set its seam covers. A tool that is offered and not covered is a
 launch-time refusal naming the tool. This closes by construction the failure class
-`engineering-protocols` hit once and fixed by hand: a matcher that *looked* exhaustive while a
+`AEP` hit once and fixed by hand: a matcher that *looked* exhaustive while a
 second file-writing tool walked past it.
 
 **Coverage is not the only thing that can be nominal.** A hook that matches every tool and does not
@@ -1228,7 +1228,7 @@ approximately.
 | O4 | **Declare the capability set honestly.** The adapter publishes which tiers it delivers (§ 7.1), which commands it can honour, which it refuses, and — **a10** — which **decision modes** (§ 4.2) it delivers. A tier or mode it has not driven is declared `unverified`, and an embedder that *requires* an unverified one gets a refusal rather than a silent no-op | § 7.3's `turn/steer` row is the live case. The mode table's live case is `observe` on Codex: the mode is the `allow` half of that vendor's decision wire and only the `deny` half has been driven (a7), so it is `unverified` in the descriptor **and** refused at plan time — one decision, read from one place, so the published capability and the behaviour cannot drift apart |
 | O5 | **No cross-class fallback, and no mid-run degradation.** A harness adapter never becomes a direct API call. An adapter that cannot honour a declared requirement refuses at start | § 11 |
 | O6 | **Publish the operation rendering as a value.** `capabilities <kind> --render` prints the neutral-operation → vendor-tool table without running anything | § 5.2. A rendering that only exists inside a run cannot be asserted on before one |
-| O7 | **Assert the argv, the environment and the hook definition before spawning.** The constructed command line, the constructed child environment, the ancestor walk for memory files (H11) and the emitted hook definition — `type: command`, neither `async` nor `asyncRewake` — are all values the adapter's tests read | `engineering-protocols` does exactly this for three flags *"because every one of the failures would be silent"*. The hook-definition clause is review finding **F6**: a hook that matches everything and does not block is a guard that has already stopped guarding |
+| O7 | **Assert the argv, the environment and the hook definition before spawning.** The constructed command line, the constructed child environment, the ancestor walk for memory files (H11) and the emitted hook definition — `type: command`, neither `async` nor `asyncRewake` — are all values the adapter's tests read | `AEP` does exactly this for three flags *"because every one of the failures would be silent"*. The hook-definition clause is review finding **F6**: a hook that matches everything and does not block is a guard that has already stopped guarding |
 | O8 | **Retain the raw vendor transcript and its digest.** The adapter keeps the bytes it read and the digest of them, and `session.started` references both | three things depend on it and none of them works without it: `transcript_digest` and `source_line` in the projection (D6a), the § 4.4 cross-check, and § 9.4's auditor, which reads a **transcript** (review findings **F1**, **F2**, **F4**) |
 
 ### 8.5 Conformance, and what it costs
@@ -1274,7 +1274,7 @@ The **projection cross-check** (§ 4.4) is a C2 vector: for a recorded Claude Co
 metaharness projects and the IR `trace-spec`'s own adapter reads must agree. That is how "losslessly
 projectable" stops being an adjective.
 
-C4 must contain a denial that the model cannot legally route around. `engineering-protocols` learned
+C4 must contain a denial that the model cannot legally route around. `AEP` learned
 this the expensive way: its first deliberate-denial case asked for a hand-edited status field, the
 model correctly used the CLI verb instead, and the guard was never exercised — a green run that
 audited nothing.
@@ -1378,7 +1378,7 @@ introduced.
 ### 9.4 `--audit`: one invocation that runs and judges
 
 **Owner requirement, binding.** *`metaharness run <kind> -p "…" --audit` does what
-`engineering-protocols`' eval process does today: hermetic launch → transcript → expectation check →
+`AEP`' eval process does today: hermetic launch → transcript → expectation check →
 `ok`/`gap`/`unk` report with distinct exit codes.*
 
 **Decision D12 — `--audit` has a built-in floor and a pluggable ceiling. metaharness embeds no
@@ -1423,7 +1423,7 @@ billed-to-the-session`. Three corrections:
    is reported as exit `2`. A verdict table with no rows in it would otherwise go green — or red —
    while checking nothing.
 
-For `engineering-protocols` the auditor is `protocol trace check`. Nothing in metaharness names it.
+For `AEP` the auditor is `protocol trace check`. Nothing in metaharness names it.
 
 **No discovery.** The auditor is named explicitly (`--auditor`, or the field in `RunSpec`). A
 `--spec` with no auditor is a **refusal**, not a skip: a specification nobody checked reads exactly
@@ -1453,7 +1453,7 @@ refuses two paragraphs above. `--hermetic` and `--hermetic off` are unaffected.
 `3` is not a softer `1`. It is `aep-driver`'s `NoVerdict`, and it exists for the same reason: a
 crashed suite is not a failing suite, and submitting a failing verdict for something that never ran
 fabricates an observation. A caller that wants a run nobody could judge to be red says so in CI, as
-`engineering-protocols`' own eval already does.
+`AEP`' own eval already does.
 
 **The census is always printed.** A report that hides "0 denials" reads as clean when it may mean
 nothing was ever attempted — § 2.2's ambiguity, in a report rather than in a counter.
@@ -1471,7 +1471,7 @@ a4's rule), which is the confusion this field exists to end.
 
 ---
 
-## 10. Adopting it in `engineering-protocols`
+## 10. Adopting it in `AEP`
 
 ### 10.1 The driver, through the library — and the gap it closes
 
@@ -1559,7 +1559,7 @@ that gets both ignored. The attribution rule is the one the sources already use:
 A sixth, which is a **finding rather than a requirement**: `drivers/development/default.yaml` states
 that no development profile grants `command.execute`, so a driven `llm` step holds no shell — and
 the planning skill's entire surface is `protocol artifact …`, every verb of which is a shell
-command. `engineering-protocols` resolved that with a capability grant plus a hook constraint. Under
+command. `AEP` resolved that with a capability grant plus a hook constraint. Under
 metaharness the same resolution is expressible without a second mechanism: the frame admits `shell`
 and the embedder's `ask` policy holds it to one program and two verbs, in Rust, with the reason fed
 back to the model. That is a real simplification and it should be reported to that repository rather
@@ -1570,7 +1570,7 @@ than assumed here.
 **The pattern.** A user request arrives; it is *classified*; the classification is *mapped onto a
 list of available entities*; the run then does the one thing that entity admits. It is general —
 which workflow governs this task, which artifact kind this request becomes, which runbook this alert
-matches, which handler this intent routes to — and `engineering-protocols` already contains an
+matches, which handler this intent routes to — and `AEP` already contains an
 instance of it: the planning skill's *"Discover, do not memorise"* rule, where the entity list comes
 from `protocol artifact kinds` and `protocol artifact lifecycle <kind>` **at use time**, because
 *"a prose copy of a validated document is a copy that goes stale."*
@@ -1634,7 +1634,7 @@ is a row nobody intends to close.
 | Q6 | Does `turn/steer` deliver a mid-turn steer on 0.145.0, and what does the model see? (V14: method present) | one app-server session, steer during a long turn | `steer` is refused by name on Codex too, and the matrix says kill-only |
 | Q7 | Does a Codex thread accept a `dynamicTools` change without a new thread? (V16: registered at `thread/start`) | `thread/start`, then attempt a re-registration | per-step tool sets on Codex mean a new thread per step, which is strategy B |
 | Q8 | Is the Codex rollout JSONL adaptable to the same IR with no loss? (§ 2.5: no stability guarantee, drift observed) | project a corpus of rollout files and diff the census against `codex exec --json` | the Codex adapter's projection is partial and says which families it cannot fill |
-| Q9 | **Can a `trace-ir/1` document be read back by anything?** It is `Serialize`-only, its identity fields are `&'static str`, and no schema is published | a change **in `engineering-protocols`**: `Deserialize` on `trace-domain`'s IR types plus a generated `trace-ir.schema.json` | D6a stands as written — the projection is an in-process value and the auditor reads the raw transcript. Nothing in v0.1 depends on the document form |
+| Q9 | **Can a `trace-ir/1` document be read back by anything?** It is `Serialize`-only, its identity fields are `&'static str`, and no schema is published | a change **in `AEP`**: `Deserialize` on `trace-domain`'s IR types plus a generated `trace-ir.schema.json` | D6a stands as written — the projection is an in-process value and the auditor reads the raw transcript. Nothing in v0.1 depends on the document form |
 | Q10 | **What does Claude Code do when a `type: command` `PreToolUse` hook exceeds its timeout?** V7's fail-closed string is the SDK hook-*callback* path | one `claude -p` run with an on-disk hook that sleeps past its declared timeout, reading the transcript for whether the tool ran | § 7.7 rule 2 already fails closed from metaharness's side; the answer only says whether the vendor agrees |
 | Q11 | **Does matcher `""` behave as documented, and what does a child process per tool call cost?** The measured parity runs used two narrow matchers. **Partly answered by amendment a4, and deliberately not called closed:** live runs with matcher `""` fired the hook for `Bash` and the deny was honoured — but a single tool is not "all tools", and neither the per-call child-process cost nor the behaviour over `Read`, `Glob`, `Grep`, `WebFetch` and `TodoWrite` was measured | one `claude -p` run with matcher `""` over a prompt that calls several **different** tools, counting hook invocations against tool calls and recording added latency | the seam enumerates the offered set instead, and § 7.8's coverage assertion becomes the guard that the enumeration is complete |
 | Q12 | **Is a hook `allow` honoured for a tool a settings allow-rule would have denied, and in which direction does the conflict resolve?** § 6 takes the grant authority; the resolution order is stated by two log strings and undriven | one run with a hook `allow` against a `deny` rule in `--settings` | metaharness's policy becomes `deny`-only and § 6's grant claim is withdrawn by name |
@@ -1697,8 +1697,8 @@ identifier, ADR reference or credentials posture appears in § 2.6 or anywhere e
 
 | method | rows |
 |---|---|
-| read from a file in `engineering-protocols` at the path cited | § 2.1–2.4, § 10 |
-| labelled *verified* in `engineering-protocols`' own Codex table, against codex-cli 0.145.0 | § 2.5 |
+| read from a file in `AEP` at the path cited | § 2.1–2.4, § 10 |
+| labelled *verified* in `AEP`' own Codex table, against codex-cli 0.145.0 | § 2.5 |
 | pattern from a private runtime, described generically, no names or records reproduced | § 2.6 |
 | `claude --help` / `codex --version` on 2.1.239 / 0.145.0, 2026-08-22 | V6, V10, V11, V12, V17 (absence side), H8's `--safe-mode` and H11's `--bare` clauses |
 | strings in the shipped vendor binary, quoted verbatim where the string is the evidence. **Where a count is given it is matching lines of `strings -n 6`** | V1–V5, V7, V7b, V8, V9, V13–V18 |

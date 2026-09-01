@@ -1,4 +1,4 @@
-//! One Rust runner for the engineering-protocols comparison's native and driven arms.
+//! One Rust runner for the AEP comparison's native and driven arms.
 //!
 //! Fixture assembly and every pre-spend assertion live here once. The model-facing commands are
 //! deliberately ordinary child processes: metaharness remains the component that drives a
@@ -21,9 +21,9 @@ const DRIVER_MOUNTED: &str = "/toolchain/driver/protocol";
 const LIVE_ENV: &str = "METAHARNESS_LIVE";
 const SCOPED_ENV: &str = "METAHARNESS_EVAL_SCOPED";
 
-/// Run the engineering-protocols comparison without hiding paid work behind a script.
+/// Run the AEP comparison without hiding paid work behind a script.
 #[derive(Parser, Debug)]
-#[command(name = "engineering-protocols-eval", version, about)]
+#[command(name = "aep-eval", version, about)]
 pub struct Cli {
     /// Which evaluation shape to prepare or run.
     #[command(subcommand)]
@@ -44,9 +44,12 @@ pub enum EvalCommand {
 /// Paths shared by every arm.
 #[derive(Args, Clone, Debug)]
 pub struct CommonArgs {
-    /// The engineering-protocols checkout being evaluated.
-    #[arg(long, value_name = "DIR", env = "EP_REPO")]
-    pub ep_repo: Option<PathBuf>,
+    /// The AEP checkout being evaluated.
+    #[arg(long, value_name = "DIR", env = "AEP_REPO")]
+    pub aep_repo: Option<PathBuf>,
+    /// The Agent Plugins checkout that supplies the planning plugin.
+    #[arg(long, value_name = "DIR", env = "AGENTPLUGINS_REPO")]
+    pub agentplugins_repo: Option<PathBuf>,
     /// The harness checkout used by the native binary freshness check.
     #[arg(long, value_name = "DIR", env = "HARNESS_REPO")]
     pub harness_repo: Option<PathBuf>,
@@ -165,7 +168,8 @@ pub struct DrivenArgs {
 #[derive(Debug)]
 struct Resolved {
     repo: PathBuf,
-    ep_repo: PathBuf,
+    aep_repo: PathBuf,
+    agentplugins_repo: PathBuf,
     harness_repo: PathBuf,
     b10x_binary: PathBuf,
     scratch_root: PathBuf,
@@ -231,7 +235,7 @@ fn native(args: NativeArgs) -> Result<i32, String> {
     let fixture = prepare(&resolved, "native", NATIVE_TASK_ID)?;
     preflight(&resolved, &fixture)?;
 
-    let script_dir = resolved.repo.join("evals/engineering-protocols");
+    let script_dir = resolved.repo.join("evals/aep");
     let map = args
         .flow_map
         .clone()
@@ -257,8 +261,8 @@ fn native(args: NativeArgs) -> Result<i32, String> {
     if !args.spend {
         println!("Everything free has run. No model was started.");
         println!(
-            "Paid form: METAHARNESS_LIVE=1 cargo run -p metaharness-engineering-protocols-eval -- native --spend --budget-usd <USD>{}",
-            render_ep_repo(&args.common)
+            "Paid form: METAHARNESS_LIVE=1 cargo run -p metaharness-aep-eval -- native --spend --budget-usd <USD>{}",
+            render_source_repositories(&args.common)
         );
         println!("record: {}", fixture.work.display());
         return Ok(0);
@@ -332,7 +336,7 @@ fn native(args: NativeArgs) -> Result<i32, String> {
         .arg("--max-cost-microunits")
         .arg(budget.to_string())
         .arg("--json");
-    prepend_path(&mut command, &[resolved.ep_repo.join("target/debug")])?;
+    prepend_path(&mut command, &[resolved.aep_repo.join("target/debug")])?;
     println!(
         "walking native arm: model {}, cap ${}, record {}",
         args.model,
@@ -370,9 +374,7 @@ fn driven(args: DrivenArgs) -> Result<i32, String> {
     if args.arm == DrivenArm::B10x {
         preflight_confined(&resolved, &fixture)?;
     }
-    let source_map = resolved
-        .repo
-        .join("evals/engineering-protocols/driven.steps.yaml");
+    let source_map = resolved.repo.join("evals/aep/driven.steps.yaml");
     let map = match args.arm {
         DrivenArm::B10x => {
             let target = fixture.work.join("driven.steps.b10x.yaml");
@@ -389,12 +391,12 @@ fn driven(args: DrivenArgs) -> Result<i32, String> {
     if !args.spend {
         println!("Everything free has run. No model was started.");
         println!(
-            "Paid form: METAHARNESS_LIVE=1 cargo run -p metaharness-engineering-protocols-eval -- driven --arm {} --spend --budget-usd <USD> --assume-usd-per-run <USD>{}",
+            "Paid form: METAHARNESS_LIVE=1 cargo run -p metaharness-aep-eval -- driven --arm {} --spend --budget-usd <USD> --assume-usd-per-run <USD>{}",
             match args.arm {
                 DrivenArm::B10x => "b10x",
                 DrivenArm::Claude => "claude",
             },
-            render_ep_repo(&args.common)
+            render_source_repositories(&args.common)
         );
         println!("record: {}", fixture.work.display());
         return Ok(0);
@@ -452,7 +454,7 @@ fn driven(args: DrivenArgs) -> Result<i32, String> {
     prepend_path(
         &mut command,
         &[
-            resolved.ep_repo.join("target/debug"),
+            resolved.aep_repo.join("target/debug"),
             resolved.repo.join("target/debug"),
         ],
     )?;
@@ -523,11 +525,16 @@ fn resolve(args: &CommonArgs) -> Result<Resolved, String> {
         .parent()
         .ok_or_else(|| "metaharness checkout has no collection parent".to_owned())?;
     let home = env::var_os("HOME").map(PathBuf::from);
-    let ep_repo = args
-        .ep_repo
+    let aep_repo = args
+        .aep_repo
         .clone()
-        .unwrap_or_else(|| collection.join("engineering-protocols"));
-    let ep_repo = canonical_existing(&ep_repo, "engineering-protocols repository")?;
+        .unwrap_or_else(|| collection.join("aep"));
+    let aep_repo = canonical_existing(&aep_repo, "AEP repository")?;
+    let agentplugins_repo = args
+        .agentplugins_repo
+        .clone()
+        .unwrap_or_else(|| collection.join("agentplugins"));
+    let agentplugins_repo = canonical_existing(&agentplugins_repo, "Agent Plugins repository")?;
     let harness_repo = args
         .harness_repo
         .clone()
@@ -548,10 +555,11 @@ fn resolve(args: &CommonArgs) -> Result<Resolved, String> {
             "/sys/fs/cgroup/user.slice/user-{uid}.slice/user@{uid}.service"
         ))
     });
-    let protocol = ep_repo.join("target/debug/protocol");
+    let protocol = aep_repo.join("target/debug/protocol");
     Ok(Resolved {
         repo,
-        ep_repo,
+        aep_repo,
+        agentplugins_repo,
         harness_repo,
         b10x_binary,
         scratch_root,
@@ -590,14 +598,11 @@ fn current_uid() -> Result<u32, String> {
 }
 
 fn build_protocol(resolved: &Resolved) -> Result<(), String> {
-    require_dir(
-        &resolved.ep_repo.join("workflows"),
-        "engineering-protocols checkout",
-    )?;
-    println!("building protocol-cli from {}", resolved.ep_repo.display());
+    require_dir(&resolved.aep_repo.join("workflows"), "AEP checkout")?;
+    println!("building protocol-cli from {}", resolved.aep_repo.display());
     checked(
         Command::new("cargo")
-            .current_dir(&resolved.ep_repo)
+            .current_dir(&resolved.aep_repo)
             .arg("build")
             .arg("-p")
             .arg("protocol-cli")
@@ -644,11 +649,11 @@ fn prepare(resolved: &Resolved, prefix: &str, task_id: &str) -> Result<Fixture, 
         "profiles",
         "drivers",
     ] {
-        copy_tree(&resolved.ep_repo.join(directory), &tree.join(directory))?;
+        copy_tree(&resolved.aep_repo.join(directory), &tree.join(directory))?;
     }
     for directory in ["lifecycles", "templates"] {
         copy_tree(
-            &resolved.ep_repo.join("artifacts").join(directory),
+            &resolved.aep_repo.join("artifacts").join(directory),
             &tree.join("artifacts").join(directory),
         )?;
     }
@@ -678,7 +683,10 @@ fn prepare(resolved: &Resolved, prefix: &str, task_id: &str) -> Result<Fixture, 
     )
     .map_err(|error| format!("write task document: {error}"))?;
     let plugin = work.join("plugin");
-    copy_tree(&resolved.ep_repo.join("integrations/claude-code"), &plugin)?;
+    copy_tree(
+        &resolved.agentplugins_repo.join("plugins/aep-planning"),
+        &plugin,
+    )?;
     require_file(&plugin.join("skills/planning/SKILL.md"), "planning skill")?;
     println!("scratch directory: {}", work.display());
     Ok(Fixture {
@@ -1394,7 +1402,7 @@ fn inspect_driven(
         "honest",
         &resolved
             .repo
-            .join("evals/engineering-protocols/expectations.driven-step.trace.yaml"),
+            .join("evals/aep/expectations.driven-step.trace.yaml"),
         &honest,
         &mut rows,
     )?;
@@ -1404,7 +1412,7 @@ fn inspect_driven(
         "protected",
         &resolved
             .repo
-            .join("evals/engineering-protocols/expectations.denial-step.trace.yaml"),
+            .join("evals/aep/expectations.denial-step.trace.yaml"),
         &denial,
         &mut rows,
     )?;
@@ -1599,7 +1607,7 @@ fn read_json(path: &Path) -> Result<Value, String> {
 
 fn paid_lock(root: &Path) -> Result<File, String> {
     fs::create_dir_all(root).map_err(|error| format!("create paid lock directory: {error}"))?;
-    let path = root.join("engineering-protocols-paid.lock");
+    let path = root.join("aep-paid.lock");
     let file = File::options()
         .create(true)
         .truncate(false)
@@ -1610,7 +1618,7 @@ fn paid_lock(root: &Path) -> Result<File, String> {
     rustix::fs::flock(&file, rustix::fs::FlockOperation::NonBlockingLockExclusive).map_err(
         |_| {
             format!(
-                "another engineering-protocols paid eval holds {}; runs must be sequential",
+                "another AEP paid eval holds {}; runs must be sequential",
                 path.display()
             )
         },
@@ -1677,10 +1685,17 @@ fn prepend_path(command: &mut Command, prefixes: &[PathBuf]) -> Result<(), Strin
     Ok(())
 }
 
-fn render_ep_repo(args: &CommonArgs) -> String {
-    args.ep_repo
+fn render_source_repositories(args: &CommonArgs) -> String {
+    let aep = args.aep_repo.as_ref().map_or_else(String::new, |path| {
+        format!(" --aep-repo {}", path.display())
+    });
+    let plugins = args
+        .agentplugins_repo
         .as_ref()
-        .map_or_else(String::new, |path| format!(" --ep-repo {}", path.display()))
+        .map_or_else(String::new, |path| {
+            format!(" --agentplugins-repo {}", path.display())
+        });
+    format!("{aep}{plugins}")
 }
 
 fn require_file(path: &Path, label: &str) -> Result<(), String> {

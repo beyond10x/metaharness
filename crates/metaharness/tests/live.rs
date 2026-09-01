@@ -19,7 +19,7 @@
 //! the deny really does stop the effect, the record really does say what the record-asserted rows
 //! read."* Everything else about the seam is proven free at C1, C2 and C3.
 //!
-//! The second test carries the lesson `engineering-protocols` bought twice: **a run in which
+//! The second test carries the lesson `AEP` bought twice: **a run in which
 //! nothing forbidden was attempted audits nothing.** Its prompt asks for a shell command the
 //! frame does not admit, so the denial census cannot come back `0` while the guard is holding.
 

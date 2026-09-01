@@ -1,6 +1,6 @@
 //! The `contract_result` record, pinned as the bytes a consumer reads (adapter contract CT-1).
 //!
-//! `engineering-protocols` ingests `metaharness conformance <kind> --contract` as evidence. It is
+//! `AEP` ingests `metaharness conformance <kind> --contract` as evidence. It is
 //! public and this workspace is not, so no Cargo dependency crosses; what crosses is the
 //! **vocabulary** — `{checked, failed, breaking_changes, provider, consumer}` (design
 //! `docs/design/adapter-contract-v0.1.md`). Two implementations that share a vocabulary and no code

@@ -2,7 +2,7 @@
 
 Status: **proposed** (operator brain-dump, 2026-08-22, `docs/ROADMAP.md` item 1), reviewed and
 written decision-complete the same day. Companion to `metaharness-protocol-v0.1.md` (§ 8.5, the
-conformance tiers this builds on) and to `engineering-protocols`' `contract-testing` principle,
+conformance tiers this builds on) and to `AEP`' `contract-testing` principle,
 whose vocabulary this reuses. The first slice (LP-equivalent CT-1) is built alongside this page;
 **CT-2 and CT-3 are built** (2026-08-23 — one recorded capture run per adapter, then the version
 pair reconciled and Q18 closed by protocol amendment a8), and **CT-4 is built** (2026-08-23 — the
@@ -12,7 +12,7 @@ milestone table is closed.
 ## The idea, in the operator's words
 
 > we map harness protocols (claude, codex, XYZ) to the semantics of meta-harness — do we make
-> use of contract testing here? maybe even using tooling from engineering-protocols? So each
+> use of contract testing here? maybe even using tooling from AEP? So each
 > adapter `metaharness <-- adapter --> [codex, claude, xyz]` must be contract tested.
 
 ## Verdict: yes, and the evidence that it is needed already exists
@@ -37,9 +37,9 @@ exactly what a contract test exists to catch before a run costs money:
 None of these is a bug in the adapter's logic; each is a fact about a vendor the adapter asserts
 and could be wrong about. That is the definition of a contract.
 
-## Reuse of engineering-protocols' tooling — the vocabulary, not a dependency
+## Reuse of AEP' tooling — the vocabulary, not a dependency
 
-The established boundary holds: metaharness is private, engineering-protocols is public, **no
+The established boundary holds: metaharness is private, AEP is public, **no
 crate dependency crosses** (the migration kept the driver reading metaharness's *output*, never
 linking it). So the reuse is the same shape as the frame document — a shared **vocabulary**, not
 shared code:
@@ -146,7 +146,7 @@ as identical made the only truthful b10x mode impossible to start.
 
 ### The record is pinned as bytes, because a consumer reads bytes
 
-`engineering-protocols` ingests `conformance <kind> --contract` as evidence, and the two repositories
+`AEP` ingests `conformance <kind> --contract` as evidence, and the two repositories
 share a vocabulary and no code — the same gap the frame document has, closed the same way. Each
 adapter's record is committed as the exact stdout of its deterministic conformance run
 (`crates/metaharness/fixtures/golden/contract-result-<kind>.json`, recorded 2026-08-23 at CT-1..3 +

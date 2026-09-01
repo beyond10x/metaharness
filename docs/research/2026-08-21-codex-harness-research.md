@@ -1,4 +1,4 @@
-> Migrated from `engineering-protocols/docs/reviews/`, 2026-08-22, under that repository's
+> Migrated from `AEP/docs/reviews/`, 2026-08-22, under that repository's
 > `epic:metaharness-migration`: this record is the `metaharness-codex` adapter's evidence base
 > and belongs beside it. The original stays in the subject repository's history.
 

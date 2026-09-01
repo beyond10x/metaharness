@@ -13,7 +13,7 @@ mapping should be **contract-tested**: the vendor side pinned by recorded wire s
 metaharness side pinned by the protocol's event/command vocabulary, and drift on either side a
 red contract rather than a surprise in a paid run. Today's nearest things are the conformance
 vectors (C1–C3) and the pinned-version doctor; a contract suite would make the pairing explicit
-and per-adapter-symmetrical. **Open question:** reuse engineering-protocols' contract tooling
+and per-adapter-symmetrical. **Open question:** reuse AEP' contract tooling
 (`contract-testing` principle, `contract_result` evidence, its conformance crates) rather than
 inventing a second harness-contract shape — the operator suspects yes; needs a short design
 page mapping "adapter contract" onto that tooling's vocabulary.
@@ -21,7 +21,7 @@ page mapping "adapter contract" onto that tooling's vocabulary.
 **Answered and built, 2026-08-23.** `docs/design/adapter-contract-v0.1.md` is that page and its
 four milestones are all built: the record (CT-1), recorded real wire on both faces (CT-2), the
 version pair (CT-3) and the per-adapter authoring shape (CT-4). The reuse is the vocabulary and
-not a dependency — `engineering-protocols` never appears in a `Cargo.toml` here. What the last
+not a dependency — `AEP` never appears in a `Cargo.toml` here. What the last
 milestone surfaced is carried in that page: the two adapters were not symmetrical, because codex
 tested no launch face, and the checklist said so out loud instead of leaving it absent. **That gap
 is closed as of 2026-08-23** — six recorded C1 expectations, `checked: 10 → 17` on codex — and the
