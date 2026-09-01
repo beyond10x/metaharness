@@ -1,0 +1,26 @@
+schema: b10x-docs/v1
+repository:
+  id: metaharness
+  url: https://github.com/beyond10x/metaharness
+surfaces:
+  - id: docs
+    name: Metaharness
+    summary: Drive and compare multiple agent harnesses through one observable, steerable, hermetic interface.
+    kind: documentation
+    canonicalUrl: https://beyond10x.github.io/metaharness/
+    maturity: experimental
+    availability: published
+    discoverability: public
+    audiences: [evaluator, developer, researcher]
+    journeys: [understand, build-agents]
+    capabilities: [harness-comparison, hermetic-runs, steering-protocol]
+    sections:
+      - {label: Quickstart, url: https://beyond10x.github.io/metaharness/docs/quickstart, kind: quickstart}
+      - {label: Protocol, url: https://beyond10x.github.io/metaharness/docs/protocol/events, kind: reference}
+      - {label: Status, url: https://beyond10x.github.io/metaharness/docs/status, kind: status}
+      - {label: Source, url: https://github.com/beyond10x/metaharness, kind: source}
+    relationships:
+      - {target: harness/docs, kind: drives}
+    accent: "#4dc4e6"
+    mark: website/static/img/logo.svg
+    shell: {integration: docusaurus, revision: 6323bfdaf73609247e8dabcc9df410ab280a1960}

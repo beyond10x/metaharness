@@ -5,6 +5,7 @@
 // See: https://docusaurus.io/docs/api/docusaurus-config
 
 import {themes as prismThemes} from 'prism-react-renderer';
+import docsSystemPlugin from '@beyond10x/docs-system/docusaurus';
 
 const organizationName = 'beyond10x';
 const projectName = 'metaharness';
@@ -28,6 +29,7 @@ const config = {
   trailingSlash: false,
 
   onBrokenLinks: 'throw',
+  plugins: [docsSystemPlugin],
 
   markdown: {
     hooks: {
@@ -72,6 +74,8 @@ const config = {
           src: 'img/logo.svg',
         },
         items: [
+          {href: 'https://beyond10x.github.io/getting-started/', label: 'beyond10x', position: 'left'},
+          {href: 'https://beyond10x.github.io/getting-started/ecosystem', label: 'Ecosystem', position: 'left'},
           {
             type: 'docSidebar',
             sidebarId: 'docsSidebar',
