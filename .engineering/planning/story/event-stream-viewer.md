@@ -2,7 +2,7 @@
 format: aep.planning-md/1
 id: story:event-stream-viewer
 kind: story
-status: draft
+status: implemented
 title: One page renders two trace-ir/1 streams side by side
 summary: Static HTML, two aligned columns of states, calls, refusals, timings and cost; generated from the IR; embedded by the bench site.
 owner: metaharness
@@ -12,7 +12,7 @@ tags:
 relations:
 - decomposes: epic:runs-side-by-side
 - depends_on: story:trace-ir-reader
-revision: 1
+revision: 4
 ---
 # Story: One page renders two `trace-ir/1` streams side by side
 

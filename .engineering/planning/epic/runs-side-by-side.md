@@ -2,14 +2,14 @@
 format: aep.planning-md/1
 id: epic:runs-side-by-side
 kind: epic
-status: draft
+status: implemented
 title: Two runs of one task, from any two stacks, read beside each other
 summary: A trace-ir/1 reader behind project, a static two-column viewer, and a --plugin option that installs a named marketplace plugin into the scratch home and attests it.
 owner: metaharness
 tags:
 - bench
 - trace
-revision: 1
+revision: 4
 ---
 # Epic: Two runs of one task, from any two stacks, read beside each other
 

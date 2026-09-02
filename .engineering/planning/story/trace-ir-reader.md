@@ -2,7 +2,7 @@
 format: aep.planning-md/1
 id: story:trace-ir-reader
 kind: story
-status: draft
+status: implemented
 title: metaharness project reads an event stream into trace-ir/1
 summary: 'The reader the README says is missing: byte-stable projection, every event kind mapped or listed as unk, judged by aep trace check.'
 owner: metaharness
@@ -10,7 +10,7 @@ tags:
 - trace
 relations:
 - decomposes: epic:runs-side-by-side
-revision: 1
+revision: 4
 ---
 # Story: `metaharness project` reads an event stream into `trace-ir/1`
 

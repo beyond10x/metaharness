@@ -2,7 +2,7 @@
 format: aep.planning-md/1
 id: story:own-planning-store
 kind: story
-status: draft
+status: implemented
 title: metaharness plans in a store of its own
 summary: The .engineering store, pinned to aep 0.42.0; roadmap items become epics here before code.
 owner: metaharness
@@ -10,7 +10,7 @@ tags:
 - store
 relations:
 - decomposes: epic:runs-side-by-side
-revision: 1
+revision: 4
 ---
 # Story: metaharness plans in a store of its own
 

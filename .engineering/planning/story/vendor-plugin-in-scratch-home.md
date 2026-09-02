@@ -2,7 +2,7 @@
 format: aep.planning-md/1
 id: story:vendor-plugin-in-scratch-home
 kind: story
-status: draft
+status: implemented
 title: A marketplace plugin is installed into the hermetic scratch home, on request and attested
 summary: metaharness run claude --plugin <repo>@<name>@<pin> places a third-party plugin into the scratch home; the attestation lists it.
 owner: metaharness
@@ -11,7 +11,7 @@ tags:
 - hermetic
 relations:
 - decomposes: epic:runs-side-by-side
-revision: 1
+revision: 4
 ---
 # Story: A marketplace plugin is installed into the hermetic scratch home, on request and attested
 
