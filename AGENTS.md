@@ -250,6 +250,7 @@ The full gate comes first; component steps alone are not enough.
 | What | Where |
 |---|---|
 | Directions the operator has scheduled | `docs/ROADMAP.md` |
+| The plan derived from them: epics, stories, blockers | `.engineering/planning/`, mutated only through `aep artifact`; a roadmap item becomes an epic here before code |
 | Binding designs and their amendment records | `docs/design/` |
 | Investigations behind a design | `docs/research/` |
 | What shipped | `CHANGELOG.md`, and `git tag -n99` |
