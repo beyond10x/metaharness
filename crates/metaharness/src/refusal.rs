@@ -149,6 +149,46 @@ pub enum Refusal {
         /// The argv that produced nothing.
         argv: Vec<String>,
     },
+    /// A line of an event stream `project` was pointed at could not be read.
+    ///
+    /// **By name, and never by producing a shorter document.** A stream that lost a line silently
+    /// would make a reader report *the tool was never called* when what happened is that the
+    /// reader stopped being able to see tool calls — design D4's failure, one level up.
+    ProjectionUnreadable {
+        /// The stream.
+        path: PathBuf,
+        /// Which 1-based line, or `0` when the whole file was unreadable.
+        line: usize,
+        /// What the framing reader said, verbatim.
+        detail: String,
+    },
+    /// The viewer was given something other than one or two runs.
+    ///
+    /// Two columns is the shape `docs/design/runs-side-by-side-v0.1.md` § 2 decided. A third
+    /// would have to be aligned against something nobody decided, and silently dropping it would
+    /// leave a reader comparing two runs believing they had asked about three.
+    ViewerColumnCount {
+        /// How many were given.
+        given: usize,
+    },
+    /// A declared `--plugin` could not be resolved against this machine (amendment a16).
+    ///
+    /// The detail is the adapter's own sentence, which names the `claude plugin marketplace add`
+    /// and `claude plugin install` to run **once, deliberately, outside a run**. That is where the
+    /// network reach belongs: a launch that fetched would be unpinnable at 2.1.258 and would reach
+    /// out from inside the boundary the hermetic floor exists to draw.
+    MarketplacePlugin {
+        /// What the adapter said, verbatim.
+        detail: String,
+    },
+    /// `--plugin` was given for a kind that has no marketplace.
+    ///
+    /// Refused by name rather than accepted and ignored, on the same rule `--prices` carries: an
+    /// operator who declared a plugin would otherwise believe the run had one.
+    MarketplacePluginUnsupported {
+        /// The kind with no marketplace.
+        kind: Kind,
+    },
     /// Something the platform refused.
     Io {
         /// What it said.
@@ -309,6 +349,38 @@ impl fmt::Display for Refusal {
                 f,
                 "the auditor ({argv:?}) produced no verdict rows: a table with nothing in it is a \
                  setup failure, never a verdict"
+            ),
+            Refusal::ProjectionUnreadable { path, line, detail } => {
+                if *line == 0 {
+                    write!(
+                        f,
+                        "the event stream {} could not be read: {detail}",
+                        path.display()
+                    )
+                } else {
+                    write!(
+                        f,
+                        "line {line} of the event stream {} is not a metaharness.event/1 event \
+                         this build knows: {detail}. It is refused rather than skipped, because a \
+                         document one event shorter than its stream reads exactly like a run that \
+                         did one thing less",
+                        path.display()
+                    )
+                }
+            }
+            Refusal::ViewerColumnCount { given } => write!(
+                f,
+                "the viewer renders one or two runs and was given {given}: two columns is the \
+                 decided shape, and a third would have to be aligned against a rule nothing \
+                 decides. Give one or two event streams"
+            ),
+            Refusal::MarketplacePlugin { detail } => write!(f, "{detail}"),
+            Refusal::MarketplacePluginUnsupported { kind } => write!(
+                f,
+                "--plugin names a marketplace plugin and {} has no marketplace this build can \
+                 resolve one from. Refused by name rather than ignored: an operator who declared a \
+                 plugin would otherwise believe the run had one",
+                kind.as_str()
             ),
             Refusal::Io { detail } => write!(f, "the platform refused: {detail}"),
         }

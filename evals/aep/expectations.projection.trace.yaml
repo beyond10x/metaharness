@@ -1,0 +1,213 @@
+format: trace-spec/1
+id: metaharness/projection
+title: Every kind this driver emits is decidable — no row reports `unk`
+
+# The acceptance row of `story:trace-ir-reader`, as a document:
+#
+#   "`aep trace check` over the projected document judges the two recorded `evals/aep` runs with
+#    no `unk` rows for the kinds the driver emits."
+#
+# **This document is not about the agent.** Every other specification under `evals/aep/` asks
+# whether a model did the right thing; this one asks whether the *record* can be read at all. A
+# row here is chosen for one property: it decides on a kind `metaharness.event/1` actually
+# carries, so an `unk` verdict can only mean that the consumer's event-stream adapter stopped
+# understanding something this driver writes. That is the failure the acceptance exists to catch,
+# and it is why every bound below is deliberately loose — a `gap` here would be a fact about the
+# fixture, and this document is not calibrated to gate on one.
+#
+# The subjects are `runs/decomposer-clean.events.jsonl` and `runs/plan-reviewer-clean.events.jsonl`
+# — the two recorded runs, passed through this driver's own Claude transcript reader. See
+# `runs/README.md` for what they are and, more importantly, what they are not.
+#
+#   aep trace check --spec evals/aep/expectations.projection.trace.yaml \
+#     --transcript evals/aep/runs/decomposer-clean.events.jsonl
+#
+# **Five kinds are emitted by these two streams and every row below reads one of them:**
+# `session.started`, `tool.requested`, `tool.result`, `text`, `session.ended`. A kind the driver
+# can emit and these two runs do not contain — `step.entered`, `tool.decided`, `rate_limit`,
+# `opaque`, `auth.expired` — has **no row here on purpose**: a bound over a kind the record does
+# not carry reports `unk`, and an `unk` that means *this fixture has none of those* would drown
+# the one that means *the reader broke*.
+
+expectations:
+  # --- session.started ----------------------------------------------------------------------
+
+  - id: the-opening-record-names-a-model
+    statement: the opening record crossed the wire with the model the vendor resolved to
+    expect:
+      env.model:
+        equals: claude-sonnet-5
+
+  - id: the-opening-record-names-a-permission-mode
+    statement: the permission posture reached the reader
+    expect:
+      env.permission_mode:
+        equals: dontAsk
+
+  - id: the-opening-record-names-a-credential-source
+    statement: the credential source reached the reader — H4's evidence field
+    expect:
+      env.api_key_source:
+        equals: none
+
+  - id: the-opening-record-names-an-output-style
+    statement: the output style reached the reader — H1b's evidence field
+    expect:
+      env.output_style:
+        equals: default
+
+  - id: the-offered-tool-list-survived-the-projection
+    statement: "`offered_tools` arrived as a list a reader can ask about, not as a count"
+    expect:
+      env.tool_available:
+        tool: Bash
+
+  - id: the-plugin-list-survived-the-projection
+    statement: the loaded plugin arrived with its name, version and source — H1a's evidence field
+    expect:
+      env.plugin_loaded:
+        plugin: aep-planning
+        version: "0.1.0"
+        source: aep-planning@inline
+
+  - id: the-skill-list-survived-the-projection
+    statement: the session's skills arrived under the names an expectation refers to
+    expect:
+      env.skill_available:
+        skill: aep-planning:planning
+
+  - id: the-agent-list-survived-the-projection
+    statement: the session's subagents arrived under the names an expectation refers to
+    expect:
+      env.agent_available:
+        agent: aep-planning:plan-reviewer
+
+  # --- tool.requested and tool.result -------------------------------------------------------
+
+  - id: tool-calls-are-selectable-by-name-and-argument
+    statement: a `tool.requested` carries the vendor's tool name and its input, so a selector decides
+    expect:
+      tool.called:
+        tool: Bash
+        count: {at_least: 1}
+
+  # **`tool.failed` is deliberately not a row here, and the reason is a real finding.**
+  #
+  # A `tool.failed` bound reads `is_error`. On the **real** Claude Code wire that field is present
+  # and explicit — `crates/metaharness-claude/fixtures/golden/transcript.jsonl`, captured from
+  # 2.1.240, carries `"is_error": false` on a successful `tool_result` — so a driven run decides
+  # this row. On these two **hand-written** fixtures it is omitted, exactly as
+  # `checks/transcripts/README.md` warns ("only the fields the adapter reads are populated"), and
+  # the two readers then answer differently about the same run:
+  #
+  #   claude-code/stream-json   ok   0 of 5 Bash call(s) failed, exactly 0
+  #   metaharness/event-stream  unk  the result at event 3 … records no `is_error`
+  #
+  # The event-stream answer is the correct one and the reader is not being changed to match: an
+  # absent field is `null` and never `false` (design § 2.1, invariant 3). What the disagreement
+  # measures is the fixture, not the format, so the row is left out rather than downgraded — an
+  # `unk` that means *this hand-written input omits a field the real wire carries* would drown the
+  # one this document exists to surface.
+
+  - id: tool-results-carry-their-size
+    statement: a `tool.result` carries enough to size what it injected into the context
+    severity: advisory
+    expect:
+      tool.result_bytes:
+        bytes: {at_most: 400000}
+        per: total
+
+  - id: the-call-to-result-interval-is-derivable
+    statement: recorded timestamps survive on both ends of a call, so a duration is derivable
+    expect:
+      step.exec_time:
+        tool: Bash
+        ms: {at_most: 60000}
+
+  # --- text ---------------------------------------------------------------------------------
+
+  - id: assistant-text-survived-the-projection
+    statement: what the model said arrived as its own family, apart from its reasoning
+    severity: advisory
+    expect:
+      events.assistant:
+        count: {at_most: 80}
+
+  # --- session.ended --------------------------------------------------------------------------
+
+  - id: the-terminal-record-survived-the-projection
+    statement: the terminal record arrived with the three fields that say how a run ended
+    expect:
+      result:
+        is_error: false
+        terminal_reason: completed
+        api_error_status: absent
+
+  - id: the-vendors-denial-list-survived-the-projection
+    statement: the vendor's own denial list arrived as a list — `[]` is *none*, and a missing key is `unk`
+    expect:
+      permission.denied:
+        count: {exactly: 0}
+
+  - id: the-turn-count-survived-the-projection
+    statement: the terminal record's turn count arrived
+    severity: advisory
+    expect:
+      turns:
+        count: {at_most: 30}
+
+  - id: the-cost-survived-the-projection
+    statement: what the vendor said it cost arrived, and was never multiplied out here
+    severity: advisory
+    expect:
+      cost.total:
+        at_most_usd: 1.00
+
+  - id: the-output-token-count-survived-the-projection
+    statement: the usage block arrived with its token fields
+    severity: advisory
+    expect:
+      tokens.output:
+        count: {at_most: 20000}
+
+  - id: the-billed-thinking-figure-survived-the-projection
+    statement: billed thinking arrived — the invoice's number, not the harness's live estimate
+    severity: advisory
+    expect:
+      tokens.thinking:
+        count: {at_most: 5000}
+
+  - id: the-run-duration-survived-the-projection
+    statement: the recorded wall clock arrived
+    severity: advisory
+    expect:
+      duration.total:
+        ms: {at_most: 300000}
+
+  - id: the-api-duration-survived-the-projection
+    statement: the recorded API duration arrived — its own field, not derived from the other
+    severity: advisory
+    expect:
+      duration.api:
+        ms: {at_most: 300000}
+
+  - id: the-first-token-latency-survived-the-projection
+    statement: TTFT arrived from the recorded field, never from a subtraction
+    severity: advisory
+    expect:
+      ttft:
+        ms: {at_most: 20000}
+
+  - id: the-startup-latency-survived-the-projection
+    statement: time to the first request arrived
+    severity: advisory
+    expect:
+      time_to_request:
+        ms: {at_most: 20000}
+
+  - id: the-subagent-count-survived-the-projection
+    statement: the terminal record's subagent count arrived
+    severity: advisory
+    expect:
+      subagent.spawned:
+        count: {at_most: 2}

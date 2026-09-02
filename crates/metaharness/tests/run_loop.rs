@@ -309,6 +309,7 @@ fn every_builder_method_sets_one_field_of_the_one_options_type() {
         effort: Some("medium".to_string()),
         max_turns: Some(30),
         plugin_dir: vec!["plugins/one".into()],
+        plugin: Vec::new(),
         cwd: Some("/operator/repo".into()),
         retain_dir: Some("/operator/keep".into()),
         strict_version: true,

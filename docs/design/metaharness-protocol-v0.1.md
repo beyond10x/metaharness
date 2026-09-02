@@ -152,6 +152,31 @@
 > copies and one caller-named source or none. The former wording made a fully known, stronger
 > posture permanently `unavailable`; the row now records either adapter-class-specific
 > imposition and remains advisory because neither is visible in the provider record.
+> **Amendment a15, 2026-09-03**, from building the reading surface `beyond10x/bench` embeds:
+> **the projection has a document form, and the events that map to no IR family are still nodes.**
+> `metaharness project <events.jsonl>` writes a `trace-ir/1`-tagged JSON document — byte-stable, no
+> clock, no network — and every one of the nineteen event kinds lands in an IR family or in a node
+> of family **`unk` carrying its metaharness event name**, which is a metaharness extension over
+> the IR's ten families and is deliberately *not* `opaque`: `opaque` means the vendor said
+> something the adapter could not read, and this means metaharness read it perfectly well and
+> `trace-ir/1` has no family for it. Folding the two together would report a protocol-vocabulary
+> gap as a vendor-format gap. Two further corrections at the point of change in § 4.4:
+> `transcript_digest` is over the **event stream's own bytes** and says so, because a document
+> projected from an event stream that carried a vendor transcript's digest would name a file it was
+> not made from; and **`aep trace check` is a consumer of the event stream, not of this document** —
+> `aep` 0.42.0 dispatches on the first line's `format` tag and has exactly two readers,
+> `metaharness.event/1` and `claude-code/stream-json`, so Q9 is **half closed** rather than closed.
+> The mapping table, the alignment rule for the two-column viewer, and the `--plugin` semantics are
+> `docs/design/runs-side-by-side-v0.1.md`.
+> **Amendment a16, 2026-09-03**, same build: **H1a's declared set may be added to on purpose.**
+> `--plugin <marketplace-repo>@<name>@<version-or-commit>` places a named third-party plugin into
+> the scratch config home before launch, resolved from a marketplace the operator has **already
+> fetched** so the run itself reaches no network, pinned — an unpinned spelling is refused by name,
+> not warned about — and digested before the copy. H1a is unchanged and is the reason this is
+> allowed: it says *plugins are exactly the declared set*, never *no plugins*. The placement layout
+> is **read from a real config home and not driven**, so `InstalledPlugin::loaded_by` says which of
+> the two mechanisms carried the install and how strong that claim is, and the hermetic report
+> prints `plugins: none` rather than nothing when the list is empty.
 > **Audience:** whoever reviews this for acceptance, and whoever builds it afterwards.
 > **Sources studied:** `beyond10x/aep` (public, read-only), and a private
 > agent runtime whose patterns are described here generically and whose names, records and
@@ -684,6 +709,29 @@ eighteen derives in `crates/trace-domain/src/ir.rs` carries `Deserialize`, its i
 document any third party can read back. `metaharness project --to trace-ir` writes JSON for a human
 and for diffing, and says so; a machine-readable trace-ir document is Q9's prerequisite, named in
 § 12.
+
+> **Amendment a15, 2026-09-03.** The document form now exists, and three things about it are
+> decided here rather than left to the writer:
+>
+> 1. **Every event kind is a node.** The nine control-plane kinds — `step.entered`, `step.left`,
+>    `turn.started`, `turn.ended`, `tool.decided`, `command.result`, `warning`, `auth.expired`, and
+>    nothing else — are written as nodes of family **`unk`** carrying the metaharness event name and
+>    `reason: "no trace-ir/1 family"`. They are not dropped, and they are not folded into `opaque`,
+>    which means the opposite thing (*the vendor said something the adapter could not read*). The
+>    tenth kind D6 could have listed, `usage`, is not control-plane: it folds into `run_outcome`.
+> 2. **`transcript_digest` is over the event stream's own bytes.** D6a made this field exempt
+>    because it is a property of a file; the file this document is made from is the event stream,
+>    so that is the file it names. The vendor transcript's own reference, where `session.started`
+>    carried one, travels beside it as `metaharness.vendor_transcript` — two digests meaning two
+>    things, neither pretending to be the other.
+> 3. **`aep trace check` reads the event stream, not this document.** Established by reading
+>    `aep/crates/trace-spec/src/reader.rs` at `e27c84b`: the reader dispatches on the first
+>    non-blank line's `format` tag and has exactly two adapters, `metaharness.event/1` and
+>    `claude-code/stream-json`. So **Q9 is half closed** — the document is written, tagged and
+>    byte-stable, and nothing outside this repository can read it back into an IR. The § 4.4
+>    cross-check is therefore asserted by comparing **censuses**, per family, rather than two
+>    deserialized values. The full decision, with the complete nineteen-row mapping table, is
+>    `docs/design/runs-side-by-side-v0.1.md` § 1.
 
 ---
 
@@ -1335,7 +1383,8 @@ metaharness run <claude|codex> [--hermetic|--hermetic strict] [-p <prompt>] [--f
                                [-- <auditor pass-through args>…]
 metaharness capabilities <kind> [--render]     # declared tiers, pinned versions, operation rendering
 metaharness conformance <kind>                 # the free vectors (§ 8.5) — no model, no credential
-metaharness project --events <f> --to trace-ir # the projection, as a verb (see D6a on its form)
+metaharness project <events.jsonl> --out <f>   # the projection, as a verb (a15: --events became a positional)
+metaharness project --html <f> <a.jsonl> <b.jsonl>  # two runs, aligned, as one static page (a15)
 metaharness audit --transcript <f> [--events <f>] [--spec <s>] [--auditor <p>]  # judge offline
 metaharness doctor <kind>                      # installed vendor version vs the adapter's pin
 ```

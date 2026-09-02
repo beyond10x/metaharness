@@ -194,12 +194,13 @@ fn conformance_covers_the_adapters_tiers_and_this_crates_control_tier() {
     );
 }
 
+/// `project` **stops refusing** with amendment a15, and what is left to assert here is the
+/// refusal it still owes: a stream that is not there is exit `2` and never a document.
+///
+/// The verb's own behaviour is `tests/project.rs`; this file keeps the exit-code contract.
 #[test]
-fn project_refuses_honestly_and_names_the_open_question_it_waits_on() {
-    assert_eq!(
-        code_of(&["metaharness", "project", "--events", "e.jsonl"]),
-        2
-    );
+fn project_over_a_stream_that_is_not_there_exits_two() {
+    assert_eq!(code_of(&["metaharness", "project", "e.jsonl"]), 2);
 }
 
 #[test]
@@ -238,7 +239,7 @@ fn no_verb_ever_exits_one_without_a_verdict_to_contradict() {
         // Never `run claude -p …`: that starts a paid session. See this file's own note.
         vec!["metaharness", "run", "codex"],
         vec!["metaharness", "run", "claude", "--tool-surface", "owned"],
-        vec!["metaharness", "project", "--events", "e.jsonl"],
+        vec!["metaharness", "project", "e.jsonl"],
         vec!["metaharness", "audit", "--transcript", "t.jsonl"],
     ] {
         assert_ne!(code_of(&argv), 1, "{argv:?}");

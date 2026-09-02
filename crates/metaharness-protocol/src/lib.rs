@@ -38,6 +38,7 @@ mod plugin;
 mod projection;
 mod seam;
 mod spec;
+mod trace_ir;
 
 pub use capability::{
     AdapterClass, AdapterId, Capabilities, CommandSupport, Tier, TierStatus, decision_modes_all,
@@ -66,9 +67,16 @@ pub use hermetic::{
     Assertion, HermeticAttestation, HermeticMode, HermeticRow, ImposedControl, RowVerdict,
     Severity, UnavailableControl, Verdict,
 };
-pub use plugin::{InstalledPlugin, PluginContent, PluginInstall, PluginTree, tree_digest};
+pub use plugin::{
+    InstalledPlugin, MarketplacePlugin, MarketplacePluginError, PluginContent, PluginInstall,
+    PluginTree, ResolvedMarketplacePlugin, tree_digest,
+};
 pub use projection::{
     CONTROL_PLANE_EVENTS, IrFamily, ProjectionReport, ir_family, project, required_ir_fields,
 };
 pub use seam::{HarnessSeam, SeamFactory};
 pub use spec::{CredentialSource, DecisionMode, Kind, RunSpec, ScopeAnnounce, ToolSurface};
+pub use trace_ir::{
+    AdapterRef, AssistantRequest, IR_ADAPTER, IR_FORMAT, MetaharnessBlock, TraceIrDocument,
+    TraceIrEvent, UNK_FAMILY, UNK_REASON, parse_timestamp_ms, project_document,
+};

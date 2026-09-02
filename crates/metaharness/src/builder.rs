@@ -19,8 +19,9 @@ use std::sync::Arc;
 
 use metaharness_protocol::{
     Capabilities, CredentialSource, DecisionMode, Digest, EventStream, Frame, HermeticMode,
-    HermeticRow, ImposedControl, Kind, PluginContent, PluginInstall, PluginTree, Refused, RunId,
-    RunSpec, ScopeAnnounce, Seam, ToolSurface, TranscriptRef, UnavailableControl, tree_digest,
+    HermeticRow, ImposedControl, Kind, PluginContent, PluginInstall, PluginTree, Refused,
+    ResolvedMarketplacePlugin, RunId, RunSpec, ScopeAnnounce, Seam, ToolSurface, TranscriptRef,
+    UnavailableControl, tree_digest,
 };
 
 use crate::clock::{Clock, SystemClock};
@@ -767,6 +768,7 @@ fn start_claude(
             memory_ancestors: memory_ancestors(&cwd),
             inputs_digest: None,
             plugins: plugin_trees(&spec),
+            marketplace_plugins: marketplace_plugins(&spec)?,
             loopback: loopback_params(loopback.as_ref()),
             tool_server: tool_server(),
         };
@@ -1179,6 +1181,10 @@ fn materialise(
 ) -> Result<(), Refusal> {
     install_plugins(&plan.plugin_installs)?;
     std::fs::create_dir_all(&plan.config_home)?;
+    // The marketplace copies land **inside** the config home, so the home has to exist first —
+    // which is why this is here rather than beside the `--plugin-dir` copies above.
+    install_plugins(&plan.marketplace_installs)?;
+    write_scratch_files(&plan.scratch_files)?;
     std::fs::create_dir_all(scratch_root.join("tmp"))?;
 
     std::fs::write(
@@ -1297,6 +1303,96 @@ fn install_plugins(installs: &[PluginInstall]) -> Result<(), Refusal> {
         })?;
     }
     Ok(())
+}
+
+/// Write the documents the launch plan decided and deliberately did not write.
+///
+/// The same division as the settings document: the adapter says what is in the file and where it
+/// goes, and this performs the I/O. Pretty-printed, because a scratch home is a thing somebody
+/// opens when a run did not behave.
+fn write_scratch_files(files: &[metaharness_claude::ScratchFile]) -> Result<(), Refusal> {
+    for file in files {
+        if let Some(parent) = file.path.parent() {
+            std::fs::create_dir_all(parent)?;
+        }
+        let rendered =
+            serde_json::to_string_pretty(&file.document).map_err(|error| Refusal::Io {
+                detail: format!("{} could not be rendered: {error}", file.path.display()),
+            })?;
+        std::fs::write(&file.path, rendered)?;
+    }
+    Ok(())
+}
+
+/// The operator's own Claude config home, which is where an already-fetched marketplace lives.
+///
+/// `CLAUDE_CONFIG_DIR` first, then `~/.claude` — the vendor's own resolution order, read from a
+/// real machine at 2.1.258. **Read-only**: nothing metaharness does writes into it.
+fn operator_config_home() -> Option<PathBuf> {
+    if let Ok(named) = std::env::var("CLAUDE_CONFIG_DIR")
+        && !named.is_empty()
+    {
+        return Some(PathBuf::from(named));
+    }
+    std::env::var("HOME")
+        .ok()
+        .map(|home| PathBuf::from(home).join(".claude"))
+}
+
+/// Resolve every declared `--plugin` against the operator's own registry, and read its tree.
+///
+/// The caller half of amendment a16: this reads, `plan_launch` decides. **Nothing here fetches**
+/// — a run reaches no network, and the refusal names the two commands that do
+/// (`docs/research/2026-09-03-claude-plugin-headless-install.md` F1–F3).
+fn marketplace_plugins(spec: &RunSpec) -> Result<Vec<ResolvedMarketplacePlugin>, Refusal> {
+    if spec.plugin.is_empty() {
+        return Ok(Vec::new());
+    }
+    let home = operator_config_home().ok_or_else(|| Refusal::Io {
+        detail: "--plugin was declared and neither CLAUDE_CONFIG_DIR nor HOME is set, so there is \
+                 no operator config home to resolve an already-fetched marketplace against"
+            .to_string(),
+    })?;
+    let known = read_registry(&home.join(metaharness_claude::KNOWN_MARKETPLACES))?;
+    let installed = read_registry(&home.join(metaharness_claude::INSTALLED_PLUGINS))?;
+
+    let mut resolved = Vec::new();
+    for declared in &spec.plugin {
+        let found = metaharness_claude::resolve_marketplace(declared, &known, &installed).map_err(
+            |refusal| Refusal::MarketplacePlugin {
+                detail: refusal.to_string(),
+            },
+        )?;
+        let source = PathBuf::from(&found.install_path);
+        resolved.push(ResolvedMarketplacePlugin {
+            requested: declared.clone(),
+            marketplace: found.marketplace,
+            version: found.version,
+            commit: found.commit,
+            tree: PluginTree {
+                content: read_plugin_tree(&source),
+                source,
+            },
+        });
+    }
+    Ok(resolved)
+}
+
+/// One registry document, or the refusal that says which one is missing and what fetches it.
+fn read_registry(path: &Path) -> Result<serde_json::Value, Refusal> {
+    // An **absent** document is not a malformed one: it means nothing has ever been installed on
+    // this machine, which is a different sentence for the operator to read. It is answered with an
+    // empty object so the resolution refuses by naming the marketplace rather than the file.
+    let Ok(text) = std::fs::read_to_string(path) else {
+        return Ok(serde_json::json!({}));
+    };
+    serde_json::from_str(&text).map_err(|error| Refusal::MarketplacePlugin {
+        detail: format!(
+            "{} is not readable JSON: {error}. Refused rather than ignored — a registry this \
+             build could not read would silently become \"nothing is installed\"",
+            path.display()
+        ),
+    })
 }
 
 /// One directory into another, files and real subdirectories, skipping exactly what
@@ -1450,6 +1546,11 @@ pub fn check_spec(spec: &RunSpec) -> Result<(), Refusal> {
     // very catalogue in-process, so there is nothing to replace and the flag would mean nothing.
     if spec.tool_surface == ToolSurface::Owned && spec.kind != Kind::Claude {
         return Err(Refusal::ToolSurfaceOwned { kind: spec.kind });
+    }
+    // A marketplace is Claude Code's; codex and the b10x loop have none, and a declaration this
+    // build could not act on would read as a plugin the run had (amendment a16).
+    if !spec.plugin.is_empty() && spec.kind != Kind::Claude {
+        return Err(Refusal::MarketplacePluginUnsupported { kind: spec.kind });
     }
     // A rate card is only meaningful where nothing else prices the run. See the variant.
     if spec.prices.is_some() && spec.kind != Kind::B10x {

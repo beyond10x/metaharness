@@ -135,6 +135,130 @@ pub struct InstalledPlugin {
     pub loaded_by: String,
 }
 
+/// A plugin named by **marketplace coordinates and a pin**: `<repo>@<name>@<version-or-commit>`.
+///
+/// The neutral half of amendment a16. Nothing here knows how a particular vendor stores a
+/// marketplace on disk — that is the adapter's, on invariant 2 — and nothing here fetches: this is
+/// the *spelling* a caller uses and the refusal it gets when the spelling names something that
+/// cannot be reproduced.
+///
+/// **Three segments, and the third is not optional.** An unpinned plugin names something that can
+/// change between two runs that both claim to have used it, which makes a bench's two arms
+/// incomparable and the run unreproducible. It is refused by name rather than warned about, on
+/// design § 7.1's rule: a control that reports and proceeds has already stopped controlling.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct MarketplacePlugin {
+    /// The marketplace's source repository, as the caller named it — `owner/repo`.
+    ///
+    /// Never the marketplace's *name*: the two differ (`beyond10x/agentplugins` is the marketplace
+    /// `beyond10x`) and only the adapter's registry can get from one to the other.
+    pub repo: String,
+    /// The plugin's own name inside that marketplace.
+    pub name: String,
+    /// The pin: a version, or a commit. Which of the two it is, is the adapter's to decide when it
+    /// resolves — a caller who knows only the version must not have to look up a sha.
+    pub pin: String,
+}
+
+impl std::fmt::Display for MarketplacePlugin {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "{}@{}@{}", self.repo, self.name, self.pin)
+    }
+}
+
+/// Why a `--plugin` spelling was refused, before anything was resolved or spawned.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum MarketplacePluginError {
+    /// Fewer than three segments: no pin.
+    Unpinned {
+        /// What was written.
+        given: String,
+    },
+    /// A segment that is there and empty.
+    EmptySegment {
+        /// Which one.
+        segment: &'static str,
+        /// What was written.
+        given: String,
+    },
+}
+
+impl std::fmt::Display for MarketplacePluginError {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            MarketplacePluginError::Unpinned { given } => write!(
+                f,
+                "`{given}` names no pin. Write `<repo>@<name>@<version-or-commit>`: an unpinned \
+                 plugin can change between two runs that both claim to have used it, which makes \
+                 the two arms of a comparison incomparable and neither of them reproducible"
+            ),
+            MarketplacePluginError::EmptySegment { segment, given } => write!(
+                f,
+                "`{given}` has an empty {segment}. Write `<repo>@<name>@<version-or-commit>`; a \
+                 blank segment names nothing and would be resolved against everything"
+            ),
+        }
+    }
+}
+
+impl std::error::Error for MarketplacePluginError {}
+
+impl std::str::FromStr for MarketplacePlugin {
+    type Err = MarketplacePluginError;
+
+    /// Split on the **last two** `@`, because a repository spelling never contains one and a
+    /// plugin name never does, while a pin might one day.
+    fn from_str(text: &str) -> Result<Self, Self::Err> {
+        let (head, pin) =
+            text.rsplit_once('@')
+                .ok_or_else(|| MarketplacePluginError::Unpinned {
+                    given: text.to_string(),
+                })?;
+        let (repo, name) =
+            head.rsplit_once('@')
+                .ok_or_else(|| MarketplacePluginError::Unpinned {
+                    given: text.to_string(),
+                })?;
+        for (segment, value) in [("repo", repo), ("name", name), ("pin", pin)] {
+            if value.is_empty() {
+                return Err(MarketplacePluginError::EmptySegment {
+                    segment: match segment {
+                        "repo" => "repo",
+                        "name" => "name",
+                        _ => "pin",
+                    },
+                    given: text.to_string(),
+                });
+            }
+        }
+        Ok(Self {
+            repo: repo.to_string(),
+            name: name.to_string(),
+            pin: pin.to_string(),
+        })
+    }
+}
+
+/// One declared marketplace plugin, **resolved by the caller** against an already-fetched
+/// marketplace and read off disk.
+///
+/// The same division as [`PluginTree`] and the ancestor walk: the caller reads, the launch plan
+/// decides. A declared plugin with no resolution here is a caller that forgot to look, and it is
+/// refused rather than silently planned without.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct ResolvedMarketplacePlugin {
+    /// What the run asked for.
+    pub requested: MarketplacePlugin,
+    /// The marketplace's **name**, which is what the plugin's id is spelled with.
+    pub marketplace: String,
+    /// The version the resolution landed on, whichever spelling of the pin was given.
+    pub version: String,
+    /// The commit the installer recorded, where it recorded one.
+    pub commit: Option<String>,
+    /// The source tree, as the caller read it.
+    pub tree: PluginTree,
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;

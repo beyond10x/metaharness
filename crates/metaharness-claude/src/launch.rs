@@ -20,12 +20,14 @@
 
 use std::collections::BTreeMap;
 use std::fmt;
+use std::fmt::Write as _;
 use std::path::{Path, PathBuf};
 
 use metaharness_protocol::{
     CredentialSource, DecisionMode, Digest, HermeticAttestation, HermeticRow, ImposedControl,
-    InstalledPlugin, Kind, PluginContent, PluginInstall, PluginTree, RefusalCode, RunSpec,
-    TierStatus, ToolSurface, UnavailableControl, required_commands,
+    InstalledPlugin, Kind, MarketplacePlugin, PluginContent, PluginInstall, PluginTree,
+    RefusalCode, ResolvedMarketplacePlugin, RunSpec, TierStatus, ToolSurface, UnavailableControl,
+    required_commands,
 };
 use serde_json::{Value, json};
 
@@ -210,6 +212,28 @@ pub struct LaunchContext {
     /// with no tree here is a caller that forgot to look, and it is refused rather than silently
     /// planned without the plugin.
     pub plugins: Vec<PluginTree>,
+    /// Every `--plugin` the run declared, **resolved** against a marketplace the operator has
+    /// already fetched (amendment a16, `crate::marketplace`).
+    ///
+    /// The same division as [`LaunchContext::plugins`]: the caller reads the operator's registry
+    /// and the tree, this function decides where the copy goes and what the registry the child
+    /// sees will say. A declared plugin with no resolution here is a caller that forgot to look,
+    /// and it is refused rather than silently planned without.
+    pub marketplace_plugins: Vec<ResolvedMarketplacePlugin>,
+}
+
+/// One document the caller writes into the scratch tree before the child starts.
+///
+/// A value on the plan, on the same division as [`LaunchPlan::settings`] and
+/// [`LaunchPlan::mcp_config`]: the adapter decides what is in it and where it goes, and the caller
+/// performs the I/O. That is what makes an assembled plugin registry a thing a test reads **before
+/// any process exists** rather than a directory somebody inspects afterwards.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct ScratchFile {
+    /// Where it goes, absolute, inside the run's own scratch tree.
+    pub path: PathBuf,
+    /// What is in it.
+    pub document: Value,
 }
 
 /// What a started loopback proxy tells the launch, and the whole of it.
@@ -281,6 +305,21 @@ pub struct LaunchPlan {
     /// in a document. The argv's `--plugin-dir` names each entry's `to`, never the operator's own
     /// directory, so what the vendor loads is the snapshot this plan digested.
     pub plugin_installs: Vec<PluginInstall>,
+    /// What to copy into the scratch **config home** once, before the child starts: one entry per
+    /// declared `--plugin`, at the path Claude Code's own plugin cache uses (amendment a16).
+    ///
+    /// Separate from [`LaunchPlan::plugin_installs`] because the two are loaded by different
+    /// mechanisms and only one of them is verified: `--plugin-dir` names its copy in the argv with
+    /// the vendor's own flag, and this one is read out of the registry the config home carries.
+    /// **The argv never names these**, because two mechanisms loading one plugin would report it
+    /// twice under two different sources and H1a's *exactly the declared set* would have to be
+    /// widened to accommodate a duplicate metaharness created itself.
+    pub marketplace_installs: Vec<PluginInstall>,
+    /// Documents the caller writes into the scratch tree before the child starts.
+    ///
+    /// Empty unless the run declared a `--plugin`, in which case it is the two registry documents
+    /// Claude Code reads under the config home and the marketplace manifest beside them.
+    pub scratch_files: Vec<ScratchFile>,
     /// The settings document the argv's `--settings` names. The caller writes it; this crate
     /// only decides what is in it.
     pub settings: Value,
@@ -416,6 +455,17 @@ pub enum LaunchRefusal {
         /// Which of the two, in the words that say what to do about it.
         why: String,
     },
+    /// A declared `--plugin` cannot be installed into the scratch config home (amendment a16).
+    ///
+    /// The same refusal `--plugin-dir` gets and for the same reason: a run that installed no
+    /// plugin and reported one would be the untreated run wearing the treated run's label. What
+    /// differs is the causes — an unresolved declaration, an empty tree, an unreadable one.
+    MarketplacePluginUnusable {
+        /// The plugin, as the run spelled it.
+        plugin: String,
+        /// Why, in the words that say what to do about it.
+        why: String,
+    },
     /// The run asked for a decision mode this adapter has not driven.
     ///
     /// Design § 8.4 O4, applied to the mode table: an embedder that requires an unverified
@@ -526,6 +576,12 @@ impl fmt::Display for LaunchRefusal {
                  run wearing the treated run's label",
                 directory.display()
             ),
+            LaunchRefusal::MarketplacePluginUnusable { plugin, why } => write!(
+                f,
+                "--plugin {plugin} cannot be installed: {why}. It is refused rather than skipped, \
+                 because a run that installed no plugin and reported one would be the untreated \
+                 run wearing the treated run's label"
+            ),
             LaunchRefusal::DecisionModeUnverified { mode, status } => write!(
                 f,
                 "the run asked for --decisions {} and the {ADAPTER_ID} adapter declares that mode \
@@ -618,6 +674,8 @@ pub fn plan_launch(spec: &RunSpec, context: &LaunchContext) -> Result<LaunchPlan
     let config_home = context.scratch_root.join(CONFIG_HOME);
     let credential_copies = credential_copies(spec, context, &config_home)?;
     let plugin_installs = plugin_installs(spec, context)?;
+    let marketplace_installs = marketplace_installs(spec, context, &config_home)?;
+    let scratch_files = scratch_registry_files(spec, context, &config_home)?;
     let mcp_config = build_mcp_config(spec, context)?;
     let prompt = spec.with_agent_execution_context(prompt);
     let args = build_args(
@@ -644,9 +702,155 @@ pub fn plan_launch(spec: &RunSpec, context: &LaunchContext) -> Result<LaunchPlan
         settings: build_settings(&hook),
         mcp_config,
         hook,
-        attestation: attest(spec, context, &config_home, &plugin_installs),
+        attestation: attest(
+            spec,
+            context,
+            &config_home,
+            &plugin_installs,
+            &marketplace_installs,
+        ),
         plugin_installs,
+        marketplace_installs,
+        scratch_files,
     })
+}
+
+/// The copy list for every declared `--plugin`, into the scratch config home.
+///
+/// The digest is computed **before** the copy, over the operator's own tree, exactly as
+/// `--plugin-dir`'s is: that is what the attestation is a claim about.
+fn marketplace_installs(
+    spec: &RunSpec,
+    context: &LaunchContext,
+    config_home: &Path,
+) -> Result<Vec<PluginInstall>, LaunchRefusal> {
+    let mut installs = Vec::new();
+    for declared in &spec.plugin {
+        let resolved = resolution(context, declared)?;
+        let digest = match &resolved.tree.content {
+            PluginContent::Files { digest, .. } => digest.clone(),
+            PluginContent::Empty => {
+                return Err(LaunchRefusal::MarketplacePluginUnusable {
+                    plugin: declared.to_string(),
+                    why: "the resolved directory holds no file at all, so the run would install \
+                          nothing and report a plugin"
+                        .to_string(),
+                });
+            }
+            PluginContent::Unreadable { detail } => {
+                return Err(LaunchRefusal::MarketplacePluginUnusable {
+                    plugin: declared.to_string(),
+                    why: format!("the resolved directory could not be read: {detail}"),
+                });
+            }
+        };
+        installs.push(PluginInstall {
+            from: resolved.tree.source.clone(),
+            to: plugin_cache_path(config_home, resolved),
+            digest,
+        });
+    }
+    Ok(installs)
+}
+
+/// Where one resolved plugin's tree goes: `<config home>/plugins/cache/<mkt>/<name>/<version>`.
+fn plugin_cache_path(config_home: &Path, resolved: &ResolvedMarketplacePlugin) -> PathBuf {
+    config_home
+        .join(crate::marketplace::PLUGIN_CACHE_HOME)
+        .join(&resolved.marketplace)
+        .join(&resolved.requested.name)
+        .join(&resolved.version)
+}
+
+/// Where one marketplace's checkout goes inside the scratch home.
+fn marketplace_path(config_home: &Path, marketplace: &str) -> PathBuf {
+    config_home
+        .join(crate::marketplace::MARKETPLACES_HOME)
+        .join(marketplace)
+}
+
+/// The resolution the caller was supposed to supply for a declared plugin.
+fn resolution<'a>(
+    context: &'a LaunchContext,
+    declared: &MarketplacePlugin,
+) -> Result<&'a ResolvedMarketplacePlugin, LaunchRefusal> {
+    context
+        .marketplace_plugins
+        .iter()
+        .find(|resolved| resolved.requested == *declared)
+        .ok_or_else(|| LaunchRefusal::MarketplacePluginUnusable {
+            plugin: declared.to_string(),
+            why: "the caller planned a launch without resolving it, so nothing digested it and \
+                  there is nothing to copy"
+                .to_string(),
+        })
+}
+
+/// The registry documents and manifests the scratch config home needs, as values.
+fn scratch_registry_files(
+    spec: &RunSpec,
+    context: &LaunchContext,
+    config_home: &Path,
+) -> Result<Vec<ScratchFile>, LaunchRefusal> {
+    if spec.plugin.is_empty() {
+        return Ok(Vec::new());
+    }
+    let mut entries = Vec::new();
+    for declared in &spec.plugin {
+        let resolved = resolution(context, declared)?;
+        entries.push(crate::marketplace::ScratchEntry {
+            marketplace: resolved.marketplace.clone(),
+            repo: resolved.requested.repo.clone(),
+            name: resolved.requested.name.clone(),
+            version: resolved.version.clone(),
+            commit: resolved.commit.clone(),
+            installed_at: plugin_cache_path(config_home, resolved)
+                .display()
+                .to_string(),
+            marketplace_at: marketplace_path(config_home, &resolved.marketplace)
+                .display()
+                .to_string(),
+        });
+    }
+
+    let (marketplaces, plugins) = crate::marketplace::scratch_registry(&entries);
+    let mut files = vec![
+        ScratchFile {
+            path: config_home.join(crate::marketplace::KNOWN_MARKETPLACES),
+            document: marketplaces,
+        },
+        ScratchFile {
+            path: config_home.join(crate::marketplace::INSTALLED_PLUGINS),
+            document: plugins,
+        },
+    ];
+    // One manifest per marketplace, so the checkout the registry points at is a marketplace and
+    // not an empty directory. Minimal on purpose: the plugin's own tree is the copy, and a
+    // manifest that listed a `source` outside the scratch home would send the vendor back to the
+    // operator's tree.
+    let mut seen: Vec<String> = Vec::new();
+    for entry in &entries {
+        if seen.contains(&entry.marketplace) {
+            continue;
+        }
+        seen.push(entry.marketplace.clone());
+        let plugins_of: Vec<Value> = entries
+            .iter()
+            .filter(|other| other.marketplace == entry.marketplace)
+            .map(|other| serde_json::json!({"name": other.name, "source": other.installed_at}))
+            .collect();
+        files.push(ScratchFile {
+            path: marketplace_path(config_home, &entry.marketplace)
+                .join(".claude-plugin")
+                .join("marketplace.json"),
+            document: serde_json::json!({
+                "name": entry.marketplace,
+                "owner": {"name": entry.repo},
+                "plugins": plugins_of,
+            }),
+        });
+    }
+    Ok(files)
 }
 
 /// The mode this run asked for against the mode table this adapter publishes.
@@ -728,6 +932,53 @@ fn installed_plugins(installs: &[PluginInstall]) -> Vec<InstalledPlugin> {
                  (H1a), never from this row",
                 install.to.display()
             ),
+        })
+        .collect()
+}
+
+/// What the attestation says about one **marketplace** plugin, and how strong the claim is.
+///
+/// The `loaded_by` sentence is the honest half of amendment a16: the layout was **read from a real
+/// config home** at 2.1.258 and recorded in the research note, and nobody has driven a session
+/// against a config home metaharness assembled. So it says *not driven*, names the open probe, and
+/// points at the record that would settle it — the opening record's plugin list, which is H1a's
+/// own comparison (invariant 4, invariant 3).
+fn marketplace_installed_plugins(
+    spec: &RunSpec,
+    context: &LaunchContext,
+    installs: &[PluginInstall],
+) -> Vec<InstalledPlugin> {
+    spec.plugin
+        .iter()
+        .zip(installs)
+        .map(|(declared, install)| {
+            let marketplace = context
+                .marketplace_plugins
+                .iter()
+                .find(|resolved| resolved.requested == *declared)
+                .map_or_else(
+                    || "unknown".to_string(),
+                    |resolved| resolved.marketplace.clone(),
+                );
+            InstalledPlugin {
+                name: declared.name.clone(),
+                source: format!("{declared} (marketplace {marketplace})"),
+                installed_at: install.to.display().to_string(),
+                digest: install.digest.clone(),
+                loaded_by: format!(
+                    "placed in the scratch config home's plugin registry: the tree at {}, named by \
+                     `plugins/installed_plugins.json` as `{}@{marketplace}` and pinned to `{}`. \
+                     That layout was read from a real config home at claude 2.1.258 \
+                     (docs/research/2026-09-03-claude-plugin-headless-install.md) and is **not \
+                     driven** — no session has been launched against a config home metaharness \
+                     assembled (open probe Q19). Whether the plugin then appears in the session is \
+                     asserted from the opening record\'s plugin list (H1a), never from this row. \
+                     `--plugin-dir` is deliberately not also passed for it",
+                    install.to.display(),
+                    declared.name,
+                    declared.pin,
+                ),
+            }
         })
         .collect()
 }
@@ -1166,18 +1417,43 @@ fn build_settings(hook: &Value) -> Value {
     })
 }
 
+/// Both injection mechanisms, in **one** list, each row saying which carried it.
+///
+/// One list and not two, because H1a is *"plugins are exactly the declared set"* and a reader
+/// comparing that set against the vendor's opening record has to be comparing the whole of it.
+fn all_installed_plugins(
+    spec: &RunSpec,
+    context: &LaunchContext,
+    plugin_installs: &[PluginInstall],
+    marketplace_installs: &[PluginInstall],
+) -> Vec<InstalledPlugin> {
+    let mut all = installed_plugins(plugin_installs);
+    all.extend(marketplace_installed_plugins(
+        spec,
+        context,
+        marketplace_installs,
+    ));
+    all
+}
+
 /// What metaharness claims it imposed, and what it says it could not.
+#[allow(
+    clippy::too_many_lines,
+    reason = "one row per hermetic control, read top to bottom against § 8.1's list; splitting it \
+              would put the twelve rows in more than one place"
+)]
 fn attest(
     spec: &RunSpec,
     context: &LaunchContext,
     config_home: &Path,
     plugin_installs: &[PluginInstall],
+    marketplace_installs: &[PluginInstall],
 ) -> HermeticAttestation {
     let home = config_home.display();
     let mut imposed = vec![
         control_imposed(
             HermeticRow::H1a,
-            plugin_posture(&home.to_string(), plugin_installs),
+            plugin_posture(&home.to_string(), plugin_installs, marketplace_installs),
         ),
         control_imposed(HermeticRow::H1b, format!("CLAUDE_CONFIG_DIR={home}")),
         control_imposed(
@@ -1282,7 +1558,12 @@ fn attest(
         imposed,
         unavailable,
         ambient_inputs: ambient_inputs(spec),
-        installed_plugins: installed_plugins(plugin_installs),
+        installed_plugins: all_installed_plugins(
+            spec,
+            context,
+            plugin_installs,
+            marketplace_installs,
+        ),
     }
 }
 
@@ -1292,26 +1573,52 @@ fn attest(
 /// the declared set is only meaningful beside the home it is declared into. A plugin-less run says
 /// so out loud — an H1a row that went quiet when nothing was injected would read as a row that
 /// stopped checking.
-fn plugin_posture(config_home: &str, installs: &[PluginInstall]) -> String {
-    if installs.is_empty() {
+fn plugin_posture(
+    config_home: &str,
+    installs: &[PluginInstall],
+    marketplace_installs: &[PluginInstall],
+) -> String {
+    if installs.is_empty() && marketplace_installs.is_empty() {
         return format!(
             "CLAUDE_CONFIG_DIR={config_home}, and no plugin was injected: the declared set is empty"
         );
     }
-    let names: Vec<String> = installs
-        .iter()
-        .map(|install| {
-            install
-                .to
-                .file_name()
-                .map_or_else(String::new, |name| name.to_string_lossy().into_owned())
-        })
-        .collect();
-    format!(
-        "CLAUDE_CONFIG_DIR={config_home}, and the declared set is {names:?} — each copied into the \
-         scratch tree at launch, digested before the copy, and named to the vendor with its own \
-         --plugin-dir flag"
-    )
+    let names = |installs: &[PluginInstall]| -> Vec<String> {
+        installs
+            .iter()
+            .map(|install| {
+                install
+                    .to
+                    .file_name()
+                    .map_or_else(String::new, |name| name.to_string_lossy().into_owned())
+            })
+            .collect()
+    };
+    let mut said = format!("CLAUDE_CONFIG_DIR={config_home}");
+    if !installs.is_empty() {
+        let directories = names(installs);
+        let _ = write!(
+            said,
+            ", and the declared set includes {directories:?} — each copied into the scratch tree \
+             at launch, digested before the copy, and named to the vendor with its own \
+             --plugin-dir flag"
+        );
+    }
+    // **Stated apart from the directories above, because the two are loaded differently and only
+    // one of them is verified** (amendment a16). Folding them into one sentence would let a
+    // reader carry `--plugin-dir`'s *verified* over onto a placement nobody has driven.
+    if !marketplace_installs.is_empty() {
+        let placed = names(marketplace_installs);
+        let _ = write!(
+            said,
+            ", and it also includes the pinned marketplace plugin(s) {placed:?} — copied into this \
+             config home's own plugin cache and named by the registry documents beside it. That \
+             placement is read from a real config home and **not driven** (open probe Q19), so \
+             whether the session loads them is asserted from the opening record and never from \
+             this row"
+        );
+    }
+    said
 }
 
 /// The one sentence that says what a loopback run's credential posture is.
@@ -1411,6 +1718,7 @@ mod tests {
             memory_ancestors: Vec::new(),
             inputs_digest: Some(Digest::of(b"inputs")),
             plugins: Vec::new(),
+            marketplace_plugins: Vec::new(),
             loopback: None,
             tool_server: Some(PathBuf::from("/usr/local/bin/metaharness")),
         }

@@ -55,7 +55,7 @@ and that document disagree, the document is amended rather than the disagreement
 | `run b10x` | observes the b10x loop |
 | `capabilities`, `conformance`, `doctor` | work with no model and no credential |
 | `mcp-serve` | serves the owned tool surface over MCP on stdio |
-| `project` | refuses with exit 2 — `trace-ir/1` has no reader yet |
+| `project` | writes a `trace-ir/1` document from an event stream, byte-stable; `--html` renders one or two runs as one static page |
 | `audit` over a foreign transcript | refuses with exit 2 |
 
 The live runs cost money, sit behind `METAHARNESS_LIVE=1`, and are never part of `task check`. The

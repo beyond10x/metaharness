@@ -60,6 +60,7 @@ mod spawn_codex;
 mod spawn_codex_vectors;
 mod spawn_vectors;
 mod vectors;
+mod viewer;
 
 /// The harness-neutral wire: the events, the commands and the one options type.
 ///
@@ -107,6 +108,7 @@ pub use vectors::{
     all_passed, capabilities, conformance_vectors, contract_obligations, contract_result,
     control_vectors,
 };
+pub use viewer::{AlignmentRule, TRACE_IR_FORM, project_file, render_page};
 
 /// The adapter ids this build carries, in the order the CLI lists them.
 ///

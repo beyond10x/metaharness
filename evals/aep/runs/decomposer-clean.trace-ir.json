@@ -1,0 +1,370 @@
+{
+  "format": "trace-ir/1",
+  "transcript_digest": "90a4bcfdf5cba46c2e5cd4386cbe8f78c229a18e68f136d342a7d31c5bddcaf7",
+  "adapter": {
+    "name": "metaharness/project",
+    "written_against": [
+      "metaharness.event/1"
+    ]
+  },
+  "events": [
+    {
+      "index": 0,
+      "source_line": 1,
+      "timestamp": "2026-08-21T09:00:00.000Z",
+      "timestamp_ms": 1787302800000,
+      "kind": {
+        "adapter": "claude",
+        "adapter_class": "harness",
+        "agents": [
+          "aep-planning:decomposer",
+          "aep-planning:plan-reviewer"
+        ],
+        "credential_source": "none",
+        "cwd": "/scratch/project",
+        "event": "session_start",
+        "harness_version": null,
+        "hermetic": {
+          "ambient_inputs": [],
+          "decisions": "frame",
+          "imposed": [],
+          "installed_plugins": [],
+          "mode": "off",
+          "unavailable": []
+        },
+        "inputs_digest": null,
+        "mcp_servers": null,
+        "model": "claude-sonnet-5",
+        "offered_tools": [
+          "Bash",
+          "Read",
+          "Write",
+          "Edit",
+          "Glob",
+          "Grep",
+          "Skill",
+          "Task",
+          "TodoWrite"
+        ],
+        "output_style": "default",
+        "permission_mode": "dontAsk",
+        "plugins": [
+          {
+            "name": "aep-planning",
+            "source": "aep-planning@inline",
+            "version": "0.1.0"
+          }
+        ],
+        "session_id": "check-decomposer-clean",
+        "skills": [
+          "aep-planning:planning"
+        ],
+        "slash_commands": [],
+        "transcript": {
+          "bytes": 4758,
+          "digest": "6327b6fcc14fe1c3c5bdc1e1b54fa245c82654e4e0990eafbec174e6193c2aa1",
+          "path": "checks/transcripts/decomposer-clean.jsonl"
+        },
+        "withheld": null
+      }
+    },
+    {
+      "index": 1,
+      "source_line": 2,
+      "timestamp": "2026-08-21T09:00:03.100Z",
+      "timestamp_ms": 1787302803100,
+      "kind": {
+        "call_id": "toolu_1",
+        "deadline_ms": null,
+        "decision_required": false,
+        "event": "tool_call",
+        "input": {
+          "description": "Decompose the epic",
+          "prompt": "epic:passkey-sign-in",
+          "subagent_type": "aep-planning:decomposer"
+        },
+        "name": "Task",
+        "seam": "none"
+      }
+    },
+    {
+      "index": 2,
+      "source_line": 3,
+      "timestamp": "2026-08-21T09:00:05.400Z",
+      "timestamp_ms": 1787302805400,
+      "kind": {
+        "call_id": "toolu_2",
+        "deadline_ms": null,
+        "decision_required": false,
+        "event": "tool_call",
+        "input": {
+          "command": "protocol artifact list --format json"
+        },
+        "name": "Bash",
+        "seam": "none"
+      }
+    },
+    {
+      "index": 3,
+      "source_line": 4,
+      "timestamp": "2026-08-21T09:00:05.520Z",
+      "timestamp_ms": 1787302805520,
+      "kind": {
+        "bytes": 49,
+        "call_id": "toolu_2",
+        "content": "[{\"id\":\"epic:passkey-sign-in\",\"status\":\"active\"}]",
+        "event": "tool_result",
+        "is_error": null,
+        "tool_use_result": {
+          "interrupted": false,
+          "stderr": "",
+          "stdout": "[{\"id\":\"epic:passkey-sign-in\",\"status\":\"active\"}]"
+        }
+      }
+    },
+    {
+      "index": 4,
+      "source_line": 5,
+      "timestamp": "2026-08-21T09:00:07.200Z",
+      "timestamp_ms": 1787302807200,
+      "kind": {
+        "call_id": "toolu_3",
+        "deadline_ms": null,
+        "decision_required": false,
+        "event": "tool_call",
+        "input": {
+          "command": "protocol artifact lifecycle story"
+        },
+        "name": "Bash",
+        "seam": "none"
+      }
+    },
+    {
+      "index": 5,
+      "source_line": 6,
+      "timestamp": "2026-08-21T09:00:07.290Z",
+      "timestamp_ms": 1787302807290,
+      "kind": {
+        "bytes": 21,
+        "call_id": "toolu_3",
+        "content": "story starts at draft",
+        "event": "tool_result",
+        "is_error": null,
+        "tool_use_result": {
+          "interrupted": false,
+          "stderr": "",
+          "stdout": "story starts at draft"
+        }
+      }
+    },
+    {
+      "index": 6,
+      "source_line": 7,
+      "timestamp": "2026-08-21T09:00:09.800Z",
+      "timestamp_ms": 1787302809800,
+      "kind": {
+        "call_id": "toolu_4",
+        "deadline_ms": null,
+        "decision_required": false,
+        "event": "tool_call",
+        "input": {
+          "command": "protocol artifact new story device-binding --title 'Bind a passkey to a device' --relate decomposes:epic:passkey-sign-in"
+        },
+        "name": "Bash",
+        "seam": "none"
+      }
+    },
+    {
+      "index": 7,
+      "source_line": 8,
+      "timestamp": "2026-08-21T09:00:09.930Z",
+      "timestamp_ms": 1787302809930,
+      "kind": {
+        "bytes": 36,
+        "call_id": "toolu_4",
+        "content": "created story:device-binding (draft)",
+        "event": "tool_result",
+        "is_error": null,
+        "tool_use_result": {
+          "interrupted": false,
+          "stderr": "",
+          "stdout": "created story:device-binding (draft)"
+        }
+      }
+    },
+    {
+      "index": 8,
+      "source_line": 9,
+      "timestamp": "2026-08-21T09:00:12.100Z",
+      "timestamp_ms": 1787302812100,
+      "kind": {
+        "call_id": "toolu_5",
+        "deadline_ms": null,
+        "decision_required": false,
+        "event": "tool_call",
+        "input": {
+          "command": "protocol artifact new story cross-device-sign-in --title 'Sign in from a second device' --relate decomposes:epic:passkey-sign-in"
+        },
+        "name": "Bash",
+        "seam": "none"
+      }
+    },
+    {
+      "index": 9,
+      "source_line": 10,
+      "timestamp": "2026-08-21T09:00:12.210Z",
+      "timestamp_ms": 1787302812210,
+      "kind": {
+        "bytes": 42,
+        "call_id": "toolu_5",
+        "content": "created story:cross-device-sign-in (draft)",
+        "event": "tool_result",
+        "is_error": null,
+        "tool_use_result": {
+          "interrupted": false,
+          "stderr": "",
+          "stdout": "created story:cross-device-sign-in (draft)"
+        }
+      }
+    },
+    {
+      "index": 10,
+      "source_line": 11,
+      "timestamp": "2026-08-21T09:00:14.600Z",
+      "timestamp_ms": 1787302814600,
+      "kind": {
+        "call_id": "toolu_6",
+        "deadline_ms": null,
+        "decision_required": false,
+        "event": "tool_call",
+        "input": {
+          "command": "protocol artifact validate"
+        },
+        "name": "Bash",
+        "seam": "none"
+      }
+    },
+    {
+      "index": 11,
+      "source_line": 12,
+      "timestamp": "2026-08-21T09:00:14.700Z",
+      "timestamp_ms": 1787302814700,
+      "kind": {
+        "bytes": 55,
+        "call_id": "toolu_6",
+        "content": "9 file(s) in .engineering/planning: 9 artifact(s)\nvalid",
+        "event": "tool_result",
+        "is_error": null,
+        "tool_use_result": {
+          "interrupted": false,
+          "stderr": "",
+          "stdout": "9 file(s) in .engineering/planning: 9 artifact(s)\nvalid"
+        }
+      }
+    },
+    {
+      "index": 12,
+      "source_line": 13,
+      "timestamp": "2026-08-21T09:00:15.100Z",
+      "timestamp_ms": 1787302815100,
+      "kind": {
+        "bytes": 122,
+        "call_id": "toolu_1",
+        "content": "Created story:device-binding and story:cross-device-sign-in under epic:passkey-sign-in. protocol artifact validate: valid.",
+        "event": "tool_result",
+        "is_error": null,
+        "tool_use_result": null
+      }
+    },
+    {
+      "index": 13,
+      "source_line": 14,
+      "timestamp": "2026-08-21T09:00:17.300Z",
+      "timestamp_ms": 1787302817300,
+      "kind": {
+        "event": "assistant_text",
+        "request_id": "req_7",
+        "text": "The decomposer created story:device-binding and story:cross-device-sign-in, both draft, both decomposing epic:passkey-sign-in. protocol artifact validate is clean."
+      }
+    },
+    {
+      "index": 14,
+      "source_line": 15,
+      "timestamp": null,
+      "timestamp_ms": null,
+      "kind": {
+        "api_error_status": null,
+        "census": {
+          "abstained": 0,
+          "allowed": 0,
+          "by_decider": {},
+          "by_seam": {},
+          "denied": 0,
+          "replaced": 0
+        },
+        "duration_api_ms": 17100,
+        "duration_ms": 18200,
+        "event": "run_outcome",
+        "is_error": false,
+        "model_usage": null,
+        "num_turns": 7,
+        "permission_denials": [],
+        "stop_reason": "end_turn",
+        "subagents_spawned": 1,
+        "subtype": "success",
+        "terminal_reason": "completed",
+        "time_to_request_ms": 55,
+        "total_cost_usd": 0.21,
+        "ttft_ms": 1700,
+        "usage": {
+          "cache_creation_input_tokens": 19400,
+          "cache_read_input_tokens": 181000,
+          "cost_usd": null,
+          "input_tokens": 42,
+          "iterations": null,
+          "output_tokens": 2100,
+          "service_tier": null,
+          "speed": null,
+          "thinking_tokens": 30
+        }
+      }
+    }
+  ],
+  "requests": [],
+  "metaharness": {
+    "source": "metaharness.event/1",
+    "run": "decomposer-clean",
+    "events_total": 15,
+    "families": {
+      "assistant_text": 1,
+      "run_outcome": 1,
+      "session_start": 1,
+      "tool_call": 6,
+      "tool_result": 6
+    },
+    "unk_kinds": {},
+    "vendor_transcript": {
+      "path": "checks/transcripts/decomposer-clean.jsonl",
+      "digest": "6327b6fcc14fe1c3c5bdc1e1b54fa245c82654e4e0990eafbec174e6193c2aa1",
+      "bytes": 4758
+    },
+    "withheld": null,
+    "available_operations": null,
+    "hermetic": {
+      "mode": "off",
+      "decisions": "frame",
+      "imposed": [],
+      "unavailable": [],
+      "ambient_inputs": [],
+      "installed_plugins": []
+    },
+    "census": {
+      "allowed": 0,
+      "denied": 0,
+      "replaced": 0,
+      "abstained": 0,
+      "by_seam": {},
+      "by_decider": {}
+    }
+  }
+}

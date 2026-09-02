@@ -50,6 +50,7 @@ pub const CONTRACT_OBLIGATIONS: ContractObligations = ContractObligations {
         "c1-plugin-empty-refusal",
         "c1-observe-mode",
         "c1-plugin-injection",
+        "c1-marketplace-plugin",
     ]),
     recorded_wire: Obligation::Filled(&["golden-transcript"]),
     recorded_hook_input: Obligation::Filled(&["golden-hook-input"]),
@@ -68,6 +69,7 @@ pub fn conformance_vectors() -> Vec<VectorOutcome> {
     let mut outcomes = launch_vectors();
     outcomes.push(observe_mode_vector());
     outcomes.push(plugin_injection_vector());
+    outcomes.push(marketplace_plugin_vector());
     outcomes.extend(replay_vectors());
     outcomes.push(golden_transcript_vector(GOLDEN_TRANSCRIPT));
     outcomes.push(golden_hook_vector(GOLDEN_HOOK_INPUT));
@@ -514,9 +516,117 @@ fn base_context() -> LaunchContext {
         // digest below is over invented file names and invented bytes, and no directory on any
         // machine was read to produce it.
         plugins: Vec::new(),
+        // And no marketplace plugin unless a case says so, on the same rule.
+        marketplace_plugins: Vec::new(),
         // No proxy: every launch vector here is a pure plan against a synthetic world, and a
         // loopback endpoint is by construction a port something really bound.
         loopback: None,
+    }
+}
+
+/// C1 — **the launch shape with a pinned marketplace plugin present** (amendment a16, G3/G4).
+///
+/// Free, and it stays free: this is a plan against a synthetic world, so the vector that records
+/// what `--plugin` does costs no run and no fetch. Four facts, and the last two are the ones a
+/// consumer of this record needs:
+///
+/// * the tree is copied **into the config home**, at the vendor's own cache path;
+/// * the two registry documents are on the plan, and **nothing in them names a path outside the
+///   scratch home** — a registry pointing at the operator's cache would make the copy pointless;
+/// * the argv does **not** also carry `--plugin-dir` for it, because two mechanisms loading one
+///   plugin would report it twice;
+/// * the attestation lists it with its pin and says the placement is **not driven**.
+fn marketplace_plugin_vector() -> VectorOutcome {
+    let id = "c1-marketplace-plugin";
+    let (_, tree) = synthetic_plugin();
+    let PluginContent::Files { digest, .. } = tree.content.clone() else {
+        return VectorOutcome::failed(id, ConformanceTier::C1, "the synthetic tree is not files");
+    };
+    let requested: metaharness_protocol::MarketplacePlugin =
+        match "beyond10x/agentplugins@aep-planning@0.4.0".parse() {
+            Ok(requested) => requested,
+            Err(error) => {
+                return VectorOutcome::failed(id, ConformanceTier::C1, error.to_string());
+            }
+        };
+
+    let mut spec = base_spec();
+    spec.plugin.push(requested.clone());
+    let mut context = base_context();
+    context
+        .marketplace_plugins
+        .push(metaharness_protocol::ResolvedMarketplacePlugin {
+            requested,
+            marketplace: "beyond10x".to_string(),
+            version: "0.4.0".to_string(),
+            commit: Some("21147b7667dfaefcfa45a094e9542891b1783541".to_string()),
+            tree: PluginTree {
+                source: PathBuf::from(
+                    "/operator/.claude/plugins/cache/beyond10x/aep-planning/0.4.0",
+                ),
+                content: PluginContent::Files {
+                    count: 2,
+                    digest: digest.clone(),
+                },
+            },
+        });
+
+    let plan = match plan_launch(&spec, &context) {
+        Ok(plan) => plan,
+        Err(refusal) => {
+            return VectorOutcome::failed(
+                id,
+                ConformanceTier::C1,
+                format!("the marketplace install was refused: {refusal}"),
+            );
+        }
+    };
+
+    let mut differences = Vec::new();
+    let placed =
+        PathBuf::from("/scratch/run-1/claude-home/plugins/cache/beyond10x/aep-planning/0.4.0");
+    match plan.marketplace_installs.as_slice() {
+        [install] if install.to == placed && install.digest == digest => {}
+        other => differences.push(format!("the config-home copy list is {other:?}")),
+    }
+    if plan.args.iter().any(|argument| argument == "--plugin-dir") {
+        differences.push("the argv names --plugin-dir for a marketplace plugin".to_string());
+    }
+    let documents: Vec<String> = plan
+        .scratch_files
+        .iter()
+        .map(|file| file.document.to_string())
+        .collect();
+    if !plan
+        .scratch_files
+        .iter()
+        .any(|file| file.path.ends_with("plugins/installed_plugins.json"))
+    {
+        differences.push(format!(
+            "no installed_plugins.json on the plan: {documents:?}"
+        ));
+    }
+    if documents
+        .iter()
+        .any(|document| document.contains("/operator/"))
+    {
+        differences.push(format!(
+            "an assembled registry names the operator's own tree: {documents:?}"
+        ));
+    }
+    match plan.attestation.installed_plugins.as_slice() {
+        [attested]
+            if attested.name == "aep-planning"
+                && attested.digest == digest
+                && attested.source.contains("0.4.0")
+                && attested.loaded_by.contains("not driven") => {}
+        other => differences.push(format!("the attestation says {other:?}")),
+    }
+
+    if differences.is_empty() {
+        VectorOutcome::passed(id, ConformanceTier::C1)
+    } else {
+        VectorOutcome::failed(id, ConformanceTier::C1, differences.join("; "))
     }
 }
 

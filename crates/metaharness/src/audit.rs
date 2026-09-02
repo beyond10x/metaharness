@@ -22,7 +22,7 @@ use std::fmt::Write as _;
 
 use metaharness_protocol::{
     Assertion, CredentialSource, DecidedBy, Decision, DecisionCensus, Event, HermeticAttestation,
-    HermeticRow, RowVerdict, RunSpec, Severity, Verdict, WithheldTool,
+    HermeticRow, InstalledPlugin, RowVerdict, RunSpec, Severity, Verdict, WithheldTool,
 };
 
 use crate::auditor::AuditorVerdict;
@@ -100,6 +100,16 @@ pub struct AuditReport {
     /// and never *nothing was withheld*. `Some(vec![])` is the harness stating that the run got
     /// everything it asked for (invariant 3, amendment a4's rule).
     pub withheld: Option<Vec<WithheldTool>>,
+    /// Every plugin metaharness says it installed, from the attestation in the opening record.
+    ///
+    /// **Always printed, and `plugins: none` when it is empty** (amendment a16). A report that
+    /// printed nothing for a plugin-less run would make *this run installed nothing* and *this
+    /// build does not report installations* the same bytes, which is the reading § 8.1 refuses
+    /// everywhere else.
+    ///
+    /// It is metaharness's own claim and **not** evidence: whether the harness then loaded any of
+    /// them is H1a's row, read out of the vendor's own plugin list.
+    pub installed_plugins: Vec<InstalledPlugin>,
     /// The external auditor's verdict, when one ran.
     pub auditor: Option<AuditorVerdict>,
     /// Whether the harness produced a terminal record at all.
@@ -199,6 +209,24 @@ impl AuditReport {
                      rather than a silence: what the run may do is the published tool list, in \
                      `session.started.offered_tools`",
                     self.census.abstained
+                );
+            }
+        }
+        // Always a line, and `none` rather than silence when there is nothing to list: a report
+        // that printed nothing here would make "this run installed nothing" and "this build does
+        // not report installations" the same bytes (amendment a16).
+        if self.installed_plugins.is_empty() {
+            out.push_str("plugins: none\n");
+        } else {
+            for plugin in &self.installed_plugins {
+                let _ = writeln!(
+                    out,
+                    "plugins: {} from {} at {} (sha256:{}) — {}",
+                    plugin.name,
+                    plugin.source,
+                    plugin.installed_at,
+                    plugin.digest,
+                    plugin.loaded_by
                 );
             }
         }
@@ -305,6 +333,23 @@ pub fn withheld_tools(events: &[Event]) -> Option<Vec<WithheldTool>> {
             _ => None,
         })
         .flatten()
+}
+
+/// Every plugin metaharness attested installing, from the opening record.
+///
+/// Empty when the run installed none **and** when there is no opening record at all. The two are
+/// distinguishable from the rest of the report — a run with no `session.started` has no rows read
+/// from a record either — and folding them here keeps the printed line one sentence rather than
+/// three.
+#[must_use]
+pub fn installed_plugins(events: &[Event]) -> Vec<InstalledPlugin> {
+    events
+        .iter()
+        .find_map(|event| match event {
+            Event::SessionStarted { hermetic, .. } => Some(hermetic.installed_plugins.clone()),
+            _ => None,
+        })
+        .unwrap_or_default()
 }
 
 /// The twelve rows of § 8.1, evaluated from the emitted events.
@@ -723,6 +768,7 @@ impl crate::run::Run {
             rows: self.hermetic_floor(),
             census: decision_census(self.events()),
             withheld: withheld_tools(self.events()),
+            installed_plugins: installed_plugins(self.events()),
             auditor,
             saw_terminal_record: self.saw_terminal_record(),
         })

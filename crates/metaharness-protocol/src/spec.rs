@@ -342,6 +342,30 @@ pub struct RunSpec {
     #[cfg_attr(feature = "clap", arg(long, value_name = "DIR"))]
     pub plugin_dir: Vec<PathBuf>,
 
+    /// A **marketplace** plugin to install into the scratch config home, pinned.
+    ///
+    /// `<marketplace-repo>@<name>@<version-or-commit>`, repeatable. Amendment a16, and the
+    /// deliberate opposite of *"no ambient plugins"* — H1a says plugins are exactly the **declared
+    /// set**, never that there are none, and this adds to that set by name.
+    ///
+    /// Three things about it are decisions rather than implementation
+    /// (`docs/design/runs-side-by-side-v0.1.md` § 3):
+    ///
+    /// * **An unpinned spelling is refused**, at parse, before anything is spawned. A plugin that
+    ///   can change between two runs that both name it makes a comparison of those two runs
+    ///   meaningless.
+    /// * **The run reaches no network.** Resolution is against a marketplace the operator has
+    ///   already fetched with `claude plugin marketplace add` and `claude plugin install`; a
+    ///   launch-time fetch would be unpinnable (neither verb takes a ref at 2.1.258) and would
+    ///   reach out from inside the boundary § 8 exists to draw.
+    /// * **Placement is into the scratch config home**, in the layout read from a real one, and
+    ///   `--plugin-dir` is *not* also passed for it — two mechanisms loading one plugin would
+    ///   report it twice, under two different sources.
+    ///
+    /// Claude Code only. Refused by name on the other kinds rather than accepted and ignored.
+    #[cfg_attr(feature = "clap", arg(long, value_name = "REPO@NAME@PIN"))]
+    pub plugin: Vec<crate::plugin::MarketplacePlugin>,
+
     /// An operator-named working directory for the child, instead of a scratch one.
     ///
     /// The declaration that trades two hermetic rows for real work (amendment a6): the child
@@ -523,6 +547,7 @@ impl RunSpec {
             effort: None,
             max_turns: None,
             plugin_dir: Vec::new(),
+            plugin: Vec::new(),
             cwd: None,
             retain_dir: None,
             strict_version: false,

@@ -3,6 +3,99 @@
 What changed. The design document carries *why*; where code and design disagreed, the design
 was amended and the amendment is named here.
 
+## [Unreleased]
+
+### Added
+
+- **`metaharness project` reads an event stream into a `trace-ir/1` document.** The verb refused
+  with exit 2 until now because `trace-ir/1` had no document form; it writes one — tagged,
+  byte-stable (no clock, no network, one serialization order), one node per stream line. **Every
+  one of the nineteen event kinds lands somewhere**: ten in an IR family, and the nine
+  control-plane kinds in a node of family `unk` carrying the metaharness event name and
+  `reason: "no trace-ir/1 family"`. `unk` is deliberately not `opaque`, which means the opposite
+  thing — *the vendor said something the adapter could not read* — and folding the two together
+  would report a protocol-vocabulary gap as a vendor-format gap. Decided in
+  `docs/design/runs-side-by-side-v0.1.md` § 1 and amendment **a15**.
+- **`metaharness project --html <out> <a.jsonl> [<b.jsonl>]` renders one or two runs as one static
+  page.** No server, no network fetch, no framework, no build step: one file that works from a
+  `file://` URL, with the stylesheet and a nine-line script inline. The **alignment is computed in
+  Rust, once** — a page that computed its own would be a second implementation of the rule. The
+  rule is the epic's declared default: **by workflow state entry when both runs are driven, else by
+  tool-call index**, never by time (metaharness reads no clock, and the first events of a real run
+  carry no timestamp at all) and never by content similarity. A step present in one run and absent
+  in the other is a **gap row**, marked as a divergence and never skipped. Each column shows state
+  entries, tool calls with their decision and refusals, per-step duration derived from recorded
+  timestamps, and cumulative cost as the vendor priced it.
+- **`metaharness run claude --plugin <marketplace-repo>@<name>@<version-or-commit>`** places a
+  pinned third-party marketplace plugin into the scratch config home before launch. This is the
+  deliberate opposite of *no ambient plugins* and H1a is why it is allowed: that row says plugins
+  are **exactly the declared set**, never that there are none. Amendment **a16**.
+  - **An unpinned spelling is refused at parse**, before a `RunSpec` exists, and the message shows
+    the shape. A plugin that can change between two runs that both name it makes the two arms of a
+    comparison incomparable and neither of them reproducible.
+  - **A run reaches no network.** Resolution is against a marketplace the operator has *already*
+    fetched, read out of `known_marketplaces.json` and `installed_plugins.json` in the operator's
+    own config home; the pin is matched against an entry's `version` **or** its `gitCommitSha`.
+    Every failure names the `claude plugin marketplace add …` and `claude plugin install …` to run
+    once, deliberately, outside a run.
+  - The hermetic report now prints a **`plugins:`** line on every run, and `plugins: none` when the
+    list is empty — a report that printed nothing would make *this run installed nothing* and *this
+    build does not report installations* the same bytes.
+  - One free C1 conformance vector (`c1-marketplace-plugin`) records the launch shape with a plugin
+    present: the config-home copy list, the two assembled registry documents, the **absence** of
+    `--plugin-dir` in the argv, and the attestation row. `checked` on the claude `contract_result`
+    moves 24 → 25.
+- Two recorded runs, in this driver's own wire, under `evals/aep/runs/` — the two hand-written
+  `checks/transcripts/*-clean.jsonl` passed through the Claude transcript reader, with their
+  projected documents and the rendered page beside them. Every one is regenerated and compared byte
+  for byte by the ordinary gate. **They are a reading fixture and nothing else**: nothing in them
+  came from a model, and no bound in this repository is calibrated against one.
+- `evals/aep/expectations.projection.trace.yaml` — 23 rows over the five kinds these streams carry,
+  written so that an `unk` verdict can only mean the consumer's event-stream adapter stopped
+  understanding something this driver writes. `aep trace check` 0.42.0 reports **23 ok, 0 gap, 0
+  unk, exit 0** on both streams.
+
+### Changed
+
+- `metaharness project` takes the event stream as a **positional** (up to two under `--html`)
+  instead of `--events <FILE>`, and gains `--out`. `--to` is unchanged and a form this build does
+  not write is refused rather than defaulted.
+- `README.md`'s status table no longer says `project` refuses.
+
+### Documented
+
+- `docs/design/runs-side-by-side-v0.1.md` — the binding page for all three: the complete
+  nineteen-row event → IR mapping, the alignment rule and its two rejected alternatives, and the
+  `--plugin` semantics.
+- `docs/research/2026-09-03-claude-plugin-headless-install.md` — what `claude plugin --help`,
+  `marketplace --help` and `install --help` say at **2.1.258**, and the config-home layout read out
+  of a real one. Nothing was spent and nothing was installed to produce it.
+
+### Known gaps, named rather than left
+
+- **`aep trace check` cannot read a `trace-ir/1` document, and this release does not pretend
+  otherwise.** `aep` 0.42.0 dispatches on the first line's `format` tag and has exactly two
+  readers, `metaharness.event/1` and `claude-code/stream-json`
+  (`aep/crates/trace-spec/src/reader.rs` at `e27c84b`). So the document's consumer is the viewer,
+  the checker's consumer is the event stream this projects **from**, and design **Q9** is *half*
+  closed: the document is written, tagged and byte-stable, and nothing outside this repository can
+  read it back into an IR. The § 4.4 cross-check therefore compares censuses rather than two
+  deserialized values.
+- **Nobody has driven a session against a config home metaharness assembled** (**Q19**). The
+  placement layout is *read* from a real one at 2.1.258 and is labelled **not driven** in the
+  attestation row itself, per invariant 4. Whether the plugin then appears in the session is H1a's
+  question, answered from the vendor's own opening record and from nothing here. Closing it costs
+  one paid run.
+- **No headless spelling pins** (**Q20**). Neither `claude plugin marketplace add` nor `claude
+  plugin install` takes a ref, a tag or a commit at 2.1.258, which is the whole reason `--plugin`
+  resolves locally instead of shelling out to them.
+- Two readers disagree about `tool.failed` on the hand-written fixtures, and the disagreement is
+  the fixture's rather than the format's: the **real** Claude Code wire carries `is_error`
+  explicitly (`fixtures/golden/transcript.jsonl`, 2.1.240), these inputs omit it, and
+  `metaharness/event-stream` correctly answers `unk` where `claude-code/stream-json` answers `ok`.
+  An absent field is `null` and never `false`, so the row was left out of the projection
+  specification rather than the reader changed.
+
 ## [0.4.2] — 2026-09-01
 
 ### Added

@@ -104,15 +104,28 @@ pub struct ConformanceArgs {
     pub contract: bool,
 }
 
-/// `project --events <f> --to trace-ir`.
+/// `project <events.jsonl> [<events.jsonl>] [--to trace-ir] [--out <f>] [--html <f>]`.
+///
+/// The stream is a **positional**, and up to two of them, because the viewer's whole subject is
+/// two runs read beside each other and a flag repeated twice reads as an accident
+/// (`docs/design/runs-side-by-side-v0.1.md` § 2).
 #[derive(Args, Debug)]
 pub struct ProjectArgs {
-    /// The event stream to project.
-    #[arg(long, value_name = "FILE")]
-    pub events: std::path::PathBuf,
+    /// The event stream to project. Two of them under `--html`, one otherwise.
+    #[arg(value_name = "EVENTS", required = true)]
+    pub events: Vec<std::path::PathBuf>,
     /// The target form.
     #[arg(long, default_value = "trace-ir")]
     pub to: String,
+    /// Write the `trace-ir/1` document here instead of to stdout.
+    #[arg(long, value_name = "FILE")]
+    pub out: Option<std::path::PathBuf>,
+    /// Render one or two runs as a static two-column page at this path.
+    ///
+    /// One file, no server, no network: the alignment is computed here and the page carries it,
+    /// so the two runs read the same in a browser and inside whatever embeds it.
+    #[arg(long, value_name = "FILE")]
+    pub html: Option<std::path::PathBuf>,
 }
 
 /// `audit --transcript <f> [--events <f>] [--spec <s>] [--auditor <p>]`.
@@ -170,13 +183,7 @@ pub fn execute(cli: Cli) -> i32 {
         Verb::Run(args) => run(args.spec),
         Verb::Capabilities(args) => capabilities(&args),
         Verb::Conformance(args) => conformance(args.kind, args.contract),
-        Verb::Project(_) => refuse(&Refusal::NotInThisMilestone {
-            verb: "project",
-            // Q9: `trace-ir/1` is a Serialize-only Rust type with no published schema, so a
-            // document written here has no reader. The projection is an in-process value until
-            // that changes (design D6a).
-            missing: "a readable `trace-ir/1` document form, which is gated on Q9",
-        }),
+        Verb::Project(args) => project(&args),
         Verb::Audit(_) => refuse(&Refusal::NotInThisMilestone {
             verb: "audit",
             // Not the spawner any more — that exists. What is missing is the launch facts the
@@ -188,6 +195,74 @@ pub fn execute(cli: Cli) -> i32 {
         Verb::Doctor(args) => doctor(args.kind),
         Verb::McpServe(args) => mcp_serve(&args),
     }
+}
+
+/// `project` — an event stream into a `trace-ir/1` document, or two of them into one page.
+///
+/// Amendment a15 lifted the refusal this verb used to carry. What Q9 still gates is a *reader*
+/// outside this repository, not a writer here: the document is written, tagged and byte-stable,
+/// and `aep trace check` consumes the event stream this projects **from** rather than the
+/// document (`docs/design/runs-side-by-side-v0.1.md` P4).
+fn project(args: &ProjectArgs) -> i32 {
+    if args.to != metaharness::TRACE_IR_FORM {
+        return refuse(&Refusal::Io {
+            detail: format!(
+                "--to {} names a form this build does not write; the one form is `{}`. Refused \
+                 rather than defaulted, because a caller who asked for another form and silently \
+                 got this one would cite the wrong document",
+                args.to,
+                metaharness::TRACE_IR_FORM
+            ),
+        });
+    }
+
+    let mut documents = Vec::with_capacity(args.events.len());
+    for path in &args.events {
+        match metaharness::project_file(path) {
+            Ok(document) => documents.push(document),
+            Err(refusal) => return refuse(&refusal),
+        }
+    }
+
+    if let Some(page) = &args.html {
+        let html = match metaharness::render_page(&documents) {
+            Ok(html) => html,
+            Err(refusal) => return refuse(&refusal),
+        };
+        if let Err(error) = std::fs::write(page, html) {
+            return refuse(&Refusal::Io {
+                detail: format!("{} could not be written: {error}", page.display()),
+            });
+        }
+        return RunExit::Ok.code();
+    }
+
+    // Without `--html` this verb projects **one** run: a document is one run's record, and a
+    // second stream given here would have to be written somewhere nobody named.
+    let [document] = documents.as_slice() else {
+        return refuse(&Refusal::ViewerColumnCount {
+            given: documents.len(),
+        });
+    };
+    let rendered = match document.render() {
+        Ok(rendered) => rendered,
+        Err(error) => {
+            return refuse(&Refusal::Io {
+                detail: error.to_string(),
+            });
+        }
+    };
+    match &args.out {
+        Some(path) => {
+            if let Err(error) = std::fs::write(path, rendered) {
+                return refuse(&Refusal::Io {
+                    detail: format!("{} could not be written: {error}", path.display()),
+                });
+            }
+        }
+        None => print!("{rendered}"),
+    }
+    RunExit::Ok.code()
 }
 
 /// `mcp-serve` — the owned tool surface, on stdin and stdout, until the client goes away.

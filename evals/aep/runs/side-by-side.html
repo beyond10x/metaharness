@@ -1,0 +1,66 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>metaharness — two runs, side by side</title>
+<style>
+:root{color-scheme:light dark}
+body{font:14px/1.5 ui-sans-serif,system-ui,sans-serif;margin:2rem;max-width:100rem}
+h1{font-size:1.4rem;margin:0 0 .25rem}
+p.rule{font-weight:600;margin:0 0 .5rem}
+p.note{max-width:60rem;opacity:.75;margin:0 0 1rem}
+table{border-collapse:collapse;width:100%;table-layout:fixed}
+th,td{border:1px solid rgba(128,128,128,.45);padding:.5rem .6rem;vertical-align:top}
+th{text-align:left}
+td.key,th.key{width:9rem;font-variant-numeric:tabular-nums;opacity:.8}
+tr.divergence>td.key{font-weight:700}
+tr.divergence{outline:2px solid rgba(220,120,0,.55);outline-offset:-2px}
+td.gap{background:repeating-linear-gradient(45deg,transparent,transparent 6px,rgba(128,128,128,.12) 6px,rgba(128,128,128,.12) 12px)}
+.gapmark{opacity:.7;font-style:italic}
+.run{font-weight:700}
+.head{font-weight:600}
+.meta{opacity:.75;font-size:.9em}
+.digest{word-break:break-all}
+.decision{font-size:.9em;margin-top:.25rem}
+.decision.none{opacity:.6;font-style:italic}
+.decision.refused{font-weight:700}
+ul.detail{margin:.35rem 0 0;padding-left:1.1rem}
+ul.detail li{overflow-wrap:anywhere}
+tbody tr.collapsed ul.detail{display:none}
+button{font:inherit;padding:.3rem .7rem}
+</style>
+</head>
+<body>
+<h1>Two runs, side by side</h1>
+<p class="rule">aligned by tool-call index · 2 divergence(s) · 6 row(s)</p>
+<p class="note">A step present in one run and absent in the other is a row with a gap, never a skipped one. Durations are derived from timestamps the harness recorded and are absent where either end has none; costs are what the vendor reported and were never multiplied out here. Nothing on this page scores either run.</p>
+<p><button id="next">jump to next divergence</button></p>
+<table>
+<thead>
+<tr><th class="key">key</th><th><div class="run">decomposer-clean</div><div class="meta">not driven · 15 event(s) · assistant_text 1, run_outcome 1, session_start 1, tool_call 6, tool_result 6</div><div class="meta">is_error false · terminal_reason completed · 7 turn(s)</div><div class="meta">total $0.2100</div><div class="meta digest">stream sha256:90a4bcfdf5cba46c2e5cd4386cbe8f78c229a18e68f136d342a7d31c5bddcaf7</div></th><th><div class="run">plan-reviewer-clean</div><div class="meta">not driven · 13 event(s) · assistant_text 1, run_outcome 1, session_start 1, tool_call 5, tool_result 5</div><div class="meta">is_error false · terminal_reason completed · 6 turn(s)</div><div class="meta">total $0.1700</div><div class="meta digest">stream sha256:95cc01e42b7ab71b8658dbdc38c43dd687c8c24bdbc2703ec6d0be5a3b33e689</div></th></tr>
+</thead>
+<tbody>
+<tr class="same"><td class="key">0</td><td><div class="head">call 0 · Task</div><div class="meta">12000 ms · —</div><div class="decision none">no tool.decided crossed the wire for this call</div><ul class="detail"><li>input: {&quot;description&quot;:&quot;Decompose the epic&quot;,&quot;prompt&quot;:&quot;epic:passkey-sign-in&quot;,&quot;subagent_type&quot;:&quot;aep-planning:decomposer&quot;}</li></ul></td><td><div class="head">call 0 · Task</div><div class="meta">9400 ms · —</div><div class="decision none">no tool.decided crossed the wire for this call</div><ul class="detail"><li>input: {&quot;description&quot;:&quot;Review the store&quot;,&quot;prompt&quot;:&quot;Review this planning store.&quot;,&quot;subagent_type&quot;:&quot;aep-planning:plan-reviewer&quot;}</li></ul></td></tr>
+<tr class="same"><td class="key">1</td><td><div class="head">call 1 · Bash</div><div class="meta">120 ms · —</div><div class="decision none">no tool.decided crossed the wire for this call</div><ul class="detail"><li>input: {&quot;command&quot;:&quot;protocol artifact list --format json&quot;}</li></ul></td><td><div class="head">call 1 · Bash</div><div class="meta">110 ms · —</div><div class="decision none">no tool.decided crossed the wire for this call</div><ul class="detail"><li>input: {&quot;command&quot;:&quot;protocol artifact list --format json&quot;}</li></ul></td></tr>
+<tr class="same"><td class="key">2</td><td><div class="head">call 2 · Bash</div><div class="meta">90 ms · —</div><div class="decision none">no tool.decided crossed the wire for this call</div><ul class="detail"><li>input: {&quot;command&quot;:&quot;protocol artifact lifecycle story&quot;}</li></ul></td><td><div class="head">call 2 · Bash</div><div class="meta">100 ms · —</div><div class="decision none">no tool.decided crossed the wire for this call</div><ul class="detail"><li>input: {&quot;command&quot;:&quot;protocol artifact graph&quot;}</li></ul></td></tr>
+<tr class="divergence"><td class="key">3</td><td><div class="head">call 3 · Bash</div><div class="meta">130 ms · —</div><div class="decision none">no tool.decided crossed the wire for this call</div><ul class="detail"><li>input: {&quot;command&quot;:&quot;protocol artifact new story device-binding --title &#39;Bind a passkey to a device&#39; --relate decomposes:epic:passkey-sign-in&quot;}</li></ul></td><td><div class="head">call 3 · Read</div><div class="meta">80 ms · —</div><div class="decision none">no tool.decided crossed the wire for this call</div><ul class="detail"><li>input: {&quot;file_path&quot;:&quot;/scratch/project/.engineering/planning/epic/passkey-sign-in.md&quot;}</li></ul></td></tr>
+<tr class="same"><td class="key">4</td><td><div class="head">call 4 · Bash</div><div class="meta">110 ms · —</div><div class="decision none">no tool.decided crossed the wire for this call</div><ul class="detail"><li>input: {&quot;command&quot;:&quot;protocol artifact new story cross-device-sign-in --title &#39;Sign in from a second device&#39; --relate decomposes:epic:passkey-sign-in&quot;}</li></ul></td><td><div class="head">call 4 · Bash</div><div class="meta">100 ms · —</div><div class="decision none">no tool.decided crossed the wire for this call</div><ul class="detail"><li>input: {&quot;command&quot;:&quot;protocol artifact validate&quot;}</li></ul></td></tr>
+<tr class="divergence"><td class="key">5</td><td><div class="head">call 5 · Bash</div><div class="meta">100 ms · —</div><div class="decision none">no tool.decided crossed the wire for this call</div><ul class="detail"><li>input: {&quot;command&quot;:&quot;protocol artifact validate&quot;}</li></ul></td><td class="gap"><span class="gapmark">— absent in this run —</span></td></tr>
+</tbody>
+</table>
+<script>
+document.querySelectorAll('tbody tr').forEach(function(row){
+  row.classList.add('collapsed');
+  row.addEventListener('click', function(){ row.classList.toggle('collapsed'); });
+});
+var at = -1;
+document.getElementById('next').addEventListener('click', function(){
+  var marks = document.querySelectorAll('tr.divergence');
+  if (!marks.length) { return; }
+  at = (at + 1) % marks.length;
+  marks[at].scrollIntoView({block: 'center'});
+});
+</script>
+</body>
+</html>

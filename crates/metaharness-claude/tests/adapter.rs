@@ -25,6 +25,7 @@ fn context() -> LaunchContext {
         memory_ancestors: Vec::new(),
         inputs_digest: Some(Digest::of(b"inputs")),
         plugins: Vec::new(),
+        marketplace_plugins: Vec::new(),
         loopback: None,
         tool_server: Some(PathBuf::from("/usr/local/bin/metaharness")),
     }
@@ -171,10 +172,11 @@ fn the_plans_attestation_reaches_the_opening_event() {
 #[test]
 fn every_conformance_vector_passes_without_a_model_a_network_or_a_credential() {
     let outcomes = conformance_vectors();
-    // Five recorded launch expectations, the two computed launch vectors that carry observe mode
-    // and plugin injection (a10, crossing #4), three synthesised replays, the two golden
-    // recorded-wire vectors (CT-2) and the version pair (CT-3).
-    assert_eq!(outcomes.len(), 13);
+    // Five recorded launch expectations, the three computed launch vectors that carry observe
+    // mode, plugin injection (a10, crossing #4) and the pinned marketplace placement (a16), three
+    // synthesised replays, the two golden recorded-wire vectors (CT-2) and the version pair
+    // (CT-3).
+    assert_eq!(outcomes.len(), 14);
     for outcome in &outcomes {
         assert!(outcome.passed, "{}: {}", outcome.id, outcome.detail);
         assert!(matches!(

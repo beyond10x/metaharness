@@ -34,6 +34,7 @@
 mod bridge;
 mod hook;
 mod launch;
+mod marketplace;
 mod seam;
 mod transcript;
 mod vectors;
@@ -42,7 +43,11 @@ pub use bridge::{ClaudeSeam, ClaudeSeams};
 pub use hook::{HOOK_WAIT_SECONDS, HookChannelPaths, hook_program};
 pub use launch::{
     CredentialCopy, HOOK_TIMEOUT_SECONDS, LaunchContext, LaunchPlan, LaunchRefusal, LoopbackParams,
-    child_path, hook_program_path, mcp_config_path, plan_launch, settings_path,
+    ScratchFile, child_path, hook_program_path, mcp_config_path, plan_launch, settings_path,
+};
+pub use marketplace::{
+    INSTALLED_PLUGINS, KNOWN_MARKETPLACES, MARKETPLACES_HOME, MarketplaceMatch, MarketplaceRefusal,
+    PLUGIN_CACHE_HOME, PLUGIN_REGISTRY_HOME, ScratchEntry, resolve_marketplace, scratch_registry,
 };
 pub use seam::{HookInput, capabilities, parse_hook_input, render_hook_response, render_operation};
 pub use transcript::TranscriptReader;
