@@ -3,7 +3,7 @@
 What changed. The design document carries *why*; where code and design disagreed, the design
 was amended and the amendment is named here.
 
-## [Unreleased]
+## [0.5.0] — 2026-09-03
 
 ### Added
 
