@@ -3,6 +3,18 @@
 What changed. The design document carries *why*; where code and design disagreed, the design
 was amended and the amendment is named here.
 
+## [0.6.2] — 2026-09-03
+
+### Fixed
+
+- **`system/background_tasks_changed` is recognised as bookkeeping too.** 0.6.1 named five of Claude
+  Code 2.1.259's new shapes and left this sixth one `opaque`. It narrates a backgrounded `Bash` call
+  starting or ending, which is already on the wire as that call's `tool.requested` and
+  `tool.result`. The re-recorded run that closed the 183-event finding carried 2 of these, and 2 was
+  enough to leave one gate row `undecidable` on `opaque_events` — a row is decided by whether the
+  adapter could read the stream, not by how many records it could not. The list stays closed: a
+  shape a later release adds still goes `opaque` (D4).
+
 ## [0.6.1] — 2026-09-03
 
 ### Fixed

@@ -336,25 +336,38 @@ impl TranscriptReader {
 /// The records the vendor writes about its **own bookkeeping**, which carry no fact any
 /// expectation reads and are recognised so that they are not `opaque`.
 ///
-/// Claude Code 2.1.259 writes five shapes 2.1.241 did not: `system/task_started`,
+/// Claude Code 2.1.259 writes six shapes 2.1.241 did not: `system/task_started`,
 /// `system/task_progress`, `system/task_notification` and `system/task_updated` — the lifecycle of a
-/// sub-agent task — and a top-level `tool_progress` heartbeat while a tool runs. The call each one
-/// narrates is already on the wire: the `Agent` call is a `tool.requested`, and what the sub-agent
-/// produced arrives in that call's `tool.result`, so these add a second account of the same thing
-/// and nothing more. They are dropped on that reading, and named here one by one — a record this
-/// list does not name still goes `opaque` — so that a shape a later release adds is met the way D4
-/// requires and not waved through with these.
+/// sub-agent task — `system/background_tasks_changed`, which narrates a backgrounded `Bash` call
+/// starting or ending, and a top-level `tool_progress` heartbeat while a tool runs. The call each
+/// one narrates is already on the wire: the `Agent` call is a `tool.requested`, the backgrounded
+/// `Bash` call is another, and what either produced arrives in that call's `tool.result`, so these
+/// add a second account of the same thing and nothing more. They are dropped on that reading, and
+/// named here one by one — a record this list does not name still goes `opaque` — so that a shape a
+/// later release adds is met the way D4 requires and not waved through with these.
 ///
-/// Why it matters that they are recognised rather than left opaque: one recorded run on 2026-09-03
-/// carried 183 of them, and every `tool.absent` row in the checker that read it came back `unk`
-/// with *"183 events the adapter could not read"* — the checker was right to, and the fix belongs
-/// here, where the record's shape is known.
+/// Why it matters that they are recognised rather than left opaque, from two recorded runs of the
+/// same eval case on 2026-09-03:
+///
+/// - the first carried 183 of the five task/tool shapes, and every `tool.absent` row in the checker
+///   that read it came back `unk` with *"183 events the adapter could not read"*;
+/// - the second, after those five were named here, carried 2 `background_tasks_changed` records —
+///   and that was enough to leave `the-story-was-walked-through-its-lifecycle` `undecidable` on
+///   `opaque_events`. Two records decide a gate row exactly as 183 do.
+///
+/// The checker was right both times, and the fix belongs here, where the record's shape is known.
 fn control_plane(record: &Record) -> bool {
     match str_field(record, "type").as_deref() {
         Some("tool_progress") => true,
         Some("system") => matches!(
             str_field(record, "subtype").as_deref(),
-            Some("task_started" | "task_progress" | "task_notification" | "task_updated")
+            Some(
+                "task_started"
+                    | "task_progress"
+                    | "task_notification"
+                    | "task_updated"
+                    | "background_tasks_changed"
+            )
         ),
         _ => false,
     }
@@ -794,6 +807,7 @@ mod tests {
             r#"{"type":"system","subtype":"task_progress","task_id":"t1","usage":{"total_tokens":10}}"#,
             r#"{"type":"system","subtype":"task_notification","task_id":"t1","status":"completed"}"#,
             r#"{"type":"system","subtype":"task_updated","task_id":"t1","description":"renamed"}"#,
+            r#"{"type":"system","subtype":"background_tasks_changed","tasks":[]}"#,
             r#"{"type":"tool_progress","tool_use_id":"toolu_1","elapsed_time_seconds":3}"#,
         ] {
             assert!(
