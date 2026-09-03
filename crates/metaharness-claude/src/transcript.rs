@@ -18,8 +18,10 @@
 
 use metaharness_protocol::{
     DecisionCensus, Digest, Emission, Event, HermeticAttestation, McpServerRef, PermissionDenial,
-    PluginRef, RateLimitInfo, Seam, TranscriptRef, Usage,
+    PluginRef, RateLimitInfo, Seam, TranscriptRef, Usage, warning_code,
 };
+use std::fmt::Write as _;
+
 use serde_json::{Map, Value};
 
 use crate::ADAPTER_ID;
@@ -180,6 +182,7 @@ impl TranscriptReader {
             Some("system") => match str_field(record, "subtype").as_deref() {
                 Some("init") => vec![self.session_started(record)],
                 Some("thinking_tokens") => thinking_estimate(record),
+                Some("api_retry") => vec![api_retry(record)],
                 _ => Vec::new(),
             },
             Some("assistant") => self.assistant(record, source_line),
@@ -382,6 +385,36 @@ fn thinking_estimate(record: &Record) -> Vec<Event> {
         estimate,
         delta: record.get("estimated_tokens_delta").and_then(Value::as_i64),
     }]
+}
+
+/// The vendor retried a request against its own API and said so.
+///
+/// A [`Event::Warning`] and not a drop, and not `opaque`. Dropped it would lose the only account of
+/// why a run stalled: on 2026-09-03 a recording carried 10 of these in 210 seconds before a
+/// `529 Overloaded` ended the session at turn 1, and without them the stream is a gap. Left
+/// `opaque` it would decide plan questions it knows nothing about — the recording before that one
+/// had a gate row come back `undecidable` over two records of a different bookkeeping shape.
+///
+/// `warning` is control plane on the consuming side too, so the fact reaches a reader without
+/// standing between the checker and a row.
+fn api_retry(record: &Record) -> Event {
+    let attempt = u64_field(record, "attempt");
+    let delay_ms = u64_field(record, "delayMs").or_else(|| u64_field(record, "delay_ms"));
+    let reason = str_field(record, "error")
+        .or_else(|| str_field(record, "message"))
+        .unwrap_or_else(|| "the vendor gave no reason".to_owned());
+    let mut message = format!("the vendor retried its API call: {reason}");
+    if let Some(attempt) = attempt {
+        let _ = write!(message, " (attempt {attempt}");
+        if let Some(delay_ms) = delay_ms {
+            let _ = write!(message, ", after {delay_ms}ms");
+        }
+        message.push(')');
+    }
+    Event::Warning {
+        code: warning_code::VENDOR_API_RETRY.to_owned(),
+        message,
+    }
 }
 
 /// A rate-limit window: a billing guard, because *this run must not have been paid for out of
@@ -818,6 +851,29 @@ mod tests {
         // The list is closed: a subtype it does not name is still met the way D4 requires.
         let event = only(reader.push_line(r#"{"type":"system","subtype":"task_invented_later"}"#));
         assert!(matches!(event, Event::Opaque { .. }));
+    }
+
+    #[test]
+    fn a_vendor_api_retry_is_a_warning_and_neither_dropped_nor_opaque() {
+        // The third shape this adapter met on a recording, and the one that is not bookkeeping: no
+        // other record says the vendor retried, so dropping it would leave a stall unexplained.
+        // `warning` is control plane on the consuming side, so keeping it decides no row either.
+        let mut reader = new_reader();
+        let event = only(reader.push_line(
+            r#"{"type":"system","subtype":"api_retry","attempt":2,"delayMs":1500,
+                "error":"529 Overloaded"}"#,
+        ));
+        let Event::Warning { code, message } = event else {
+            panic!("expected a warning");
+        };
+        assert_eq!(code, warning_code::VENDOR_API_RETRY);
+        assert!(message.contains("529 Overloaded"), "{message}");
+        assert!(message.contains("attempt 2"), "{message}");
+        assert!(message.contains("1500ms"), "{message}");
+
+        // A record stating none of the three is still a warning, not an opaque line.
+        let bare = only(reader.push_line(r#"{"type":"system","subtype":"api_retry"}"#));
+        assert!(matches!(bare, Event::Warning { .. }));
     }
 
     #[test]

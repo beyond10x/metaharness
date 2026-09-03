@@ -3,6 +3,19 @@
 What changed. The design document carries *why*; where code and design disagreed, the design
 was amended and the amendment is named here.
 
+## [0.6.3] — 2026-09-03
+
+### Added
+
+- **`system/api_retry` becomes a `warning`, not an `opaque` line.** The vendor says on the wire when
+  it has retried a request against its own API, and nothing else in the stream says so. A recording
+  on 2026-09-03 carried 10 of them in 210 seconds before a `529 Overloaded` ended the session at
+  turn 1; as `opaque` they would have made every absence row in a checker reading that stream
+  `undecidable`, which is a transport hiccup deciding a plan question, and dropped they would have
+  left the stall with no account at all. The new code is `warning_code::VENDOR_API_RETRY`, and
+  `warning` is already control plane on the consuming side, so the fact reaches a reader without
+  standing between a checker and a row.
+
 ## [0.6.2] — 2026-09-03
 
 ### Fixed

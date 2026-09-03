@@ -31,6 +31,13 @@ pub mod warning_code {
     /// An ambient input was found that metaharness reports and does not claim to have removed —
     /// git status is the named case (design § 8.1, H11's second half).
     pub const AMBIENT_INPUT: &str = "AMBIENT_INPUT";
+    /// The vendor retried a request against its own API, and said so on the wire.
+    ///
+    /// Not [`Event::Opaque`] and not dropped. Dropped would lose the only account of why a run
+    /// stalled — a recording on 2026-09-03 carried 10 of these before a `529 Overloaded` ended it
+    /// — and opaque would make every absence row in a checker reading that stream `undecidable`,
+    /// which is a transport hiccup deciding a plan question.
+    pub const VENDOR_API_RETRY: &str = "VENDOR_API_RETRY";
 }
 
 /// Where a decision was taken.
