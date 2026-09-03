@@ -183,6 +183,7 @@ impl TranscriptReader {
                 Some("init") => vec![self.session_started(record)],
                 Some("thinking_tokens") => thinking_estimate(record),
                 Some("api_retry") => vec![api_retry(record)],
+                Some("background_tasks_changed") => vec![background_tasks(record)],
                 _ => Vec::new(),
             },
             Some("assistant") => self.assistant(record, source_line),
@@ -339,38 +340,33 @@ impl TranscriptReader {
 /// The records the vendor writes about its **own bookkeeping**, which carry no fact any
 /// expectation reads and are recognised so that they are not `opaque`.
 ///
-/// Claude Code 2.1.259 writes six shapes 2.1.241 did not: `system/task_started`,
-/// `system/task_progress`, `system/task_notification` and `system/task_updated` — the lifecycle of a
-/// sub-agent task — `system/background_tasks_changed`, which narrates a backgrounded `Bash` call
-/// starting or ending, and a top-level `tool_progress` heartbeat while a tool runs. The call each
-/// one narrates is already on the wire: the `Agent` call is a `tool.requested`, the backgrounded
-/// `Bash` call is another, and what either produced arrives in that call's `tool.result`, so these
-/// add a second account of the same thing and nothing more. They are dropped on that reading, and
-/// named here one by one — a record this list does not name still goes `opaque` — so that a shape a
+/// Four shapes, all of them the lifecycle of a sub-agent task — `system/task_started`,
+/// `system/task_progress`, `system/task_notification`, `system/task_updated` — plus a top-level
+/// `tool_progress` heartbeat while a tool runs. The call each one narrates is already on the wire:
+/// the `Agent` call is a `tool.requested`, and what the sub-agent produced arrives in that call's
+/// `tool.result`, so these add a second account of the same thing and nothing more.
+///
+/// **The test each candidate has to pass** is whether the fact is stated elsewhere in the same
+/// stream, and it is a test a shape can fail. 0.6.2 added `system/background_tasks_changed` here on
+/// the same reading and was wrong: the vendor's schema calls it *"every live background task after
+/// the change"* with REPLACE semantics, emitted on completion and kill as well as start, and only
+/// the start has a `tool.result` of its own. It is read by `background_tasks` instead. A list whose
+/// entries are not checked against the vendor's own schema is a list that reintroduces the failure
+/// it exists to prevent.
+///
+/// Named one by one — a record this list does not name still goes `opaque` — so that a shape a
 /// later release adds is met the way D4 requires and not waved through with these.
 ///
-/// Why it matters that they are recognised rather than left opaque, from two recorded runs of the
-/// same eval case on 2026-09-03:
-///
-/// - the first carried 183 of the five task/tool shapes, and every `tool.absent` row in the checker
-///   that read it came back `unk` with *"183 events the adapter could not read"*;
-/// - the second, after those five were named here, carried 2 `background_tasks_changed` records —
-///   and that was enough to leave `the-story-was-walked-through-its-lifecycle` `undecidable` on
-///   `opaque_events`. Two records decide a gate row exactly as 183 do.
-///
-/// The checker was right both times, and the fix belongs here, where the record's shape is known.
+/// Why it matters that they are recognised rather than left opaque: one recorded run on 2026-09-03
+/// carried 183 of them, and every `tool.absent` row in the checker that read it came back `unk`
+/// with *"183 events the adapter could not read"*. The checker was right to, and the fix belongs
+/// here, where the record's shape is known.
 fn control_plane(record: &Record) -> bool {
     match str_field(record, "type").as_deref() {
         Some("tool_progress") => true,
         Some("system") => matches!(
             str_field(record, "subtype").as_deref(),
-            Some(
-                "task_started"
-                    | "task_progress"
-                    | "task_notification"
-                    | "task_updated"
-                    | "background_tasks_changed"
-            )
+            Some("task_started" | "task_progress" | "task_notification" | "task_updated")
         ),
         _ => false,
     }
@@ -398,21 +394,83 @@ fn thinking_estimate(record: &Record) -> Vec<Event> {
 /// `warning` is control plane on the consuming side too, so the fact reaches a reader without
 /// standing between the checker and a row.
 fn api_retry(record: &Record) -> Event {
-    let attempt = u64_field(record, "attempt");
-    let delay_ms = u64_field(record, "delayMs").or_else(|| u64_field(record, "delay_ms"));
-    let reason = str_field(record, "error")
-        .or_else(|| str_field(record, "message"))
-        .unwrap_or_else(|| "the vendor gave no reason".to_owned());
-    let mut message = format!("the vendor retried its API call: {reason}");
-    if let Some(attempt) = attempt {
+    let mut message = "the vendor retried its API call".to_owned();
+    if let Some(status) = u64_field(record, "error_status") {
+        let _ = write!(message, " after HTTP {status}");
+    }
+    if let Some(reason) = retry_reason(record) {
+        let _ = write!(message, ": {reason}");
+    }
+    if let Some(attempt) = u64_field(record, "attempt") {
         let _ = write!(message, " (attempt {attempt}");
-        if let Some(delay_ms) = delay_ms {
-            let _ = write!(message, ", after {delay_ms}ms");
+        if let Some(of) = u64_field(record, "max_retries") {
+            let _ = write!(message, " of {of}");
+        }
+        if let Some(delay) = u64_field(record, "retry_delay_ms") {
+            let _ = write!(message, ", after {delay}ms");
         }
         message.push(')');
     }
     Event::Warning {
         code: warning_code::VENDOR_API_RETRY.to_owned(),
+        message,
+    }
+}
+
+/// The vendor's own words for why it retried, out of a field whose type the schema does not fix.
+///
+/// `error` is an object in the 2.1.259 schema, not a string, and the useful part of it is
+/// `message`. Both shapes are read because a field a schema declares as an object today is one a
+/// patch release can flatten, and a reader that took only the object would report a retry with no
+/// reason on the release that flattened it.
+fn retry_reason(record: &Record) -> Option<String> {
+    match record.get("error") {
+        Some(Value::String(text)) if !text.is_empty() => Some(text.clone()),
+        Some(Value::Object(error)) => error
+            .get("message")
+            .and_then(Value::as_str)
+            .filter(|text| !text.is_empty())
+            .map(str::to_owned),
+        _ => None,
+    }
+}
+
+/// The full set of live background tasks, restated because one of them changed.
+///
+/// **Not dropped, and this is where 0.6.2 was wrong.** That release put
+/// `system/background_tasks_changed` in [`control_plane`] on the reading that it is a second telling
+/// of a call already on the wire. The vendor's own 2.1.259 schema says otherwise: the payload is
+/// *"every live background task after the change"* with **REPLACE semantics**, emitted *"whenever
+/// membership changes (start, completion, kill, a foreground agent being backgrounded) or an
+/// entry's `ambient` flag flips"*.
+///
+/// Only the start is on the wire elsewhere. The `Bash` call that launched a background task gets
+/// its `tool.result` when the shell hands back an id, not when the task ends — so a completion, a
+/// kill and an `ambient` flip are stated **here and nowhere else**, and dropping them let a checker
+/// read absence as fact. That is the failure D4 exists to prevent, arrived at by a list that was
+/// meant to prevent it.
+///
+/// A [`Event::Warning`] for the same reason [`api_retry`] is one: the fact reaches a reader, and
+/// `warning` is control plane on the consuming side so it does not stand between a checker and a
+/// row.
+fn background_tasks(record: &Record) -> Event {
+    let tasks = record.get("tasks").and_then(Value::as_array);
+    let count = tasks.map_or(0, Vec::len);
+    let named: Vec<String> = tasks
+        .map(|tasks| {
+            tasks
+                .iter()
+                .filter_map(|task| task.get("task_id").and_then(Value::as_str))
+                .map(str::to_owned)
+                .collect()
+        })
+        .unwrap_or_default();
+    let mut message = format!("the vendor's live background task set changed: {count} live");
+    if !named.is_empty() {
+        let _ = write!(message, " ({})", named.join(", "));
+    }
+    Event::Warning {
+        code: warning_code::VENDOR_BACKGROUND_TASKS.to_owned(),
         message,
     }
 }
@@ -840,7 +898,6 @@ mod tests {
             r#"{"type":"system","subtype":"task_progress","task_id":"t1","usage":{"total_tokens":10}}"#,
             r#"{"type":"system","subtype":"task_notification","task_id":"t1","status":"completed"}"#,
             r#"{"type":"system","subtype":"task_updated","task_id":"t1","description":"renamed"}"#,
-            r#"{"type":"system","subtype":"background_tasks_changed","tasks":[]}"#,
             r#"{"type":"tool_progress","tool_use_id":"toolu_1","elapsed_time_seconds":3}"#,
         ] {
             assert!(
@@ -854,24 +911,71 @@ mod tests {
     }
 
     #[test]
+    fn a_background_task_set_is_a_warning_and_is_not_in_the_drop_list() {
+        // 0.6.2 dropped this shape and 0.6.4 stopped: the vendor's own 2.1.259 schema calls the
+        // payload "every live background task after the change" with REPLACE semantics, emitted on
+        // completion and kill as well as start. Only the start has a `tool.result` of its own, so a
+        // drop lets a checker read absence as fact.
+        let mut reader = new_reader();
+        let event = only(reader.push_line(
+            r#"{"type":"system","subtype":"background_tasks_changed","tasks":[
+                {"task_id":"bg_1","task_type":"bash","description":"cargo build"},
+                {"task_id":"bg_2","task_type":"bash","description":"npm test","ambient":true}],
+                "uuid":"u","session_id":"s"}"#,
+        ));
+        let Event::Warning { code, message } = event else {
+            panic!("expected a warning, not a drop");
+        };
+        assert_eq!(code, warning_code::VENDOR_BACKGROUND_TASKS);
+        assert!(message.contains("2 live"), "{message}");
+        assert!(message.contains("bg_1, bg_2"), "{message}");
+
+        // The set emptying is the completion or kill nothing else in the stream states.
+        let emptied = only(
+            reader
+                .push_line(r#"{"type":"system","subtype":"background_tasks_changed","tasks":[]}"#),
+        );
+        let Event::Warning { message, .. } = emptied else {
+            panic!("expected a warning");
+        };
+        assert!(message.contains("0 live"), "{message}");
+    }
+
+    #[test]
     fn a_vendor_api_retry_is_a_warning_and_neither_dropped_nor_opaque() {
         // The third shape this adapter met on a recording, and the one that is not bookkeeping: no
         // other record says the vendor retried, so dropping it would leave a stall unexplained.
         // `warning` is control plane on the consuming side, so keeping it decides no row either.
+        // The field names are the vendor's own, read off the 2.1.259 binary's schema:
+        // `attempt`, `max_retries`, `retry_delay_ms`, `error_status` and an `error` **object**.
+        // 0.6.3 guessed `delayMs` and a string `error`, so every real retry reported no reason and
+        // no backoff — a reader that invents a shape and a test that invents the same one agree
+        // with each other and with nothing else.
         let mut reader = new_reader();
         let event = only(reader.push_line(
-            r#"{"type":"system","subtype":"api_retry","attempt":2,"delayMs":1500,
-                "error":"529 Overloaded"}"#,
+            r#"{"type":"system","subtype":"api_retry","attempt":2,"max_retries":10,
+                "retry_delay_ms":1500,"error_status":529,
+                "error":{"message":"Overloaded"},"uuid":"u","session_id":"s"}"#,
         ));
         let Event::Warning { code, message } = event else {
             panic!("expected a warning");
         };
         assert_eq!(code, warning_code::VENDOR_API_RETRY);
-        assert!(message.contains("529 Overloaded"), "{message}");
-        assert!(message.contains("attempt 2"), "{message}");
+        assert!(message.contains("HTTP 529"), "{message}");
+        assert!(message.contains("Overloaded"), "{message}");
+        assert!(message.contains("attempt 2 of 10"), "{message}");
         assert!(message.contains("1500ms"), "{message}");
 
-        // A record stating none of the three is still a warning, not an opaque line.
+        // A patch release that flattens `error` to a string is still read.
+        let flat = only(reader.push_line(
+            r#"{"type":"system","subtype":"api_retry","attempt":1,"error":"Overloaded"}"#,
+        ));
+        let Event::Warning { message, .. } = flat else {
+            panic!("expected a warning");
+        };
+        assert!(message.contains("Overloaded"), "{message}");
+
+        // A record stating none of them is still a warning, not an opaque line.
         let bare = only(reader.push_line(r#"{"type":"system","subtype":"api_retry"}"#));
         assert!(matches!(bare, Event::Warning { .. }));
     }

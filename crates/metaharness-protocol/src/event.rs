@@ -38,6 +38,12 @@ pub mod warning_code {
     /// — and opaque would make every absence row in a checker reading that stream `undecidable`,
     /// which is a transport hiccup deciding a plan question.
     pub const VENDOR_API_RETRY: &str = "VENDOR_API_RETRY";
+    /// The vendor's set of live background tasks changed, and it restated the whole set.
+    ///
+    /// Here for the same reason as [`VENDOR_API_RETRY`], and against the same alternative. The
+    /// vendor emits it on completion and kill as well as on start, and only the start is on the
+    /// wire elsewhere as a `tool.result` — so dropping it lets a reader take absence for fact.
+    pub const VENDOR_BACKGROUND_TASKS: &str = "VENDOR_BACKGROUND_TASKS";
 }
 
 /// Where a decision was taken.
@@ -624,10 +630,17 @@ pub enum Event {
         outcome: CommandOutcome,
     },
 
-    /// metaharness has something to say.
+    /// Something worth saying that is not a step, a call or a turn.
     ///
-    /// Distinct from [`Event::Opaque`], which means *the vendor said something we could not
-    /// read*.
+    /// Mostly metaharness's own voice — an off-pin binary, an uncovered tool, an ambient input.
+    /// Since 0.6.3 also the **vendor's**, for a record this adapter read perfectly and that no
+    /// other event carries: `VENDOR_API_RETRY` and `VENDOR_BACKGROUND_TASKS` in [`warning_code`].
+    /// The third case those two make is worth naming, because the first reading of this doc
+    /// comment says they do not belong here: a record can be *read* and still have no home in the
+    /// step/call/turn vocabulary, and the choice then is this or [`Event::Opaque`] — and `opaque`
+    /// means *the vendor said something we could not read*, which would be false.
+    ///
+    /// So the distinction this draws is not who spoke. It is whether the adapter understood.
     #[serde(rename = "warning")]
     Warning {
         /// A short stable code — see [`warning_code`].

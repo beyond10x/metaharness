@@ -101,10 +101,26 @@ pub const ADAPTER_ID: &str = "claude";
 /// never seen: `system/task_started`, `system/task_progress`, `system/task_notification`,
 /// `system/task_updated` and a top-level `tool_progress`. Each became `opaque`, which is what D4
 /// requires, and every `tool.absent` row in the checker that read the stream came back `unk` over
-/// them. `transcript::control_plane` now names those five as the vendor's own bookkeeping and drops
+/// them. `transcript::control_plane` names those five as the vendor's own bookkeeping and drops
 /// them; anything else unnamed still goes `opaque`. `metaharness doctor claude` on the same day
 /// confirmed every flag the launch builds is declared by the 2.1.259 binary, including the
 /// `--max-budget-usd` this release starts sending.
+///
+/// **Two more shapes, and the lesson of how they were met (0.6.2 → 0.6.4).** Later runs of the
+/// same case carried `system/background_tasks_changed` and `system/api_retry`. Both were first
+/// handled from the record as it appeared in a stream rather than from the binary's own schema,
+/// and both were wrong for it:
+///
+/// * `background_tasks_changed` was dropped as bookkeeping. Its schema says the payload is *"every
+///   live background task after the change"* with REPLACE semantics, emitted on completion and
+///   kill as well as start — and only the start is on the wire elsewhere. It is read now.
+/// * `api_retry` was read for `delayMs` and a string `error`. Its schema is `attempt`,
+///   `max_retries`, `retry_delay_ms`, `error_status` and an `error` **object**, so every real
+///   retry reported no reason and no backoff.
+///
+/// Both are now read from the schema the installed binary carries, which is the thing this
+/// constant exists to make somebody go and look at. A shape met from one observed record is a
+/// guess with a sample size of one.
 ///
 /// The golden fixtures stay labelled 2.1.240, because that is the binary whose bytes they are.
 /// `golden-version-pair` therefore warns, by design, and the warning is the outstanding invoice.

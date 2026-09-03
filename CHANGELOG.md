@@ -3,6 +3,29 @@
 What changed. The design document carries *why*; where code and design disagreed, the design
 was amended and the amendment is named here.
 
+## [0.6.4] — 2026-09-03
+
+### Fixed
+
+- **`system/api_retry` is read with the vendor's own field names.** 0.6.3 read `delayMs` and a
+  string `error`; the 2.1.259 binary's schema is `attempt`, `max_retries`, `retry_delay_ms`,
+  `error_status` and an `error` **object** carrying `message`. Every real retry therefore reported
+  *"the vendor gave no reason"* and dropped the backoff and the HTTP status — the one thing the
+  event exists to carry. The tests invented the same shape as the reader, so they agreed with each
+  other and with nothing else. A flattened string `error` is still read, for the patch release that
+  flattens it.
+- **`system/background_tasks_changed` is no longer dropped.** 0.6.2 put it in the closed
+  control-plane list on the reading that it restates a call already on the wire. The vendor's schema
+  says the payload is *"every live background task after the change"* with REPLACE semantics,
+  emitted *"whenever membership changes (start, completion, kill, a foreground agent being
+  backgrounded)"* — and only the start has a `tool.result` of its own. A completion and a kill were
+  stated there and nowhere else, so dropping them let a checker read absence as fact, which is the
+  failure D4 exists to prevent. It is now `warning_code::VENDOR_BACKGROUND_TASKS`, carrying the live
+  count and the task ids.
+- **`Event::Warning`'s contract is stated correctly.** It said it was metaharness's own voice, as
+  distinct from the vendor's. Two of its codes are the vendor's. The distinction it actually draws
+  is whether the adapter *understood* the record — `opaque` means it did not — and it now says so.
+
 ## [0.6.3] — 2026-09-03
 
 ### Added
