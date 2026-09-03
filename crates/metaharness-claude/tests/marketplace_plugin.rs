@@ -3,6 +3,18 @@
 //! Decided by `docs/design/runs-side-by-side-v0.1.md` § 3 (G1–G4) and amendment **a16**;
 //! established by `docs/research/2026-09-03-claude-plugin-headless-install.md`. Nothing here
 //! spawns, fetches or spends: every assertion is over a value the plan carries.
+//!
+//! # The plugin here is `aep-planning`, and that is deliberate
+//!
+//! `agentplugins` renamed the plugin to `aep-plan` on 2026-09-03. This file keeps the old name
+//! because its subject is **one pinned released version**, carried from spelling through
+//! resolution and placement to attestation: `beyond10x/agentplugins@aep-planning@0.4.0`, commit
+//! `21147b7667dfae…`, resolved out of the registry a real config home held — the bytes at
+//! `docs/research/2026-09-03-claude-plugin-headless-install.md:122-124` and the spelling at
+//! `docs/design/runs-side-by-side-v0.1.md:264`, neither of which is rewritten. `aep-plan@0.4.0`
+//! never shipped, and a fixture pinning it would resolve a coordinate that does not exist.
+//! Fixtures that model what a run installs **now** use the new name:
+//! `metaharness_claude::marketplace`'s scratch-registry test and `metaharness/tests/audit.rs`.
 
 use std::path::PathBuf;
 

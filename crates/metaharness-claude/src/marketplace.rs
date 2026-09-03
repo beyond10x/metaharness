@@ -311,6 +311,11 @@ mod tests {
         })
     }
 
+    /// The operator's own registry, as `docs/research/2026-09-03-claude-plugin-headless-install.md`
+    /// recorded it. **The plugin name here is historical and stays**: `aep-planning@0.4.0` is the
+    /// coordinate that release shipped under, `agentplugins` renamed the plugin to `aep-plan`
+    /// afterwards, and `aep-plan@0.4.0` never existed. What these two tests decide is resolution of
+    /// a pin against bytes a real config home held — not what a run installs today.
     fn installed() -> Value {
         serde_json::json!({
             "version": 2,
@@ -361,17 +366,16 @@ mod tests {
         let (marketplaces, plugins) = scratch_registry(&[ScratchEntry {
             marketplace: "beyond10x".to_string(),
             repo: "beyond10x/agentplugins".to_string(),
-            name: "aep-planning".to_string(),
-            version: "0.4.0".to_string(),
+            name: "aep-plan".to_string(),
+            version: "0.6.2".to_string(),
             commit: None,
-            installed_at: "/scratch/claude-home/plugins/cache/beyond10x/aep-planning/0.4.0"
-                .to_string(),
+            installed_at: "/scratch/claude-home/plugins/cache/beyond10x/aep-plan/0.6.2".to_string(),
             marketplace_at: "/scratch/claude-home/plugins/marketplaces/beyond10x".to_string(),
         }]);
         let rendered = format!("{marketplaces}{plugins}");
         assert!(!rendered.contains("lastUpdated"), "{rendered}");
         assert!(!rendered.contains("installedAt"), "{rendered}");
-        assert!(rendered.contains("aep-planning@beyond10x"));
+        assert!(rendered.contains("aep-plan@beyond10x"));
     }
 
     #[test]

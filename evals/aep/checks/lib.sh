@@ -20,7 +20,7 @@ EVAL_DIR="$(cd "$CHECKS_DIR/.." && pwd)"
 # Migrated: this eval lives in the metaharness repository; the subject checkout comes from AEP_REPO.
 REPO="${AEP_REPO:-$HOME/beyond10x/aep}"
 AGENTPLUGINS_REPO="${AGENTPLUGINS_REPO:-$HOME/beyond10x/agentplugins}"
-PLUGIN_DIR="$AGENTPLUGINS_REPO/plugins/aep-planning"
+PLUGIN_DIR="$AGENTPLUGINS_REPO/plugins/aep-plan"
 CONTRACTS="$CHECKS_DIR/contracts"
 TRANSCRIPTS="$CHECKS_DIR/transcripts"
 RUNNER="$EVAL_DIR/run-agents.sh"

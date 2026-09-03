@@ -3,6 +3,39 @@
 What changed. The design document carries *why*; where code and design disagreed, the design
 was amended and the amendment is named here.
 
+## [Unreleased]
+
+### Changed
+
+- **The plugin names follow `agentplugins`.** That repository renamed `aep-planning` to `aep-plan`,
+  `adp` to `aep-drive` and `ess-schema` to `ess-specify`, so the ids this repository *authors* move
+  with them. The live path is one line: `metaharness-aep-eval` copies
+  `<agentplugins>/plugins/aep-plan` into the driven fixture, and a checkout still carrying the old
+  directory now fails `copy_tree` before an arm runs rather than midway through it. The eval's
+  authored expectations, `checks/lib.sh`, `prompt.md` and `README.md` name `aep-plan:planning`,
+  `aep-plan:decomposer` and `aep-plan@inline`. The protocol id `adp/1` and the workflow id
+  `adp/default` are wire ids and did not change.
+- **What kept the old name, and why each one did.** A row checked against a **recording** may not be
+  renamed: the recording is evidence and is never rewritten, so a renamed row would simply contradict
+  its own subject. Measured on 2026-09-03 —
+  `aep trace check --spec expectations.projection.trace.yaml --transcript runs/decomposer-clean.events.jsonl`
+  goes from exit 0 to exit 1 with three `gap` rows when the rows are renamed. So three rows in
+  `evals/aep/expectations.projection.trace.yaml` and two in
+  `evals/aep/checks/contracts/trace-expectations.txt` stay under the recorded name, each carrying a
+  `recorded-under-this-name` line. The marketplace fixtures in
+  `metaharness-claude/tests/marketplace_plugin.rs` and `metaharness-claude/src/vectors.rs` keep
+  `beyond10x/agentplugins@aep-planning@0.4.0` and its commit `21147b7667dfae…` for a different
+  reason: their subject is one **released** coordinate, resolved out of the registry a real config
+  home held, and `aep-plan@0.4.0` never shipped. The two fixtures that model what a run installs
+  *now* — the scratch-registry test in `metaharness-claude/src/marketplace.rs` and the plugin row in
+  `metaharness/tests/audit.rs` — read `aep-plan@0.6.2`.
+- **The rename is now checked rather than reviewed.**
+  `metaharness-aep-eval`'s `no_authored_eval_document_names_a_retired_plugin_id` walks every authored
+  file under `evals/aep` — the recordings under `runs/` and `checks/transcripts/` excluded by path —
+  and fails on any retired id that is not covered by a `recorded-under-this-name` line above it. It
+  reads committed files and compares strings; it runs no eval, so invariant 5 is untouched, on the
+  argument `metaharness-claude/tests/recorded_runs.rs` already makes.
+
 ## [0.6.4] — 2026-09-03
 
 ### Fixed

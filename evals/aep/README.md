@@ -2,7 +2,7 @@
 > repository's `epic:metaharness-migration`.** The eval logic, its recorded transcripts, contracts
 > and result tables live here now; the subject stays the AEP checkout named by
 > `AEP_REPO` (default `~/beyond10x/aep`), while `AGENTPLUGINS_REPO` supplies the focused
-> `aep-planning` plugin. What changed in the move:
+> `aep-plan` plugin. What changed in the move:
 > The repository's Rust eval runner drives the subject's `aep drive run`, whose every `llm` step now spawns
 > through `metaharness run claude` in ask mode — the scratch config home, credential copy and env
 > hygiene left this eval for metaharness itself, and the denial census reads `tool.decided`

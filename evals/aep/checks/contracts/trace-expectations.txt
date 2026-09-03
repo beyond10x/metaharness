@@ -14,6 +14,11 @@
 # the expectation's `expect:` block; `-` where the kind's shape is the whole claim.
 # Every row is `gate`: R12 says "at least these gating expectations", and T2 checks the word.
 
+# recorded-under-this-name: `agentplugins` renamed the plugin to `aep-plan` on 2026-09-03, but
+# T1/T3/T4/T5 evaluate these two documents against `../transcripts/*-clean.jsonl`, which are
+# recordings and offer `aep-planning:*`. Measured 2026-09-03: an `env.agent_available` row
+# spelled `aep-plan:decomposer` reads `gap` against `decomposer-clean.jsonl` where the recorded
+# spelling reads `ok`. The two rows below follow the recording until it is re-recorded.
 expectations.decomposer.trace.yaml	never-ran-a-move	tool.absent	Bash	aep artifact move	gate
 expectations.decomposer.trace.yaml	created-through-the-cli	tool.called	Bash	aep artifact new	gate
 expectations.decomposer.trace.yaml	validated-its-own-work	tool.called	Bash	aep artifact validate	gate
@@ -22,6 +27,7 @@ expectations.decomposer.trace.yaml	nothing-was-refused	permission.denied	-	exact
 expectations.decomposer.trace.yaml	the-decomposer-was-offered	env.agent_available	-	aep-planning:decomposer	gate
 expectations.decomposer.trace.yaml	a-subagent-ran	subagent.spawned	-	at_least	gate
 
+# recorded-under-this-name — same reason as the block above.
 expectations.plan-reviewer.trace.yaml	never-ran-a-move	tool.absent	Bash	aep artifact move	gate
 expectations.plan-reviewer.trace.yaml	never-created-an-artifact	tool.absent	Bash	aep artifact new	gate
 expectations.plan-reviewer.trace.yaml	never-related-an-artifact	tool.absent	Bash	aep artifact relate	gate

@@ -20,6 +20,11 @@ const NATIVE_TASK_ID: &str = "NATIVE-1";
 const DRIVER_MOUNTED: &str = "/toolchain/driver/aep";
 const PREFLIGHT_PROCESS_WRITE_SUBTREE: &str = ".engineering/preflight-planning";
 const NATIVE_PROCESS_WRITE_SUBTREE: &str = ".engineering/planning";
+/// The plugin directory the fixture copies out of the `agentplugins` checkout, and the skill file
+/// that proves the copy is the tree the eval means. Named here so a test can decide which
+/// directory this runner reads without assembling a fixture.
+const PLUGIN_SUBPATH: &str = "plugins/aep-plan";
+const PLANNING_SKILL: &str = "skills/planning/SKILL.md";
 const LIVE_ENV: &str = "METAHARNESS_LIVE";
 const SCOPED_ENV: &str = "METAHARNESS_EVAL_SCOPED";
 
@@ -690,11 +695,8 @@ fn prepare(resolved: &Resolved, prefix: &str, task_id: &str) -> Result<Fixture, 
     )
     .map_err(|error| format!("write task document: {error}"))?;
     let plugin = work.join("plugin");
-    copy_tree(
-        &resolved.agentplugins_repo.join("plugins/aep-planning"),
-        &plugin,
-    )?;
-    require_file(&plugin.join("skills/planning/SKILL.md"), "planning skill")?;
+    copy_tree(&resolved.agentplugins_repo.join(PLUGIN_SUBPATH), &plugin)?;
+    require_file(&plugin.join(PLANNING_SKILL), "planning skill")?;
     println!("scratch directory: {}", work.display());
     Ok(Fixture {
         work,
@@ -1810,6 +1812,115 @@ fn run_to_files(
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    /// The plugin ids `agentplugins` retired when it renamed its plugins by product and verb
+    /// (`aep-planning` → `aep-plan`, `adp` → `aep-drive`, `ess-schema` → `ess-specify`). The
+    /// protocol id `adp/1` and the workflow id `adp/default` are wire ids and are not here.
+    const RETIRED_PLUGIN_IDS: [&str; 8] = [
+        "aep-planning",
+        "ess-schema",
+        "adp@",
+        "adp:drive",
+        "adp:wave",
+        "adp:implementor",
+        "adp:adversary",
+        "adp:story-scoper",
+    ];
+
+    /// What an authored line says about itself when it must keep a retired id because the thing it
+    /// is checked against is a recording. It exempts every line under it up to the next blank line.
+    const KEPT_MARKER: &str = "recorded-under-this-name";
+
+    /// Recordings, which are evidence and are never rewritten to match a rename.
+    const RECORDINGS: [&str; 2] = ["runs", "checks/transcripts"];
+
+    fn authored_eval_files(root: &Path, prefix: &Path, into: &mut Vec<PathBuf>) {
+        let mut entries: Vec<PathBuf> = fs::read_dir(root)
+            .expect("the eval directory is readable")
+            .map(|entry| entry.expect("a directory entry").path())
+            .collect();
+        entries.sort();
+        for entry in entries {
+            let relative = prefix.join(entry.file_name().expect("a name"));
+            if RECORDINGS
+                .iter()
+                .any(|excluded| relative == Path::new(excluded))
+            {
+                continue;
+            }
+            if entry.is_dir() {
+                authored_eval_files(&entry, &relative, into);
+            } else {
+                into.push(relative);
+            }
+        }
+    }
+
+    /// Every authored expectation, check and instruction under `evals/aep` names the ids the
+    /// plugins carry **now** — or says, on the line above, that its subject is a recording.
+    ///
+    /// This does not run an eval, and so does not touch invariant 5: it reads committed files and
+    /// compares strings, exactly as `metaharness-claude/tests/recorded_runs.rs` argues for the two
+    /// recorded runs. The check is here rather than in a reviewer's `rg` because the failure it
+    /// catches is a *silent* one — a row renamed against a recording still passes its own suite,
+    /// and a row left behind still reads like a current id.
+    #[test]
+    fn no_authored_eval_document_names_a_retired_plugin_id() {
+        let evals = PathBuf::from(env!("CARGO_MANIFEST_DIR"))
+            .parent()
+            .and_then(Path::parent)
+            .expect("the repository root")
+            .join("evals/aep");
+        let mut files = Vec::new();
+        authored_eval_files(&evals, Path::new(""), &mut files);
+        assert!(!files.is_empty(), "the eval directory has authored files");
+
+        let mut offences = Vec::new();
+        for relative in &files {
+            let text = fs::read_to_string(evals.join(relative)).expect("an authored file is text");
+            let mut exempt = false;
+            for (index, line) in text.lines().enumerate() {
+                if line.trim().is_empty() {
+                    exempt = false;
+                }
+                if line.contains(KEPT_MARKER) {
+                    exempt = true;
+                    continue;
+                }
+                if exempt {
+                    continue;
+                }
+                for id in RETIRED_PLUGIN_IDS {
+                    if line.contains(id) {
+                        offences.push(format!(
+                            "{}:{}: {} — rename it, or mark the line above `{KEPT_MARKER}`",
+                            relative.display(),
+                            index + 1,
+                            id
+                        ));
+                    }
+                }
+            }
+        }
+        assert!(
+            offences.is_empty(),
+            "{} authored line(s) still name a retired plugin id:\n{}",
+            offences.len(),
+            offences.join("\n")
+        );
+    }
+
+    /// The fixture copies the directory the `agentplugins` checkout publishes today. A path that
+    /// no longer exists there is not a slow failure: `copy_tree` refuses and the arm never runs.
+    #[test]
+    fn the_fixture_copies_the_plugin_agentplugins_publishes() {
+        let source = Path::new("/checkout").join(PLUGIN_SUBPATH);
+        assert_eq!(source, Path::new("/checkout/plugins/aep-plan"));
+        assert_eq!(
+            source.join(PLANNING_SKILL),
+            Path::new("/checkout/plugins/aep-plan/skills/planning/SKILL.md")
+        );
+    }
 
     #[test]
     fn project_points_at_tree_inside_workspace() {

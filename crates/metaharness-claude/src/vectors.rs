@@ -537,6 +537,11 @@ fn base_context() -> LaunchContext {
 ///   because the registry alone loads nothing while `--setting-sources ""` is in force (probe Q19,
 ///   closed 2026-09-03);
 /// * the attestation lists it with its pin and says how it is loaded.
+///
+/// **The pin is `aep-planning@0.4.0` and stays so after the 2026-09-03 rename to `aep-plan`**: this
+/// vector resolves one released coordinate, recorded in
+/// `docs/research/2026-09-03-claude-plugin-headless-install.md`, and `aep-plan@0.4.0` never shipped.
+/// See `metaharness-claude/tests/marketplace_plugin.rs` for the same decision stated once.
 fn marketplace_plugin_vector() -> VectorOutcome {
     let id = "c1-marketplace-plugin";
     let (_, tree) = synthetic_plugin();

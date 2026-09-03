@@ -695,15 +695,15 @@ fn a_run_with_no_plugin_prints_plugins_none_rather_than_printing_nothing() {
 fn a_run_that_installed_a_plugin_lists_it_with_its_digest_and_how_it_is_loaded() {
     let mut report = report_with(floor_for(good_record()));
     report.installed_plugins = vec![metaharness::protocol::InstalledPlugin {
-        name: "aep-planning".to_string(),
-        source: "beyond10x/agentplugins@aep-planning@0.4.0 (marketplace beyond10x)".to_string(),
-        installed_at: "/scratch/claude-home/plugins/cache/beyond10x/aep-planning/0.4.0".to_string(),
+        name: "aep-plan".to_string(),
+        source: "beyond10x/agentplugins@aep-plan@0.6.2 (marketplace beyond10x)".to_string(),
+        installed_at: "/scratch/claude-home/plugins/cache/beyond10x/aep-plan/0.6.2".to_string(),
         digest: metaharness::protocol::Digest::of(b"the tree"),
         loaded_by: "placed in the scratch config home's plugin registry — not driven".to_string(),
     }];
     let rendered = report.render();
-    assert!(rendered.contains("plugins: aep-planning"), "{rendered}");
-    assert!(rendered.contains("0.4.0"), "{rendered}");
+    assert!(rendered.contains("plugins: aep-plan"), "{rendered}");
+    assert!(rendered.contains("0.6.2"), "{rendered}");
     assert!(rendered.contains("not driven"), "{rendered}");
     assert!(!rendered.contains("plugins: none"), "{rendered}");
 }

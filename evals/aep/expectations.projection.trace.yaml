@@ -37,6 +37,16 @@ title: Every kind this driver emits is decidable — no row reports `unk`
 # is the reader working correctly on a name it has not learned, it gates nothing, and it is
 # recorded in `runs/README.md` rather than papered over by deleting the row.
 
+# recorded-under-this-name — **three rows below keep a retired plugin name, and it is not an
+# oversight.** `agentplugins` renamed `aep-planning` to `aep-plan` on 2026-09-03; the two subjects
+# of this document were recorded before that and are evidence, so they still offer the old ids.
+# Measured that day: renaming those three rows takes
+# `aep trace check --spec … --transcript runs/decomposer-clean.events.jsonl` from exit 0 to exit 1
+# with three `gap` rows. Each carries a `recorded-under-this-name` line, which is what
+# `metaharness-aep-eval`'s `no_authored_eval_document_names_a_retired_plugin_id` reads. When these
+# streams are next re-recorded from a run of the renamed plugin, the rows and the markers go
+# together.
+
 expectations:
   # --- session.started ----------------------------------------------------------------------
 
@@ -72,6 +82,7 @@ expectations:
 
   - id: the-plugin-list-survived-the-projection
     statement: the loaded plugin arrived with its name, version and source — H1a's evidence field
+    # recorded-under-this-name — see the note above `expectations:`.
     expect:
       env.plugin_loaded:
         plugin: aep-planning
@@ -80,12 +91,14 @@ expectations:
 
   - id: the-skill-list-survived-the-projection
     statement: the session's skills arrived under the names an expectation refers to
+    # recorded-under-this-name — see the note above `expectations:`.
     expect:
       env.skill_available:
         skill: aep-planning:planning
 
   - id: the-agent-list-survived-the-projection
     statement: the session's subagents arrived under the names an expectation refers to
+    # recorded-under-this-name — see the note above `expectations:`.
     expect:
       env.agent_available:
         agent: aep-planning:plan-reviewer
