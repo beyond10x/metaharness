@@ -89,8 +89,8 @@ checksum = "f2032f911046de80f0a198e0901378627c33f59ea0ac00e363d481118bd70a53"
 
 [[package]]
 name = "b10x-harness-loop"
-version = "0.10.2"
-source = "git+https://github.com/beyond10x/harness?rev=c1493a79331f315cac24aa3818ddaa1eb41c8b25#c1493a79331f315cac24aa3818ddaa1eb41c8b25"
+version = "0.11.1"
+source = "git+https://github.com/beyond10x/harness?rev=0f2edfef9f6dc3333b9377a730dfb40aeff14351#0f2edfef9f6dc3333b9377a730dfb40aeff14351"
 dependencies = [
  "b10x-harness-wire",
  "jsonschema",
@@ -102,8 +102,8 @@ dependencies = [
 
 [[package]]
 name = "b10x-harness-toolchain"
-version = "0.10.2"
-source = "git+https://github.com/beyond10x/harness?rev=c1493a79331f315cac24aa3818ddaa1eb41c8b25#c1493a79331f315cac24aa3818ddaa1eb41c8b25"
+version = "0.11.1"
+source = "git+https://github.com/beyond10x/harness?rev=0f2edfef9f6dc3333b9377a730dfb40aeff14351#0f2edfef9f6dc3333b9377a730dfb40aeff14351"
 dependencies = [
  "regex",
  "serde",
@@ -114,8 +114,8 @@ dependencies = [
 
 [[package]]
 name = "b10x-harness-tools"
-version = "0.10.2"
-source = "git+https://github.com/beyond10x/harness?rev=c1493a79331f315cac24aa3818ddaa1eb41c8b25#c1493a79331f315cac24aa3818ddaa1eb41c8b25"
+version = "0.11.1"
+source = "git+https://github.com/beyond10x/harness?rev=0f2edfef9f6dc3333b9377a730dfb40aeff14351#0f2edfef9f6dc3333b9377a730dfb40aeff14351"
 dependencies = [
  "b10x-harness-toolchain",
  "b10x-harness-wire",
@@ -128,8 +128,8 @@ dependencies = [
 
 [[package]]
 name = "b10x-harness-wire"
-version = "0.10.2"
-source = "git+https://github.com/beyond10x/harness?rev=c1493a79331f315cac24aa3818ddaa1eb41c8b25#c1493a79331f315cac24aa3818ddaa1eb41c8b25"
+version = "0.11.1"
+source = "git+https://github.com/beyond10x/harness?rev=0f2edfef9f6dc3333b9377a730dfb40aeff14351#0f2edfef9f6dc3333b9377a730dfb40aeff14351"
 dependencies = [
  "httpdate",
  "serde",
