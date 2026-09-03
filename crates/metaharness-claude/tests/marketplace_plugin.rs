@@ -211,18 +211,36 @@ fn the_scratch_home_carries_the_two_registry_documents_and_nothing_points_outsid
     assert!(rendered.contains("/scratch/run-1/claude-home/plugins/cache"));
 }
 
-/// **`--plugin-dir` is not also passed.** Two mechanisms loading one plugin would report it twice.
+/// **`--plugin-dir` is also passed, pointing at the copy inside the config home.** Until 0.6.1 it
+/// was deliberately not, on the argument that two mechanisms loading one plugin would report it
+/// twice; probe Q19 (2026-09-03) showed the registry mechanism loads nothing while
+/// `--setting-sources ""` is in force, so the flag is the only one of the two that does.
 #[test]
-fn a_marketplace_plugin_is_not_also_named_by_plugin_dir_in_the_argv() {
+fn a_marketplace_plugin_is_also_named_by_plugin_dir_in_the_argv() {
     let (spec, context, _) = marketplace_world();
     let plan = plan_launch(&spec, &context).expect("plans");
-    assert!(!plan.args.iter().any(|argument| argument == "--plugin-dir"));
+    let placed = plan.marketplace_installs[0].to.display().to_string();
+    assert!(
+        plan.args
+            .windows(2)
+            .any(|pair| pair[0] == "--plugin-dir" && pair[1] == placed),
+        "the argv names the config-home copy with --plugin-dir: {:?}",
+        plan.args
+    );
+    assert_eq!(
+        plan.args
+            .iter()
+            .filter(|argument| *argument == "--plugin-dir")
+            .count(),
+        1,
+        "one --plugin-dir per plugin, not one per mechanism"
+    );
 }
 
 // --- G4: what the attestation says ----------------------------------------------------------------
 
 #[test]
-fn the_attestation_lists_the_plugin_with_its_pin_and_says_the_claim_is_not_driven() {
+fn the_attestation_lists_the_plugin_with_its_pin_and_says_how_it_is_loaded() {
     let (spec, context, digest) = marketplace_world();
     let plan = plan_launch(&spec, &context).expect("plans");
 
@@ -236,8 +254,8 @@ fn the_attestation_lists_the_plugin_with_its_pin_and_says_the_claim_is_not_drive
         "the pin is in the record"
     );
     assert!(
-        attested[0].loaded_by.contains("not driven"),
-        "a vendor surface nobody has driven is documented as undriven: {}",
+        attested[0].loaded_by.contains("--plugin-dir") && attested[0].loaded_by.contains("Q19"),
+        "the row names both placements and the probe that decided between them: {}",
         attested[0].loaded_by
     );
     assert!(attested[0].loaded_by.contains(PLUGIN_REGISTRY_HOME));

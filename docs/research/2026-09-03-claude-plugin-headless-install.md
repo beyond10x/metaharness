@@ -171,10 +171,11 @@ supports:
 
 | id | question | why reading cannot answer it |
 |---|---|---|
-| **Q19** | does a session launched with `CLAUDE_CONFIG_DIR` pointing at a home **metaharness assembled** actually load the plugin, and what `source` string does the opening record report for it? | the binary's plugin loader is not documented and was not driven; the two registry documents were read from a home the vendor itself wrote, and a home metaharness writes is a different input. The evidence would be one `session.started` whose `plugins` list names it — H1a's own comparison |
+| **Q19** — **closed 2026-09-03, answer: no** | does a session launched with `CLAUDE_CONFIG_DIR` pointing at a home **metaharness assembled** actually load the plugin, and what `source` string does the opening record report for it? | Driven once, paid: `aep eval run` over the golden-path case with `--plugin-dir aep-planning --plugin …@adp@0.6.0 --plugin …@ess-schema@0.6.0` (metaharness 0.6.0, claude 2.1.259). `session.started.plugins` = `[{"name":"aep-planning","source":"aep-planning@inline","version":"0.6.0"}]`; `skills` held only `aep-planning:*`; the run later found the ess-schema tree under the *operator's* cache by hand and read the wave skill from a checkout. The registry was placed and not loaded, because enablement lives in the user settings source that `--setting-sources ""` removes. Since 0.6.1 the launch also passes `--plugin-dir <config home>/plugins/cache/<mkt>/<name>/<pin>` for each pin; Q21 stays open (the `source` string for a registry-loaded plugin was never produced) |
 | **Q20** | is there any headless spelling that pins? | `--help` on three verbs shows none at 2.1.258. A future version could add one; this note is pinned to the version it was read from |
 | **Q21** | does a marketplace-installed plugin's `source` differ from a `--plugin-dir` one's (`<name>@inline` in the golden fixture)? | same reason as Q19 — it is a field in an opening record nobody has produced for this path |
 
-Until Q19 closes, `InstalledPlugin::loaded_by` for a `--plugin` install says **not driven** in so
-many words, and the `CHANGELOG` entry says it too. A claim about a vendor surface nobody has driven
-is documented as undriven (`AGENTS.md` invariant 4).
+Q19 closed the day this note was written, in the direction the note allowed for: the assembled
+registry is *read* and not *loaded*. `InstalledPlugin::loaded_by` for a `--plugin` install now says
+both placements and names this probe; the 0.6.0 `CHANGELOG` entry that said *not driven* stands as
+the record of what was known when it shipped (`AGENTS.md` invariant 4).

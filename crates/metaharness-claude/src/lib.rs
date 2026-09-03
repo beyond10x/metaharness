@@ -4,7 +4,7 @@
 //! onto [`metaharness_protocol::Event`], how a decision reaches it, and what hermetic means for
 //! it. Nothing outside this crate may know any of that.
 //!
-//! Pinned to **2.1.241** ([`PINNED_VERSIONS`]). Every claim this crate makes about that binary is
+//! Pinned to **2.1.259** ([`PINNED_VERSIONS`]). Every claim this crate makes about that binary is
 //! either read from `docs/design/metaharness-protocol-v0.1.md` § 2.7 — where each row carries its
 //! own method — or labelled unverified at the point of use with the `Q` row that would close it.
 //! A string in a binary is weaker than a driven call, and this crate says which it has.
@@ -94,6 +94,18 @@ pub const ADAPTER_ID: &str = "claude";
 ///   bundle; V4's bare-`--allowedTools` auto-approval, never driven on any version; and Q11's
 ///   `""` hook matcher regime. None of these were re-read, and none is claimed to have been.
 ///
+/// Moved 2.1.241 → **2.1.259** on 2026-09-03, the cheap kind again, and with one thing read that the
+/// earlier moves had no occasion to: the **wire grew**. A paid run of the installed 2.1.259 through
+/// this adapter (the golden-path eval case, 1,515 events) opened, streamed and ended, its opening
+/// record reported `claude_code_version` 2.1.259 — and 183 of its lines were shapes this reader had
+/// never seen: `system/task_started`, `system/task_progress`, `system/task_notification`,
+/// `system/task_updated` and a top-level `tool_progress`. Each became `opaque`, which is what D4
+/// requires, and every `tool.absent` row in the checker that read the stream came back `unk` over
+/// them. `transcript::control_plane` now names those five as the vendor's own bookkeeping and drops
+/// them; anything else unnamed still goes `opaque`. `metaharness doctor claude` on the same day
+/// confirmed every flag the launch builds is declared by the 2.1.259 binary, including the
+/// `--max-budget-usd` this release starts sending.
+///
 /// The golden fixtures stay labelled 2.1.240, because that is the binary whose bytes they are.
 /// `golden-version-pair` therefore warns, by design, and the warning is the outstanding invoice.
-pub const PINNED_VERSIONS: [&str; 1] = ["2.1.241"];
+pub const PINNED_VERSIONS: [&str; 1] = ["2.1.259"];

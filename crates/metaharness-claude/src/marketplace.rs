@@ -5,14 +5,17 @@
 //! half — the `<repo>@<name>@<pin>` spelling and the refusal an unpinned one gets — is
 //! [`metaharness_protocol::MarketplacePlugin`].
 //!
-//! # Read, not driven, and the difference is stated
+//! # Read first, driven once, and the difference is stated
 //!
 //! Every path and every field below was **read out of a real config home** at Claude Code 2.1.258
-//! and is recorded verbatim in `docs/research/2026-09-03-claude-plugin-headless-install.md`. What
-//! has **not** been established is that a session launched against a config home *metaharness*
-//! assembled loads what is placed there — that is the note's open probe **Q19**, it needs a paid
-//! run, and until it closes [`metaharness_protocol::InstalledPlugin::loaded_by`] says *not driven*
-//! in so many words (`AGENTS.md` invariant 4).
+//! and is recorded verbatim in `docs/research/2026-09-03-claude-plugin-headless-install.md`. The
+//! note's probe **Q19** — does a session launched against a config home *metaharness* assembled
+//! load what is placed there — was driven on 2026-09-03 and answered **no**: a session declaring two
+//! pinned plugins opened with only its `--plugin-dir` plugin in `session.started.plugins`. The
+//! registry is enabled through the user settings source, and `--setting-sources ""` (H2) switches
+//! that source off. So the launch places the copy here **and** names it to the vendor with
+//! `--plugin-dir` (`launch::build_args`); the registry documents keep the vendor's own bookkeeping
+//! coherent, and [`metaharness_protocol::InstalledPlugin::loaded_by`] says which of the two loads.
 //!
 //! # The run reaches no network
 //!

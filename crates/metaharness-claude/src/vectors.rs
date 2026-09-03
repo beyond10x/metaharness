@@ -533,9 +533,10 @@ fn base_context() -> LaunchContext {
 /// * the tree is copied **into the config home**, at the vendor's own cache path;
 /// * the two registry documents are on the plan, and **nothing in them names a path outside the
 ///   scratch home** — a registry pointing at the operator's cache would make the copy pointless;
-/// * the argv does **not** also carry `--plugin-dir` for it, because two mechanisms loading one
-///   plugin would report it twice;
-/// * the attestation lists it with its pin and says the placement is **not driven**.
+/// * the argv **also** carries `--plugin-dir` for it, pointing at the copy inside the config home,
+///   because the registry alone loads nothing while `--setting-sources ""` is in force (probe Q19,
+///   closed 2026-09-03);
+/// * the attestation lists it with its pin and says how it is loaded.
 fn marketplace_plugin_vector() -> VectorOutcome {
     let id = "c1-marketplace-plugin";
     let (_, tree) = synthetic_plugin();
@@ -589,8 +590,15 @@ fn marketplace_plugin_vector() -> VectorOutcome {
         [install] if install.to == placed && install.digest == digest => {}
         other => differences.push(format!("the config-home copy list is {other:?}")),
     }
-    if plan.args.iter().any(|argument| argument == "--plugin-dir") {
-        differences.push("the argv names --plugin-dir for a marketplace plugin".to_string());
+    if !plan
+        .args
+        .windows(2)
+        .any(|pair| pair[0] == "--plugin-dir" && pair[1] == placed.display().to_string())
+    {
+        differences.push(format!(
+            "the argv does not name the config-home copy with --plugin-dir: {:?}",
+            plan.args
+        ));
     }
     let documents: Vec<String> = plan
         .scratch_files
@@ -619,7 +627,7 @@ fn marketplace_plugin_vector() -> VectorOutcome {
             if attested.name == "aep-planning"
                 && attested.digest == digest
                 && attested.source.contains("0.4.0")
-                && attested.loaded_by.contains("not driven") => {}
+                && attested.loaded_by.contains("--plugin-dir") => {}
         other => differences.push(format!("the attestation says {other:?}")),
     }
 
@@ -874,9 +882,9 @@ mod tests {
 
     /// The pair is **apart again**, on purpose, and this test is the outstanding invoice.
     ///
-    /// The committed golden is 2.1.240's bytes; the pin moved to 2.1.241 on 2026-08-24 because
-    /// holding it behind the installed binary bought nothing and cost every `--hermetic strict`
-    /// run an H9 gap. `fixtures/golden/README.md` is explicit that this is the cheap direction —
+    /// The committed golden is 2.1.240's bytes; the pin moved to 2.1.241 on 2026-08-24 and to
+    /// 2.1.259 on 2026-09-03, because holding it behind the installed binary bought nothing and
+    /// cost every `--hermetic strict` run an H9 gap. `fixtures/golden/README.md` is explicit that this is the cheap direction —
     /// *"a re-pin is free and honest; only a re-capture costs money"* — and that the disagreement
     /// must be a **named warning that stands until somebody pays**. So the assertion is that the
     /// warning is there and names both versions, not that it is absent.

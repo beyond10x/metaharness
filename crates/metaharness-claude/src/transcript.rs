@@ -133,6 +133,11 @@ impl TranscriptReader {
         };
 
         let at = str_field(&record, "timestamp");
+        if control_plane(&record) {
+            // Recognised and owed nothing: see [`control_plane`]. Not `opaque`, because an opaque
+            // record is one this reader could not name, and it turns every absence row `unk`.
+            return Vec::new();
+        }
         let mut events = self.auth_expiry(&record, source_line);
         events.extend(self.map_record(&record, source_line));
         if events.is_empty() {
@@ -167,6 +172,9 @@ impl TranscriptReader {
     }
 
     /// Which events one recognised record becomes. An empty answer means `opaque`.
+    ///
+    /// The vendor's own bookkeeping records are answered before this is asked, by
+    /// [`control_plane`], and never reach it.
     fn map_record(&mut self, record: &Record, source_line: u64) -> Vec<Event> {
         match str_field(record, "type").as_deref() {
             Some("system") => match str_field(record, "subtype").as_deref() {
@@ -322,6 +330,33 @@ impl TranscriptReader {
             }],
             None => Vec::new(),
         }
+    }
+}
+
+/// The records the vendor writes about its **own bookkeeping**, which carry no fact any
+/// expectation reads and are recognised so that they are not `opaque`.
+///
+/// Claude Code 2.1.259 writes five shapes 2.1.241 did not: `system/task_started`,
+/// `system/task_progress`, `system/task_notification` and `system/task_updated` — the lifecycle of a
+/// sub-agent task — and a top-level `tool_progress` heartbeat while a tool runs. The call each one
+/// narrates is already on the wire: the `Agent` call is a `tool.requested`, and what the sub-agent
+/// produced arrives in that call's `tool.result`, so these add a second account of the same thing
+/// and nothing more. They are dropped on that reading, and named here one by one — a record this
+/// list does not name still goes `opaque` — so that a shape a later release adds is met the way D4
+/// requires and not waved through with these.
+///
+/// Why it matters that they are recognised rather than left opaque: one recorded run on 2026-09-03
+/// carried 183 of them, and every `tool.absent` row in the checker that read it came back `unk`
+/// with *"183 events the adapter could not read"* — the checker was right to, and the fix belongs
+/// here, where the record's shape is known.
+fn control_plane(record: &Record) -> bool {
+    match str_field(record, "type").as_deref() {
+        Some("tool_progress") => true,
+        Some("system") => matches!(
+            str_field(record, "subtype").as_deref(),
+            Some("task_started" | "task_progress" | "task_notification" | "task_updated")
+        ),
+        _ => false,
     }
 }
 
@@ -746,6 +781,29 @@ mod tests {
             panic!("expected opaque");
         };
         assert_eq!(vendor_subtype.as_deref(), Some("unheard_of"));
+    }
+
+    /// Claude Code 2.1.259's sub-agent task lifecycle and tool-progress heartbeats are the vendor's
+    /// own bookkeeping: recognised, owed no event, and **not** opaque — one recorded run carried 183
+    /// of them and every absence row read over it came back `unk`.
+    #[test]
+    fn the_vendors_bookkeeping_records_are_recognised_and_emit_nothing() {
+        let mut reader = new_reader();
+        for line in [
+            r#"{"type":"system","subtype":"task_started","task_id":"t1","description":"scope it"}"#,
+            r#"{"type":"system","subtype":"task_progress","task_id":"t1","usage":{"total_tokens":10}}"#,
+            r#"{"type":"system","subtype":"task_notification","task_id":"t1","status":"completed"}"#,
+            r#"{"type":"system","subtype":"task_updated","task_id":"t1","description":"renamed"}"#,
+            r#"{"type":"tool_progress","tool_use_id":"toolu_1","elapsed_time_seconds":3}"#,
+        ] {
+            assert!(
+                reader.push_line(line).is_empty(),
+                "a bookkeeping record emits nothing and is not opaque: {line}"
+            );
+        }
+        // The list is closed: a subtype it does not name is still met the way D4 requires.
+        let event = only(reader.push_line(r#"{"type":"system","subtype":"task_invented_later"}"#));
+        assert!(matches!(event, Event::Opaque { .. }));
     }
 
     #[test]

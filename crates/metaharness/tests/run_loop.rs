@@ -308,6 +308,7 @@ fn every_builder_method_sets_one_field_of_the_one_options_type() {
         subscription_token_pointer: None,
         effort: Some("medium".to_string()),
         max_turns: Some(30),
+        max_budget_usd: None,
         plugin_dir: vec!["plugins/one".into()],
         plugin: Vec::new(),
         cwd: Some("/operator/repo".into()),

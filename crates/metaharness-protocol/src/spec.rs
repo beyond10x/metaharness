@@ -331,6 +331,16 @@ pub struct RunSpec {
     #[cfg_attr(feature = "clap", arg(long))]
     pub max_turns: Option<u32>,
 
+    /// A ceiling on what the session may spend, in US dollars, enforced by the **vendor**.
+    ///
+    /// Claude Code takes it as `--max-budget-usd` (documented for print mode, which is the only
+    /// mode this adapter launches) and stops the session when its own cost estimate crosses it. A
+    /// cap a runner compares against the bill between two runs is a receipt; this one acts during
+    /// the run. Passed through as the caller wrote it — `5`, `12.50` — and validated by the vendor.
+    /// Codex has no such flag and refuses the option by name rather than dropping it.
+    #[cfg_attr(feature = "clap", arg(long, value_name = "USD"))]
+    pub max_budget_usd: Option<String>,
+
     /// Plugin directories to load, and only these.
     ///
     /// Each one is **copied into the run's scratch tree before the child starts** and digested on
@@ -546,6 +556,7 @@ impl RunSpec {
             subscription_token_pointer: None,
             effort: None,
             max_turns: None,
+            max_budget_usd: None,
             plugin_dir: Vec::new(),
             plugin: Vec::new(),
             cwd: None,

@@ -683,6 +683,7 @@ pub fn plan_launch(spec: &RunSpec, context: &LaunchContext) -> Result<LaunchPlan
         &prompt,
         &context.scratch_root.join(SETTINGS_FILE),
         &plugin_installs,
+        &marketplace_installs,
         mcp_config
             .is_some()
             .then(|| mcp_config_path(&context.scratch_root)),
@@ -966,14 +967,16 @@ fn marketplace_installed_plugins(
                 installed_at: install.to.display().to_string(),
                 digest: install.digest.clone(),
                 loaded_by: format!(
-                    "placed in the scratch config home's plugin registry: the tree at {}, named by \
-                     `plugins/installed_plugins.json` as `{}@{marketplace}` and pinned to `{}`. \
-                     That layout was read from a real config home at claude 2.1.258 \
-                     (docs/research/2026-09-03-claude-plugin-headless-install.md) and is **not \
-                     driven** — no session has been launched against a config home metaharness \
-                     assembled (open probe Q19). Whether the plugin then appears in the session is \
-                     asserted from the opening record\'s plugin list (H1a), never from this row. \
-                     `--plugin-dir` is deliberately not also passed for it",
+                    "placed in the scratch config home's plugin registry — the tree at {}, named by \
+                     `plugins/installed_plugins.json` as `{}@{marketplace}` and pinned to `{}` — \
+                     **and** named to the vendor with its own --plugin-dir flag pointing at that \
+                     same copy. Both, because the registry alone loads nothing under this launch: \
+                     the vendor enables an installed plugin through the user settings source, which \
+                     `--setting-sources \"\"` (H2) switches off. Probe Q19 closed on 2026-09-03: a \
+                     session declaring two pinned plugins opened with only the --plugin-dir one in \
+                     its plugin list (docs/research/2026-09-03-claude-plugin-headless-install.md \
+                     § 4). Whether the plugin appears in the session is still read from the opening \
+                     record\'s plugin list (H1a), never from this row",
                     install.to.display(),
                     declared.name,
                     declared.pin,
@@ -1042,6 +1045,7 @@ fn build_args(
     prompt: &str,
     settings_path: &Path,
     plugin_installs: &[PluginInstall],
+    marketplace_installs: &[PluginInstall],
     mcp_config_path: Option<PathBuf>,
 ) -> Vec<String> {
     let mut args = vec![
@@ -1072,11 +1076,30 @@ fn build_args(
         args.push("--max-turns".to_string());
         args.push(max_turns.to_string());
     }
+    if let Some(budget) = &spec.max_budget_usd {
+        // The vendor's own stop, and the only cap that acts *during* a run: a runner comparing the
+        // bill against a cap between two runs holds a receipt, not a ceiling. `--max-budget-usd`
+        // is documented for print mode only (`claude --help`, 2.1.259), which is the only mode this
+        // adapter launches.
+        args.push("--max-budget-usd".to_string());
+        args.push(budget.clone());
+    }
     // The **copy**, never the operator's own directory: what the vendor loads has to be the tree
     // this plan digested, and a directory outside the scratch can be edited while the run is in
     // flight — which would leave the attestation citing a digest of something that is no longer
     // there.
     for install in plugin_installs {
+        args.push("--plugin-dir".to_string());
+        args.push(install.to.display().to_string());
+    }
+    // A pinned marketplace plugin is named the same way, pointing at its copy inside the scratch
+    // config home. The registry documents beside that copy are still written, but on their own they
+    // load nothing here: the vendor enables an installed plugin through the *user* settings source,
+    // and `--setting-sources ""` (H2) is the flag that switches that source off. Probe Q19 closed on
+    // 2026-09-03 with exactly that observation — a session declaring two pinned plugins opened with
+    // only the `--plugin-dir` one in its `plugins` list (`docs/research/2026-09-03-claude-plugin-
+    // headless-install.md` § 4).
+    for install in marketplace_installs {
         args.push("--plugin-dir".to_string());
         args.push(install.to.display().to_string());
     }
@@ -1604,18 +1627,20 @@ fn plugin_posture(
              --plugin-dir flag"
         );
     }
-    // **Stated apart from the directories above, because the two are loaded differently and only
-    // one of them is verified** (amendment a16). Folding them into one sentence would let a
-    // reader carry `--plugin-dir`'s *verified* over onto a placement nobody has driven.
+    // **Stated apart from the directories above, because the two arrive differently** (amendment
+    // a16): a directory is copied where metaharness chooses, a pinned plugin is copied into the
+    // config home's own plugin cache with the registry documents beside it. Both are then named to
+    // the vendor with `--plugin-dir`, because the registry alone loads nothing while H2 switches the
+    // user settings source off (probe Q19, closed 2026-09-03).
     if !marketplace_installs.is_empty() {
         let placed = names(marketplace_installs);
         let _ = write!(
             said,
             ", and it also includes the pinned marketplace plugin(s) {placed:?} — copied into this \
-             config home's own plugin cache and named by the registry documents beside it. That \
-             placement is read from a real config home and **not driven** (open probe Q19), so \
-             whether the session loads them is asserted from the opening record and never from \
-             this row"
+             config home's own plugin cache, named by the registry documents beside it, and named \
+             to the vendor with its own --plugin-dir flag, because the registry alone loads nothing \
+             while --setting-sources is empty (probe Q19, closed 2026-09-03). Whether the session \
+             loaded them is read from the opening record's plugin list, never from this row"
         );
     }
     said

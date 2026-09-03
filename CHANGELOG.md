@@ -3,6 +3,36 @@
 What changed. The design document carries *why*; where code and design disagreed, the design
 was amended and the amendment is named here.
 
+## [0.6.1] — 2026-09-03
+
+### Fixed
+
+- **A pinned `--plugin` is now also named to the vendor with `--plugin-dir`, pointing at its copy
+  inside the scratch config home.** Probe Q19 closed on 2026-09-03 and the answer was *no*: a
+  session declaring two pinned plugins opened with only its `--plugin-dir` plugin in
+  `session.started.plugins`. The registry documents metaharness writes are read, but an installed
+  plugin is *enabled* through the user settings source, which `--setting-sources ""` (H2) switches
+  off. The documents are still written; `InstalledPlugin::loaded_by` and the H1a row now say which
+  of the two mechanisms loads, and the C1 vector `c1-marketplace-plugin` asserts the flag.
+- **Claude Code 2.1.259's bookkeeping records are recognised instead of going `opaque`.**
+  `system/task_started`, `system/task_progress`, `system/task_notification`, `system/task_updated`
+  and the top-level `tool_progress` heartbeat narrate a call that is already on the wire as the
+  `Agent` tool's request and result. One recorded run carried 183 of them, and every `tool.absent`
+  row in the checker that read it came back `unk` over *"183 events the adapter could not read"*.
+  They now emit nothing; the list is closed, so a shape a later release adds still goes `opaque`
+  (D4).
+- **Pin moved 2.1.241 → 2.1.259.** What was re-read on the new binary is in `PINNED_VERSIONS`'
+  note; the golden fixtures stay labelled by the binary whose bytes they are, and the contract
+  record's `provider` moves with the pin.
+
+### Added
+
+- **`metaharness run claude --max-budget-usd <USD>`**, passed through as written to the vendor's own
+  `--max-budget-usd`, which stops the session when its cost estimate crosses the number. It is the
+  only cap that acts *during* a run: a runner comparing the bill against a cap between two runs
+  holds a receipt, not a ceiling — one eval case stated $10.96 against a runner cap of $5. Codex has
+  no such flag and refuses the option by name (`UnsupportedOption`), as it does `--max-turns`.
+
 ## [0.6.0] — 2026-09-03
 
 ### Added

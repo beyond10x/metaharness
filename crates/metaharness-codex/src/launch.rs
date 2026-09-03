@@ -778,6 +778,14 @@ fn unsupported_options(spec: &RunSpec) -> Result<(), LaunchRefusal> {
                   the same name",
         });
     }
+    if spec.max_budget_usd.is_some() {
+        return Err(LaunchRefusal::UnsupportedOption {
+            option: "--max-budget-usd",
+            why: "codex exec has no spend ceiling of its own; a cap metaharness enforced by \
+                  killing the child at a price it estimated would be a different thing wearing \
+                  the same name",
+        });
+    }
     // `--plugin-dir` **was** refused here, on the grounds that codex loads plugins from its own
     // config and marketplace snapshots rather than from a directory named on the command line.
     // Both halves of that sentence are still true; what changed is that the refusal was hiding a
