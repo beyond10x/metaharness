@@ -5,6 +5,9 @@
 > `docs/design/metaharness-protocol-v0.1.md` § 4.4 (amendment **a15**) and § 8.1 H1a
 > (amendment **a16**); where the two disagree, the protocol document's own amendment record is the
 > pointer and this page is the detail.
+> **Amended 2026-09-03 by protocol amendment a17**, which adds a twentieth event: § 1.2's table
+> gains `stream.closed` as row 20 and it is the one kind with no IR family that is **not** `unk`.
+> The counts below are corrected at the point of change; the rest of P2 is unchanged.
 > **Decides:** the three things `epic:runs-side-by-side` could not start without — the
 > event → IR mapping `metaharness project` writes, the alignment rule the viewer aligns two runs
 > by, and what `--plugin` does and what the attestation says about it.
@@ -57,9 +60,10 @@ what lets the projected document be committed, diffed, and cited by a bench resu
 
 ### 1.2 P2 — every event kind, and `unk` is a node
 
-The protocol emits **nineteen** event kinds (`metaharness_protocol::EVENT_NAMES`). `trace-ir/1`
-has **ten** families. The nine that do not land in one are the control-plane events, and the
-decision this page makes is that **they are still nodes**:
+The protocol emits **twenty** event kinds (`metaharness_protocol::EVENT_NAMES`) — nineteen when
+this page was written, and `stream.closed` since amendment a17. `trace-ir/1` has **ten** families.
+The nine that do not land in one are the control-plane events, and the decision this page makes is
+that **they are still nodes**:
 
 > An event with no IR family is written as a node of family `unk` carrying its metaharness event
 > name. It is never dropped, and it is never quietly folded into `opaque`.
@@ -92,12 +96,18 @@ The mapping, complete:
 | 17 | `warning` | **`unk`** | metaharness has something to say |
 | 18 | `opaque` | `opaque` | the vendor said something the adapter could not read |
 | 19 | `auth.expired` | **`unk`** | a control-plane fact about the credential (amendment a1, Q13) |
+| 20 | `stream.closed` | **`stream_closed`** | the completeness record, and the one kind with no IR family that is **not** `unk` (amendment a17). `unk` means *the IR has no family for this*; writing the marker under it would file the one node a completeness check reads among the protocol-vocabulary gaps. The node carries `events`, `reason` and `run_id`, and the `metaharness` block carries the verified `stream_complete` beside them |
 
 Ten `unk`-bearing kinds would be a mapping nobody had thought about. **Nine is the whole
 control-plane list and it is closed**: `metaharness_protocol::CONTROL_PLANE_EVENTS` already
 enumerates eight of them and the ninth, `usage`, is not control-plane at all — it folds. The
 writer's match is exhaustive with no wildcard arm, so a twentieth event cannot be added without
 this table being answered for it.
+
+**A twentieth event was added, and this is that answer.** `stream.closed` (amendment a17) joins
+`CONTROL_PLANE_EVENTS` — it is metaharness's own record and the IR has no family for it — and it is
+the one member of that list the writer does **not** render as `unk`. The `unk`-bearing set is
+therefore still the eight kinds above; the ninth member of the list has a node of its own.
 
 **`unk` in this document is not the `unk` of a verdict.** A verdict's `unk` means *nobody found
 out*; this one means *the IR has no family*. They are different claims and the document says which

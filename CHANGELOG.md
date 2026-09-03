@@ -3,6 +3,75 @@
 What changed. The design document carries *why*; where code and design disagreed, the design
 was amended and the amendment is named here.
 
+## [Unreleased]
+
+### Added
+
+- **Every stream this driver writes ends with `stream.closed`, and it says how the run ended.** A
+  twentieth event, carrying `events` (how many lines preceded it), `reason` (`completed` ·
+  `budget` · `killed` · `error` · `steer-halt`) and `run_id`. It exists because eight
+  `aep trace check` reports on 2026-09-03 ended `undecided`: every *negative* row —
+  `nothing-was-moved`, `no-store-command-was-run`, `nothing-was-written-to-tmp` — was `unk`, because
+  **a stream with none of them and a stream that was cut off before the first one are the same
+  bytes**. The driver owns the stream and knows when it ended, so it says so. Amendment **a17**.
+  - **The last line on every exit path**: a normal end, a budget stop, a kill, an error, and a
+    `halt` steering command. A run that broke so badly that the loop never wound up writes no
+    marker — which is the honest account, because that stream *was* cut off.
+  - **The reason is read from the run's own record, never defaulted.** `budget` is written when the
+    terminal record's own word says a budget stopped it — in this workspace that word is
+    `budget-exhausted`, which the b10x loop writes and this repository has read out of a record. A
+    vendor's word for the same thing that nobody here has read is **not guessed at**. A run with no
+    terminal record at all closes `error`: *the stream is complete and the run is not* are two
+    facts, in two fields.
+  - **`killed` is in the vocabulary and no path in this build's run loop produces it.** `halt`
+    closes `steer-halt`, because the reader who has to act on it needs to know *who* ended the run.
+    `killed` is reachable from outside the loop through `EventStream::close`, and it is named rather
+    than left out because a later producer inventing a sixth word would be a wire change (D3).
+  - **Completeness is verified, not restated.** A marker whose count disagrees with the lines before
+    it, or that is not the last line, is `inconsistent` and never `complete`
+    (`metaharness_protocol::stream_completeness`).
+- **`metaharness project` writes the marker as a terminal node, not as `unk`.** Family
+  `stream_closed`, carrying `events`, `reason` and `run_id`, and the document's `metaharness` block
+  gains a verified `stream_complete` with the count and the reason beside it. `unk` means *the IR
+  has no family for this*; filing the one node a completeness check decides on among the
+  protocol-vocabulary gaps would send the wrong person looking. The `unk`-bearing set is unchanged
+  at eight kinds.
+- **The hermetic report names a truncated stream.** `--audit` prints one `stream:` line on every
+  run: `complete` with the count and the reason, `INCONSISTENT`, or `TRUNCATED` for a stream with no
+  `stream.closed` marker at all. It does **not** gate: this marker is metaharness's own, so its absence in
+  a live run is a defect in this build rather than a verdict about the run, and the reader who needs
+  it is the offline one.
+- Two free C3 conformance vectors:
+  `c3/a-budget-stop-closes-the-stream-with-the-records-own-word` and
+  `c3/a-halted-run-still-closes-its-stream-and-says-who-halted-it`. Every other C3 vector's expected
+  trace now ends with the marker, its count and its reason, so a loop that wrote the wrong number is
+  red rather than quietly wrong. `checked` on the claude `contract_result` moves 25 → 27.
+
+### Changed
+
+- The two committed `evals/aep/runs/*.events.jsonl` streams are regenerated with the marker, and
+  their projections and `side-by-side.html` with them. The regeneration tests still compare byte for
+  byte. The fixture states `completed` rather than deriving it: a fixture that classified its own
+  reason would agree with itself through any change to the classifier.
+
+### Known gaps, named rather than left
+
+- **`aep` 0.44.0 does not know the twentieth name, and one advisory row went `unk` because of it.**
+  Its `metaharness/event-stream` adapter reports `stream.closed` as *a record it could not read* —
+  correct behaviour on a name it has not learned — and `tool-results-carry-their-size`, whose
+  `per: total` byte bound cannot rule out that the unreadable record was a tool result, then reads
+  `unk`. `aep trace check` over both streams was **23 ok, 0 gap, 0 unk** and is now **22 ok, 0 gap,
+  1 unk, exit 0**: the row is advisory and gates nothing. It closes in the repository that owns the
+  reader, not here, and the row is left in the specification rather than deleted to make the report
+  green.
+
+### Documented
+
+- `docs/design/metaharness-protocol-v0.1.md` — amendment **a17**: the twentieth event, its five
+  rules, and the correction to a15's first point at its point of definition.
+- `docs/design/runs-side-by-side-v0.1.md` — § 1.2's mapping table is twenty rows, and row 20 is the
+  one kind with no IR family that is not `unk`.
+
 ## [0.5.0] — 2026-09-03
 
 ### Added

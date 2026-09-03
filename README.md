@@ -45,7 +45,7 @@ never links this workspace.
 
 ## Status
 
-**Pre-v1. Tagged `0.4.2` (2026-09-01).** The design in `docs/design/` is binding: where this code
+**Pre-v1. Tagged `0.5.0` (2026-09-03).** The design in `docs/design/` is binding: where this code
 and that document disagree, the document is amended rather than the disagreement left in the code.
 
 | verb | state |
@@ -55,7 +55,8 @@ and that document disagree, the document is amended rather than the disagreement
 | `run b10x` | observes the b10x loop |
 | `capabilities`, `conformance`, `doctor` | work with no model and no credential |
 | `mcp-serve` | serves the owned tool surface over MCP on stdio |
-| `project` | writes a `trace-ir/1` document from an event stream, byte-stable; `--html` renders one or two runs as one static page |
+| `project` | writes a `trace-ir/1` document from an event stream, byte-stable; `--html` renders one or two runs as one static page. The stream's own `stream.closed` marker becomes a terminal node, and the document states whether the stream is whole |
+| `run --audit` | prints the hermetic floor, the decision census, and one `stream:` line — a stream with no closing marker is named `TRUNCATED` rather than read as a run that did nothing |
 | `audit` over a foreign transcript | refuses with exit 2 |
 
 The live runs cost money, sit behind `METAHARNESS_LIVE=1`, and are never part of `task check`. The

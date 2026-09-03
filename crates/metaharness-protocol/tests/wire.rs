@@ -8,10 +8,10 @@
 use std::collections::BTreeMap;
 
 use metaharness_protocol::{
-    COMMAND_FORMAT, COMMAND_NAMES, CONTROL_PLANE_EVENTS, Command, CommandLine, CommandOutcome,
-    DecidedBy, Decision, DecisionCensus, DecisionMode, Digest, EVENT_FORMAT, EVENT_NAMES, Emission,
-    EntityList, Event, EventStream, EvidenceLine, Frame, FramingError, Handoff,
-    HermeticAttestation, HermeticMode, ImposedControl, Kind, Line, McpServerRef, NodeRef,
+    COMMAND_FORMAT, COMMAND_NAMES, CONTROL_PLANE_EVENTS, CloseReason, Command, CommandLine,
+    CommandOutcome, DecidedBy, Decision, DecisionCensus, DecisionMode, Digest, EVENT_FORMAT,
+    EVENT_NAMES, Emission, EntityList, Event, EventStream, EvidenceLine, Frame, FramingError,
+    Handoff, HermeticAttestation, HermeticMode, ImposedControl, Kind, Line, McpServerRef, NodeRef,
     Operation, OperationSet, PermissionDenial, PluginRef, RateLimitInfo, RefusalCode, Refused,
     RunId, RunSpec, Seam, StepOutcome, StepRef, SubjectScope, ToolSurface, TranscriptRef, Usage,
     WithheldTool, WorkflowRef, ir_family, parse_command_line, parse_event_line, project,
@@ -294,6 +294,11 @@ fn tool_and_accounting_events() -> Vec<Event> {
             detail: Some("the vendor said the session could not be refreshed".into()),
             source_line: Some(90),
         },
+        Event::StreamClosed {
+            events: 19,
+            reason: CloseReason::Completed,
+            run_id: "r-1".into(),
+        },
     ]
 }
 
@@ -368,8 +373,8 @@ fn the_vocabulary_is_the_one_the_design_lists() {
     assert_eq!(names, EVENT_NAMES, "every event, in the design's order");
     assert_eq!(
         EVENT_NAMES.len(),
-        19,
-        "18 from § 4.1 plus auth.expired (Q13)"
+        20,
+        "18 from § 4.1, plus auth.expired (Q13) and stream.closed (a17)"
     );
 
     let commands: Vec<&str> = every_command().iter().map(Command::name).collect();
@@ -385,8 +390,8 @@ fn sequence_numbers_come_from_one_place_and_are_monotone() {
         .into_iter()
         .map(|event| stream.stamp(Emission::untimed(event)).seq)
         .collect();
-    assert_eq!(seqs, (1..=19).collect::<Vec<u64>>());
-    assert_eq!(stream.emitted(), 19);
+    assert_eq!(seqs, (1..=20).collect::<Vec<u64>>());
+    assert_eq!(stream.emitted(), 20);
 }
 
 /// metaharness never measures: an event the vendor recorded no time for carries no time, and
@@ -711,4 +716,61 @@ fn a_run_declares_the_commands_it_will_need_before_it_starts() {
         required_commands(&framed),
         ["halt", "interrupt", "tool.decide"]
     );
+}
+
+/// Amendment a17 — the closing marker is framed in the one place `seq` is assigned, so its count
+/// and its run id are that stream's own facts rather than a producer's copy of them.
+#[test]
+fn closing_a_stream_counts_the_lines_before_it_and_names_its_run_twice() {
+    let mut stream = EventStream::new(RunId::new("r-1"));
+    for event in every_event().into_iter().take(3) {
+        stream.stamp(Emission::untimed(event));
+    }
+    let line = stream.close(CloseReason::SteerHalt).expect("a first close");
+
+    assert_eq!(line.seq, 4, "the marker takes the next sequence number");
+    assert!(
+        line.at.is_none(),
+        "metaharness reads no clock, here least of all"
+    );
+    assert_eq!(
+        line.event,
+        Event::StreamClosed {
+            events: 3,
+            reason: CloseReason::SteerHalt,
+            run_id: "r-1".into(),
+        }
+    );
+
+    // Readable on its own: the payload names the run, and the line's own key still does too.
+    let written = serde_json::to_string(&line).expect("serializes");
+    assert!(written.contains(r#""run":"r-1""#), "{written}");
+    assert!(written.contains(r#""run_id":"r-1""#), "{written}");
+    assert!(written.contains(r#""reason":"steer-halt""#), "{written}");
+    assert_eq!(
+        parse_event_line(&written).expect("parses").event,
+        line.event
+    );
+}
+
+/// A stream ends once. A driver whose wind-up is reached twice writes one marker, not two.
+#[test]
+fn a_stream_closes_once_and_says_so() {
+    let mut stream = EventStream::new(RunId::new("r-1"));
+    assert!(!stream.is_closed());
+    assert!(stream.close(CloseReason::Completed).is_some());
+    assert!(stream.is_closed());
+    assert!(stream.close(CloseReason::Error).is_none());
+    assert_eq!(stream.emitted(), 1);
+}
+
+/// A stream this build cannot decide about is never reported as whole: the reading amendment a17
+/// exists to end is *no marker means nothing happened*.
+#[test]
+fn a_stream_with_no_marker_is_truncated_and_not_complete() {
+    assert_eq!(
+        metaharness_protocol::stream_completeness(&every_event()[..3]),
+        metaharness_protocol::StreamCompleteness::Truncated
+    );
+    assert!(metaharness_protocol::stream_completeness(&every_event()).is_complete());
 }

@@ -29,7 +29,10 @@ use std::collections::BTreeMap;
 use serde::Serialize;
 use serde_json::{Map, Value};
 
-use crate::event::{DecisionCensus, Event, TranscriptRef, Usage, WithheldTool};
+use crate::event::{
+    CloseReason, DecisionCensus, Event, StreamCompleteness, TranscriptRef, Usage, WithheldTool,
+    stream_completeness,
+};
 use crate::framing::EventLine;
 use crate::hermetic::HermeticAttestation;
 use crate::projection::ir_family;
@@ -52,6 +55,15 @@ pub const UNK_FAMILY: &str = "unk";
 /// Why an event has no IR family, in the node itself, so a reader never has to guess which of the
 /// two meanings of `unk` this one is.
 pub const UNK_REASON: &str = "no trace-ir/1 family";
+
+/// The family the closing marker is written under (amendment a17).
+///
+/// A metaharness extension over `trace-ir/1`'s ten families, exactly as [`UNK_FAMILY`] is — and its
+/// own word for the same reason `unk` is not `opaque`. `stream.closed` has no IR family either, but
+/// `unk` means *metaharness read this and the IR has no family for it*, and the marker is the one
+/// node in the document a completeness check is supposed to **decide on**. Filing it among the
+/// protocol-vocabulary gaps would report the answer as a gap.
+pub const CLOSED_FAMILY: &str = "stream_closed";
 
 /// Which adapter produced a document, and which wire it was written against.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize)]
@@ -133,6 +145,18 @@ pub struct MetaharnessBlock {
     /// This is the census the acceptance line reads: an event kind that appears here is one
     /// `trace-ir/1` has no family for, named, rather than a number nobody can act on.
     pub unk_kinds: BTreeMap<String, u32>,
+    /// Whether this stream closed itself, **verified rather than copied**.
+    ///
+    /// True only when a `stream.closed` marker is present, is the last node, and counts exactly the
+    /// nodes before it. `false` is a statement this build made after looking — a document written
+    /// by a build that predates amendment a17 has no such key at all, and the two stay
+    /// distinguishable (design § 2.1).
+    pub stream_complete: bool,
+    /// What the closing marker said, where the stream carries one that adds up.
+    ///
+    /// [`None`] is *there is no marker, or it does not add up*, and never *the stream ended
+    /// normally*: the whole point of the marker is that an absence is not evidence (invariant 3).
+    pub closed: Option<StreamClose>,
     /// The **vendor's** retained transcript, as `session.started` reported it.
     ///
     /// Its own field because it is a different file from the one `transcript_digest` names
@@ -147,6 +171,16 @@ pub struct MetaharnessBlock {
     pub hermetic: Option<HermeticAttestation>,
     /// What metaharness's own seam did, from the terminal record.
     pub census: Option<DecisionCensus>,
+}
+
+/// A stream's closing marker, as a document carries it.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize)]
+pub struct StreamClose {
+    /// How many events preceded the marker. Equal to `events_total - 1` by construction, and
+    /// checked against it before this is filled at all.
+    pub events: u64,
+    /// Why the stream ended.
+    pub reason: CloseReason,
 }
 
 /// One run, projected.
@@ -203,6 +237,8 @@ pub fn project_document(lines: &[EventLine], bytes: &[u8]) -> TraceIrDocument {
         events_total: lines.len(),
         families: BTreeMap::new(),
         unk_kinds: BTreeMap::new(),
+        stream_complete: false,
+        closed: None,
         vendor_transcript: None,
         withheld: None,
         available_operations: None,
@@ -211,7 +247,11 @@ pub fn project_document(lines: &[EventLine], bytes: &[u8]) -> TraceIrDocument {
     };
 
     for (position, line) in lines.iter().enumerate() {
-        let family = ir_family(&line.event).map_or(UNK_FAMILY, |family| family.as_str());
+        let family = match &line.event {
+            // The one event with no IR family that is not `unk` (amendment a17).
+            Event::StreamClosed { .. } => CLOSED_FAMILY,
+            other => ir_family(other).map_or(UNK_FAMILY, |family| family.as_str()),
+        };
         *families.entry(family.to_string()).or_default() += 1;
         if family == UNK_FAMILY {
             *unk_kinds.entry(line.event.name().to_string()).or_default() += 1;
@@ -269,6 +309,11 @@ pub fn project_document(lines: &[EventLine], bytes: &[u8]) -> TraceIrDocument {
 
     block.families = families;
     block.unk_kinds = unk_kinds;
+    let completeness = stream_completeness(lines.iter().map(|line| &line.event));
+    block.stream_complete = completeness.is_complete();
+    if let StreamCompleteness::Complete { events, reason } = completeness {
+        block.closed = Some(StreamClose { events, reason });
+    }
 
     TraceIrDocument {
         format: IR_FORMAT,
@@ -304,6 +349,14 @@ fn kind_of(family: &str, event: &Event) -> Value {
         return Value::Object(node);
     };
     fields.remove("event");
+
+    if family == CLOSED_FAMILY {
+        // A mapped node, on the same rule as an IR family's: the payload's own fields, under the
+        // family tag. It is the one node a reader seeks to the end of a document to find, and
+        // burying it under a `payload` key would make it read like the `unk` nodes it is not.
+        fields.insert("event".to_string(), Value::from(CLOSED_FAMILY));
+        return Value::Object(fields);
+    }
 
     if family == UNK_FAMILY {
         let mut node = Map::new();
@@ -424,18 +477,132 @@ mod tests {
         }
     }
 
-    /// The whole of P2, mechanically: every name on the wire either has a family or is `unk`, and
-    /// the `unk` set is exactly the control-plane list. A twentieth event cannot slip through
-    /// without this failing.
+    /// The whole of P2, mechanically: every name on the wire either has a family, is `unk`, or is
+    /// the closing marker — and the third set has exactly one member. A twenty-first event cannot
+    /// slip through without this failing.
     #[test]
     fn every_event_name_maps_to_a_family_or_to_unk_and_the_unk_set_is_the_control_plane() {
-        assert_eq!(EVENT_NAMES.len(), 19);
-        assert_eq!(CONTROL_PLANE_EVENTS.len(), 8);
-        // The ninth `unk` kind is not on that list because it is not control-plane in the
-        // projection's sense: `usage` folds into `run_outcome` and therefore *has* a family.
+        assert_eq!(EVENT_NAMES.len(), 20);
+        assert_eq!(CONTROL_PLANE_EVENTS.len(), 9);
+        // The `usage` kind is not on that list because it is not control-plane in the projection's
+        // sense: it folds into `run_outcome` and therefore *has* a family.
         for name in CONTROL_PLANE_EVENTS {
             assert!(EVENT_NAMES.contains(&name), "{name} is not on the wire");
         }
+        // Amendment a17: the ninth member is the one the writer does not render as `unk`.
+        assert!(CONTROL_PLANE_EVENTS.contains(&"stream.closed"));
+    }
+
+    /// The terminal node is a node of its own, and never an `unk` one: `unk` says *the IR has no
+    /// family for this*, and this is the one node a completeness check decides on.
+    #[test]
+    fn the_closing_marker_is_a_terminal_node_and_never_unk() {
+        let document = project_document(
+            &[
+                line(
+                    1,
+                    Event::Text {
+                        text: "done".to_string(),
+                        request_id: None,
+                    },
+                ),
+                line(
+                    2,
+                    Event::StreamClosed {
+                        events: 1,
+                        reason: CloseReason::Completed,
+                        run_id: "t".to_string(),
+                    },
+                ),
+            ],
+            b"stream",
+        );
+        let node = &document.events[1].kind;
+        assert_eq!(node["event"], CLOSED_FAMILY);
+        assert_eq!(node["events"], 1);
+        assert_eq!(node["reason"], "completed");
+        assert_eq!(node["run_id"], "t");
+        assert!(
+            document.metaharness.unk_kinds.is_empty(),
+            "the marker is not a protocol-vocabulary gap"
+        );
+        assert_eq!(document.metaharness.families[CLOSED_FAMILY], 1);
+        assert!(document.metaharness.stream_complete);
+        assert_eq!(
+            document.metaharness.closed,
+            Some(StreamClose {
+                events: 1,
+                reason: CloseReason::Completed
+            })
+        );
+    }
+
+    /// `stream_complete` is verified and not copied: a marker whose count disagrees with the lines
+    /// before it decides nothing, and a stream with no marker at all is never read as whole.
+    #[test]
+    fn completeness_is_verified_against_the_bytes_and_an_absent_marker_is_never_complete() {
+        let text = || {
+            line(
+                1,
+                Event::Text {
+                    text: "done".to_string(),
+                    request_id: None,
+                },
+            )
+        };
+        let truncated = project_document(&[text()], b"stream");
+        assert!(!truncated.metaharness.stream_complete);
+        assert_eq!(truncated.metaharness.closed, None);
+
+        let miscounted = project_document(
+            &[
+                text(),
+                line(
+                    2,
+                    Event::StreamClosed {
+                        events: 7,
+                        reason: CloseReason::Completed,
+                        run_id: "t".to_string(),
+                    },
+                ),
+            ],
+            b"stream",
+        );
+        assert!(!miscounted.metaharness.stream_complete);
+        assert_eq!(miscounted.metaharness.closed, None);
+        assert_eq!(miscounted.metaharness.families[CLOSED_FAMILY], 1);
+    }
+
+    /// The three answers are three, and each says which failure it is.
+    #[test]
+    fn a_stream_says_which_of_the_three_completeness_answers_it_is() {
+        let closed = |events, run: &str| Event::StreamClosed {
+            events,
+            reason: CloseReason::Budget,
+            run_id: run.to_string(),
+        };
+        let text = Event::Text {
+            text: "x".to_string(),
+            request_id: None,
+        };
+
+        assert_eq!(
+            stream_completeness(&[text.clone(), closed(1, "t")]),
+            StreamCompleteness::Complete {
+                events: 1,
+                reason: CloseReason::Budget
+            }
+        );
+        assert_eq!(
+            stream_completeness(std::slice::from_ref(&text)),
+            StreamCompleteness::Truncated
+        );
+        let StreamCompleteness::Inconsistent { detail, .. } =
+            stream_completeness(&[closed(0, "t"), text])
+        else {
+            panic!("a marker that is not the last line is not complete");
+        };
+        assert!(detail.contains("event 1 of 2"), "{detail}");
     }
 
     /// `unk` is not `opaque`, and the node says which it is.

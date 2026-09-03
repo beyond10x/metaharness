@@ -177,6 +177,28 @@
 > is **read from a real config home and not driven**, so `InstalledPlugin::loaded_by` says which of
 > the two mechanisms carried the install and how strong that claim is, and the hermetic report
 > prints `plugins: none` rather than nothing when the list is empty.
+> **Amendment a17, 2026-09-03**, from a consumer's undecided verdicts rather than from a build:
+> **a twentieth event, `stream.closed`, and it is the last line of every stream this driver
+> writes.** On 2026-09-03 eight `aep trace check` reports ended `undecided` because every
+> *negative* row — `nothing-was-moved`, `no-store-command-was-run`, `nothing-was-written-to-tmp` —
+> came back `unk`. The bound those rows need is *this run did X zero times*, and a reader of a file
+> cannot assert it: a stream with no `Bash` call and a stream that was **cut off before the first
+> one** are the same bytes, so the only honest answer was `unk`, forever, for a question the run
+> itself had already answered. That is D4's failure — *"a checker reporting the tool was never
+> called when what happened is that it stopped being able to see tool calls"* — one level up, about
+> the file instead of about a record inside it. `opaque` closed it for a line; this closes it for
+> the stream. **The driver owns the stream and knows when it ended, so the driver says so**, in a
+> line carrying `events` (how many lines preceded it), `reason` (`completed` · `budget` · `killed` ·
+> `error` · `steer-halt`) and `run_id`. Three consequences are decided at the point of change and
+> not left to the writer: the marker is **not** `unk` in the projection but a terminal node of its
+> own (§ 4.4), because `unk` means *the IR has no family for this* and reporting the one node a
+> completeness check reads as a vocabulary gap would send the wrong person looking; **completeness
+> is verified, never restated** — a marker whose count disagrees with the lines before it, or that
+> is not the last line, is `inconsistent` and never `complete`; and a stream with **no** marker is
+> named `truncated` by the audit rather than treated as a stream that did nothing, which is
+> invariant 3 applied to the file. What it does **not** do is decide a row: turning a closed stream
+> into a verdict about `nothing-was-moved` is the consumer's change, in the repository that owns the
+> checker.
 > **Audience:** whoever reviews this for acceptance, and whoever builds it afterwards.
 > **Sources studied:** `beyond10x/aep` (public, read-only), and a private
 > agent runtime whose patterns are described here generically and whose names, records and
@@ -462,9 +484,9 @@ field removed, retyped or given new meaning does.
 
 ### 4.1 The vocabulary
 
-`metaharness.event/1`. Eighteen events in five groups — **nineteen since amendment a1**, whose row
-is stated below the five groups rather than folded into them, so the first draft's count stays
-visible. The right-hand column is § 4.4's projection.
+`metaharness.event/1`. Eighteen events in five groups — **nineteen since amendment a1** and
+**twenty since amendment a17**, whose rows are stated below the five groups rather than folded into
+them, so the first draft's count stays visible. The right-hand column is § 4.4's projection.
 
 **Session lifecycle**
 
@@ -612,6 +634,51 @@ a field it cannot receive. Until the repository that owns the IR carries it, the
 fact is § 9.4's audit report, which prints it beside the census, and any consumer reading the
 event stream directly.
 
+**Amendment a17 — a twentieth event: `stream.closed`, and it is the last line.** Added from a
+consumer's undecided verdicts rather than from a review. Eight `aep trace check` reports on
+2026-09-03 ended `undecided` because every *negative* row was `unk`: a bound of the shape *this run
+did X zero times* cannot be asserted from a file, because **a stream with none of them and a stream
+that was cut off before the first one are the same bytes.** This driver owns the stream and knows
+when it ended, so it says so in a line of its own.
+
+| event | payload | why it exists | → `trace-ir/1` |
+|---|---|---|---|
+| `stream.closed` | `events` — how many lines preceded this one; `reason` — `completed` \| `budget` \| `killed` \| `error` \| `steer-halt`; `run_id` | **the completeness record.** Without it an absence and a truncation are indistinguishable, so every negative expectation about a run is undecidable whatever the run did | **`stream_closed`** — a terminal node, and deliberately *not* `unk` (§ 4.4) |
+
+**Five rules, each of which a test asserts rather than a sentence promising it.**
+
+1. **It is the last line, on every exit path and for every harness kind.** Normal end, a budget
+   stop, a kill, an error, a `halt` steering command: the stream ends here or it was truncated.
+   There is no sixth path that ends a stream silently, and a run that broke so badly that the loop
+   never wound up writes no marker — which is the honest account, because that stream *was* cut off.
+2. **`events` is the count of preceding lines, and it is checked rather than believed.** A marker
+   whose count disagrees with the lines before it, or that is not the last line, is **inconsistent**
+   and never *complete*. A field a reader has to take on trust adds nothing a reader did not already
+   have.
+3. **`run_id` is on the payload as well as on the line.** D2 already puts `run` on every line, and
+   the duplication is deliberate: the marker's whole purpose is to be readable **on its own**, by
+   something that seeks to the end of a file. Both are rendered from the same `EventStream`, so they
+   cannot disagree. It is spelled `run_id` and not `run` because the line's own key is `run` and
+   this payload is flattened into the same object.
+4. **`reason` is read from the run's own record, never guessed.** `budget` is written when the
+   terminal record's own word says a budget stopped it — in this workspace that word is
+   `budget-exhausted`, which the b10x loop writes and this repository has read out of a record. **A
+   vendor's word for the same thing that nobody here has read is not guessed at**: such a run closes
+   `completed` or `error` on the terminal record's own `is_error`, and reporting it as a budget stop
+   would be inventing an observation (invariant 3). `error` also covers *no terminal record at all*
+   — the stream is complete and the run is not, and those are two different facts in two different
+   fields.
+5. **It ends no run and decides no row.** It is not the `error` channel § 4.3 refuses and it is not
+   a second terminal record: `session.ended` is still the terminal record, still carries every
+   resource fact, and still comes first. What this line adds is the one thing that record cannot
+   carry — *and then the file stopped, on purpose*. Turning that into a verdict about
+   `nothing-was-moved` belongs to the consumer that owns the checker.
+
+**Additive on D3's rule, and the vocabulary moves from nineteen to twenty.** A reader of an older
+stream finds no marker and is told `truncated`, which is the correct answer about a file whose
+producer never promised to close it — and is why the absence is *named* rather than defaulted to
+complete.
+
 ### 4.2 Decision modes
 
 **Decision D5 — the embedder chooses, per run and overridable per operation, between two modes.**
@@ -732,6 +799,19 @@ and for diffing, and says so; a machine-readable trace-ir document is Q9's prere
 >    cross-check is therefore asserted by comparing **censuses**, per family, rather than two
 >    deserialized values. The full decision, with the complete nineteen-row mapping table, is
 >    `docs/design/runs-side-by-side-v0.1.md` § 1.
+
+> **Amendment a17, 2026-09-03, corrects a15's first point at its point of definition.** The
+> mapping table is twenty rows, and the twentieth does **not** land in `unk`. `stream.closed` has
+> no `trace-ir/1` family either — the IR has no vocabulary for *the file ends here* — but writing
+> it as `unk` would say *metaharness read this and the IR has no family for it* about the one node
+> a completeness check is supposed to decide on, and a reader counting `unk_kinds` to find
+> protocol-vocabulary gaps would find the marker sitting among them. So it is written as its own
+> terminal node, family **`stream_closed`**, carrying `events`, `reason` and `run_id`; the `unk`
+> set is unchanged at the eight kinds a15 lists, and the document additionally carries the fact in
+> its `metaharness` block (§ 1.5's rule: a metaharness fact the IR has no field for goes in one
+> namespaced sibling, never scattered into the IR's nodes). **`stream_complete` there is verified,
+> not copied**: it is true only when a marker is present, is the last node, and counts exactly the
+> nodes before it.
 
 ---
 

@@ -29,7 +29,7 @@ use std::path::PathBuf;
 
 use metaharness_claude::TranscriptReader;
 use metaharness_protocol::{
-    Digest, EventStream, HermeticAttestation, HermeticMode, RunId, Seam, TranscriptRef,
+    CloseReason, Digest, EventStream, HermeticAttestation, HermeticMode, RunId, Seam, TranscriptRef,
 };
 
 /// The two runs, as `(run id, recorded transcript, derived event stream)`.
@@ -77,6 +77,18 @@ fn convert(run: &str, transcript_path: &str) -> String {
     }
     for emission in reader.finish() {
         let framed = stream.stamp(emission);
+        out.push_str(&serde_json::to_string(&framed).expect("an event line renders"));
+        out.push('\n');
+    }
+    // Amendment a17 — the last line, so a checker reading these two files can tell an absence from
+    // a truncation and decide a negative row instead of reporting `unk`.
+    //
+    // **`completed` is stated here, not derived.** Both recorded transcripts end with a terminal
+    // record that reports a finished run, and a fixture that classified its own reason would agree
+    // with itself through any change to the classifier — the same reason the transcript reference
+    // above is fixed rather than measured. The run loop's own derivation is exercised by the C3
+    // vectors, where there is a run to derive it from.
+    if let Some(framed) = stream.close(CloseReason::Completed) {
         out.push_str(&serde_json::to_string(&framed).expect("an event line renders"));
         out.push('\n');
     }

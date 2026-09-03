@@ -60,8 +60,8 @@ fn project_writes_a_trace_ir_document_and_exits_zero() {
     assert!(
         document["events"]
             .as_array()
-            .is_some_and(|events| events.len() == 15),
-        "the fifteen event lines are fifteen nodes"
+            .is_some_and(|events| events.len() == 16),
+        "the sixteen event lines are sixteen nodes — fifteen, and the closing marker (a17)"
     );
 }
 
@@ -138,6 +138,62 @@ fn a_control_plane_event_is_written_as_an_unk_node_carrying_its_kind() {
     }
     assert_eq!(document["metaharness"]["unk_kinds"]["warning"], 1);
     assert_eq!(document["metaharness"]["unk_kinds"]["turn.started"], 1);
+}
+
+/// Amendment a17 — the closing marker is a terminal node of its own, and the document says the
+/// stream is whole. A checker reading this can tell an absence from a truncation, which is the one
+/// thing that makes a negative expectation decidable.
+#[test]
+fn the_closing_marker_is_a_terminal_node_and_the_document_states_the_stream_is_complete() {
+    let scratch = tempfile::tempdir().expect("a scratch directory");
+    let out = scratch.path().join("run-a.trace-ir.json");
+    assert_eq!(project_to(&out, &run_a()), 0);
+    let document: serde_json::Value =
+        serde_json::from_str(&std::fs::read_to_string(&out).expect("written")).expect("JSON");
+
+    let events = document["events"].as_array().expect("events");
+    let last = events.last().expect("a last node");
+    assert_eq!(last["kind"]["event"], "stream_closed");
+    assert_ne!(
+        last["kind"]["event"], "unk",
+        "`unk` means the IR has no family for this; the marker is the node a check decides on"
+    );
+    assert_eq!(last["kind"]["events"], 15);
+    assert_eq!(last["kind"]["reason"], "completed");
+    assert_eq!(last["kind"]["run_id"], "decomposer-clean");
+
+    assert_eq!(document["metaharness"]["stream_complete"], true);
+    assert_eq!(document["metaharness"]["closed"]["events"], 15);
+    assert_eq!(document["metaharness"]["closed"]["reason"], "completed");
+    assert_eq!(document["metaharness"]["families"]["stream_closed"], 1);
+    assert!(
+        document["metaharness"]["unk_kinds"]["stream.closed"].is_null(),
+        "the marker is not filed among the protocol-vocabulary gaps"
+    );
+}
+
+/// A stream with no marker is not reported as whole. It is the reading amendment a17 exists to
+/// end: *no marker* is *nobody closed this file*, never *nothing happened in it*.
+#[test]
+fn a_stream_with_no_closing_marker_is_not_complete() {
+    let scratch = tempfile::tempdir().expect("a scratch directory");
+    let stream = scratch.path().join("cut-off.jsonl");
+    std::fs::write(
+        &stream,
+        concat!(
+            r#"{"format":"metaharness.event/1","seq":1,"run":"r","event":"text","text":"hello","request_id":null}"#,
+            "
+",
+        ),
+    )
+    .expect("written");
+
+    let out = scratch.path().join("cut-off.json");
+    assert_eq!(project_to(&out, &stream.display().to_string()), 0);
+    let document: serde_json::Value =
+        serde_json::from_str(&std::fs::read_to_string(&out).expect("written")).expect("JSON");
+    assert_eq!(document["metaharness"]["stream_complete"], false);
+    assert!(document["metaharness"]["closed"].is_null());
 }
 
 /// A line this build cannot read is a refusal that names it, not a silently shorter document.

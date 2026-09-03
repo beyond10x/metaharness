@@ -683,6 +683,12 @@ fn replay(input: &str) -> String {
 }
 
 /// [`replay`] framed under a caller-named run id, so the golden stream says what it is.
+///
+/// **No `stream.closed` marker, on purpose (amendment a17).** That line is the *driver's*: it says
+/// a run's stream ended and how, and this vector replays an adapter's transcript reader with no run
+/// behind it. Closing a stream nothing drove would be metaharness asserting a fact about a run that
+/// never existed, which is invariant 3 in miniature — and it would make a C2 vector red whenever
+/// the run loop's own vocabulary moved, which is a C3 concern wearing a C2 name.
 fn replay_as(run: &str, input: &str) -> String {
     let mut reader = TranscriptReader::new(replay_transcript(), replay_attestation())
         .with_seam(Seam::Hook)

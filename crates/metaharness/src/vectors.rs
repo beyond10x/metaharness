@@ -31,6 +31,8 @@ const CALL: &str =
     r#"{"emit":"tool.requested","call_id":"t1","name":"Bash","input":{"command":"ls"}}"#;
 const RESULT: &str = r#"{"emit":"tool.result","call_id":"t1","is_error":false}"#;
 const END: &str = r#"{"emit":"session.ended","is_error":false,"subtype":"success"}"#;
+/// The b10x loop's own word for a budget stop, carried through to `terminal_reason`.
+const END_ON_BUDGET: &str = r#"{"emit":"session.ended","is_error":false,"subtype":"stopped","terminal_reason":"budget-exhausted"}"#;
 
 /// The seven control vectors of § 8.5's C3 tier.
 ///
@@ -47,6 +49,8 @@ pub fn control_vectors() -> Vec<VectorOutcome> {
         vector_unknown_call(),
         vector_too_late(),
         vector_observe(),
+        vector_closed_on_a_budget_stop(),
+        vector_closed_when_the_embedder_halts(),
     ]
 }
 
@@ -120,6 +124,12 @@ fn note(event: &Event) -> String {
             census.allowed, census.denied, census.replaced, census.abstained
         ),
         Event::Warning { code, .. } => format!("warning {code}"),
+        // Spelled out rather than left as a bare name: the whole claim of amendment a17 is the
+        // count and the reason, and a vector that asserted only "a marker was there" would pass
+        // while the marker said the wrong thing about the wrong number of lines.
+        Event::StreamClosed { events, reason, .. } => {
+            format!("stream.closed events={events} reason={}", reason.as_str())
+        }
         other => other.name().to_string(),
     }
 }
@@ -196,6 +206,7 @@ fn vector_allow() -> VectorOutcome {
             "command.result ok",
             "tool.result",
             "session.ended allowed=1 denied=0 replaced=0 abstained=0",
+            "stream.closed events=6 reason=completed",
         ],
         &[r#"{"call_id":"t1","decision":{"decision":"allow"}}"#],
     )
@@ -225,6 +236,7 @@ fn vector_deny() -> VectorOutcome {
             "command.result ok",
             "tool.result",
             "session.ended allowed=0 denied=1 replaced=0 abstained=0",
+            "stream.closed events=6 reason=completed",
         ],
         &[
             r#"{"call_id":"t1","decision":{"decision":"deny","reason":"this step admits no shell"}}"#,
@@ -256,6 +268,7 @@ fn vector_replace() -> VectorOutcome {
             "command.result ok",
             "tool.result",
             "session.ended allowed=0 denied=0 replaced=1 abstained=0",
+            "stream.closed events=6 reason=completed",
         ],
         &[r#"{"call_id":"t1","decision":{"decision":"replace","input":{"command":"ls -1"}}}"#],
     )
@@ -299,6 +312,7 @@ fn vector_deadline_expiry() -> VectorOutcome {
             "tool.decided deny by=deadline",
             "tool.result",
             "session.ended allowed=0 denied=1 replaced=0 abstained=0",
+            "stream.closed events=5 reason=completed",
         ],
         &[expected_line.as_str()],
     )
@@ -326,6 +340,7 @@ fn vector_cancel_instead_of_decide() -> VectorOutcome {
             "command.result ok",
             "tool.result",
             "session.ended allowed=0 denied=1 replaced=0 abstained=0",
+            "stream.closed events=7 reason=completed",
         ],
         // Rule 1: the decision reaches the child **before** the interrupt. Cancelling first
         // would clear the active call and leave the child waiting on a correlation that no
@@ -370,6 +385,7 @@ fn vector_unknown_call() -> VectorOutcome {
             "command.result refused UNKNOWN_CALL",
             "session.started",
             "session.ended allowed=0 denied=0 replaced=0 abstained=0",
+            "stream.closed events=3 reason=completed",
         ],
         &[],
     )
@@ -415,6 +431,7 @@ fn vector_too_late() -> VectorOutcome {
             "command.result refused TOO_LATE",
             "tool.result",
             "session.ended allowed=1 denied=0 replaced=0 abstained=0",
+            "stream.closed events=7 reason=completed",
         ],
         // Exactly one line reached the child. A replayed decision that wrote a second one would
         // be the failure rule 3 exists for.
@@ -456,8 +473,72 @@ fn vector_observe() -> VectorOutcome {
             "tool.decided allow by=observe",
             "tool.result",
             "session.ended allowed=1 denied=0 replaced=0 abstained=0",
+            "stream.closed events=5 reason=completed",
         ],
         &[r#"{"call_id":"t1","decision":{"decision":"allow"}}"#],
+    )
+}
+
+/// Amendment a17 — the reason is read from the run's own record, and never from a default.
+///
+/// The one word this workspace has read out of a real terminal record for a budget stop is
+/// `budget-exhausted`; this drives it end to end, so a loop that closed every stream `completed`
+/// would be red here rather than quietly reporting a stopped run as a finished one.
+fn vector_closed_on_a_budget_stop() -> VectorOutcome {
+    let id = "c3/a-budget-stop-closes-the-stream-with-the-records-own-word";
+    let Ok((run, log)) = started(
+        vec![ScriptStep::line(INIT), ScriptStep::line(END_ON_BUDGET)],
+        DecisionMode::Frame,
+    ) else {
+        return refused(id);
+    };
+    let observed = observe(run, &log, |_, _| Ok(()));
+    outcome(
+        id,
+        observed,
+        &[
+            "session.started",
+            "session.ended allowed=0 denied=0 replaced=0 abstained=0",
+            "stream.closed events=2 reason=budget",
+        ],
+        &[],
+    )
+}
+
+/// Amendment a17 — a killed run still closes its stream, and the marker says **who** ended it.
+///
+/// The exit path with no terminal record at all: `halt` writes the control, kills the child and
+/// winds up, so there is no `session.ended` to read a reason out of. The marker is still the last
+/// line, it still counts the lines before it, and it says `steer-halt` rather than `completed` —
+/// which is the difference between *the run finished* and *the embedder stopped it*, and the reason
+/// a checker can decide a negative row about a halted run at all.
+fn vector_closed_when_the_embedder_halts() -> VectorOutcome {
+    let id = "c3/a-halted-run-still-closes-its-stream-and-says-who-halted-it";
+    let Ok((run, log)) = started(ask_script(), DecisionMode::Ask) else {
+        return refused(id);
+    };
+    let observed = observe(run, &log, |run, _| {
+        run.send(Command::Halt {
+            reason: "the embedder is done".to_string(),
+        })
+        .map(|_| ())
+    });
+    outcome(
+        id,
+        observed,
+        &[
+            "session.started",
+            "tool.requested decision_required=true",
+            // Rule 1 again: the pending call's decision is written before the control.
+            "tool.decided deny by=adapter",
+            "warning PENDING_CALL_ABANDONED",
+            "command.result ok",
+            "stream.closed events=5 reason=steer-halt",
+        ],
+        &[
+            r#"{"call_id":"t1","decision":{"decision":"deny","reason":"the run was halted before this call was decided, so nothing ran"}}"#,
+            r#"{"control":"halt"}"#,
+        ],
     )
 }
 
@@ -639,7 +720,7 @@ mod tests {
             .map(|vector| (vector.id.as_str(), vector.detail.as_str()))
             .collect();
         assert!(failures.is_empty(), "{failures:#?}");
-        assert_eq!(vectors.len(), 8);
+        assert_eq!(vectors.len(), 10);
     }
 
     /// **A run that did not ask for observe mode never gets it**, asserted at the seam rather than

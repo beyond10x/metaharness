@@ -13,7 +13,7 @@ use std::fmt;
 use serde::{Deserialize, Serialize};
 
 use crate::command::Command;
-use crate::event::{Emission, Event};
+use crate::event::{CloseReason, Emission, Event};
 
 /// The format tag every event line carries.
 pub const EVENT_FORMAT: &str = "metaharness.event/1";
@@ -25,7 +25,7 @@ pub const COMMAND_FORMAT: &str = "metaharness.command/1";
 ///
 /// Published as a value so a reader can refuse an unknown name **by name** instead of failing
 /// with a serde message, and so a test can assert the vocabulary's size against the design.
-pub const EVENT_NAMES: [&str; 19] = [
+pub const EVENT_NAMES: [&str; 20] = [
     "session.started",
     "session.ended",
     "step.entered",
@@ -45,6 +45,7 @@ pub const EVENT_NAMES: [&str; 19] = [
     "warning",
     "opaque",
     "auth.expired",
+    "stream.closed",
 ];
 
 /// Every command name this version of the wire knows.
@@ -135,13 +136,18 @@ impl CommandLine {
 pub struct EventStream {
     run: RunId,
     next: u64,
+    closed: bool,
 }
 
 impl EventStream {
     /// A stream for this run, numbering from 1.
     #[must_use]
     pub fn new(run: RunId) -> Self {
-        Self { run, next: 1 }
+        Self {
+            run,
+            next: 1,
+            closed: false,
+        }
     }
 
     /// Frame one emission, taking the next sequence number.
@@ -164,6 +170,36 @@ impl EventStream {
     #[must_use]
     pub fn emitted(&self) -> u64 {
         self.next - 1
+    }
+
+    /// Whether this stream has already written its closing marker.
+    #[must_use]
+    pub fn is_closed(&self) -> bool {
+        self.closed
+    }
+
+    /// Write the last line: `stream.closed`, with the count and the reason (amendment a17).
+    ///
+    /// **Here rather than at each producer**, for the reason `seq` is assigned here: the count of
+    /// preceding lines and the run id are this type's own facts, and a producer that filled them
+    /// itself would be a second place that decides what the marker claims — which is exactly the
+    /// disagreement between the line's `run` and the payload's `run_id` that the duplication is
+    /// only safe without.
+    ///
+    /// [`None`] when the stream is already closed, so a driver whose wind-up is reached twice
+    /// writes one marker and not two. A stream that has been closed frames nothing further; the
+    /// caller that would have is the defect, and the closed stream is not the place to hide it.
+    pub fn close(&mut self, reason: CloseReason) -> Option<EventLine> {
+        if self.closed {
+            return None;
+        }
+        self.closed = true;
+        let events = self.emitted();
+        Some(self.stamp(Emission::untimed(Event::StreamClosed {
+            events,
+            reason,
+            run_id: self.run.to_string(),
+        })))
     }
 }
 

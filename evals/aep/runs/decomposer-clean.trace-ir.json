@@ -1,6 +1,6 @@
 {
   "format": "trace-ir/1",
-  "transcript_digest": "90a4bcfdf5cba46c2e5cd4386cbe8f78c229a18e68f136d342a7d31c5bddcaf7",
+  "transcript_digest": "0a8b738ab785674dcf3929f995035167427080470fb93a62d36c3d8eb2b9b8f9",
   "adapter": {
     "name": "metaharness/project",
     "written_against": [
@@ -328,21 +328,39 @@
           "thinking_tokens": 30
         }
       }
+    },
+    {
+      "index": 15,
+      "source_line": 16,
+      "timestamp": null,
+      "timestamp_ms": null,
+      "kind": {
+        "event": "stream_closed",
+        "events": 15,
+        "reason": "completed",
+        "run_id": "decomposer-clean"
+      }
     }
   ],
   "requests": [],
   "metaharness": {
     "source": "metaharness.event/1",
     "run": "decomposer-clean",
-    "events_total": 15,
+    "events_total": 16,
     "families": {
       "assistant_text": 1,
       "run_outcome": 1,
       "session_start": 1,
+      "stream_closed": 1,
       "tool_call": 6,
       "tool_result": 6
     },
     "unk_kinds": {},
+    "stream_complete": true,
+    "closed": {
+      "events": 15,
+      "reason": "completed"
+    },
     "vendor_transcript": {
       "path": "checks/transcripts/decomposer-clean.jsonl",
       "digest": "6327b6fcc14fe1c3c5bdc1e1b54fa245c82654e4e0990eafbec174e6193c2aa1",

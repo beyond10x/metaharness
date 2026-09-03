@@ -20,15 +20,25 @@ use std::collections::{BTreeMap, VecDeque};
 use std::io::ErrorKind;
 
 use metaharness_protocol::{
-    Capabilities, Command, CommandOutcome, CommandSupport, DecidedBy, Decision, DecisionCensus,
-    DecisionMode, Digest, Emission, Event, EventLine, EventStream, Frame, Kind, Operation,
-    RefusalCode, Refused, RunSpec, Seam, ToolSurface, TranscriptRef,
+    Capabilities, CloseReason, Command, CommandOutcome, CommandSupport, DecidedBy, Decision,
+    DecisionCensus, DecisionMode, Digest, Emission, Event, EventLine, EventStream, Frame, Kind,
+    Operation, RefusalCode, Refused, RunSpec, Seam, ToolSurface, TranscriptRef,
 };
 use serde_json::Value;
 
 use crate::clock::Clock;
 use crate::process::HarnessProcess;
 use metaharness_protocol::HarnessSeam;
+
+/// The terminal record's own word for a budget stop, as this workspace has read it.
+///
+/// The b10x loop writes `{"kind":"finished","stop":{"kind":"budget-exhausted",…}}` and the adapter
+/// carries that word through to `session.ended.terminal_reason`
+/// (`crates/metaharness-b10x/src/seam.rs`). **A vendor's word for the same thing that nobody here
+/// has read is not guessed at** (invariant 3, design amendment a17 rule 4): such a run closes
+/// `completed` or `error` on the terminal record's own `is_error`, because reporting it as a budget
+/// stop would be inventing an observation.
+const BUDGET_EXHAUSTED: &str = "budget-exhausted";
 
 /// Short codes for the warnings this crate raises, so an embedder matches a code and not prose.
 pub mod warning {
@@ -219,6 +229,13 @@ pub struct Run {
     outbox: VecDeque<Emission>,
     next_command_id: u64,
     finished: bool,
+    /// The reason a **steering command** ended this run, where one did.
+    ///
+    /// [`None`] is not *the run is still going*: it is *nothing overrode the record*, and the
+    /// closing marker then reads its reason out of the terminal record itself
+    /// ([`Run::reason_from_record`]). Only `halt` fills it, because only `halt` ends a run for a
+    /// reason the record cannot state.
+    closing: Option<CloseReason>,
     saw_terminal_record: bool,
     events: Vec<Event>,
     warned_no_frame: bool,
@@ -318,6 +335,7 @@ impl Run {
             outbox: VecDeque::new(),
             next_command_id: 1,
             finished: false,
+            closing: None,
             saw_terminal_record: false,
             events: Vec::new(),
             warned_no_frame: false,
@@ -425,7 +443,7 @@ impl Run {
                 continue;
             }
             if self.finished {
-                return Ok(None);
+                return Ok(self.close_stream());
             }
             let read = self.process.next_line();
             match read {
@@ -1094,6 +1112,64 @@ impl Run {
         Ok(())
     }
 
+    /// The last line of the stream, written once, after everything else has been delivered
+    /// (amendment a17).
+    ///
+    /// **Here rather than in [`Run::wind_up`]**, and the difference is the whole point: wind-up
+    /// pushes more emissions into the outbox — the seam's `finish`, an abandoned call's decision, a
+    /// retention warning — and a marker written there would count lines that had not been written
+    /// yet and would not be last. This runs when the outbox is empty and the run is over, which is
+    /// the only moment "how many lines preceded this one" has an answer.
+    ///
+    /// The reason a steering command set wins over the record's, because `halt` ends a run for a
+    /// reason no terminal record can state; everything else is read out of the run's own record.
+    fn close_stream(&mut self) -> Option<EventLine> {
+        let steered = self.closing.take();
+        let reason = steered.unwrap_or_else(|| self.reason_from_record());
+        let line = self.stream.close(reason)?;
+        self.events.push(line.event.clone());
+        Some(line)
+    }
+
+    /// Why this run's stream ended, read from the run's own record and from nothing else.
+    ///
+    /// A run with no terminal record closes `error`: **the stream is complete and the run is not**,
+    /// and those are two different facts in two different fields — this one, and
+    /// [`Run::saw_terminal_record`]. Reporting such a run `completed` because the file ended tidily
+    /// is the confusion the marker exists to remove.
+    fn reason_from_record(&self) -> CloseReason {
+        let Some(Event::SessionEnded {
+            is_error,
+            subtype,
+            stop_reason,
+            terminal_reason,
+            ..
+        }) = self
+            .events
+            .iter()
+            .rev()
+            .find(|event| matches!(event, Event::SessionEnded { .. }))
+        else {
+            return CloseReason::Error;
+        };
+        let says_budget = [terminal_reason, stop_reason, subtype]
+            .into_iter()
+            .any(|word| word.as_deref() == Some(BUDGET_EXHAUSTED));
+        if says_budget {
+            CloseReason::Budget
+        } else if *is_error == Some(true) {
+            CloseReason::Error
+        } else {
+            CloseReason::Completed
+        }
+    }
+
+    /// Wind up because a steering command ended the run, rather than because the stream did.
+    fn wind_up_as(&mut self, reason: CloseReason) {
+        self.closing = Some(reason);
+        self.wind_up();
+    }
+
     fn wind_up(&mut self) {
         self.abandon_pending("the stream ended", warning::PENDING_CALL_ABANDONED);
         self.report_silent_child();
@@ -1247,7 +1323,10 @@ impl Run {
                     reason: String::new(),
                 })?;
                 self.process.kill()?;
-                self.wind_up();
+                // `steer-halt` and not `killed`, although metaharness killed the child on both:
+                // the reader who has to act on this needs to know **who** ended the run, and here
+                // it was the embedder (amendment a17).
+                self.wind_up_as(CloseReason::SteerHalt);
                 Ok(CommandOutcome::Ok { applies_at: None })
             }
             other => {

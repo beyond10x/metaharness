@@ -52,8 +52,9 @@ pub use envelope::{
     StagedExecutable, assess_envelope,
 };
 pub use event::{
-    DecidedBy, DecisionCensus, Emission, Event, McpServerRef, PermissionDenial, PluginRef,
-    RateLimitInfo, Seam, StepOutcome, TranscriptRef, Usage, WithheldTool, warning_code,
+    CloseReason, DecidedBy, DecisionCensus, Emission, Event, McpServerRef, PermissionDenial,
+    PluginRef, RateLimitInfo, Seam, StepOutcome, StreamCompleteness, TranscriptRef, Usage,
+    WithheldTool, stream_completeness, warning_code,
 };
 pub use frame::{
     Digest, EntityList, EvidenceLine, FRAME_FORMAT, Frame, FrameDocError, Handoff, Line, NodeRef,
@@ -77,6 +78,7 @@ pub use projection::{
 pub use seam::{HarnessSeam, SeamFactory};
 pub use spec::{CredentialSource, DecisionMode, Kind, RunSpec, ScopeAnnounce, ToolSurface};
 pub use trace_ir::{
-    AdapterRef, AssistantRequest, IR_ADAPTER, IR_FORMAT, MetaharnessBlock, TraceIrDocument,
-    TraceIrEvent, UNK_FAMILY, UNK_REASON, parse_timestamp_ms, project_document,
+    AdapterRef, AssistantRequest, CLOSED_FAMILY, IR_ADAPTER, IR_FORMAT, MetaharnessBlock,
+    StreamClose, TraceIrDocument, TraceIrEvent, UNK_FAMILY, UNK_REASON, parse_timestamp_ms,
+    project_document,
 };

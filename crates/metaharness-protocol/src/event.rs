@@ -668,6 +668,41 @@ pub enum Event {
         /// Which 1-based line of the retained transcript said so.
         source_line: Option<u64>,
     },
+
+    /// The stream ends here, on purpose (amendment a17).
+    ///
+    /// **The completeness record, and the last line of every stream this driver writes.** Without
+    /// it a stream that contains no `Bash` call and a stream that was cut off before the first one
+    /// are the same bytes, so every *negative* expectation about a run — `nothing-was-moved`,
+    /// `no-store-command-was-run` — is undecidable whatever the run actually did. Eight
+    /// `aep trace check` reports ended `undecided` for exactly that reason on 2026-09-03. It is
+    /// [`Event::Opaque`]'s rule (design D4) one level up: about the file rather than about a record
+    /// inside it.
+    ///
+    /// It is **not** a second terminal record and it ends no run: [`Event::SessionEnded`] is still
+    /// the terminal record, still carries every resource fact, and still comes first. This line
+    /// carries the one thing that record cannot — *and then the file stopped*.
+    #[serde(rename = "stream.closed")]
+    StreamClosed {
+        /// How many lines preceded this one.
+        ///
+        /// **Checked rather than believed.** A reader compares it against the lines it actually
+        /// read, so a truncated stream that somehow kept its marker is `inconsistent` and never
+        /// `complete` — see [`stream_completeness`]. A count a reader had to take on trust would
+        /// add nothing a reader did not already have.
+        events: u64,
+        /// Why the stream ended.
+        reason: CloseReason,
+        /// Which run this closes.
+        ///
+        /// Also on the line itself, under `run` (design D2), and the duplication is deliberate: the
+        /// marker's purpose is to be readable **on its own**, by something that seeks to the end of
+        /// a file. Both are rendered from the same
+        /// [`EventStream`](crate::EventStream), so they cannot disagree. It is spelled `run_id`
+        /// rather than `run` because this payload is flattened into the line's own object and two
+        /// keys of one name would be one key.
+        run_id: String,
+    },
 }
 
 /// An event with the timestamp the vendor recorded for it, or none.
@@ -727,6 +762,184 @@ impl Event {
             Event::Warning { .. } => "warning",
             Event::Opaque { .. } => "opaque",
             Event::AuthExpired { .. } => "auth.expired",
+            Event::StreamClosed { .. } => "stream.closed",
         }
+    }
+}
+
+/// Why a run's stream ended (amendment a17).
+///
+/// Read from the run's own record, never guessed. The one word this workspace has read out of a
+/// real terminal record for a budget stop is `budget-exhausted`, which the b10x loop writes; a
+/// vendor's word for the same thing that nobody here has read is **not** guessed at, and such a run
+/// closes [`CloseReason::Completed`] or [`CloseReason::Error`] on the terminal record's own
+/// `is_error` (invariant 3: absence of evidence is not a property).
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "kebab-case")]
+pub enum CloseReason {
+    /// The harness ended its own stream and its terminal record reports a finished run.
+    Completed,
+    /// The terminal record's own word says a budget or turn ceiling stopped it.
+    Budget,
+    /// The child was killed and no steering command asked for it.
+    ///
+    /// **No path in this build's run loop reaches this**, and it is in the vocabulary rather than
+    /// left out because the alternative is a later producer inventing a sixth word, which is a wire
+    /// change under design D3 rather than an addition. It is reachable today from outside the loop:
+    /// [`EventStream::close`](crate::EventStream::close) is public, so an embedder that kills a
+    /// child itself closes the stream with the word for what it did.
+    Killed,
+    /// The terminal record reports an error, or there is no terminal record at all.
+    ///
+    /// The second case is the one worth naming: *the stream is complete and the run is not*. Those
+    /// are two different facts and they live in two different fields — this one, and
+    /// `session.ended`'s absence.
+    Error,
+    /// A `halt` steering command ended the run.
+    ///
+    /// Distinct from [`CloseReason::Killed`] although metaharness kills the child on both: the
+    /// reader who has to act on this needs to know **who** ended the run, and here it was the
+    /// embedder.
+    SteerHalt,
+}
+
+impl CloseReason {
+    /// The reason's word on the wire.
+    #[must_use]
+    pub fn as_str(&self) -> &'static str {
+        match self {
+            CloseReason::Completed => "completed",
+            CloseReason::Budget => "budget",
+            CloseReason::Killed => "killed",
+            CloseReason::Error => "error",
+            CloseReason::SteerHalt => "steer-halt",
+        }
+    }
+}
+
+/// What a stream says about its own completeness.
+///
+/// Three answers and no fourth, because the two failures are different questions to a reader: a
+/// stream with no marker was **cut off** (or was written by a build older than amendment a17), and
+/// a stream whose marker does not add up was **written by something that got its own count wrong**.
+/// Folding them together would send the wrong person looking.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum StreamCompleteness {
+    /// A marker is present, is the last event, and counts exactly the events before it.
+    Complete {
+        /// How many events preceded the marker.
+        events: u64,
+        /// Why the stream ended.
+        reason: CloseReason,
+    },
+    /// A marker is present and something about it does not hold.
+    Inconsistent {
+        /// What did not hold, in the words a reader needs to act on it.
+        detail: String,
+        /// The reason the marker stated, which is still the producer's own claim.
+        reason: CloseReason,
+    },
+    /// **No marker at all.** The stream was cut off, or its producer never promised to close it.
+    /// Never read as *complete*: that is the reading amendment a17 exists to end.
+    Truncated,
+}
+
+impl StreamCompleteness {
+    /// Whether this stream closed itself and the marker adds up.
+    #[must_use]
+    pub fn is_complete(&self) -> bool {
+        matches!(self, StreamCompleteness::Complete { .. })
+    }
+
+    /// How many events preceded the marker, where there is one that adds up.
+    #[must_use]
+    pub fn events(&self) -> Option<u64> {
+        match self {
+            StreamCompleteness::Complete { events, .. } => Some(*events),
+            _ => None,
+        }
+    }
+
+    /// The reason the marker stated, where there is a marker.
+    #[must_use]
+    pub fn reason(&self) -> Option<CloseReason> {
+        match self {
+            StreamCompleteness::Complete { reason, .. }
+            | StreamCompleteness::Inconsistent { reason, .. } => Some(*reason),
+            StreamCompleteness::Truncated => None,
+        }
+    }
+
+    /// One line a report prints, saying which of the three this is.
+    #[must_use]
+    pub fn render(&self) -> String {
+        match self {
+            StreamCompleteness::Complete { events, reason } => format!(
+                "stream: complete — {events} event(s) before the marker, reason {}",
+                reason.as_str()
+            ),
+            StreamCompleteness::Inconsistent { detail, reason } => format!(
+                "stream: INCONSISTENT — a closing marker says {} and {detail}",
+                reason.as_str()
+            ),
+            StreamCompleteness::Truncated => "stream: TRUNCATED — no `stream.closed` marker, so \
+                                              nothing in it can tell an absence from a cut-off \
+                                              file"
+                .to_string(),
+        }
+    }
+}
+
+/// Read a stream's own account of whether it is whole.
+///
+/// **Verified, never restated.** The marker's count is compared against the events actually read
+/// and its position against the end of the stream, so `Complete` is a fact about these bytes rather
+/// than a field somebody wrote. Takes an iterator so one implementation serves both a `&[Event]`
+/// and a stream of framed lines — two readers of one rule cannot disagree if there is only one.
+pub fn stream_completeness<'a>(events: impl IntoIterator<Item = &'a Event>) -> StreamCompleteness {
+    let mut total: u64 = 0;
+    let mut markers: Vec<(u64, u64, CloseReason)> = Vec::new();
+    for event in events {
+        total += 1;
+        if let Event::StreamClosed {
+            events: stated,
+            reason,
+            ..
+        } = event
+        {
+            markers.push((total, *stated, *reason));
+        }
+    }
+
+    let Some(&(position, stated, reason)) = markers.first() else {
+        return StreamCompleteness::Truncated;
+    };
+    if markers.len() > 1 {
+        return StreamCompleteness::Inconsistent {
+            detail: format!("there are {} of them; a stream ends once", markers.len()),
+            reason,
+        };
+    }
+    if position != total {
+        return StreamCompleteness::Inconsistent {
+            detail: format!(
+                "it is event {position} of {total}; the marker is the last line or the stream was \
+                 appended to afterwards"
+            ),
+            reason,
+        };
+    }
+    if stated != position - 1 {
+        return StreamCompleteness::Inconsistent {
+            detail: format!(
+                "it counts {stated} preceding event(s) and there are {}",
+                position - 1
+            ),
+            reason,
+        };
+    }
+    StreamCompleteness::Complete {
+        events: stated,
+        reason,
     }
 }

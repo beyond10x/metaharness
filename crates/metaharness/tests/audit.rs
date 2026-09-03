@@ -510,6 +510,9 @@ fn the_two_advisory_rows_are_evaluated_and_do_not_move_the_exit_code() {
         installed_plugins: Vec::new(),
         auditor: None,
         saw_terminal_record: true,
+        // These reports are built from a row list rather than from a run, so there is no stream to
+        // read: `Truncated` is the honest answer and never a softer one (invariant 3).
+        stream: metaharness::protocol::StreamCompleteness::Truncated,
     };
     assert_eq!(
         report.exit(),
@@ -535,6 +538,9 @@ fn report_withholding(
         installed_plugins: Vec::new(),
         auditor: None,
         saw_terminal_record: true,
+        // These reports are built from a row list rather than from a run, so there is no stream to
+        // read: `Truncated` is the honest answer and never a softer one (invariant 3).
+        stream: metaharness::protocol::StreamCompleteness::Truncated,
     }
 }
 

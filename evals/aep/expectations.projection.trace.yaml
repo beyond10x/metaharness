@@ -28,6 +28,14 @@ title: Every kind this driver emits is decidable — no row reports `unk`
 # `opaque`, `auth.expired` — has **no row here on purpose**: a bound over a kind the record does
 # not carry reports `unk`, and an `unk` that means *this fixture has none of those* would drown
 # the one that means *the reader broke*.
+#
+# **A sixth kind is emitted since protocol amendment a17 and has no row here either:**
+# `stream.closed`, the completeness marker, is the last line of both streams. `aep` 0.44.0's
+# `metaharness/event-stream` adapter does not know that name yet and reports it as a record it
+# could not read, which turns exactly one advisory row (`tool-results-carry-their-size`, whose
+# `per: total` bound cannot rule out that the unreadable record was a tool result) into `unk`. That
+# is the reader working correctly on a name it has not learned, it gates nothing, and it is
+# recorded in `runs/README.md` rather than papered over by deleting the row.
 
 expectations:
   # --- session.started ----------------------------------------------------------------------

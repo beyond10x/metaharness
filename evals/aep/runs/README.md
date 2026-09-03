@@ -33,6 +33,16 @@ Every file here is regenerated from its source and compared byte for byte by the
 Both carry an `#[ignore]`d regeneration test beside the check. A change here is deliberate, and the
 diff is the review.
 
+## They end where they end
+
+Both event streams close with `stream.closed` — the completeness marker of protocol amendment a17 —
+and both projections carry `"stream_complete": true` with the count and the reason. That is what
+lets a checker reading these files decide *this run did X zero times* instead of reporting `unk`: a
+stream with none of them and a stream that was cut off before the first one are otherwise the same
+bytes. The reason is stated in the fixture generator rather than derived from the records, because a
+fixture that classified its own reason would agree with itself through any change to the classifier;
+the derivation is exercised where there is a run to derive it from, in `metaharness`'s C3 vectors.
+
 **This does not put an eval in the gate** (`AGENTS.md` invariant 5). That invariant is about a
 **paid run** never gating; these tests read committed files, convert them in memory and compare
 bytes. Nothing under `evals/` is executed.
@@ -42,12 +52,22 @@ bytes. Nothing under `evals/` is executed.
 ```console
 $ aep trace check --spec ../expectations.projection.trace.yaml \
     --transcript decomposer-clean.events.jsonl
-metaharness/projection against transcript sha256:90a4bcfdf5cb… — 23 ok, 0 gap, 0 unk
+metaharness/projection against transcript sha256:0a8b738ab785… — 22 ok, 0 gap, 1 unk
 ```
 
-Both streams, `aep` 0.42.0, exit 0. That is the acceptance line of `story:trace-ir-reader`, in the
+Both streams, `aep` 0.44.0, exit 0. That is the acceptance line of `story:trace-ir-reader`, in the
 form the consumer supports — `aep trace check` reads a `metaharness.event/1` stream and has no
 `trace-ir/1` reader (`docs/design/runs-side-by-side-v0.1.md` P4).
+
+**The one `unk` is the consumer meeting a name it has not learned, and it is named rather than
+removed.** Both streams end with `stream.closed` since protocol amendment a17. `aep` 0.44.0's
+`metaharness/event-stream` adapter has nineteen names and reports the twentieth as *a record it
+could not read* — correct behaviour on its side — and one **advisory** row,
+`tool-results-carry-their-size`, then reads `unk`, because a `per: total` byte bound cannot rule out
+that the record it could not read was a tool result. It gates nothing and the exit is still 0. The
+row was `ok` at 23 ok / 0 gap / 0 unk before the marker existed, so the change is real and is
+written down here rather than hidden by deleting the row: **it closes when the repository that owns
+the reader learns the name**, and that is that repository's change to make.
 
 **One row is deliberately absent from that specification and the reason is a finding.** A
 `tool.failed` bound reads `is_error`; the real Claude Code wire carries it explicitly

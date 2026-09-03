@@ -849,7 +849,14 @@ fn a_line_the_seam_cannot_read_becomes_opaque_and_is_never_dropped() {
     run.drain().expect("drains");
     assert_eq!(
         names(&run),
-        vec!["session.started", "opaque", "opaque", "session.ended"]
+        vec![
+            "session.started",
+            "opaque",
+            "opaque",
+            "session.ended",
+            // Amendment a17: every stream this driver writes ends here.
+            "stream.closed",
+        ]
     );
 }
 
@@ -869,7 +876,12 @@ fn an_expired_credential_is_its_own_event_and_does_not_end_the_run() {
     run.drain().expect("drains");
     assert_eq!(
         names(&run),
-        vec!["session.started", "auth.expired", "session.ended"]
+        vec![
+            "session.started",
+            "auth.expired",
+            "session.ended",
+            "stream.closed",
+        ]
     );
     assert!(run.saw_terminal_record());
 }
@@ -887,7 +899,9 @@ fn sequence_numbers_come_from_the_protocols_own_stream_and_are_monotone_from_one
     let mut run = started.run;
     let lines = run.drain().expect("drains");
     let sequence: Vec<u64> = lines.iter().map(|line| line.seq).collect();
-    assert_eq!(sequence, vec![1, 2, 3]);
+    // Four, not three: the closing marker takes the next sequence number from the same place
+    // every other line takes it from (amendment a17).
+    assert_eq!(sequence, vec![1, 2, 3, 4]);
     assert!(
         lines
             .iter()
@@ -1088,6 +1102,7 @@ fn the_claude_seam_reads_the_vendors_own_stream_json_into_protocol_events() {
             "tool.decided",
             "tool.result",
             "session.ended",
+            "stream.closed",
         ],
         "if this fails the adapter's transcript shape moved and the fixture, not the loop, is stale"
     );

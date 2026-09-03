@@ -1,6 +1,6 @@
 {
   "format": "trace-ir/1",
-  "transcript_digest": "95cc01e42b7ab71b8658dbdc38c43dd687c8c24bdbc2703ec6d0be5a3b33e689",
+  "transcript_digest": "eac40dfd2c4025256f8ab9b8096db216c9b81c7ecc6d85ba3023568498823897",
   "adapter": {
     "name": "metaharness/project",
     "written_against": [
@@ -291,21 +291,39 @@
           "thinking_tokens": 22
         }
       }
+    },
+    {
+      "index": 13,
+      "source_line": 14,
+      "timestamp": null,
+      "timestamp_ms": null,
+      "kind": {
+        "event": "stream_closed",
+        "events": 13,
+        "reason": "completed",
+        "run_id": "plan-reviewer-clean"
+      }
     }
   ],
   "requests": [],
   "metaharness": {
     "source": "metaharness.event/1",
     "run": "plan-reviewer-clean",
-    "events_total": 13,
+    "events_total": 14,
     "families": {
       "assistant_text": 1,
       "run_outcome": 1,
       "session_start": 1,
+      "stream_closed": 1,
       "tool_call": 5,
       "tool_result": 5
     },
     "unk_kinds": {},
+    "stream_complete": true,
+    "closed": {
+      "events": 13,
+      "reason": "completed"
+    },
     "vendor_transcript": {
       "path": "checks/transcripts/plan-reviewer-clean.jsonl",
       "digest": "4ae893731211a0a5c38b1093603b686b0dc2903c5624f72ace81aff31df09798",

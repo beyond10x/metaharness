@@ -22,7 +22,8 @@ use std::fmt::Write as _;
 
 use metaharness_protocol::{
     Assertion, CredentialSource, DecidedBy, Decision, DecisionCensus, Event, HermeticAttestation,
-    HermeticRow, InstalledPlugin, RowVerdict, RunSpec, Severity, Verdict, WithheldTool,
+    HermeticRow, InstalledPlugin, RowVerdict, RunSpec, Severity, StreamCompleteness, Verdict,
+    WithheldTool, stream_completeness,
 };
 
 use crate::auditor::AuditorVerdict;
@@ -114,6 +115,18 @@ pub struct AuditReport {
     pub auditor: Option<AuditorVerdict>,
     /// Whether the harness produced a terminal record at all.
     pub saw_terminal_record: bool,
+    /// Whether the stream closed itself, and what it said when it did (amendment a17).
+    ///
+    /// **Always printed, and a stream with no `stream.closed` marker is named `TRUNCATED`.** A
+    /// report that said nothing here would leave *this run did X zero times* and *this file stopped
+    /// before X could happen* the same bytes, which is the reading invariant 3 refuses everywhere
+    /// else — and is why eight `aep trace check` reports ended `undecided` on 2026-09-03.
+    ///
+    /// **It does not gate**, and the reason is what a failure here would mean: this marker is
+    /// metaharness's own, written by the loop that produced these events, so its absence in a live
+    /// run is a defect in this build rather than a verdict about the run. The reader who needs it
+    /// is the offline one, reading a file this process did not produce.
+    pub stream: StreamCompleteness,
 }
 
 impl AuditReport {
@@ -192,6 +205,9 @@ impl AuditReport {
         for (decider, count) in &self.census.by_decider {
             let _ = writeln!(out, "  by decider {decider}: {count}");
         }
+        // Always a line, on the same rule as the census and the plugin list: a report that printed
+        // nothing here would make *nothing happened* and *the file stopped* the same bytes.
+        let _ = writeln!(out, "{}", self.stream.render());
         if self.census.allowed + self.census.denied + self.census.replaced == 0 {
             if self.census.abstained == 0 {
                 out.push_str(
@@ -771,6 +787,7 @@ impl crate::run::Run {
             installed_plugins: installed_plugins(self.events()),
             auditor,
             saw_terminal_record: self.saw_terminal_record(),
+            stream: stream_completeness(self.events()),
         })
     }
 

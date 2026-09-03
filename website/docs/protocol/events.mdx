@@ -23,7 +23,7 @@ One JSON object per line on stdout. Every line carries its own format tag,
   name* is a named refusal. This wire is an authored schema, so a misspelling is a mistake the
   author wants to be told about.
 
-## The 19 events
+## The 20 events
 
 | Event | What it is |
 |---|---|
@@ -44,6 +44,7 @@ One JSON object per line on stdout. Every line carries its own format tag,
 | `warning` | **metaharness** has something to say. |
 | `opaque` | **The vendor** said something the adapter could not read. |
 | `auth.expired` | The credential the run launched with stopped working mid-flight. |
+| `stream.closed` | **The last line.** How many lines preceded it, why the run ended (`completed` · `budget` · `killed` · `error` · `steer-halt`), and which run. Without it, a stream with no `Bash` call and a stream that was **cut off** before the first one are the same bytes — so every *negative* expectation about a run is undecidable. |
 
 ## Why three tool events and not two
 

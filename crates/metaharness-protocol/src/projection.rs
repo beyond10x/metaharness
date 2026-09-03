@@ -65,8 +65,13 @@ impl IrFamily {
 ///
 /// Exhaustive on purpose: this list is what makes "maps to none" a decision. The design lists
 /// seven; the eighth, `auth.expired`, is a **deviation from design v0.1** recorded as Q13 — it
-/// is a control-plane fact about the credential, and the IR has no family for it.
-pub const CONTROL_PLANE_EVENTS: [&str; 8] = [
+/// is a control-plane fact about the credential, and the IR has no family for it. The ninth,
+/// `stream.closed`, is amendment a17's completeness record: also metaharness's own, also without an
+/// IR family, and the **one member of this list the document writer does not render as `unk`** —
+/// see [`crate::UNK_FAMILY`] and [`crate::CLOSED_FAMILY`]. `unk` says *the IR has no family for
+/// this*, and filing the one node a completeness check reads among the protocol-vocabulary gaps
+/// would send the wrong person looking.
+pub const CONTROL_PLANE_EVENTS: [&str; 9] = [
     "step.entered",
     "step.left",
     "turn.started",
@@ -75,6 +80,7 @@ pub const CONTROL_PLANE_EVENTS: [&str; 8] = [
     "command.result",
     "warning",
     "auth.expired",
+    "stream.closed",
 ];
 
 /// Which family an event projects into, if any.
@@ -103,7 +109,10 @@ pub fn ir_family(event: &Event) -> Option<IrFamily> {
         | Event::ToolDecided { .. }
         | Event::CommandResult { .. }
         | Event::Warning { .. }
-        | Event::AuthExpired { .. } => None,
+        | Event::AuthExpired { .. }
+        // `trace-ir/1` has no vocabulary for *the file ends here*, so this maps to no family
+        // either — and it is still not `unk` in the document (amendment a17).
+        | Event::StreamClosed { .. } => None,
     }
 }
 
