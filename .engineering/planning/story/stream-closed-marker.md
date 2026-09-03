@@ -2,7 +2,7 @@
 format: aep.planning-md/1
 id: story:stream-closed-marker
 kind: story
-status: draft
+status: implemented
 title: A run's stream ends with a closing event that says it is complete
 summary: A terminal stream.closed event with count and reason, in the attestation and the IR, so aep trace check can decide negative rows instead of leaving them unknown.
 owner: metaharness
@@ -11,7 +11,7 @@ tags:
 - protocol
 relations:
 - decomposes: epic:runs-side-by-side
-revision: 1
+revision: 4
 ---
 # Story: A run's stream ends with a closing event that says it is complete
 
