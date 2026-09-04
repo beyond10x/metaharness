@@ -201,7 +201,7 @@ pub fn execute(cli: Cli) -> i32 {
 ///
 /// Amendment a15 lifted the refusal this verb used to carry. What Q9 still gates is a *reader*
 /// outside this repository, not a writer here: the document is written, tagged and byte-stable,
-/// and `aep trace check` consumes the event stream this projects **from** rather than the
+/// and `aep observe trace check` consumes the event stream this projects **from** rather than the
 /// document (`docs/design/runs-side-by-side-v0.1.md` P4).
 fn project(args: &ProjectArgs) -> i32 {
     if args.to != metaharness::TRACE_IR_FORM {

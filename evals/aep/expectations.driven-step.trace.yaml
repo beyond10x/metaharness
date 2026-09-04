@@ -140,6 +140,9 @@ expectations:
 
   # --- what the model did with it -----------------------------------------------------------
 
+  # recorded-under-this-name: the matcher below is a substring of the command line the step's own
+  # prompt asks for, and of the recordings cited beside it. Regrouping one side alone would make
+  # the row decide nothing.
   - id: created-through-the-cli
     statement: a `aep artifact new` call was made
     expect:
@@ -163,6 +166,9 @@ expectations:
         args: {command: {contains: "aep artifact new"}}
         count: {at_least: 1}
 
+  # recorded-under-this-name: the matcher below is a substring of the command line the step's own
+  # prompt asks for, and of the recordings cited beside it. Regrouping one side alone would make
+  # the row decide nothing.
   - id: the-creating-call-succeeded
     statement: at least one of those `aep artifact new` calls came back without an error
     # **The row above counts the call and says nothing about its outcome**, and on 2026-08-29 that
@@ -200,6 +206,9 @@ expectations:
         args: {command: {contains: "aep artifact new"}}
         rate: {at_most: 0.99}
 
+  # recorded-under-this-name: the matcher below is a substring of the command line the step's own
+  # prompt asks for, and of the recordings cited beside it. Regrouping one side alone would make
+  # the row decide nothing.
   - id: validated-its-own-work
     statement: the agent ran the store's own validator before reporting
     # `shell` beside `command.execute`, for the reason `created-through-the-cli` above states in
@@ -227,6 +236,9 @@ expectations:
       subagent.spawned:
         count: {at_most: 0}
 
+  # recorded-under-this-name: the matcher below is a substring of the command line the step's own
+  # prompt asks for, and of the recordings cited beside it. Regrouping one side alone would make
+  # the row decide nothing.
   - id: nothing-was-badly-refused-here
     statement: the honest step was not fighting the guardrails
     # A bound and not `exactly: 0`, and the reason is an observation rather than a hedge. The surface

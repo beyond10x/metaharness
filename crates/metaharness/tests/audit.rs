@@ -784,9 +784,9 @@ fn the_census_is_read_from_the_terminal_record_when_there_is_one() {
 // ---------------------------------------------------------------- the auditor contract
 
 #[test]
-fn the_auditor_prefix_is_argv_and_a_two_word_subcommand_is_not_a_special_case() {
+fn the_auditor_prefix_is_argv_and_a_multi_word_subcommand_is_not_a_special_case() {
     let argv = auditor_argv(
-        "protocol trace check",
+        "protocol observe trace check",
         std::path::Path::new("expectations.yaml"),
         std::path::Path::new("/scratch/transcript.jsonl"),
         &[
@@ -798,6 +798,7 @@ fn the_auditor_prefix_is_argv_and_a_two_word_subcommand_is_not_a_special_case() 
         argv,
         vec![
             "protocol",
+            "observe",
             "trace",
             "check",
             "--spec",
@@ -842,7 +843,7 @@ fn an_auditor_with_no_spec_is_a_refusal_because_there_is_nothing_to_check() {
     let mut auditor = FakeAuditor::default();
     let refused = run_auditor(
         None,
-        Some("protocol trace check"),
+        Some("protocol observe trace check"),
         &[],
         std::path::Path::new("t.jsonl"),
         &mut auditor,
@@ -908,7 +909,7 @@ fn an_audit_with_no_verdict_rows_is_a_setup_failure_and_never_a_verdict() {
         });
         let refused = run_auditor(
             Some(spec.path()),
-            Some("protocol trace check"),
+            Some("protocol observe trace check"),
             &[],
             std::path::Path::new("t.jsonl"),
             &mut auditor,
@@ -935,7 +936,7 @@ fn an_auditor_that_produced_rows_is_recorded_with_its_argv_and_its_exit_code() {
     });
     let verdict = run_auditor(
         Some(spec.path()),
-        Some("protocol trace check"),
+        Some("protocol observe trace check"),
         &["--advisory".to_string()],
         std::path::Path::new("/scratch/transcript.jsonl"),
         &mut auditor,

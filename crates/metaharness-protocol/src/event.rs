@@ -695,7 +695,7 @@ pub enum Event {
     /// it a stream that contains no `Bash` call and a stream that was cut off before the first one
     /// are the same bytes, so every *negative* expectation about a run — `nothing-was-moved`,
     /// `no-store-command-was-run` — is undecidable whatever the run actually did. Eight
-    /// `aep trace check` reports ended `undecided` for exactly that reason on 2026-09-03. It is
+    /// `aep observe trace check` reports ended `undecided` for exactly that reason on 2026-09-03. It is
     /// [`Event::Opaque`]'s rule (design D4) one level up: about the file rather than about a record
     /// inside it.
     ///

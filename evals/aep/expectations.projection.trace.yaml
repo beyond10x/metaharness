@@ -2,6 +2,8 @@ format: trace-spec/1
 id: metaharness/projection
 title: Every kind this driver emits is decidable — no row reports `unk`
 
+# recorded-under-this-name: the acceptance of `story:trace-ir-reader`, quoted, and the command
+# that judges the two recordings under `runs/` with it.
 # The acceptance row of `story:trace-ir-reader`, as a document:
 #
 #   "`aep trace check` over the projected document judges the two recorded `evals/aep` runs with

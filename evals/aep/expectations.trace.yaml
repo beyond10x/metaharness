@@ -91,6 +91,9 @@ expectations:
         skill: aep-plan:planning
         count: {at_least: 1}
 
+  # recorded-under-this-name: the matcher below is a substring of a recorded command line, and
+  # the sentences around it read as the matcher reads. A predicate over a finished run is a claim
+  # about that run's bytes.
   - id: consulted-the-skill-before-touching-the-store
     statement: the skill was loaded before the CLI was reached for, not afterwards
     expect:
@@ -98,6 +101,9 @@ expectations:
         first: {tool: Skill}
         before: {tool: Bash, args: {command: {contains: "aep artifact"}}}
 
+  # recorded-under-this-name: the matcher below is a substring of a recorded command line, and
+  # the sentences around it read as the matcher reads. A predicate over a finished run is a claim
+  # about that run's bytes.
   - id: created-through-the-cli
     statement: artifacts were created with the CLI, not with hand-written frontmatter
     # run.sh assertion 3.4 — which was a `grep` for this string anywhere in the file, including
@@ -109,6 +115,9 @@ expectations:
         args: {command: {contains: "aep artifact new"}}
         count: {at_least: 1}
 
+  # recorded-under-this-name: the matcher below is a substring of a recorded command line, and
+  # the sentences around it read as the matcher reads. A predicate over a finished run is a claim
+  # about that run's bytes.
   - id: the-creating-call-succeeded
     statement: at least one of those creating calls came back clean
     # The gate on the row above, which counts calls and can say nothing about what came back.
@@ -137,6 +146,9 @@ expectations:
         args: {command: {contains: "aep artifact new"}}
         rate: {at_most: 0.99}
 
+  # recorded-under-this-name: the matcher below is a substring of a recorded command line, and
+  # the sentences around it read as the matcher reads. A predicate over a finished run is a claim
+  # about that run's bytes.
   - id: validated-its-own-work
     statement: the agent ran the store's own validator before reporting
     expect:
@@ -202,6 +214,9 @@ expectations:
 
   # --- this repository's own CLI, which is the one thing here we can regress ---------------
 
+  # recorded-under-this-name: the matcher below is a substring of a recorded command line, and
+  # the sentences around it read as the matcher reads. A predicate over a finished run is a claim
+  # about that run's bytes.
   - id: the-cli-stays-fast
     statement: every `aep artifact` call returned promptly
     # Derived from recorded timestamps, never measured (design § 2.6). Observed: every such call

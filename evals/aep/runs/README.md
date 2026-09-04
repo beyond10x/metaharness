@@ -50,13 +50,14 @@ bytes. Nothing under `evals/` is executed.
 ## What the consumer says about them
 
 ```console
-$ aep trace check --spec ../expectations.projection.trace.yaml \
+$ aep observe trace check --spec ../expectations.projection.trace.yaml \
     --transcript decomposer-clean.events.jsonl
 metaharness/projection against transcript sha256:0a8b738ab785… — 22 ok, 0 gap, 1 unk
 ```
 
-Both streams, `aep` 0.44.0, exit 0. That is the acceptance line of `story:trace-ir-reader`, in the
-form the consumer supports — `aep trace check` reads a `metaharness.event/1` stream and has no
+Both streams, exit 0 — measured at `aep` 0.44.0, which spelled the verb flat. That is the
+acceptance line of `story:trace-ir-reader`, in the
+form the consumer supports — `aep observe trace check` reads a `metaharness.event/1` stream and has no
 `trace-ir/1` reader (`docs/design/runs-side-by-side-v0.1.md` P4).
 
 **The one `unk` is the consumer meeting a name it has not learned, and it is named rather than

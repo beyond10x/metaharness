@@ -133,6 +133,8 @@ else
   cp "$TRANSCRIPTS/decomposer-ran-a-move.jsonl" "$DEC_FIX"
   OUT="$WORK/o7.txt"; runner --offline > "$OUT" 2>&1; O7_EXIT=$?
   cp "$WORK/o7-original.jsonl" "$DEC_FIX"
+  # recorded-under-this-name: the reason names the call `decomposer-ran-a-move.jsonl` records,
+  # and a recording is evidence rather than an instruction.
   [ "$O7_EXIT" -ne 0 ] || { R=1; why "--offline exited 0 against a fixture that ran \`aep artifact move\`"; }
   [ "$(table_verdict "$OUT" never-ran-a-move)" = "fail" ] \
     || { R=1; why "never-ran-a-move did not go red — the offline mode does not evaluate that bound"; }

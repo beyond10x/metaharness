@@ -15,7 +15,7 @@ id	status	digest
 
 | Field | Source | Notes |
 |---|---|---|
-| `id` | `aep artifact list --format json` | the store's id, `kind:slug` |
+| `id` | `aep plan artifact list --format json` | the store's id, `kind:slug` |
 | `status` | the same call | never read from the file's frontmatter — the CLI is the authority on status |
 | `digest` | the artifact's file | lower-case hex SHA-256 of the file's bytes, whole file including frontmatter |
 

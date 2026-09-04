@@ -9,6 +9,8 @@ They are not `eval/fixtures/`. That directory holds the transcripts of the live 
 deliberately-broken transcripts a discrimination check needs — `T3`, `T4`, `T5` and `V6` each need a
 transcript that violates exactly one bound, and a real run does not helpfully produce one.
 
+<!-- recorded-under-this-name: the cells below say what each transcript's bytes contain, and
+     those bytes are the input `T3`, `T4`, `T5` and `V6` are judged against. -->
 | File | What it is |
 |---|---|
 | `decomposer-clean.jsonl` | a decomposer stage that held every bound in R12 |

@@ -25,7 +25,7 @@
 | **P1** | `project` writes a `trace-ir/1`-shaped document, byte-stable, no clock, no network | 1.1 |
 | **P2** | every one of the nineteen event kinds maps to an IR family or to `unk`, and `unk` carries the kind | 1.2 |
 | **P3** | the document's `transcript_digest` is over the **event stream's own bytes**, and says so | 1.3 |
-| **P4** | `aep trace check` is a consumer of the **event stream**, not of this document; the document's consumer is the viewer | 1.4 |
+| **P4** | `aep observe trace check` is a consumer of the **event stream**, not of this document; the document's consumer is the viewer | 1.4 |
 | **V1** | align by workflow state entry when both runs are driven, else by tool-call index | 2.2 |
 | **V2** | a step in one run and not the other renders as a **gap row**, never skipped | 2.3 |
 | **V3** | one file, no server, no network, JS inline and minimal, deterministic bytes | 2.4 |
@@ -129,11 +129,13 @@ the other (invariant 3, and § 4.4's D6a which made these three fields exempt in
 
 ### 1.4 P4 — who reads what, and the acceptance line this corrects
 
+<!-- recorded-under-this-name: the sentence below quotes `story:trace-ir-reader`'s acceptance
+     verbatim, and that artifact is the planning store's, mutated only through the CLI. -->
 The story's acceptance says *"`aep trace check` over the projected document"*. **That is not a
 thing `aep` 0.42.0 can do, and this page says so rather than shipping a document nobody reads.**
 
-Established by reading `~/beyond10x/aep/crates/trace-spec/src/reader.rs` at `e27c84b`: `aep trace
-check --transcript <file>` dispatches on the first non-blank line's `format` tag and has exactly
+Established by reading `~/beyond10x/aep/crates/trace-spec/src/reader.rs` at `e27c84b`: `aep observe
+trace check --transcript <file>` dispatches on the first non-blank line's `format` tag and has exactly
 two readers — `metaharness.event/1` and, as the fallback, `claude-code/stream-json`. There is no
 `trace-ir/1` reader, and there cannot easily be one: `trace_domain::ir::TraceIr` is `Serialize`
 only, its identity fields are `&'static str`, and no trace-ir schema is published. That is design
@@ -143,10 +145,10 @@ So the two consumers are split, and the split is the decision:
 
 | consumer | reads | why |
 |---|---|---|
-| `aep trace check` / `aep trace inspect` | the **`metaharness.event/1` stream** | it already has that reader, and it builds its own IR from it |
+| `aep observe trace check` / `aep observe trace inspect` | the **`metaharness.event/1` stream** | it already has that reader, and it builds its own IR from it |
 | the viewer (§ 2), and `beyond10x/bench` | the **projected `trace-ir/1` document** | it needs an aligned, positional, digest-named form and must not re-implement an adapter |
 
-The acceptance is therefore met in the form the consumer supports: `aep trace check` is run over
+The acceptance is therefore met in the form the consumer supports: `aep observe trace check` is run over
 the two recorded runs' event streams — the same bytes `project` reads — and must report **no `unk`
 verdict row** for the kinds the driver emits. A row that is `unk` there means *aep's own
 event-stream adapter did not understand something metaharness wrote*, which is exactly the failure
@@ -172,8 +174,8 @@ knows `trace-ir/1` reads it unchanged.
 
 ### 2.1 What the viewer is for
 
-A person compares two runs of one task. The question is never *which is better* — `aep eval
-matrix` counts and nobody here scores (epic, § Out of Scope) — it is **where did these two stop
+A person compares two runs of one task. The question is never *which is better* — `aep drive
+eval matrix` counts and nobody here scores (epic, § Out of Scope) — it is **where did these two stop
 doing the same thing**. Everything below serves that one question.
 
 ### 2.2 V1 — the alignment rule
@@ -194,7 +196,7 @@ mechanically:
 * **Otherwise** → the alignment key is the **tool-call index**: the 0-based position of the
   `tool.requested` event within its own run. Call *n* aligns with call *n*. Text, thinking and
   injections attach to the call that follows them, which is the same attribution
-  `aep trace inspect`'s `gen` split already uses, so two tools do not disagree about which turn
+  `aep observe trace inspect`'s `gen` split already uses, so two tools do not disagree about which turn
   produced a call.
 
 **Not by time, and the reason is not taste.** metaharness reads no clock: a timestamp exists only

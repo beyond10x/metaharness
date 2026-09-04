@@ -146,7 +146,7 @@ fn the_command_line_parses_the_designs_own_example_invocation() {
         "--spec",
         "eval/expectations.trace.yaml",
         "--auditor",
-        "protocol trace check",
+        "protocol observe trace check",
         "--",
         "--advisory",
         "billed-to-the-session",
@@ -165,7 +165,10 @@ fn the_command_line_parses_the_designs_own_example_invocation() {
     assert_eq!(args.spec.max_turns, Some(30));
     assert!(args.spec.strict_version);
     assert!(args.spec.audit);
-    assert_eq!(args.spec.auditor.as_deref(), Some("protocol trace check"));
+    assert_eq!(
+        args.spec.auditor.as_deref(),
+        Some("protocol observe trace check")
+    );
     assert_eq!(
         args.spec.auditor_args,
         vec![

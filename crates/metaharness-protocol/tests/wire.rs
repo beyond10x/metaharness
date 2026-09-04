@@ -66,7 +66,7 @@ fn frame() -> Frame {
             },
         ]),
         entities: Some(EntityList {
-            source: "aep artifact kinds".into(),
+            source: "aep plan artifact kinds".into(),
             members: vec!["spec".into(), "plan".into()],
         }),
         digest: Digest::of(b""),

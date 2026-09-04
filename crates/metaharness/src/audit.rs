@@ -120,7 +120,7 @@ pub struct AuditReport {
     /// **Always printed, and a stream with no `stream.closed` marker is named `TRUNCATED`.** A
     /// report that said nothing here would leave *this run did X zero times* and *this file stopped
     /// before X could happen* the same bytes, which is the reading invariant 3 refuses everywhere
-    /// else — and is why eight `aep trace check` reports ended `undecided` on 2026-09-03.
+    /// else — and is why eight `aep observe trace check` reports ended `undecided` on 2026-09-03.
     ///
     /// **It does not gate**, and the reason is what a failure here would mean: this marker is
     /// metaharness's own, written by the loop that produced these events, so its absence in a live

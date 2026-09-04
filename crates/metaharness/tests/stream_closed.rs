@@ -3,7 +3,7 @@
 //! **What the marker buys, in one sentence:** without it, a stream containing no `Bash` call and a
 //! stream that was cut off before the first one are the same bytes, so every *negative* expectation
 //! about a run — `nothing-was-moved`, `no-store-command-was-run`, `nothing-was-written-to-tmp` — is
-//! undecidable whatever the run actually did. Eight `aep trace check` reports ended `undecided` for
+//! undecidable whatever the run actually did. Eight `aep observe trace check` reports ended `undecided` for
 //! exactly that reason on 2026-09-03.
 //!
 //! Every run below is driven through [`metaharness::ScriptedRunner`]: no process, no model, no

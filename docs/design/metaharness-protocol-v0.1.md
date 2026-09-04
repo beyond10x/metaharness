@@ -163,7 +163,7 @@
 > gap as a vendor-format gap. Two further corrections at the point of change in § 4.4:
 > `transcript_digest` is over the **event stream's own bytes** and says so, because a document
 > projected from an event stream that carried a vendor transcript's digest would name a file it was
-> not made from; and **`aep trace check` is a consumer of the event stream, not of this document** —
+> not made from; and **`aep observe trace check` is a consumer of the event stream, not of this document** —
 > `aep` 0.42.0 dispatches on the first line's `format` tag and has exactly two readers,
 > `metaharness.event/1` and `claude-code/stream-json`, so Q9 is **half closed** rather than closed.
 > The mapping table, the alignment rule for the two-column viewer, and the `--plugin` semantics are
@@ -179,7 +179,7 @@
 > prints `plugins: none` rather than nothing when the list is empty.
 > **Amendment a17, 2026-09-03**, from a consumer's undecided verdicts rather than from a build:
 > **a twentieth event, `stream.closed`, and it is the last line of every stream this driver
-> writes.** On 2026-09-03 eight `aep trace check` reports ended `undecided` because every
+> writes.** On 2026-09-03 eight `aep observe trace check` reports ended `undecided` because every
 > *negative* row — `nothing-was-moved`, `no-store-command-was-run`, `nothing-was-written-to-tmp` —
 > came back `unk`. The bound those rows need is *this run did X zero times*, and a reader of a file
 > cannot assert it: a stream with no `Bash` call and a stream that was **cut off before the first
@@ -260,7 +260,7 @@ been run rather than written down. What they impose, and why each line exists:
 | MCP exclusion | `--strict-mcp-config`, always | *"account-level MCP servers arrive with the login, over the network, and no directory the runner controls excludes them — observed in governed run W4-1/1, three servers in a scratch home with no `mcpServers` key"* |
 | scratch project, copied not referenced | the document tree is `cp -R`'d per run | *"a checkout that changes mid-run cannot change what this run was judged against"* |
 | never `/tmp` | `$TMPDIR`, defaulting to `~/.cache/claude-tmp` | the machine's tmpfs drops writes under pressure |
-| the record, not the configuration | `protocol trace check` over the transcript | a scratch directory is a control; the opening record is the evidence |
+| the record, not the configuration | `protocol observe trace check` over the transcript | a scratch directory is a control; the opening record is the evidence |
 
 The last row is the doctrine, and `crates/trace-domain/src/spec.rs` states it where the bound is
 defined: an MCP-server count is `unk` when the harness records no list, *"because absence of
@@ -298,7 +298,7 @@ and all four are load-bearing here:
    sessions of a governed run. The row is nonetheless kept **advisory** in the specification,
    because it asserts a model behaviour (that something forbidden was attempted at all) on top of
    an undocumented harness detail; the gating evidence stays in the hook-decision log and in
-   `aep artifact validate`.
+   `aep plan artifact validate`.
 
 And two limits, stated by the same code:
 
@@ -312,7 +312,7 @@ And two limits, stated by the same code:
   `permission.denied` is a whole-run count and *"`0` cannot distinguish enforcement holding from
   nothing being attempted, so a run in which nothing forbidden was tried audits nothing."* Getting
   the deliberate-denial case right took two attempts: the first asked for a hand-edited `status:`
-  and the model legally used `aep artifact move` instead, so the guard was never exercised.
+  and the model legally used `aep plan artifact move` instead, so the guard was never exercised.
 
 ### 2.3 The embedder metaharness must serve
 
@@ -635,7 +635,7 @@ fact is § 9.4's audit report, which prints it beside the census, and any consum
 event stream directly.
 
 **Amendment a17 — a twentieth event: `stream.closed`, and it is the last line.** Added from a
-consumer's undecided verdicts rather than from a review. Eight `aep trace check` reports on
+consumer's undecided verdicts rather than from a review. Eight `aep observe trace check` reports on
 2026-09-03 ended `undecided` because every *negative* row was `unk`: a bound of the shape *this run
 did X zero times* cannot be asserted from a file, because **a stream with none of them and a stream
 that was cut off before the first one are the same bytes.** This driver owns the stream and knows
@@ -759,7 +759,7 @@ mapping either (review finding **F4**). Two consequences, both taken:
 
 1. **§ 8.4 O8 requires the adapter to retain the raw vendor bytes and their digest.** This is not
    only for the projection: § 9.4's auditor contract runs over that transcript, and without it
-   there is nothing for `protocol trace check` to read.
+   there is nothing for `protocol observe trace check` to read.
 2. **`adapter` is exempt and is expected to differ**, because the whole point of the cross-check is
    that two different readers agreed.
 
@@ -791,7 +791,7 @@ and for diffing, and says so; a machine-readable trace-ir document is Q9's prere
 >    so that is the file it names. The vendor transcript's own reference, where `session.started`
 >    carried one, travels beside it as `metaharness.vendor_transcript` — two digests meaning two
 >    things, neither pretending to be the other.
-> 3. **`aep trace check` reads the event stream, not this document.** Established by reading
+> 3. **`aep observe trace check` reads the event stream, not this document.** Established by reading
 >    `aep/crates/trace-spec/src/reader.rs` at `e27c84b`: the reader dispatches on the first
 >    non-blank line's `format` tag and has exactly two adapters, `metaharness.event/1` and
 >    `claude-code/stream-json`. So **Q9 is half closed** — the document is written, tagged and
@@ -1532,19 +1532,19 @@ The reasons, in order of weight:
 
 **The auditor contract, rewritten to fit the one auditor it names** (review finding **F2**). The
 first draft invoked `<auditor> --spec <spec> --ir <path>` and it would not have run: the existing
-auditor is a **two-word subcommand** that takes **`--transcript`**, not `--ir`, and it carries
+auditor is a **multi-word subcommand** that takes **`--transcript`**, not `--ir`, and it carries
 options this design has no way to pass — `eval/run.sh` already passes `--advisory
 billed-to-the-session`. Three corrections:
 
 1. **`--auditor` is an argv prefix, and extra arguments pass through.**
-   `--auditor 'protocol trace check' -- --advisory billed-to-the-session`. A single-word program
+   `--auditor 'protocol observe trace check' -- --advisory billed-to-the-session`. A single-word program
    name is a degenerate prefix; a subcommand is not a special case.
 2. **The subject is the raw vendor transcript, not a trace-ir document.** metaharness has the bytes
    because § 8.4 O8 requires it to keep them, and the existing auditor reads exactly that. The
    trace-ir document form is Q9's, not v0.1's (D6a). The full invocation is
    `<prefix…> --spec <spec> --transcript <path> [pass-through…]`.
 3. **Exit `1` from this auditor is ambiguous and must not be trusted alone.** Everything
-   `protocol trace check` rejects about *itself* — an unreadable specification, an unknown
+   `protocol observe trace check` rejects about *itself* — an unreadable specification, an unknown
    `--advisory` id — also leaves as `1`
    (`crates/protocol-cli/src/trace.rs`: *"Everything this module rejects itself … leaves through the
    binary's top-level error handler as `1`"*). So metaharness applies the guard `run.sh` already
@@ -1552,7 +1552,7 @@ billed-to-the-session`. Three corrections:
    is reported as exit `2`. A verdict table with no rows in it would otherwise go green — or red —
    while checking nothing.
 
-For `AEP` the auditor is `protocol trace check`. Nothing in metaharness names it.
+For `AEP` the auditor is `protocol observe trace check`. Nothing in metaharness names it.
 
 **No discovery.** The auditor is named explicitly (`--auditor`, or the field in `RunSpec`). A
 `--spec` with no auditor is a **refusal**, not a skip: a specification nobody checked reads exactly
@@ -1629,7 +1629,7 @@ carry operations; metaharness renders them. The protocol still decides what a ca
 ### 10.2 The eval, through the binary
 
 `eval/run.sh`'s sections 1 and 2 — the scratch home, the credential copy, the `unset`, the flags —
-become `metaharness run claude --hermetic strict`. Section 3.4's `protocol trace check` invocation
+become `metaharness run claude --hermetic strict`. Section 3.4's `protocol observe trace check` invocation
 becomes `--audit --spec eval/expectations.trace.yaml --auditor protocol` (§ 9.4), and the trace
 expectations file is **unchanged**, because the IR it is checked against is unchanged.
 
@@ -1687,7 +1687,7 @@ that gets both ignored. The attribution rule is the one the sources already use:
 
 A sixth, which is a **finding rather than a requirement**: `drivers/development/default.yaml` states
 that no development profile grants `command.execute`, so a driven `llm` step holds no shell — and
-the planning skill's entire surface is `aep artifact …`, every verb of which is a shell
+the planning skill's entire surface is `aep plan artifact …`, every verb of which is a shell
 command. `AEP` resolved that with a capability grant plus a hook constraint. Under
 metaharness the same resolution is expressible without a second mechanism: the frame admits `shell`
 and the embedder's `ask` policy holds it to one program and two verbs, in Rust, with the reason fed
@@ -1701,7 +1701,7 @@ list of available entities*; the run then does the one thing that entity admits.
 which workflow governs this task, which artifact kind this request becomes, which runbook this alert
 matches, which handler this intent routes to — and `AEP` already contains an
 instance of it: the planning skill's *"Discover, do not memorise"* rule, where the entity list comes
-from `aep artifact kinds` and `aep artifact lifecycle <kind>` **at use time**, because
+from `aep plan artifact kinds` and `aep plan artifact lifecycle <kind>` **at use time**, because
 *"a prose copy of a validated document is a copy that goes stale."*
 
 Three steps, three frames.
@@ -1794,7 +1794,7 @@ asserted.
 | # | finding | verdict | where |
 |---|---|---|---|
 | F1 | `trace-ir/1` is `Serialize`-only with no published schema, so a written trace-ir document has no reader | **NEEDS-CHANGE applied.** The projection is an in-process value in v0.1; the document form is gated on **Q9** | D6a, § 12 Q9 |
-| F2 | the auditor contract does not fit `protocol trace check` (`--transcript` not `--ir`; two-word subcommand; no pass-through; exit `1` ambiguous) | **NEEDS-CHANGE applied.** `--auditor` is an argv prefix with pass-through; the subject is the raw transcript; an audit with no verdict rows is exit `2` | § 9.4 |
+| F2 | the auditor contract does not fit `protocol observe trace check` (`--transcript` not `--ir`; multi-word subcommand; no pass-through; exit `1` ambiguous) | **NEEDS-CHANGE applied.** `--auditor` is an argv prefix with pass-through; the subject is the raw transcript; an audit with no verdict rows is exit `2` | § 9.4 |
 | F3 | `--hermetic strict` could never pass — H2 and H6 were unconditionally `unk` | **NEEDS-CHANGE applied.** Per-row gating, borrowed from `trace-spec`'s severity model; H2 and H6 are advisory | § 8.1 |
 | F4 | the § 4.4 cross-check cannot pass: `transcript_digest` and `source_line` are unfillable from an event stream | **NEEDS-CHANGE applied.** New obligation **O8** — the adapter retains the raw bytes and their digest; `adapter` is a named exemption | D6a, O8 |
 | F5 | `--safe-mode` disables hooks exactly as `--bare` does, and H8 named only `--bare` | **CONFIRMED, applied.** H8 is a denylist over argv *and* environment | § 8.1 H8 |

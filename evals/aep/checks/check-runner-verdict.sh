@@ -61,7 +61,7 @@ fi
 
 GREEN="$WORK/green"; cp -R "$FIXTURE" "$GREEN"
 for slug in device-binding cross-device-sign-in; do
-  (cd "$GREEN" && aep artifact new story "$slug" --store "$GREEN/.engineering/planning" \
+  (cd "$GREEN" && aep plan artifact new story "$slug" --store "$GREEN/.engineering/planning" \
     --title "Replay story $slug" --relate decomposes:epic:passkey-sign-in) >/dev/null 2>&1
 done
 

@@ -1910,6 +1910,219 @@ mod tests {
         );
     }
 
+    /// The binaries whose first level regrouped. `protocol` is the exact compatibility alias of
+    /// the canonical name and answers to every spelling it does, so a line left behind can be
+    /// under either one.
+    const CLI_BINARIES: [&str; 2] = ["aep", "protocol"];
+
+    /// The first-level verbs that moved under a group word in AEP 0.52.0 — eight under
+    /// `govern`, seven under `plan`, `eval` under `drive`, five under `observe`. `drive` itself
+    /// and `doctor` did not move and are not here. The forbidden spellings are assembled from a
+    /// binary and a verb at run time rather than written out, so this file carries none of them.
+    const REGROUPED_VERBS: [&str; 21] = [
+        "validate",
+        "resolve",
+        "inspect",
+        "evaluate",
+        "explain",
+        "describe",
+        "schema",
+        "workflow",
+        "artifact",
+        "serve",
+        "entity",
+        "audit",
+        "workspace",
+        "conformance",
+        "reverse",
+        "eval",
+        "trace",
+        "contract",
+        "property",
+        "specification",
+        "evidence",
+    ];
+
+    /// Everything a reader is told to run, or told what to type. `CHANGELOG.md` is not here — it
+    /// is the record of what shipped under a version heading and is never rewritten — and neither
+    /// is `.engineering/planning/`, whose files are the CLI's to mutate and not an editor's.
+    const AUTHORED_ROOTS: [&str; 8] = [
+        ".github",
+        "AGENTS.md",
+        "README.md",
+        "Taskfile.yml",
+        "crates",
+        "docs",
+        "evals",
+        "website/docs",
+    ];
+
+    /// The preserved body of a script that is explicitly not a thing to run.
+    const NOT_AUTHORED: [&str; 1] = ["evals/aep/run.sh"];
+
+    /// Directories of recordings. A **recording** in one of them is a finished run's own bytes and
+    /// is never rewritten; the `README.md` beside it is a document like any other and is checked,
+    /// which is the half a whole-directory exclusion silently gives away.
+    const RECORDING_DIRS: [&str; 2] = ["evals/aep/runs", "evals/aep/checks/transcripts"];
+
+    /// Directory names that hold a producer's own bytes, or a build's, wherever they appear.
+    const NOT_AUTHORED_DIRS: [&str; 2] = ["fixtures", "target"];
+
+    /// What a command can stand after: a backtick, an opening bracket or quote, a pipe or `&&`, a
+    /// path separator, or the start of an indented line.
+    const COMMAND_OPENERS: [char; 13] = [
+        '`', '(', '"', '\'', '[', '/', '$', ';', '|', '&', '=', '>', '#',
+    ];
+
+    /// The canonical binary name is a program name and nothing else, so it counts wherever it
+    /// stands as a word. The compatibility alias is also an ordinary English noun this repository
+    /// uses constantly, so it counts only where a command can stand — a sentence about the
+    /// protocol's own schema names no command, and a rule that reddened on it would be reporting
+    /// the vocabulary rather than a call site.
+    fn is_a_call_site(binary: &str, line: &str, start: usize) -> bool {
+        let mut before = line[..start].chars().rev();
+        let previous = before.next();
+        match previous {
+            Some(character)
+                if character.is_alphanumeric() || character == '_' || character == '-' =>
+            {
+                false
+            }
+            _ if binary == "aep" => true,
+            None => true,
+            Some(character) if COMMAND_OPENERS.contains(&character) => true,
+            Some(character) if character.is_whitespace() => match before.next() {
+                None => true,
+                Some(earlier) => earlier.is_whitespace() || COMMAND_OPENERS.contains(&earlier),
+            },
+            Some(_) => false,
+        }
+    }
+
+    /// Does the verb end where a word ends, so `artifacts` is not read as `artifact`.
+    fn ends_a_word(line: &str, end: usize) -> bool {
+        line[end..]
+            .chars()
+            .next()
+            .is_none_or(|character| !character.is_alphanumeric() && character != '-')
+    }
+
+    fn authored_documents(root: &Path, relative: &Path, into: &mut Vec<PathBuf>) {
+        if NOT_AUTHORED
+            .iter()
+            .any(|excluded| relative == Path::new(excluded))
+        {
+            return;
+        }
+        let is_a_recording = RECORDING_DIRS
+            .iter()
+            .any(|directory| relative.starts_with(directory))
+            && relative
+                .extension()
+                .is_some_and(|extension| extension != "md");
+        if is_a_recording {
+            return;
+        }
+        if relative
+            .file_name()
+            .is_some_and(|name| NOT_AUTHORED_DIRS.iter().any(|excluded| name == *excluded))
+        {
+            return;
+        }
+        let full = root.join(relative);
+        if full.is_dir() {
+            let mut names: Vec<PathBuf> = fs::read_dir(&full)
+                .expect("an authored directory is readable")
+                .map(|entry| PathBuf::from(entry.expect("a directory entry").file_name()))
+                .collect();
+            names.sort();
+            for name in names {
+                authored_documents(root, &relative.join(name), into);
+            }
+        } else if full.is_file() {
+            into.push(relative.to_path_buf());
+        }
+    }
+
+    /// No authored document tells a reader to type a spelling AEP 0.52.0 regrouped.
+    ///
+    /// The old first level is retained as a hidden alias with identical stdout, stderr and exit
+    /// status, which is exactly what makes this silent: a document left behind keeps working and
+    /// reads like a current one. It is the same defect
+    /// `no_authored_eval_document_names_a_retired_plugin_id` catches for plugin ids, so it takes
+    /// the same escape — a line marked `recorded-under-this-name` keeps its spelling, because what
+    /// it is judged against is a recording and a recording is evidence, not an instruction.
+    ///
+    /// This reads committed files and compares strings. It starts nothing, spends nothing and
+    /// does not touch invariant 5. It reads one line at a time, so a spelling wrapped across two
+    /// lines is the one shape it cannot see; there are none today and the sweep that found the
+    /// three there were is in this commit's message.
+    #[test]
+    fn no_authored_document_names_a_regrouped_cli_spelling() {
+        let repository = PathBuf::from(env!("CARGO_MANIFEST_DIR"))
+            .parent()
+            .and_then(Path::parent)
+            .expect("the repository root")
+            .to_path_buf();
+        let mut documents = Vec::new();
+        for root in AUTHORED_ROOTS {
+            authored_documents(&repository, Path::new(root), &mut documents);
+        }
+        assert!(
+            documents.len() > 50,
+            "the authored roots resolve to documents, not to nothing: {documents:?}"
+        );
+
+        let needles: Vec<(String, &str)> = CLI_BINARIES
+            .iter()
+            .flat_map(|binary| {
+                REGROUPED_VERBS.iter().flat_map(move |verb| {
+                    [
+                        (format!("{binary} {verb}"), *binary),
+                        (format!("{binary}, {verb}"), *binary),
+                    ]
+                })
+            })
+            .collect();
+
+        let mut offences = Vec::new();
+        for relative in &documents {
+            let Ok(text) = fs::read_to_string(repository.join(relative)) else {
+                continue;
+            };
+            let mut exempt = false;
+            for (index, line) in text.lines().enumerate() {
+                if line.trim().is_empty() {
+                    exempt = false;
+                }
+                if line.contains(KEPT_MARKER) {
+                    exempt = true;
+                    continue;
+                }
+                if exempt {
+                    continue;
+                }
+                for (needle, binary) in &needles {
+                    for (at, found) in line.match_indices(needle.as_str()) {
+                        if is_a_call_site(binary, line, at) && ends_a_word(line, at + found.len()) {
+                            offences.push(format!(
+                                "{}:{}: {needle} — regroup it, or mark the line above `{KEPT_MARKER}`",
+                                relative.display(),
+                                index + 1,
+                            ));
+                        }
+                    }
+                }
+            }
+        }
+        assert!(
+            offences.is_empty(),
+            "{} authored line(s) still name a regrouped CLI spelling:\n{}",
+            offences.len(),
+            offences.join("\n")
+        );
+    }
+
     /// The fixture copies the directory the `agentplugins` checkout publishes today. A path that
     /// no longer exists there is not a slow failure: `copy_tree` refuses and the arm never runs.
     #[test]
@@ -1999,13 +2212,13 @@ mod tests {
         let target = directory.path().join("derived.yaml");
         fs::write(
             &source,
-            "prompt: run `aep artifact kinds`\nrun: [aep, artifact, validate]\n",
+            "prompt: run `aep plan artifact kinds`\nrun: [aep, plan, artifact, validate]\n",
         )
         .unwrap();
         derive_claude_map(&source, &target).unwrap();
         assert_eq!(
             fs::read_to_string(target).unwrap(),
-            "prompt: run `./.engineering/toolchain/aep artifact kinds`\nrun: [aep, artifact, validate]\n"
+            "prompt: run `./.engineering/toolchain/aep plan artifact kinds`\nrun: [aep, plan, artifact, validate]\n"
         );
     }
 }

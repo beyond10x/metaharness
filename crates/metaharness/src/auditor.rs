@@ -132,8 +132,8 @@ impl AuditorInvoker for FakeAuditor {
 
 /// The full invocation: `<prefix…> --spec <spec> --transcript <path> [pass-through…]`.
 ///
-/// The prefix is split on whitespace, so `protocol trace check` is three words and `protocol` is
-/// one; the pass-through goes **last**, after everything metaharness adds, because that is where
+/// The prefix is split on whitespace, so `protocol observe trace check` is four words and
+/// `protocol` is one; the pass-through goes **last**, after everything metaharness adds, because that is where
 /// an auditor's own options have to be for its parser to see them.
 #[must_use]
 pub fn auditor_argv(

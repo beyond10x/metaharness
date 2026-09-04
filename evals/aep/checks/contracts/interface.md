@@ -83,7 +83,7 @@ FAIL  P1   git status --porcelain in the scratch project is empty
 ```
 
 Two shapes are accepted for the leading verdict word, so the runner may follow either sibling:
-`PASS`/`FAIL`/`note` as `run.sh` writes them, or `ok`/`gap`/`unk` as `protocol trace check` writes
+`PASS`/`FAIL`/`note` as `run.sh` writes them, or `ok`/`gap`/`unk` as `protocol observe trace check` writes
 them. The id must be the second field either way.
 
 The last two lines of a run are the cost and the scratch path (`R7`):

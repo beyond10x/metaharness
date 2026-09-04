@@ -8,7 +8,7 @@ source "$(dirname "${BASH_SOURCE[0]}")/lib.sh"
 DECOMPOSER="$PLUGIN_DIR/agents/decomposer.md"
 SKILL="$PLUGIN_DIR/skills/planning/SKILL.md"
 
-declare_row E1 "neither file contains derived_from:epic: in a aep artifact new example"
+declare_row E1 "neither file contains derived_from:epic: in an `artifact new` example"
 declare_row E2 "both files contain decomposes:epic: in the example that previously read derived_from"
 declare_row E3 "the diff against the pre-task revision is the relation token and nothing else"
 declare_row E4 "the corrected command creates a story carrying decomposes: epic:…, and validate exits 0"
@@ -19,7 +19,7 @@ for f in "$DECOMPOSER" "$SKILL"; do
 done
 
 # story_example_epic_edges <file…>  — the relation of every `--relate <rel>:epic:` token taught
-# inside an `aep artifact new story` example, one per line, deduplicated.
+# inside an `artifact new … story` example, one per line, deduplicated.
 #
 # **Scoped to that example on purpose.** The task these rows decide is about the edge a *story*
 # takes from its epic. A grep over the whole file answers a different question — "does any epic edge
@@ -32,6 +32,8 @@ done
 # backslash, which is how every example in both files is written.
 story_example_epic_edges() {
   awk '
+    # recorded-under-this-name: this pattern is read against the `agentplugins` checkout,
+    # whose examples still spell the first level flat. It follows that file, not this one.
     /aep artifact new[[:space:]]+story([[:space:]]|$)/ { in_story = 1 }
     in_story && match($0, /--relate[[:space:]]+[a-z_]+:epic:/) {
       tok = substr($0, RSTART, RLENGTH)
@@ -44,7 +46,7 @@ story_example_epic_edges() {
 }
 
 # ---- E1 -----------------------------------------------------------------------------------------
-# Scoped to a `aep artifact new` example, not to the whole file: `derived_from` is a legitimate
+# Scoped to an `artifact new` example, not to the whole file: `derived_from` is a legitimate
 # relation, and a rule that forbade the word would forbid the vocabulary.
 R=0
 for f in "$DECOMPOSER" "$SKILL"; do
@@ -56,12 +58,12 @@ row E1 "$R"
 
 # ---- E2 -----------------------------------------------------------------------------------------
 # Read through the same extractor E4 uses, so both rows are claims about the same text: the token
-# has to be in the `aep artifact new story` example, not merely somewhere in the file.
+# has to be in the `artifact new … story` example, not merely somewhere in the file.
 R=0
 for f in "$DECOMPOSER" "$SKILL"; do
   EDGES="$(story_example_epic_edges "$f")"
   if [ -z "$EDGES" ]; then
-    R=1; why "${f#"$PLUGIN_DIR"/} teaches no epic edge in an \`aep artifact new story\` example"
+    R=1; why "${f#"$PLUGIN_DIR"/} teaches no epic edge in an \`artifact new … story\` example"
   elif ! grep -qx 'decomposes' <<< "$EDGES"; then
     R=1; why "${f#"$PLUGIN_DIR"/}: the new-story example takes $(tr '\n' ' ' <<< "$EDGES")from its epic, not \`decomposes\`"
   fi
@@ -107,18 +109,18 @@ else
   cp -R "$REPO/artifacts/templates" "$WORK/artifacts/templates"
   STORE="$WORK/.engineering/planning"
 
-  # The edge the `aep artifact new story` example teaches — and only that example. What this row
+  # The edge the `artifact new … story` example teaches — and only that example. What this row
   # decides is that a story takes `decomposes` from its epic, not that no other `*:epic:` token
   # exists anywhere in the two files; a `blocks:epic:` on a decision-blocker is a different, correct
   # lesson and reddening on it would be the check judging the wrong sentence.
   EDGES="$(story_example_epic_edges "$DECOMPOSER" "$SKILL")"
   if [ -z "$EDGES" ]; then
-    R=1; why "neither file teaches an epic edge inside an \`aep artifact new story\` example"
+    R=1; why "neither file teaches an epic edge inside an \`artifact new … story\` example"
   elif [ "$EDGES" != "decomposes" ]; then
     R=1; why "the new-story example takes $(tr '\n' ' ' <<< "$EDGES")from its epic, not \`decomposes\` alone"
   else
     REL="$EDGES"
-    OUT="$(cd "$WORK" && aep artifact new story e4-probe --store "$STORE" \
+    OUT="$(cd "$WORK" && aep plan artifact new story e4-probe --store "$STORE" \
       --title "E4 probe" --relate "$REL:epic:passkey-sign-in" 2>&1)" || {
       R=1; why "the taught command was refused: $OUT"
     }
@@ -129,7 +131,7 @@ else
     else
       R=1; why "no story was created at $FILE"
     fi
-    VOUT="$(cd "$WORK" && aep artifact validate --store "$STORE" 2>&1)" \
+    VOUT="$(cd "$WORK" && aep plan artifact validate --store "$STORE" 2>&1)" \
       || { R=1; why "validate exited non-zero after the taught command: $VOUT"; }
   fi
 fi

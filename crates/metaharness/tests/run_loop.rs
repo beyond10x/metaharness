@@ -277,7 +277,7 @@ fn every_builder_method_sets_one_field_of_the_one_options_type() {
         .with_strict_version(true)
         .with_audit(true)
         .with_spec_file("expectations.yaml")
-        .with_auditor("protocol trace check")
+        .with_auditor("protocol observe trace check")
         .with_prices("rates.json")
         .with_substrate("/run/substrate.sock")
         .with_cgroup_root("/sys/fs/cgroup/run.slice")
@@ -324,7 +324,7 @@ fn every_builder_method_sets_one_field_of_the_one_options_type() {
         scope_announce: metaharness_protocol::ScopeAnnounce::Stated,
         context: Vec::new(),
         prices: Some("rates.json".into()),
-        auditor: Some("protocol trace check".to_string()),
+        auditor: Some("protocol observe trace check".to_string()),
         auditor_args: vec![
             "--advisory".to_string(),
             "billed-to-the-session".to_string(),

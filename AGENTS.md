@@ -133,7 +133,7 @@ cargo run -p metaharness-aep-eval -- driven --arm claude
 ```
 
 `aep-eval native` is the third shape: the same work walked **natively** —
-`b10x-harness workflow run` over the flow `aep workflow flow` projects from `adp/default/2`
+`b10x-harness workflow run` over the flow `aep govern workflow flow` projects from `adp/default/2`
 with the eval's step map, governed at every section boundary by `aep drive transition`
 through the loop's `transition` hook (atlas ADR 0004). Without `--spend` it does everything free —
 assembles the scratch project, proves the subject lifecycle is visible through a command executed
@@ -211,7 +211,7 @@ long and the interesting lines are in the middle. Redirect to a file and grep it
   127 on the third paid native walk, which the model read as *the command is wrong*. `--driver`
   stages the binary at `/toolchain/driver/aep`, and the prompts have to say that path.
 - **The `transition` hook fires at group boundaries only.** Until AEP
-  `870894d`, `aep workflow flow` grouped a multi-step state and a retreat span and nothing
+  `870894d`, `aep govern workflow flow` grouped a multi-step state and a retreat span and nothing
   else, so a bare-workflow walk was governed at `root` and nowhere else (fifth paid walk). Every
   state is a section since; still, count `hook-ran` at `transition` — the runner's census
   prints them per boundary — before believing a walk was governed at every state.
@@ -250,7 +250,7 @@ The full gate comes first; component steps alone are not enough.
 | What | Where |
 |---|---|
 | Directions the operator has scheduled | `docs/ROADMAP.md` |
-| The plan derived from them: epics, stories, blockers | `.engineering/planning/`, mutated only through `aep artifact`; a roadmap item becomes an epic here before code |
+| The plan derived from them: epics, stories, blockers | `.engineering/planning/`, mutated only through `aep plan artifact`; a roadmap item becomes an epic here before code |
 | Binding designs and their amendment records | `docs/design/` |
 | Investigations behind a design | `docs/research/` |
 | What shipped | `CHANGELOG.md`, and `git tag -n99` |

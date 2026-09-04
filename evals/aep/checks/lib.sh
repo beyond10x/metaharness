@@ -231,7 +231,7 @@ table_verdict() {
 # table_has_row <file> <id>
 table_has_row() { [ -n "$(table_verdict "$1" "$2")" ]; }
 
-# ---- reading an `aep trace check` report ----------------------------------------------------
+# ---- reading an `aep observe trace check` report ------------------------------------------------
 # `report_to_text` writes `  <status> <id>  <statement>`; the status is `ok`, `gap` or `unk`, with
 # ` (adv)` appended for an advisory row.
 

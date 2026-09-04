@@ -18,6 +18,8 @@
 #
 # ## Why the ids and matchers read the way they do
 #
+# recorded-under-this-name: the two spellings below are quoted — what this file used to say,
+# and what `../transcripts/` records. Neither is an instruction to a reader.
 # Re-pinned 2026-09-04 against AEP 0.51.0. Before that this file named the ids of two
 # documents that were never migrated here, and spelled the CLI `aep artifact …` while every
 # recording under `../transcripts/` — which is what the documents are judged against, and which is

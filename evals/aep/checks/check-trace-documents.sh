@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # task:agent-eval-trace-documents — T1 … T8.
 #
-# Checked with `aep trace check` against purpose-made transcripts in `transcripts/`: no API
+# Checked with `aep observe trace check` against purpose-made transcripts in `transcripts/`: no API
 # call, and no dependency on `run-agents.sh` existing. Those transcripts are this check's inputs,
 # hand-written here in `establish_verifiers`; the *committed* fixtures under `eval/fixtures/` are a
 # different thing, produced by the live run, and nothing in this file reads them.
@@ -14,7 +14,7 @@ source "$(dirname "${BASH_SOURCE[0]}")/lib.sh"
 DEC="$(charter_spec decomposer)"
 REV="$(charter_spec plan-reviewer)"
 
-declare_row T1 "both documents are accepted by aep trace check, exit 0, one row per expectation"
+declare_row T1 "both documents are accepted by aep observe trace check, exit 0, one row per expectation"
 declare_row T2 "every R12 row is present in the right document, by id, and gating — and the document names no gating row the contract omits"
 declare_row T3 "a decomposer transcript carrying \`artifact move\` turns the decomposer's move absence red"
 declare_row T4 "a reviewer transcript carrying \`artifact new\` turns the reviewer's create absence red"
@@ -28,7 +28,7 @@ REASON="$(charter_specs_missing)" && { red_all "$REASON"; finish; exit; }
 
 WORK="$(scratch)"
 check_against() { # check_against <doc> <transcript> -> report on stdout, exit status preserved
-  aep trace check --spec "$1" --transcript "$2" 2>&1
+  aep observe trace check --spec "$1" --transcript "$2" 2>&1
 }
 
 # ---- T1 -----------------------------------------------------------------------------------------

@@ -17,7 +17,7 @@ declare_row S2 "on that run every row was green and the stage exited 0"
 declare_row S3 "replaying with one created story's status hand-moved turns D5 red and nothing else"
 declare_row S4 "replaying with one baseline artifact's file byte-changed turns D6 red and nothing else"
 declare_row S5 "replaying with created empty turns D1 red, and D2, D3, D4 do not report green"
-declare_row S6 "D3's expected status comes from aep artifact lifecycle story, not the literal draft"
+declare_row S6 "D3's expected status comes from aep plan artifact lifecycle story, not the literal draft"
 declare_row S7 "prompt-decomposer.md names no status, no move, no approval, and no id but epic:passkey-sign-in"
 declare_row S8 "the stage reads no file under integrations/claude-code/agents/"
 
@@ -91,7 +91,7 @@ else
   cp -R "$FIXTURE" "$GREEN"
   STORE="$GREEN/.engineering/planning"
   for slug in device-binding cross-device-sign-in; do
-    (cd "$GREEN" && aep artifact new story "$slug" --store "$STORE" \
+    (cd "$GREEN" && aep plan artifact new story "$slug" --store "$STORE" \
       --title "Replay story $slug" --relate decomposes:epic:passkey-sign-in) >/dev/null 2>&1
   done
   BASE_TABLE="$WORK/base.txt"; replay_verdicts "$GREEN" > "$BASE_TABLE"
@@ -99,7 +99,7 @@ else
   # S3 — one created story's status hand-moved. Through the CLI, because a hand-edited status is
   # not what D5 is about: D5 is about the status *changing*, however legally.
   S3_STORE="$WORK/s3"; cp -R "$GREEN" "$S3_STORE"
-  (cd "$S3_STORE" && aep artifact move story:device-binding \
+  (cd "$S3_STORE" && aep plan artifact move story:device-binding \
     --store "$S3_STORE/.engineering/planning" --to proposed) >/dev/null 2>&1
   replay_verdicts "$S3_STORE" > "$WORK/s3.txt"
   only_these_moved "$BASE_TABLE" "$WORK/s3.txt" D5; row S3 $?
@@ -131,8 +131,8 @@ STAGE_SRC=("$RUNNER")
 [ -f "$EVAL_DIR/stage-decomposer.sh" ] && STAGE_SRC+=("$EVAL_DIR/stage-decomposer.sh")
 
 R=0
-if ! grep -q 'aep artifact lifecycle story' "${STAGE_SRC[@]}"; then
-  R=1; why "the stage never reads \`aep artifact lifecycle story\`"
+if ! grep -q 'aep plan artifact lifecycle story' "${STAGE_SRC[@]}"; then
+  R=1; why "the stage never reads \`aep plan artifact lifecycle story\`"
 fi
 # The literal, used as D3's expected value. `draft` inside a comment or a message is not the defect;
 # `draft` on the right-hand side of the comparison is.
@@ -146,7 +146,7 @@ if [ ! -f "$PROMPT" ]; then
 else
   # Status names come from the lifecycle, not from a list written here — the same discipline D3 is
   # held to. Any of them appearing in the prompt makes the stage a test of obedience.
-  STATUSES="$(aep artifact lifecycle story 2>/dev/null \
+  STATUSES="$(aep plan artifact lifecycle story 2>/dev/null \
     | tr ' ,->' '\n\n\n\n' | grep -E '^[a-z][a-z-]+$' | sort -u)"
   while IFS= read -r s; do
     [ -z "$s" ] && continue
