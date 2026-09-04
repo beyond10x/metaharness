@@ -7,8 +7,10 @@
 source "$(dirname "${BASH_SOURCE[0]}")/lib.sh"
 
 EVIDENCE="$EVAL_DIR/evidence/run-1-live.txt"
-DEC_DOC="$EVAL_DIR/expectations.decomposer.trace.yaml"
-REV_DOC="$EVAL_DIR/expectations.plan-reviewer.trace.yaml"
+# The charter documents are AEP's, resolved from `AEP_REPO` by `lib.sh` — one source of
+# truth, in the repository whose own gate replays them. Never a copy under `evals/aep/`.
+DEC_DOC="$(charter_spec decomposer)"
+REV_DOC="$(charter_spec plan-reviewer)"
 
 declare_row R1 "one live run printed one table with D1–D9, P1–P7 and a row per trace expectation"
 declare_row R2 "exit 0 when every gating row is green, non-zero when one is red — shown both ways"

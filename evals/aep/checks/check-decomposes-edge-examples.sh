@@ -18,21 +18,53 @@ for f in "$DECOMPOSER" "$SKILL"; do
   [ -f "$f" ] || { red_all "$f does not exist"; finish; exit; }
 done
 
+# story_example_epic_edges <file…>  — the relation of every `--relate <rel>:epic:` token taught
+# inside an `aep artifact new story` example, one per line, deduplicated.
+#
+# **Scoped to that example on purpose.** The task these rows decide is about the edge a *story*
+# takes from its epic. A grep over the whole file answers a different question — "does any epic edge
+# appear anywhere" — and agentplugins 0.7.0 legitimately teaches a second one:
+# `agents/decomposer.md:93` files a `decision-blocker` with `--relate blocks:epic:…`, which is a
+# blocker stopping an area of an epic and is exactly what the plugin should teach. A check that
+# reddened on it would be reporting the file's vocabulary, not the story example's edge.
+#
+# An invocation runs from the line naming it to the first line that does not end in a continuation
+# backslash, which is how every example in both files is written.
+story_example_epic_edges() {
+  awk '
+    /aep artifact new[[:space:]]+story([[:space:]]|$)/ { in_story = 1 }
+    in_story && match($0, /--relate[[:space:]]+[a-z_]+:epic:/) {
+      tok = substr($0, RSTART, RLENGTH)
+      sub(/^--relate[[:space:]]+/, "", tok)
+      sub(/:epic:$/, "", tok)
+      print tok
+    }
+    in_story && !/\\[[:space:]]*$/ { in_story = 0 }
+  ' "$@" | sort -u
+}
+
 # ---- E1 -----------------------------------------------------------------------------------------
 # Scoped to a `aep artifact new` example, not to the whole file: `derived_from` is a legitimate
 # relation, and a rule that forbade the word would forbid the vocabulary.
 R=0
 for f in "$DECOMPOSER" "$SKILL"; do
   HIT="$(grep -n -- '--relate derived_from:epic:' "$f")"
-  [ -z "$HIT" ] || { R=1; why "${f#"$REPO"/}: $HIT"; }
+  # Relative to the plugin, not to `$REPO`: these two files moved to the `agentplugins` checkout.
+  [ -z "$HIT" ] || { R=1; why "${f#"$PLUGIN_DIR"/}: $HIT"; }
 done
 row E1 "$R"
 
 # ---- E2 -----------------------------------------------------------------------------------------
+# Read through the same extractor E4 uses, so both rows are claims about the same text: the token
+# has to be in the `aep artifact new story` example, not merely somewhere in the file.
 R=0
 for f in "$DECOMPOSER" "$SKILL"; do
-  grep -q -- '--relate decomposes:epic:' "$f" \
-    || { R=1; why "${f#"$REPO"/} teaches no \`--relate decomposes:epic:\` example"; }
+  EDGES="$(story_example_epic_edges "$f")"
+  if [ -z "$EDGES" ]; then
+    R=1; why "${f#"$PLUGIN_DIR"/} teaches no epic edge in an \`aep artifact new story\` example"
+  elif ! grep -qx 'decomposes' <<< "$EDGES"; then
+    R=1; why "${f#"$PLUGIN_DIR"/}: the new-story example takes $(tr '\n' ' ' <<< "$EDGES")from its epic, not \`decomposes\`"
+  fi
 done
 row E2 "$R"
 
@@ -64,8 +96,8 @@ row E3 "$R"
 # example names `epic:passkey-login`, which is not the epic the passkeys fixture actually carries,
 # and a check that failed on that would be reporting the example's slug rather than its edge.
 R=0
-if ! have protocol; then
-  R=1; why "the \`protocol\` CLI is not on PATH"
+if ! have aep; then
+  R=1; why "the \`aep\` CLI is not on PATH"
 else
   WORK="$(scratch)/e4"
   mkdir -p "$WORK"
@@ -75,11 +107,17 @@ else
   cp -R "$REPO/artifacts/templates" "$WORK/artifacts/templates"
   STORE="$WORK/.engineering/planning"
 
-  TOKEN="$(grep -ho -- '--relate [a-z_]*:epic:' "$DECOMPOSER" "$SKILL" | sort -u)"
-  if [ "$(wc -l <<< "$TOKEN")" -ne 1 ]; then
-    R=1; why "the two files teach more than one epic edge: $(tr '\n' ' ' <<< "$TOKEN")"
+  # The edge the `aep artifact new story` example teaches — and only that example. What this row
+  # decides is that a story takes `decomposes` from its epic, not that no other `*:epic:` token
+  # exists anywhere in the two files; a `blocks:epic:` on a decision-blocker is a different, correct
+  # lesson and reddening on it would be the check judging the wrong sentence.
+  EDGES="$(story_example_epic_edges "$DECOMPOSER" "$SKILL")"
+  if [ -z "$EDGES" ]; then
+    R=1; why "neither file teaches an epic edge inside an \`aep artifact new story\` example"
+  elif [ "$EDGES" != "decomposes" ]; then
+    R=1; why "the new-story example takes $(tr '\n' ' ' <<< "$EDGES")from its epic, not \`decomposes\` alone"
   else
-    REL="${TOKEN#--relate }"; REL="${REL%:epic:}"
+    REL="$EDGES"
     OUT="$(cd "$WORK" && aep artifact new story e4-probe --store "$STORE" \
       --title "E4 probe" --relate "$REL:epic:passkey-sign-in" 2>&1)" || {
       R=1; why "the taught command was refused: $OUT"

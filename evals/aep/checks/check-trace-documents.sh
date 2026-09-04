@@ -1,33 +1,34 @@
 #!/usr/bin/env bash
 # task:agent-eval-trace-documents — T1 … T8.
 #
-# Checked with `protocol trace check` against purpose-made transcripts in `transcripts/`: no API
+# Checked with `aep trace check` against purpose-made transcripts in `transcripts/`: no API
 # call, and no dependency on `run-agents.sh` existing. Those transcripts are this check's inputs,
 # hand-written here in `establish_verifiers`; the *committed* fixtures under `eval/fixtures/` are a
 # different thing, produced by the live run, and nothing in this file reads them.
+#
+# The two documents are **not** in this repository and never were: they are AEP's own eval
+# corpus, `conformance/eval/<case>/expectations.trace.yaml`, resolved by `charter_spec` in `lib.sh`.
+# That is the one source of truth — the subject's gate replays them, this eval's gate never could.
 source "$(dirname "${BASH_SOURCE[0]}")/lib.sh"
 
-DEC="$EVAL_DIR/expectations.decomposer.trace.yaml"
-REV="$EVAL_DIR/expectations.plan-reviewer.trace.yaml"
+DEC="$(charter_spec decomposer)"
+REV="$(charter_spec plan-reviewer)"
 
-declare_row T1 "both documents are accepted by protocol trace check, exit 0, one row per expectation"
-declare_row T2 "every R12 row is present in the right document, by id, and gating"
-declare_row T3 "a decomposer transcript carrying \`aep artifact move\` turns never-ran-a-move red"
-declare_row T4 "a reviewer transcript carrying \`aep artifact new\` turns never-created-an-artifact red"
+declare_row T1 "both documents are accepted by aep trace check, exit 0, one row per expectation"
+declare_row T2 "every R12 row is present in the right document, by id, and gating — and the document names no gating row the contract omits"
+declare_row T3 "a decomposer transcript carrying \`artifact move\` turns the decomposer's move absence red"
+declare_row T4 "a reviewer transcript carrying \`artifact new\` turns the reviewer's create absence red"
 declare_row T5 "against a transcript with no tool calls, each document reports at least one red row"
 declare_row T6 "the plan-reviewer document contains no tool.absent over Write or Edit"
 declare_row T7 "every tool.absent is paired with a tool.called over the same tool in the same document"
-declare_row T8 "neither document references a path under integrations/claude-code/agents/"
+declare_row T8 "neither document's expectations reference the agent's own charter file under agents/"
 
-have protocol || { red_all "the \`protocol\` CLI is not on PATH"; finish; exit; }
-MISSING=""
-[ -f "$DEC" ] || MISSING="$MISSING ${DEC#"$REPO"/}"
-[ -f "$REV" ] || MISSING="$MISSING ${REV#"$REPO"/}"
-[ -n "$MISSING" ] && { red_all "missing document(s):$MISSING"; finish; exit; }
+have aep || { red_all "the \`aep\` CLI is not on PATH"; finish; exit; }
+REASON="$(charter_specs_missing)" && { red_all "$REASON"; finish; exit; }
 
 WORK="$(scratch)"
 check_against() { # check_against <doc> <transcript> -> report on stdout, exit status preserved
-  protocol trace check --spec "$1" --transcript "$2" 2>&1
+  aep trace check --spec "$1" --transcript "$2" 2>&1
 }
 
 # ---- T1 -----------------------------------------------------------------------------------------
@@ -59,25 +60,41 @@ row T1 "$R"
 # Three claims per row: the id exists, the kind and matcher under it are the ones R12 names, and the
 # expectation is gating — because an advisory charter bound is a bound that never fails.
 R=0
-while IFS=$'\t' read -r file id kind tool contains severity; do
-  doc="$EVAL_DIR/$file"
+while IFS=$'\t' read -r stage id kind tool contains severity; do
+  doc="$(charter_spec "$stage")" || { R=1; why "unknown stage \`$stage\` in trace-expectations.txt"; continue; }
   # The expectation's own block: from its `- id:` line to the next one.
   block="$(awk -v id="$id" '
     $0 ~ "^[[:space:]]*-[[:space:]]*id:[[:space:]]*"id"[[:space:]]*$" { inside = 1; print; next }
     inside && /^[[:space:]]*-[[:space:]]*id:/ { inside = 0 }
     inside { print }' "$doc")"
   if [ -z "$block" ]; then
-    R=1; why "$file declares no expectation with id \`$id\`"; continue
+    R=1; why "$stage declares no expectation with id \`$id\`"; continue
   fi
-  grep -q "$kind:" <<< "$block" || { R=1; why "$file/$id is not a \`$kind\` expectation"; }
+  grep -q "$kind:" <<< "$block" || { R=1; why "$stage/$id is not a \`$kind\` expectation"; }
   [ "$tool" = "-" ] || grep -Eq "tool:[[:space:]]*$tool([[:space:]]|$)" <<< "$block" \
-    || { R=1; why "$file/$id does not name tool \`$tool\`"; }
+    || { R=1; why "$stage/$id does not name tool \`$tool\`"; }
   [ "$contains" = "-" ] || grep -qF "$contains" <<< "$block" \
-    || { R=1; why "$file/$id does not carry the matcher \`$contains\`"; }
+    || { R=1; why "$stage/$id does not carry the matcher \`$contains\`"; }
   if [ "$severity" = "gate" ] && grep -q 'severity:[[:space:]]*advisory' <<< "$block"; then
-    R=1; why "$file/$id is advisory; R12 requires it to gate"
+    R=1; why "$stage/$id is advisory; R12 requires it to gate"
   fi
 done < <(contract_lines trace-expectations.txt)
+
+# The other direction, and the half that was not being checked. `contracts/trace-expectations.txt`
+# is hand-maintained, and a hand-maintained list that only ever gets read one way goes stale in
+# silence: the loop above is green when the contract names a subset of the document, so a gating
+# bound the subject *adds* is a bound nothing in this repository reads. Enumerated from the document
+# itself, so the list cannot fall behind without a red row. Advisory rows are excluded on purpose —
+# the contract records gates, and R12 asks for gates.
+for stage in decomposer plan-reviewer; do
+  doc="$(charter_spec "$stage")"
+  NAMED="$(contract_lines trace-expectations.txt | awk -F'\t' -v s="$stage" '$1 == s { print $2 }')"
+  while IFS= read -r id; do
+    [ -z "$id" ] && continue
+    grep -qxF -- "$id" <<< "$NAMED" \
+      || { R=1; why "$stage/$id gates in ${doc##*/} and contracts/trace-expectations.txt does not name it"; }
+  done < <(gating_ids "$doc")
+done
 row T2 "$R"
 
 # ---- T3, T4 -------------------------------------------------------------------------------------
@@ -94,12 +111,21 @@ named_row_red() { # named_row_red <doc> <transcript> <expectation-id>
     *)   why "$3 produced no row at all against ${2##*/}"; return 1 ;;
   esac
 }
+# The id is looked up by the bound it carries, never written here as a literal: an id spelled in a
+# check and again in the contract drifts the moment the document renames one, and T2 already holds
+# the contract against the document.
 T="$TRANSCRIPTS/decomposer-ran-a-move.jsonl"
-if [ -f "$T" ]; then named_row_red "$DEC" "$T" never-ran-a-move; row T3 $?
+ID="$(contract_expectation_id decomposer tool.absent move)"
+if [ -z "$ID" ]; then
+  why "contracts/trace-expectations.txt names no decomposer tool.absent bound over \`artifact move\`"; row T3 1
+elif [ -f "$T" ]; then named_row_red "$DEC" "$T" "$ID"; row T3 $?
 else why "no input transcript at ${T#"$REPO"/}"; row T3 1; fi
 
 T="$TRANSCRIPTS/plan-reviewer-created-an-artifact.jsonl"
-if [ -f "$T" ]; then named_row_red "$REV" "$T" never-created-an-artifact; row T4 $?
+ID="$(contract_expectation_id plan-reviewer tool.absent new)"
+if [ -z "$ID" ]; then
+  why "contracts/trace-expectations.txt names no plan-reviewer tool.absent bound over \`artifact new\`"; row T4 1
+elif [ -f "$T" ]; then named_row_red "$REV" "$T" "$ID"; row T4 $?
 else why "no input transcript at ${T#"$REPO"/}"; row T4 1; fi
 
 # ---- T5 -----------------------------------------------------------------------------------------
@@ -164,9 +190,19 @@ row T7 "$R"
 # ---- T8 -----------------------------------------------------------------------------------------
 # The specification's first invariant. A document that cites the charter file asserts the sentence
 # is still written, which is the failure mode the story exists to remove.
+#
+# Read over the document's **assertions**, not its prose: `yaml_body` drops `#` comments first,
+# because the canonical decomposer case opens by stating this very invariant in words ("No row here
+# reads `agents/decomposer.md`") and a grep over the raw bytes reads the disclaimer as the breach.
+# The path is matched wherever it now lives — `integrations/claude-code/agents/` before the plugins
+# moved to agentplugins, `plugins/aep-plan/agents/` after — because what the invariant forbids is
+# reading the agent's own markdown, not one spelling of where it sits.
 R=0
-HIT="$(grep -n 'agents/' "$DEC" "$REV")"
-[ -z "$HIT" ] || { R=1; while IFS= read -r l; do why "$l"; done <<< "$HIT"; }
+for pair in "decomposer:$DEC" "plan-reviewer:$REV"; do
+  case_name="${pair%%:*}"; doc="${pair#*:}"
+  HIT="$(yaml_body "$doc" | grep -n 'agents/')"
+  [ -z "$HIT" ] || { R=1; while IFS= read -r l; do why "$case_name: $l"; done <<< "$HIT"; }
+done
 row T8 "$R"
 
 finish

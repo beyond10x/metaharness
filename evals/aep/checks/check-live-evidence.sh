@@ -83,8 +83,10 @@ if [ -z "$RUN3" ]; then
 else
   grep -q '^exit: 0$' "$RUN3" && { R=1; why "run 3 exited 0 — removing the write section changed no verdict"; }
   ACCEPTABLE="P1"
-  while IFS=$'\t' read -r file id kind _ _ _; do
-    [ "$file" = "expectations.plan-reviewer.trace.yaml" ] && [ "$kind" = "tool.absent" ] \
+  # The first column is a stage, not a file name: both canonical documents are called
+  # `expectations.trace.yaml`, and `lib.sh` resolves each stage to its own one.
+  while IFS=$'\t' read -r stage id kind _ _ _; do
+    [ "$stage" = "plan-reviewer" ] && [ "$kind" = "tool.absent" ] \
       && ACCEPTABLE="$ACCEPTABLE $id"
   done < <(contract_lines trace-expectations.txt)
   FOUND=""

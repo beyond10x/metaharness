@@ -418,11 +418,27 @@ before the code exists is a test of nothing, and the `establish_verifiers → im
 guarded on `test.exists` precisely so the order cannot be argued about afterwards.
 
 ```bash
-bash ./checks/run-checks.sh                          # every check
+AEP_REPO=~/beyond10x/aep AGENTPLUGINS_REPO=~/beyond10x/agentplugins \
+  bash ./checks/run-checks.sh                        # every check
 bash ./checks/run-checks.sh trace-documents readme   # only those
 ```
 
-Today it reports `2 pass, 67 fail, 0 broken check(s)`. Nothing in it calls the Claude API: rows that
+It reads the same two checkouts everything else here does — `AEP_REPO` for the subject and
+`AGENTPLUGINS_REPO` for the `aep-plan` plugin — and needs `aep` on `PATH`. The two **charter
+expectation documents** `T1`–`T8` judge are the subject's own eval corpus,
+`$AEP_REPO/conformance/eval/<case>/expectations.trace.yaml`, and are read from there rather than
+copied here: AEP replays that corpus in its own `task check`, nothing under `evals/` runs
+in this repository's gate (`AGENTS.md` invariant 5), and a copy nothing gates is how
+`checks/contracts/trace-expectations.txt` came to name seven ids per document that no document
+carries. `EVAL_CHARTER_SPEC_DECOMPOSER` and `EVAL_CHARTER_SPEC_REVIEWER` name a document directly if
+one ever moves; unset and missing, the rows go red naming the path and the variable, never absent.
+
+Measured 2026-09-04 against agentplugins `0.7.0` and AEP `0.51.0`, it reports
+`11 pass, 58 fail, 0 broken check(s)` and exits 1 — up from `2 pass, 67 fail` on the same command
+and the same two checkouts. The eleven green rows are every row whose subject exists (`E1`, `E2`,
+`E4`, `T1`–`T8`); [`checks/README.md`](./checks/README.md) enumerates the fifty-eight red ones by
+what each is waiting for, which is `run-agents.sh` and three paid live runs that `W4-1/1` decomposed
+and never built. Nothing in it calls the Claude API: rows that
 are claims about a live run are asserted against the recordings
 [`checks/contracts/evidence-manifest.txt`](./checks/contracts/evidence-manifest.txt) names, so a
 live-only row stays in the table as a red row instead of becoming a skip. A missing deliverable is a

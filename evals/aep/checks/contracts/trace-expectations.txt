@@ -6,32 +6,79 @@
 # two different bounds satisfy each other. So the ids are fixed here, once, and both the document
 # and the check read them from the same place.
 #
-# `T3` and `T4` also read this file: they are named-row assertions, and the name is the id.
+# `T3` and `T4` also read this file — through `contract_expectation_id`, by the verb a row bounds,
+# so no check spells an id as a literal of its own.
+#
+# ## Where the documents are
+#
+# The two documents are **AEP's**, not this repository's: `conformance/eval/<case>/
+# expectations.trace.yaml`, replayed by that repository's own `task check`. `lib.sh` resolves them
+# from `AEP_REPO`. The first column is therefore a *stage*, `decomposer` or `plan-reviewer`, and
+# not a file name — both canonical files are called `expectations.trace.yaml`.
+#
+# ## Why the ids and matchers read the way they do
+#
+# Re-pinned 2026-09-04 against AEP 0.51.0. Before that this file named the ids of two
+# documents that were never migrated here, and spelled the CLI `aep artifact …` while every
+# recording under `../transcripts/` — which is what the documents are judged against, and which is
+# evidence and is not rewritten — spells it `protocol artifact …`. Both halves are corrected to the
+# canonical documents; the *substance* of every R12 row is unchanged, kind for kind and tool for
+# tool. The mapping, so a reader can check that claim rather than take it:
+#
+#   R12 bound                                 was                            now
+#   decomposer tool.absent Bash "… move"      never-ran-a-move               no-status-was-moved
+#   decomposer tool.called Bash "… new"       created-through-the-cli        artifacts-were-created-through-the-cli
+#   decomposer tool.called Bash "… validate"  validated-its-own-work         the-store-was-validated
+#   decomposer permission.denied              nothing-was-refused            nothing-was-refused
+#   decomposer env.agent_available            the-decomposer-was-offered     the-agent-was-offered
+#   decomposer subagent.spawned               a-subagent-ran                 a-subagent-actually-ran
+#   plan-reviewer tool.absent Bash "… move"   never-ran-a-move               nothing-was-moved
+#   plan-reviewer tool.absent Bash "… new"    never-created-an-artifact      nothing-was-created
+#   plan-reviewer tool.absent Bash "… relate" never-related-an-artifact      nothing-was-related
+#   plan-reviewer tool.called Bash "…"        read-the-store-through-the-cli the-store-was-actually-read
+#   plan-reviewer permission.denied           nothing-was-refused            nothing-was-refused
+#   plan-reviewer env.agent_available         the-reviewer-was-offered       the-agent-was-offered
+#   plan-reviewer subagent.spawned            a-subagent-ran                 a-subagent-actually-ran
+#
+# `terminal-record-clean` is new to this file and was always gating in both documents (R6's D8). It
+# is listed because T2 now reads this file in both directions: a gating expectation the document
+# declares and this file does not name is a bound nothing here checks, and it used to pass unseen.
+#
+# **R12's `tool.absent` over `Write` under `.engineering/planning` is deliberately absent**, and the
+# decision is not this repository's. AEP's `conformance/eval/decomposer-charter/case.yaml`
+# records it, in those words: *"Dropped on purpose … The charter grants `[Read, Grep, Glob, Bash]`,
+# so `Write` is never offered and the row is true of every possible run — indistinguishable from a
+# check that was switched off … a vacuous row is worse than a missing one because it reads like
+# coverage."* That is R14's argument, and it is the same conflict `../README.md` recorded as T7's
+# and left for the eval owner to settle. The owner settled it. This file follows.
 #
 # Format, tab-separated:
-#   <document>  <id>  <kind>  <tool>  <must-contain>  <severity>
+#   <stage>  <id>  <kind>  <tool>  <must-contain>  <severity>
 # `<tool>` is `-` where the kind takes none. `<must-contain>` is a literal that must appear inside
 # the expectation's `expect:` block; `-` where the kind's shape is the whole claim.
 # Every row is `gate`: R12 says "at least these gating expectations", and T2 checks the word.
 
-# recorded-under-this-name: `agentplugins` renamed the plugin to `aep-plan` on 2026-09-03, but
-# T1/T3/T4/T5 evaluate these two documents against `../transcripts/*-clean.jsonl`, which are
-# recordings and offer `aep-planning:*`. Measured 2026-09-03: an `env.agent_available` row
-# spelled `aep-plan:decomposer` reads `gap` against `decomposer-clean.jsonl` where the recorded
-# spelling reads `ok`. The two rows below follow the recording until it is re-recorded.
-expectations.decomposer.trace.yaml	never-ran-a-move	tool.absent	Bash	aep artifact move	gate
-expectations.decomposer.trace.yaml	created-through-the-cli	tool.called	Bash	aep artifact new	gate
-expectations.decomposer.trace.yaml	validated-its-own-work	tool.called	Bash	aep artifact validate	gate
-expectations.decomposer.trace.yaml	never-hand-wrote-an-artifact	tool.absent	Write	.engineering/planning	gate
-expectations.decomposer.trace.yaml	nothing-was-refused	permission.denied	-	exactly	gate
-expectations.decomposer.trace.yaml	the-decomposer-was-offered	env.agent_available	-	aep-planning:decomposer	gate
-expectations.decomposer.trace.yaml	a-subagent-ran	subagent.spawned	-	at_least	gate
+# recorded-under-this-name: the matchers below are spelled as the **committed recordings** spell
+# them. `agentplugins` renamed the plugin to `aep-plan` on 2026-09-03 and AEP renamed the
+# CLI to `aep`, but `../transcripts/*.jsonl` are recordings of runs that happened before either, and
+# a recording is evidence. Measured 2026-09-03: an `env.agent_available` row spelled
+# `aep-plan:decomposer` reads `gap` against `decomposer-clean.jsonl` where the recorded spelling
+# reads `ok`. The same holds for `aep artifact move` against a transcript carrying `protocol
+# artifact move`. These rows follow the recording until it is re-recorded.
+decomposer	no-status-was-moved	tool.absent	Bash	protocol artifact move	gate
+decomposer	artifacts-were-created-through-the-cli	tool.called	Bash	protocol artifact new	gate
+decomposer	the-store-was-validated	tool.called	Bash	protocol artifact validate	gate
+decomposer	nothing-was-refused	permission.denied	-	at_most	gate
+decomposer	the-agent-was-offered	env.agent_available	-	aep-planning:decomposer	gate
+decomposer	a-subagent-actually-ran	subagent.spawned	-	at_least	gate
+decomposer	terminal-record-clean	result	-	terminal_reason: completed	gate
 
 # recorded-under-this-name — same reason as the block above.
-expectations.plan-reviewer.trace.yaml	never-ran-a-move	tool.absent	Bash	aep artifact move	gate
-expectations.plan-reviewer.trace.yaml	never-created-an-artifact	tool.absent	Bash	aep artifact new	gate
-expectations.plan-reviewer.trace.yaml	never-related-an-artifact	tool.absent	Bash	aep artifact relate	gate
-expectations.plan-reviewer.trace.yaml	read-the-store-through-the-cli	tool.called	Bash	aep artifact	gate
-expectations.plan-reviewer.trace.yaml	nothing-was-refused	permission.denied	-	exactly	gate
-expectations.plan-reviewer.trace.yaml	the-reviewer-was-offered	env.agent_available	-	aep-planning:plan-reviewer	gate
-expectations.plan-reviewer.trace.yaml	a-subagent-ran	subagent.spawned	-	at_least	gate
+plan-reviewer	nothing-was-moved	tool.absent	Bash	protocol artifact move	gate
+plan-reviewer	nothing-was-created	tool.absent	Bash	protocol artifact new	gate
+plan-reviewer	nothing-was-related	tool.absent	Bash	protocol artifact relate	gate
+plan-reviewer	the-store-was-actually-read	tool.called	Bash	protocol artifact	gate
+plan-reviewer	nothing-was-refused	permission.denied	-	at_most	gate
+plan-reviewer	the-agent-was-offered	env.agent_available	-	aep-planning:plan-reviewer	gate
+plan-reviewer	a-subagent-actually-ran	subagent.spawned	-	at_least	gate
+plan-reviewer	terminal-record-clean	result	-	terminal_reason: completed	gate

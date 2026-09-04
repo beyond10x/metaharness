@@ -17,7 +17,7 @@ declare_row F8 "CLAUDE_CONFIG_DIR is inside the scratch directory and the plugin
 declare_row F9 "the fixture .gitignore matches no path under .engineering/planning/"
 
 runner_present || { red_all "$RUNNER does not exist"; finish; exit; }
-have protocol   || { red_all "the \`protocol\` CLI is not on PATH"; finish; exit; }
+have aep        || { red_all "the \`aep\` CLI is not on PATH"; finish; exit; }
 have git        || { red_all "\`git\` is not on PATH"; finish; exit; }
 
 WORK_F6_SAVE="$(scratch)/f6-original.md"

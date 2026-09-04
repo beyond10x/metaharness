@@ -3,6 +3,55 @@
 What changed. The design document carries *why*; where code and design disagreed, the design
 was amended and the amendment is named here.
 
+## [Unreleased]
+
+### Fixed
+
+- **The AEP eval's `checks/` read the charter documents where they actually live, and E4
+  judges the decomposition edge rather than every edge.** `run-checks.sh` went from
+  `2 pass, 67 fail, 0 broken` to `11 pass, 58 fail, 0 broken` against agentplugins `0.7.0` and
+  AEP `0.51.0` — the same command, the same two checkouts, measured back to back on
+  2026-09-04. Nine rows moved and nothing else did: `T1`–`T8` and `E4`.
+- **One source of truth for the two charter documents, and it is not this repository.**
+  `check-trace-documents.sh`, `check-runner-verdict.sh` and `check-live-evidence.sh` read
+  `expectations.decomposer.trace.yaml` and `expectations.plan-reviewer.trace.yaml` under
+  `evals/aep/`, where those files have never existed. They now resolve
+  `$AEP_REPO/conformance/eval/<case>/expectations.trace.yaml` through `charter_spec` in
+  `checks/lib.sh`, with `EVAL_CHARTER_SPEC_DIR` and `EVAL_CHARTER_SPEC_DECOMPOSER`/`_REVIEWER` as
+  overrides and a `red_all` reason that names the unreadable path and the variable to set. Migrating
+  a copy here was the other option and is the worse one: AEP replays that corpus in its own
+  `task check`, nothing under `evals/` runs in this repository's gate (invariant 5), and a copy
+  nothing gates is exactly what `checks/contracts/trace-expectations.txt` had become.
+- **`contracts/trace-expectations.txt` is re-pinned to those documents, and is now read in both
+  directions.** It named seven ids per document that no canonical document carries, and spelled the
+  CLI `aep artifact …` where every recording under `checks/transcripts/` — evidence, not rewritten —
+  spells it `protocol artifact …`. Every R12 bound keeps its kind, tool and matcher; the file
+  carries the old-id → new-id mapping so the claim can be checked rather than taken. `T2` now also
+  asserts that every **gating** expectation the document declares is named in the contract: read one
+  way only, a hand-maintained list is green while the subject adds a bound nothing here reads.
+- **R12's `tool.absent` over `Write` is gone from the contract, on the eval owner's recorded
+  decision, not this repository's.** `conformance/eval/decomposer-charter/case.yaml` drops it
+  because the charter grants `[Read, Grep, Glob, Bash]`, so the row is true of every possible run.
+  That settles the conflict `checks/README.md` had left open as `T7`'s, which now passes on the
+  pairing it was written to demand.
+- **`E4` asserts the `aep artifact new story` example's edge is `decomposes`**, through an extractor
+  scoped to that invocation, instead of requiring that no other `*:epic:` token exists in either
+  file. agentplugins `0.7.0` teaches `blocks:epic:` on a `decision-blocker`
+  (`plugins/aep-plan/agents/decomposer.md:93`), which is correct and which the old grep reddened on.
+  `E2` reads through the same extractor, so both rows are claims about the same sentence.
+- **The checks invoke `aep`, not the retired `protocol` spelling** — `check-trace-documents.sh`,
+  `check-scratch-fixture.sh` and `check-decomposes-edge-examples.sh`, the last of which guarded on
+  `protocol` being on `PATH` and then called `aep`.
+
+### Notes
+
+- `run-checks.sh` still exits 1, and the 58 red rows are enumerated in `evals/aep/checks/README.md`
+  by what each waits for: 37 on `run-agents.sh`, 11 on recordings of three **paid** live runs, 7 on
+  a README section for that runner — none of which `W4-1/1` ever built — 2 on a pre-task revision
+  `b83c623` that no AEP checkout can reach since the plugins moved to `agentplugins`, and
+  `L7` on whichever subject checkout happens to be dirty. Nothing was softened, skipped or removed
+  to shorten that list.
+
 ## [0.6.5] — 2026-09-04
 
 ### Changed

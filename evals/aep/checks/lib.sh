@@ -26,6 +26,55 @@ TRANSCRIPTS="$CHECKS_DIR/transcripts"
 RUNNER="$EVAL_DIR/run-agents.sh"
 FIXTURE_SRC="$REPO/examples/planning-passkeys"
 
+# ---- the two charter expectation documents ------------------------------------------------------
+# **One source of truth, and it is not here.** The decomposer and plan-reviewer charter cases are
+# AEP's own eval corpus: `conformance/eval/<case>/expectations.trace.yaml`, replayed by
+# `crates/edge/aep-cli/tests/eval_corpus.rs` in *that* repository's `task check`. A copy under
+# `evals/aep/` would be a second copy nothing gates — nothing under `evals/` runs in this
+# repository's gate (AGENTS.md invariant 5) — and that is exactly how `contracts/trace-expectations.txt`
+# came to name ids and a CLI spelling no document carries. So these checks read the canonical files.
+#
+#   AEP_REPO                       the subject checkout (the default for everything else here too)
+#   EVAL_CHARTER_SPEC_DIR          the corpus directory inside it, if the corpus ever moves
+#   EVAL_CHARTER_SPEC_DECOMPOSER   one document, by path, overriding both of the above
+#   EVAL_CHARTER_SPEC_REVIEWER     the same, for the plan-reviewer
+#
+# Deliberately *not* `EVAL_SPEC_DECOMPOSER`/`EVAL_SPEC_REVIEWER`: those are the runner's own
+# per-stage override (`contracts/interface.md`), and `check-runner-verdict.sh` R4 sets them to an
+# emptied document on purpose. Sharing the name would hand that emptied file to every other row.
+CHARTER_SPEC_DIR="${EVAL_CHARTER_SPEC_DIR:-$REPO/conformance/eval}"
+CHARTER_SPEC_DECOMPOSER="${EVAL_CHARTER_SPEC_DECOMPOSER:-$CHARTER_SPEC_DIR/decomposer-charter/expectations.trace.yaml}"
+CHARTER_SPEC_REVIEWER="${EVAL_CHARTER_SPEC_REVIEWER:-$CHARTER_SPEC_DIR/plan-reviewer-charter/expectations.trace.yaml}"
+
+# charter_spec <decomposer|plan-reviewer>  — the document's path. The stage names are the keys
+# `contracts/trace-expectations.txt` uses, so a contract row and a document resolve through one name.
+charter_spec() {
+  case "$1" in
+    decomposer)    printf '%s' "$CHARTER_SPEC_DECOMPOSER" ;;
+    plan-reviewer) printf '%s' "$CHARTER_SPEC_REVIEWER" ;;
+    *)             return 1 ;;
+  esac
+}
+
+# charter_specs_missing  — prints why the documents cannot be read and returns 0, or returns 1.
+#
+# The reason is the whole value of this helper: "missing document" sends a reader to `evals/aep/`,
+# where the file has never been, instead of to the checkout that owns it.
+charter_specs_missing() {
+  local stage path missing=""
+  for stage in decomposer plan-reviewer; do
+    path="$(charter_spec "$stage")"
+    [ -f "$path" ] || missing="$missing $path"
+  done
+  [ -z "$missing" ] && return 1
+  printf 'the canonical charter document(s) are not readable:%s' "$missing"
+  if [ -z "${AEP_REPO:-}" ] && [ -z "${EVAL_CHARTER_SPEC_DIR:-}" ]; then
+    printf ' — AEP_REPO is unset, so the default %s was used' "$HOME/beyond10x/aep"
+  fi
+  printf '. They are AEP'"'"'s own eval corpus (conformance/eval/<case>/expectations.trace.yaml, 0.51.0 or later); set AEP_REPO to a checkout that carries it, or name each file with EVAL_CHARTER_SPEC_DECOMPOSER / EVAL_CHARTER_SPEC_REVIEWER.'
+  return 0
+}
+
 # ---- rows ---------------------------------------------------------------------------------------
 # A check declares its ids and their statements up front, then reports each one exactly once.
 
@@ -128,6 +177,42 @@ contract_lines() {
 # pre_task_blob <revision> <path>  — the file's bytes before W4.1 touched it.
 pre_task_blob() { git -C "$REPO" cat-file blob "$1:$2" 2>/dev/null; }
 
+# contract_expectation_id <stage> <kind> <verb>  — the id of the contract row whose matcher ends in
+# <verb>. A check that wants "the bound over `artifact move`" asks for it by what it bounds; the id
+# is spelled once, in `contracts/trace-expectations.txt`, and nowhere else. An id written into a
+# check as a literal is an id that drifts silently when the document renames it, which is the defect
+# this whole story is an instance of.
+contract_expectation_id() {
+  contract_lines trace-expectations.txt \
+    | awk -F'\t' -v s="$1" -v k="$2" -v v="$3" '$1 == s && $3 == k && $5 ~ (v "$") { print $2; exit }'
+}
+
+# gating_ids <document>  — every expectation id in a `trace-spec/1` document that is **not**
+# advisory. The reverse of what the contract file lists, and the half nobody was checking: a gating
+# bound the subject adds and this repository never names is a bound no check here reads.
+gating_ids() {
+  awk '
+    /^[[:space:]]*-[[:space:]]*id:[[:space:]]*/ {
+      if (id != "" && !adv) print id
+      id = $0
+      sub(/^[[:space:]]*-[[:space:]]*id:[[:space:]]*/, "", id)
+      sub(/[[:space:]]*$/, "", id)
+      adv = 0
+      next
+    }
+    id != "" && /severity:[[:space:]]*advisory/ { adv = 1 }
+    END { if (id != "" && !adv) print id }
+  ' "$1" 2>/dev/null
+}
+
+# yaml_body <document>  — the document with `#` comment text removed.
+#
+# A row that asks whether a document *references* something must read what the document asserts, not
+# what its prose says about itself: the canonical decomposer case opens with the sentence "No row
+# here reads `agents/decomposer.md`", and a grep over the raw file reads that disclaimer as the
+# violation it disclaims.
+yaml_body() { sed 's/[[:space:]]*#.*$//' "$1" 2>/dev/null; }
+
 # ---- reading a verdict table --------------------------------------------------------------------
 # The runner's table, by row id. `interface.md` fixes the two accepted verdict words per shape; a
 # row this cannot parse is *absent*, and an absent row is a failure at every call site below.
@@ -146,7 +231,7 @@ table_verdict() {
 # table_has_row <file> <id>
 table_has_row() { [ -n "$(table_verdict "$1" "$2")" ]; }
 
-# ---- reading a `protocol trace check` report ----------------------------------------------------
+# ---- reading an `aep trace check` report ----------------------------------------------------
 # `report_to_text` writes `  <status> <id>  <statement>`; the status is `ok`, `gap` or `unk`, with
 # ` (adv)` appended for an advisory row.
 
