@@ -26,13 +26,11 @@
 //! decision is made. That is deliberate, because the ordering is a vendor behaviour rather than a
 //! guarantee — although it was measured, and step 1 does precede step 3 (row **V23**).
 //!
-//! # Why the child's stdin is `/dev/null`
+//! # Finite initial input
 //!
-//! Nothing metaharness sends this adapter travels on stdin. Decisions go over the hook channel,
-//! and this adapter's kill tier is *"delivered by terminating the child"* rather than by the
-//! `interrupt` control request, which is verified present and undriven (design § 7.3). Leaving
-//! stdin open would buy nothing and cost a stall: 2.1.239 waits for stdin data and reports
-//! *"no stdin data received in 3s, proceeding without it"* on every run.
+//! Small prompts use argv and stdin is `/dev/null`. Large declared context uses a finite scratch
+//! file as stdin, avoiding per-argument OS limits without a pipe that could stall before output
+//! is drained. Decisions always travel over the hook channel.
 //!
 //! # What it captures, and why each one
 //!
@@ -247,6 +245,14 @@ impl ProcessRunner for SpawnRunner {
             std::fs::create_dir_all(parent)?;
         }
 
+        let stdin = match plan.stdin_text {
+            Some(text) => {
+                let path = plan.decision_channel.join("initial-input.txt");
+                std::fs::write(&path, text)?;
+                Stdio::from(std::fs::File::open(path)?)
+            }
+            None => Stdio::null(),
+        };
         let mut command = Command::new(plan.program);
         command
             .args(plan.args)
@@ -255,7 +261,7 @@ impl ProcessRunner for SpawnRunner {
             // plan is absent from the child however it got into this process.
             .env_clear()
             .envs(plan.env.iter())
-            .stdin(Stdio::null())
+            .stdin(stdin)
             .stdout(Stdio::piped())
             .stderr(Stdio::piped());
         let mut child = command.spawn()?;

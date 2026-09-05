@@ -7,6 +7,10 @@ was amended and the amendment is named here.
 
 ### Fixed
 
+- Claude runs now receive explicitly declared context files before launch. Large prompts use
+  finite stdin input to avoid operating-system argument limits; missing and oversized inputs fail
+  before a paid session starts. See `docs/design/declared-context-input.md`.
+
 - **The AEP eval's `checks/` read the charter documents where they actually live, and E4
   judges the decomposition edge rather than every edge.** `run-checks.sh` went from
   `2 pass, 67 fail, 0 broken` to `11 pass, 58 fail, 0 broken` against agentplugins `0.7.0` and

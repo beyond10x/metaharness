@@ -56,6 +56,7 @@ fn measurement() -> ProcessEnvelopeMeasurement {
 
 fn plan<'a>(args: &'a [String], env: &'a BTreeMap<String, String>) -> LaunchPlanView<'a> {
     LaunchPlanView {
+        stdin_text: None,
         program: "/runtime/harness",
         args,
         env,

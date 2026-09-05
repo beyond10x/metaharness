@@ -178,6 +178,7 @@ fn drive(
     let transcript = fake.path().join("rollout.jsonl");
 
     let view = LaunchPlanView {
+        stdin_text: None,
         program: "/bin/sh",
         args: &args,
         env: &env,
@@ -486,6 +487,7 @@ mod tests {
         let channel = metaharness_codex::HookChannelPaths::under(fake.path());
         let transcript = fake.path().join("rollout.jsonl");
         let view = LaunchPlanView {
+            stdin_text: None,
             program: "/bin/sh",
             args: &args,
             env: &env,

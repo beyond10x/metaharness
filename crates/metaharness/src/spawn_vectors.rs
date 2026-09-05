@@ -133,6 +133,7 @@ fn drive(
     let transcript = fake.path().join("transcript.jsonl");
 
     let view = LaunchPlanView {
+        stdin_text: None,
         program: "/bin/sh",
         args: &args,
         env: &env,
@@ -322,6 +323,7 @@ mod tests {
         let channel = metaharness_claude::HookChannelPaths::under(fake.path());
         let transcript = fake.path().join("transcript.jsonl");
         let view = LaunchPlanView {
+            stdin_text: None,
             program: "/bin/sh",
             args: &args,
             env: &env,

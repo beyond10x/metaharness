@@ -40,6 +40,8 @@ pub struct CredentialCopyView<'a> {
 /// on which adapter produced it.
 #[derive(Debug, Clone, Copy)]
 pub struct LaunchPlanView<'a> {
+    /// Optional initial input; the runner supplies a finite file rather than an open pipe.
+    pub stdin_text: Option<&'a str>,
     /// The program to run.
     pub program: &'a str,
     /// Its arguments, in order, exactly as the adapter constructed them.

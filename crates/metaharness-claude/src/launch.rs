@@ -282,6 +282,8 @@ pub struct CredentialCopy {
 /// failures it prevents would otherwise be silent (design § 8.4 O7).
 #[derive(Debug, Clone, PartialEq)]
 pub struct LaunchPlan {
+    /// Initial prompt delivered through finite stdin when it exceeds safe argv limits.
+    pub stdin_text: Option<String>,
     /// The program to run.
     pub program: String,
     /// Its arguments, in the order they are passed.
@@ -678,7 +680,7 @@ pub fn plan_launch(spec: &RunSpec, context: &LaunchContext) -> Result<LaunchPlan
     let scratch_files = scratch_registry_files(spec, context, &config_home)?;
     let mcp_config = build_mcp_config(spec, context)?;
     let prompt = spec.with_agent_execution_context(prompt);
-    let args = build_args(
+    let mut args = build_args(
         spec,
         &prompt,
         &context.scratch_root.join(SETTINGS_FILE),
@@ -688,12 +690,19 @@ pub fn plan_launch(spec: &RunSpec, context: &LaunchContext) -> Result<LaunchPlan
             .is_some()
             .then(|| mcp_config_path(&context.scratch_root)),
     );
+    let stdin_text = if prompt.len() > 65_536 {
+        args.remove(1);
+        Some(prompt)
+    } else {
+        None
+    };
     guard_arguments(&args)?;
     guard_shadowing(spec, &args)?;
     let env = build_env(spec, context, &config_home)?;
     let hook = build_hook(&context.scratch_root.join(HOOK_FILE));
 
     Ok(LaunchPlan {
+        stdin_text,
         program: ADAPTER_ID.to_string(),
         args,
         env,
@@ -1836,6 +1845,24 @@ mod tests {
 
     fn plan() -> LaunchPlan {
         plan_launch(&spec(), &context()).expect("the strict run plans")
+    }
+
+    #[test]
+    fn a_large_prompt_uses_finite_stdin_and_keeps_the_hermetic_floor() {
+        let mut spec = spec();
+        spec.prompt = Some("x".repeat(150_000));
+        let plan = plan_launch(&spec, &context()).unwrap();
+        assert!(
+            plan.stdin_text
+                .as_ref()
+                .unwrap()
+                .ends_with(&"x".repeat(150_000))
+        );
+        assert_eq!(plan.args[0], "-p");
+        assert_eq!(plan.args[1], "--output-format");
+        assert!(plan.args.iter().all(|arg| arg.len() < 65_536));
+        assert!(plan.args.iter().any(|arg| arg == "--strict-mcp-config"));
+        assert!(super::plan_launch(&super::RunSpec::new(super::Kind::Claude), &context()).is_err());
     }
 
     #[test]

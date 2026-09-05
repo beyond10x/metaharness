@@ -511,7 +511,7 @@ pub struct RunSpec {
     )]
     pub scope_announce: ScopeAnnounce,
 
-    /// A file the run is given before it starts, instead of discovering it. **`b10x` only.**
+    /// A file the run is given before it starts, instead of discovering it. Claude and b10x.
     ///
     /// A stateless loop replays its conversation, so this is paid on every turn rather than once.
     /// It is still usually a saving: what it replaces is a read, a turn, *and* a result that joins
