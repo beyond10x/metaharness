@@ -27,6 +27,131 @@ const INIT: &str = r#"{"emit":"session.started","harness_version":"2.1.240","out
 const END: &str = r#"{"emit":"session.ended","is_error":false,"subtype":"success"}"#;
 
 #[test]
+fn adversary_cache_ttl_unsupported_startup_has_no_runner_or_credential_effects() {
+    use metaharness::protocol::PromptCacheTtl;
+
+    for kind in [Kind::Codex, Kind::B10x] {
+        for ttl in [PromptCacheTtl::FiveMinutes, PromptCacheTtl::OneHour] {
+            let log = ScriptedLog::new();
+            let mut runner = ScriptedRunner::new(Vec::new(), log.clone());
+            let mut spec = Metaharness::new(kind)
+                .with_prompt_cache_ttl(ttl)
+                .with_credentials(CredentialSource::None)
+                .with_prompt("unsupported cache policy")
+                .spec()
+                .clone();
+            // A later input failure must not mask the unsupported-kind guard being bypassed.
+            spec.frame = Some("missing-frame-for-cache-refusal.json".into());
+            let refusal = Metaharness::from_spec(spec)
+                .start_with_clock(
+                    Input::FromSpec,
+                    &mut runner,
+                    &mut ScriptedSeams,
+                    Box::new(ManualClock::new()),
+                )
+                .expect_err("an unsupported TTL must stop before the supplied runner");
+            assert!(
+                matches!(&refusal, Refusal::Launch { detail } if detail.contains("--prompt-cache-ttl") && detail.contains(kind.as_str())),
+                "{refusal}"
+            );
+            assert_eq!(log.spawns(), 0);
+            assert!(log.launched().is_empty());
+            assert!(log.credential_copies().is_empty());
+        }
+    }
+}
+
+#[test]
+fn adversary_cache_ttl_concurrent_materialized_settings_do_not_cross_runs() {
+    use metaharness::protocol::PromptCacheTtl;
+    use std::sync::mpsc;
+
+    let declarations = [
+        None,
+        Some(PromptCacheTtl::FiveMinutes),
+        Some(PromptCacheTtl::OneHour),
+    ];
+    std::thread::scope(|threads| {
+        let (snapshot_tx, snapshot_rx) = mpsc::channel();
+        let mut releases = Vec::new();
+        for ttl in declarations {
+            let snapshot_tx = snapshot_tx.clone();
+            let (release_tx, release_rx) = mpsc::channel::<()>();
+            releases.push(release_tx);
+            threads.spawn(move || {
+                let mut spec = Metaharness::new(Kind::Claude)
+                    .with_prompt("The complete context mentions promptCacheTtl: 1h.")
+                    .with_credentials(CredentialSource::None)
+                    .with_effort("low")
+                    .with_model("fixture-model")
+                    .with_max_turns(32)
+                    .spec()
+                    .clone();
+                spec.prompt_cache_ttl = ttl;
+                spec.max_budget_usd = Some("2".into());
+                let log = ScriptedLog::new();
+                let mut runner = ScriptedRunner::new(vec![ScriptStep::line(END)], log.clone());
+                let run = Metaharness::from_spec(spec)
+                    .start_with_clock(
+                        Input::FromSpec,
+                        &mut runner,
+                        &mut ScriptedSeams,
+                        Box::new(ManualClock::new()),
+                    )
+                    .unwrap();
+                let launches = log.launched();
+                let argv = &launches[0];
+                let at = argv.iter().position(|arg| arg == "--settings").unwrap();
+                let path = std::path::PathBuf::from(&argv[at + 1]);
+                let bytes = std::fs::read(&path).unwrap();
+                let settings: serde_json::Value = serde_json::from_slice(&bytes).unwrap();
+                assert_eq!(
+                    settings.get("promptCacheTtl"),
+                    ttl.map(|value| serde_json::to_value(value).unwrap())
+                        .as_ref()
+                );
+                assert!(settings.get("subagentPromptCacheTtl").is_none());
+                assert_eq!(
+                    settings["permissions"],
+                    serde_json::json!({"allow":[],"deny":[]})
+                );
+                assert_eq!(settings["hooks"]["PreToolUse"].as_array().unwrap().len(), 1);
+                for (flag, expected) in [
+                    ("--effort", "low"),
+                    ("--model", "fixture-model"),
+                    ("--max-turns", "32"),
+                    ("--max-budget-usd", "2"),
+                ] {
+                    let at = argv.iter().position(|arg| arg == flag).unwrap();
+                    assert_eq!(argv[at + 1], expected);
+                }
+                assert!(log.credential_copies().is_empty());
+                assert_eq!(run.spec().prompt_cache_ttl, ttl);
+                snapshot_tx.send((path, bytes)).unwrap();
+                drop(snapshot_tx);
+                // Keep each Run alive until the parent checks every file after all writes.
+                // Channel disconnection also releases peers if any launch or assertion fails.
+                let _ = release_rx.recv();
+            });
+        }
+        drop(snapshot_tx);
+        let snapshots: Vec<_> = (0..declarations.len())
+            .map(|_| {
+                snapshot_rx
+                    .recv_timeout(std::time::Duration::from_secs(30))
+                    .unwrap()
+            })
+            .collect();
+        let paths: std::collections::BTreeSet<_> = snapshots.iter().map(|(path, _)| path).collect();
+        assert_eq!(paths.len(), declarations.len());
+        for (path, bytes) in &snapshots {
+            assert_eq!(&std::fs::read(path).unwrap(), bytes);
+        }
+        drop(releases);
+    });
+}
+
+#[test]
 fn prompt_cache_ttl_is_refused_by_shared_startup_for_every_unsupported_kind() {
     for kind in [Kind::Codex, Kind::B10x] {
         for ttl in ["5m", "1h"] {

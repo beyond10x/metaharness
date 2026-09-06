@@ -1854,6 +1854,44 @@ mod tests {
     }
 
     #[test]
+    fn adversary_cache_ttl_preserves_owned_tools_plugins_and_hostile_ambient_policy() {
+        use metaharness_protocol::PromptCacheTtl;
+
+        let (mut spec, mut context, _) = plugin_world();
+        spec.tool_surface = ToolSurface::Owned;
+        spec.decisions = DecisionMode::Frame;
+        spec.prompt = Some("Literal setting text: promptCacheTtl: 1h".into());
+        spec.effort = Some("low".into());
+        spec.model = Some("fixture-model".into());
+        spec.max_budget_usd = Some("2".into());
+        let baseline = plan_launch(&spec, &context).unwrap();
+        for key in [
+            "CLAUDE_CODE_PROMPT_CACHE_TTL",
+            "CLAUDE_CODE_SUBAGENT_PROMPT_CACHE_TTL",
+            "FORCE_PROMPT_CACHING_5M",
+            "ENABLE_PROMPT_CACHING_1H",
+            "ENABLE_PROMPT_CACHING_1H_BEDROCK",
+            "DISABLE_PROMPT_CACHING",
+        ] {
+            context.inherited_env.insert(key.into(), "1".into());
+        }
+        assert_eq!(plan_launch(&spec, &context).unwrap(), baseline);
+        for ttl in [PromptCacheTtl::FiveMinutes, PromptCacheTtl::OneHour] {
+            spec.prompt_cache_ttl = Some(ttl);
+            let mut declared = plan_launch(&spec, &context).unwrap();
+            assert_eq!(
+                declared
+                    .settings
+                    .as_object_mut()
+                    .unwrap()
+                    .remove("promptCacheTtl"),
+                Some(serde_json::to_value(ttl).unwrap())
+            );
+            assert_eq!(declared, baseline);
+        }
+    }
+
+    #[test]
     fn prompt_cache_ttl_omission_preserves_legacy_launch() {
         let plan = plan();
         assert_eq!(

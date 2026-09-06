@@ -16,6 +16,119 @@ use metaharness::protocol::RunSpec;
 use metaharness_cli::Cli;
 
 #[test]
+fn adversary_cache_ttl_cli_json_and_sdk_preserve_all_other_options() {
+    use metaharness::Metaharness;
+    use metaharness::protocol::{CredentialSource, Kind, PromptCacheTtl};
+
+    for (value, ttl) in [
+        ("5m", PromptCacheTtl::FiveMinutes),
+        ("1h", PromptCacheTtl::OneHour),
+    ] {
+        let cli = Cli::try_parse_from([
+            "metaharness",
+            "run",
+            "claude",
+            "--prompt-cache-ttl",
+            value,
+            "--credentials",
+            "none",
+            "--model",
+            "fixture-model",
+            "--effort",
+            "low",
+            "--max-budget-usd",
+            "2.000000",
+            "--max-turns",
+            "32",
+            "--context",
+            "raw/complete input.json",
+            "-p",
+            "Literal promptCacheTtl: 1h; keep the whole α context.",
+        ])
+        .unwrap();
+        let metaharness_cli::Verb::Run(args) = cli.command else {
+            panic!("expected run")
+        };
+        let builder = Metaharness::new(Kind::Claude)
+            .with_prompt("Literal promptCacheTtl: 1h; keep the whole α context.")
+            .with_credentials(CredentialSource::None)
+            .with_model("fixture-model")
+            .with_effort("low")
+            .with_max_turns(32)
+            .with_context("raw/complete input.json")
+            .with_prompt_cache_ttl(ttl);
+        let mut expected = builder.spec().clone();
+        expected.max_budget_usd = Some("2.000000".into());
+        assert_eq!(args.spec, expected);
+        let serialized = serde_json::to_vec(&args.spec).unwrap();
+        assert_eq!(
+            serde_json::from_slice::<RunSpec>(&serialized).unwrap(),
+            expected
+        );
+        let mut omitted = expected.clone();
+        omitted.prompt_cache_ttl = None;
+        let mut declared = serde_json::to_value(expected).unwrap();
+        assert_eq!(
+            declared.as_object_mut().unwrap().remove("prompt_cache_ttl"),
+            Some(serde_json::json!(value))
+        );
+        assert_eq!(declared, serde_json::to_value(omitted).unwrap());
+    }
+}
+
+#[test]
+fn adversary_cache_ttl_rejects_every_ascii_prefix_suffix_and_duplicate_declaration() {
+    use metaharness::protocol::{Kind, PromptCacheTtl};
+
+    for valid in ["5m", "1h"] {
+        for byte in 1u8..=127 {
+            for value in [
+                format!("{}{valid}", char::from(byte)),
+                format!("{valid}{}", char::from(byte)),
+            ] {
+                let argument = format!("--prompt-cache-ttl={value}");
+                let error =
+                    Cli::try_parse_from(["metaharness", "run", "claude", &argument]).unwrap_err();
+                assert_eq!(
+                    error.kind(),
+                    clap::error::ErrorKind::InvalidValue,
+                    "{value:?}: {error}"
+                );
+                let scalar = serde_json::to_string(&value).unwrap();
+                let error = serde_json::from_str::<PromptCacheTtl>(&scalar).unwrap_err();
+                assert!(
+                    error.to_string().contains("exactly 5m or 1h"),
+                    "{value:?}: {error}"
+                );
+            }
+        }
+    }
+    for first in ["null", "\"5m\"", "\"1h\""] {
+        let baseline = serde_json::to_string(&RunSpec::new(Kind::Claude)).unwrap();
+        let duplicate = format!(
+            r#"{},"prompt_cache_ttl":{first},"prompt_cache_ttl":"5m"}}"#,
+            baseline.strip_suffix('}').unwrap()
+        );
+        let error = serde_json::from_str::<RunSpec>(&duplicate).unwrap_err();
+        assert!(
+            error
+                .to_string()
+                .contains("duplicate field `prompt_cache_ttl`"),
+            "{error}"
+        );
+    }
+    let error = Cli::try_parse_from([
+        "metaharness",
+        "run",
+        "claude",
+        "--prompt-cache-ttl=5m",
+        "--prompt-cache-ttl=1h",
+    ])
+    .unwrap_err();
+    assert_eq!(error.kind(), clap::error::ErrorKind::ArgumentConflict);
+}
+
+#[test]
 fn prompt_cache_ttl_cli_preserves_both_durations_and_omission() {
     for ttl in ["5m", "1h"] {
         for arguments in [
