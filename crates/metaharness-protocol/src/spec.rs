@@ -42,6 +42,36 @@ impl Kind {
     }
 }
 
+/// An explicitly requested prompt cache lifetime.
+///
+/// Only adapters that can apply this declaration may accept it. Omission leaves their existing
+/// automatic selection unchanged.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[cfg_attr(feature = "clap", derive(clap::ValueEnum))]
+#[serde(try_from = "String")]
+pub enum PromptCacheTtl {
+    /// Retain the prompt cache for five minutes.
+    #[serde(rename = "5m")]
+    #[cfg_attr(feature = "clap", value(name = "5m"))]
+    FiveMinutes,
+    /// Retain the prompt cache for one hour.
+    #[serde(rename = "1h")]
+    #[cfg_attr(feature = "clap", value(name = "1h"))]
+    OneHour,
+}
+
+impl TryFrom<String> for PromptCacheTtl {
+    type Error = String;
+
+    fn try_from(value: String) -> Result<Self, Self::Error> {
+        match value.as_str() {
+            "5m" => Ok(Self::FiveMinutes),
+            "1h" => Ok(Self::OneHour),
+            _ => Err("prompt cache TTL must be exactly 5m or 1h".to_owned()),
+        }
+    }
+}
+
 /// Who decides a tool call.
 ///
 /// Two modes rather than one because a round trip per call costs latency, and an embedder that
@@ -327,6 +357,11 @@ pub struct RunSpec {
     #[cfg_attr(feature = "clap", arg(long, value_name = "LEVEL"))]
     pub effort: Option<String>,
 
+    /// The main conversation's prompt cache lifetime. Claude only; absent keeps automatic selection.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    #[cfg_attr(feature = "clap", arg(long, value_enum, value_name = "TTL"))]
+    pub prompt_cache_ttl: Option<PromptCacheTtl>,
+
     /// A ceiling on turns.
     #[cfg_attr(feature = "clap", arg(long))]
     pub max_turns: Option<u32>,
@@ -555,6 +590,7 @@ impl RunSpec {
             subscription_token_env: None,
             subscription_token_pointer: None,
             effort: None,
+            prompt_cache_ttl: None,
             max_turns: None,
             max_budget_usd: None,
             plugin_dir: Vec::new(),
@@ -615,6 +651,57 @@ impl RunSpec {
 #[cfg(test)]
 mod execution_context_tests {
     use super::*;
+
+    #[test]
+    fn prompt_cache_ttl_omission_preserves_legacy_spec_bytes() {
+        let spec = RunSpec::new(Kind::Claude);
+        let bytes = serde_json::to_vec(&spec).unwrap();
+        assert_eq!(
+            crate::Digest::of(&bytes).as_str(),
+            "7b51500af0ef43152dc52c9e1b9d85bf7b9a13111816cbd2eb19bff5ec32f2df"
+        );
+        assert!(!String::from_utf8_lossy(&bytes).contains("prompt_cache_ttl"));
+        assert_eq!(serde_json::from_slice::<RunSpec>(&bytes).unwrap(), spec);
+    }
+
+    #[test]
+    fn prompt_cache_ttl_serde_preserves_only_the_two_exact_duration_strings() {
+        let original = serde_json::to_value(RunSpec::new(Kind::Claude)).unwrap();
+        for value in [serde_json::json!("5m"), serde_json::json!("1h")] {
+            let mut document = original.clone();
+            document["prompt_cache_ttl"] = value;
+            let spec: RunSpec = serde_json::from_value(document.clone()).unwrap();
+            assert_eq!(serde_json::to_value(spec).unwrap(), document);
+        }
+        for value in [
+            serde_json::json!(""),
+            serde_json::json!("5M"),
+            serde_json::json!("300"),
+            serde_json::json!("5m "),
+            serde_json::json!("\n5m"),
+            serde_json::json!("1h\0"),
+            serde_json::json!("5m\u{00a0}"),
+            serde_json::json!("5m\u{feff}"),
+            serde_json::json!("automatic"),
+            serde_json::json!("--help"),
+            serde_json::json!(5),
+            serde_json::json!(true),
+            serde_json::json!([]),
+            serde_json::json!({}),
+            serde_json::json!({"5m": null}),
+        ] {
+            let mut document = original.clone();
+            document["prompt_cache_ttl"] = value.clone();
+            assert!(
+                serde_json::from_value::<RunSpec>(document).is_err(),
+                "{value}"
+            );
+        }
+        let mut null = original.clone();
+        null["prompt_cache_ttl"] = serde_json::Value::Null;
+        let spec: RunSpec = serde_json::from_value(null).unwrap();
+        assert_eq!(serde_json::to_value(spec).unwrap(), original);
+    }
 
     #[test]
     fn a_vendor_agent_sees_who_drives_decides_and_owns_confinement() {

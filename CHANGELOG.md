@@ -5,6 +5,15 @@ was amended and the amendment is named here.
 
 ## [Unreleased]
 
+### Added
+
+- Explicit per-run prompt cache lifetime through `RunSpec.prompt_cache_ttl`, the SDK's
+  `with_prompt_cache_ttl`, and `--prompt-cache-ttl 5m|1h`. Claude receives the main-conversation
+  setting in its generated settings; other harnesses refuse the declaration. Omission preserves
+  existing launch behavior and serialized options, and ambient cache variables stay scrubbed.
+  The setting is based on static Claude Code 2.1.263 evidence; actual cache behavior remains
+  unverified, and the adapter's global version pin is unchanged. See design § 9.3.
+
 ### Fixed
 
 - Claude runs now receive explicitly declared context files before launch. Large prompts use

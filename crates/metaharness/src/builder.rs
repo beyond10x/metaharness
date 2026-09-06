@@ -19,9 +19,9 @@ use std::sync::Arc;
 
 use metaharness_protocol::{
     Capabilities, CredentialSource, DecisionMode, Digest, EventStream, Frame, HermeticMode,
-    HermeticRow, ImposedControl, Kind, PluginContent, PluginInstall, PluginTree, Refused,
-    ResolvedMarketplacePlugin, RunId, RunSpec, ScopeAnnounce, Seam, ToolSurface, TranscriptRef,
-    UnavailableControl, tree_digest,
+    HermeticRow, ImposedControl, Kind, PluginContent, PluginInstall, PluginTree, PromptCacheTtl,
+    Refused, ResolvedMarketplacePlugin, RunId, RunSpec, ScopeAnnounce, Seam, ToolSurface,
+    TranscriptRef, UnavailableControl, tree_digest,
 };
 
 use crate::clock::{Clock, SystemClock};
@@ -176,6 +176,13 @@ impl Metaharness {
     #[must_use]
     pub fn with_effort(mut self, level: impl Into<String>) -> Self {
         self.spec.effort = Some(level.into());
+        self
+    }
+
+    /// The main conversation's prompt cache lifetime. Refused for non-Claude runs.
+    #[must_use]
+    pub fn with_prompt_cache_ttl(mut self, ttl: PromptCacheTtl) -> Self {
+        self.spec.prompt_cache_ttl = Some(ttl);
         self
     }
 
@@ -1617,6 +1624,14 @@ fn resolve_frame(in_memory: Option<Frame>, spec: &RunSpec) -> Result<Option<Fram
 ///
 /// [`Refusal::NoAdapter`] or [`Refusal::ToolSurfaceOwned`].
 pub fn check_spec(spec: &RunSpec) -> Result<(), Refusal> {
+    if spec.prompt_cache_ttl.is_some() && spec.kind != Kind::Claude {
+        return Err(Refusal::Launch {
+            detail: format!(
+                "--prompt-cache-ttl is supported only for claude; {} cannot apply the declaration",
+                spec.kind.as_str()
+            ),
+        });
+    }
     // Strategy C is built (`metaharness mcp-serve`), so what is left is a question about the
     // *vendor*: can its built-in tools be taken away and ours put in their place? Claude Code can
     // (`--tools ""` plus `--mcp-config`). Codex cannot — `dynamicTools` is an app-server surface

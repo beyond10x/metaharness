@@ -56,8 +56,15 @@ sometimes exactly what a test wants.
 | `--model-wire <WIRE>` | Which API the harness speaks under that root — only `b10x` has a choice: `openai-responses` or `anthropic-messages`. |
 | `--subscription-token-file <FILE>`, `--subscription-token-env <NAME>`, `--subscription-token-pointer <POINTER>` | A subscription token for a route that takes one instead of an API key; the pointer selects a field inside a JSON source. Not interchangeable with `--credentials api-key`. |
 | `--effort <LEVEL>` | Reasoning effort in the vendor's vocabulary, passed through and validated by the vendor. |
+| `--prompt-cache-ttl <5m\|1h>` | Main-conversation prompt cache lifetime, Claude only. Omission keeps automatic selection; other harnesses refuse an explicit value. |
 | `--actor <ACTOR>` | Who the run's store writes are made *as*, carried to the child as `AEP_ACTOR` — declared, never inherited. |
 | `--retain-dir <DIR>` | Copy the raw vendor wire out of the scratch root before it is deleted. |
+
+The cache lifetime is written to this run's generated settings. Ambient cache variables remain
+scrubbed; operator settings, model, effort, context, budget and tool decisions are unchanged.
+The setting was observed in Claude Code **2.1.263** by static binary inspection; actual cache
+behavior and cost effects remain unverified. It does not select subagent or background cache
+policy. See the [design evidence and compatibility contract](https://github.com/beyond10x/metaharness/blob/main/docs/design/metaharness-protocol-v0.1.md#93-the-anti-drift-rule).
 
 **`--credentials api-key`** is a declaration: without it, `ANTHROPIC_API_KEY` is not in the child
 environment at all.

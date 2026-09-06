@@ -770,6 +770,12 @@ fn guard_loopback(spec: &RunSpec, context: &LaunchContext) -> Result<(), LaunchR
 
 /// The spec fields `codex exec` cannot carry, refused by name.
 fn unsupported_options(spec: &RunSpec) -> Result<(), LaunchRefusal> {
+    if spec.prompt_cache_ttl.is_some() {
+        return Err(LaunchRefusal::UnsupportedOption {
+            option: "--prompt-cache-ttl",
+            why: "this adapter has no prompt cache lifetime setting",
+        });
+    }
     if spec.max_turns.is_some() {
         return Err(LaunchRefusal::UnsupportedOption {
             option: "--max-turns",
@@ -1522,6 +1528,24 @@ mod tests {
 
     fn plan() -> LaunchPlan {
         plan_launch(&spec(), &context()).expect("the run plans")
+    }
+
+    #[test]
+    fn prompt_cache_ttl_is_refused_by_the_direct_codex_planner() {
+        for ttl in ["5m", "1h"] {
+            let mut document = serde_json::to_value(spec()).unwrap();
+            document["prompt_cache_ttl"] = serde_json::json!(ttl);
+            let spec: RunSpec = serde_json::from_value(document).unwrap();
+            let refusal =
+                plan_launch(&spec, &context()).expect_err("unsupported TTL must not be dropped");
+            assert!(matches!(
+                refusal,
+                LaunchRefusal::UnsupportedOption {
+                    option: "--prompt-cache-ttl",
+                    ..
+                }
+            ));
+        }
     }
 
     /// The model-adapter door (MA-1): a declared endpoint becomes a provider entry in the

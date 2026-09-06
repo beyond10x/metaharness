@@ -15,6 +15,63 @@ use clap::{Args as _, Command, CommandFactory as _, Parser as _};
 use metaharness::protocol::RunSpec;
 use metaharness_cli::Cli;
 
+#[test]
+fn prompt_cache_ttl_cli_preserves_both_durations_and_omission() {
+    for ttl in ["5m", "1h"] {
+        for arguments in [
+            vec!["--prompt-cache-ttl".into(), ttl.to_owned()],
+            vec![format!("--prompt-cache-ttl={ttl}")],
+        ] {
+            let cli = Cli::try_parse_from(
+                ["metaharness", "run", "claude"]
+                    .into_iter()
+                    .chain(arguments.iter().map(String::as_str)),
+            )
+            .unwrap();
+            let metaharness_cli::Verb::Run(args) = cli.command else {
+                panic!("expected run")
+            };
+            let mut expected =
+                serde_json::to_value(RunSpec::new(metaharness::protocol::Kind::Claude)).unwrap();
+            expected["prompt_cache_ttl"] = serde_json::json!(ttl);
+            assert_eq!(serde_json::to_value(args.spec).unwrap(), expected);
+        }
+    }
+    let cli = Cli::try_parse_from(["metaharness", "run", "claude"]).unwrap();
+    let metaharness_cli::Verb::Run(args) = cli.command else {
+        panic!("expected run")
+    };
+    assert!(
+        serde_json::to_value(args.spec)
+            .unwrap()
+            .get("prompt_cache_ttl")
+            .is_none()
+    );
+}
+
+#[test]
+fn prompt_cache_ttl_cli_refuses_malformed_duration_values() {
+    for ttl in [
+        "",
+        "5M",
+        "300",
+        "automatic",
+        "5m ",
+        "\n5m",
+        "1h\0",
+        "--help",
+        "5m\u{00a0}",
+    ] {
+        let argument = format!("--prompt-cache-ttl={ttl}");
+        let error = Cli::try_parse_from(["metaharness", "run", "claude", &argument]).unwrap_err();
+        assert_eq!(
+            error.kind(),
+            clap::error::ErrorKind::InvalidValue,
+            "{ttl:?}: {error}"
+        );
+    }
+}
+
 /// The long flags of a command, minus the two `clap` adds for itself.
 fn long_flags(command: &Command) -> BTreeSet<String> {
     command

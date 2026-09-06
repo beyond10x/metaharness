@@ -47,6 +47,7 @@ while let Some(line) = run.next_event()? {
 | `.with_tool_surface(ToolSurface)` | `Native` or `Owned` (refused) |
 | `.with_credentials(CredentialSource)` | `OperatorLogin`, `ApiKey`, `None` |
 | `.with_model(impl Into<String>)` | the model to ask for |
+| `.with_prompt_cache_ttl(PromptCacheTtl)` | main-conversation cache lifetime: `FiveMinutes` or `OneHour`; Claude only |
 | `.with_max_turns(u32)` | a ceiling on turns |
 | `.with_plugin_dir(impl Into<PathBuf>)` | a plugin directory, repeatable |
 | `.with_cwd(impl Into<PathBuf>)` | an operator-named working directory |
@@ -60,6 +61,13 @@ while let Some(line) = run.next_event()? {
 The builder's `with_…` methods and the CLI's flags are **two spellings of the same struct**, and
 neither can grow a knob the other cannot express.
 :::
+
+`PromptCacheTtl` is exported from `metaharness::protocol`. Its serde and CLI spellings are `5m`
+and `1h`. Leaving `RunSpec.prompt_cache_ttl` as `None` preserves automatic selection and omits
+the field from serialization. Non-Claude runs refuse an explicit value before launch. The
+declaration changes only the generated per-run cache setting; ambient cache variables stay
+scrubbed. The [CLI reference](./cli.mdx#model-effort-and-actor) states the vendor evidence and
+the limits of this setting.
 
 ## Starting
 

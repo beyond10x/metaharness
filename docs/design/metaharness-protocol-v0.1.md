@@ -1475,6 +1475,30 @@ is spent.
 
 ### 9.3 The anti-drift rule
 
+**Declared prompt cache lifetime (2026-09-06).** `RunSpec.prompt_cache_ttl` is an optional
+`PromptCacheTtl`, with the exact serialized and CLI spellings `5m` and `1h`. The SDK exposes
+`.with_prompt_cache_ttl(PromptCacheTtl)` and the CLI derives `--prompt-cache-ttl` from that same
+field. Absence means the vendor's existing automatic selection: `RunSpec::new` sets `None`,
+serialization omits the absent field, and the launch settings remain byte-for-byte unchanged.
+Malformed duration values or shapes are refused when parsed. Shared startup refuses an explicit
+duration for every non-Claude kind; the public Codex launch planner also refuses it by name.
+
+Only the Claude adapter translates the duration to `promptCacheTtl` in the generated per-run
+settings document. H3 still constructs the child environment: ambient
+`CLAUDE_CODE_PROMPT_CACHE_TTL`, `CLAUDE_CODE_SUBAGENT_PROMPT_CACHE_TTL`,
+`FORCE_PROMPT_CACHING_5M` and `ENABLE_PROMPT_CACHING_1H` are not inherited. No operator setting
+is edited. Removing the declared member must reproduce the original launch plan, including
+prompt/context, model, effort, budget, turns, hooks, permissions, credentials, argv and environment.
+This controls the main conversation's cache lifetime, not subagent or background cache policy.
+
+**Evidence boundary:** static inspection of Claude Code **2.1.263**, binary SHA-256
+`26d020351e8112f4006790f3cfce43b4c9df0c1bb1d0e542364d64151b81d5ba`, found the settings
+schema at byte offset `177889526` and selection logic at `186082749`. Those bytes declare `5m`
+and `1h` and consult the main-conversation setting after environment overrides. They establish
+the setting's declared surface, not a driven cache-policy or cost measurement. Actual cache
+behavior remains **unverified**. The adapter's global **2.1.259** pin, historical captures,
+public conformance vectors, frame/event formats and contract-result bytes remain unchanged.
+
 **Decision D11 — there is one options type, and the `run` verb is a `derive` on it.**
 
 `RunSpec` lives in `metaharness-protocol` and carries `#[derive(clap::Args)]` behind a feature.

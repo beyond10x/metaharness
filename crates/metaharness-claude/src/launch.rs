@@ -709,7 +709,7 @@ pub fn plan_launch(spec: &RunSpec, context: &LaunchContext) -> Result<LaunchPlan
         cwd: context.cwd.clone(),
         config_home: config_home.clone(),
         credential_copies,
-        settings: build_settings(&hook),
+        settings: build_settings(spec, &hook),
         mcp_config,
         hook,
         attestation: attest(
@@ -1441,12 +1441,18 @@ fn build_hook(hook_path: &Path) -> Value {
 /// The empty `permissions.allow` is deliberate and is H2's advisory half said out loud: V4 names
 /// settings allow rules as a second thing that can shadow the seam, and this file is a source the
 /// run *does* load, so it is the one place the absence can be written down rather than assumed.
-fn build_settings(hook: &Value) -> Value {
-    json!({
+fn build_settings(spec: &RunSpec, hook: &Value) -> Value {
+    let mut settings = json!({
         "$schema": "https://json.schemastore.org/claude-code-settings.json",
         "permissions": { "allow": [], "deny": [] },
         "hooks": { "PreToolUse": [hook.clone()] },
-    })
+    });
+    // Claude 2.1.263's embedded schema and selector declare this main-conversation setting
+    // (design § 9.3, static binary evidence). Actual cache behavior remains unverified.
+    if let Some(ttl) = spec.prompt_cache_ttl {
+        settings["promptCacheTtl"] = json!(ttl);
+    }
+    settings
 }
 
 /// Both injection mechanisms, in **one** list, each row saying which carried it.
@@ -1845,6 +1851,88 @@ mod tests {
 
     fn plan() -> LaunchPlan {
         plan_launch(&spec(), &context()).expect("the strict run plans")
+    }
+
+    #[test]
+    fn prompt_cache_ttl_omission_preserves_legacy_launch() {
+        let plan = plan();
+        assert_eq!(
+            Digest::of(&serde_json::to_vec(&plan.settings).unwrap()).as_str(),
+            "56239d4f7548d5e5f13db38e1ffc182eb802d94bf6193ac556b54ff96058a0a2"
+        );
+        assert_eq!(
+            Digest::of(format!("{plan:?}").as_bytes()).as_str(),
+            "b078c9006527f745de3ffaf040cc5456bc9d9f5390175c8c4d5a7d983764c3a9"
+        );
+        assert!(plan.settings.get("promptCacheTtl").is_none());
+        assert_eq!(plan, plan_launch(&spec(), &context()).unwrap());
+    }
+
+    #[test]
+    fn prompt_cache_ttl_changes_only_declared_settings_and_never_inherits_ambient_policy() {
+        let ambient = [
+            "CLAUDE_CODE_PROMPT_CACHE_TTL",
+            "CLAUDE_CODE_SUBAGENT_PROMPT_CACHE_TTL",
+            "FORCE_PROMPT_CACHING_5M",
+            "ENABLE_PROMPT_CACHING_1H",
+            "ENABLE_PROMPT_CACHING_1H_BEDROCK",
+        ];
+        for hermetic in [HermeticMode::Off, HermeticMode::On, HermeticMode::Strict] {
+            for credentials in [
+                CredentialSource::OperatorLogin,
+                CredentialSource::ApiKey,
+                CredentialSource::None,
+                CredentialSource::Loopback,
+            ] {
+                let (mut spec, mut context) = if credentials == CredentialSource::Loopback {
+                    loopback_world()
+                } else {
+                    (spec(), context())
+                };
+                spec.hermetic = hermetic;
+                spec.credentials = credentials;
+                spec.model = Some("fixture-model".into());
+                spec.effort = Some("low".into());
+                spec.max_budget_usd = Some("2.000000".into());
+                spec.max_turns = Some(32);
+                spec.context = vec![PathBuf::from("raw/input.json")];
+                context
+                    .inherited_env
+                    .insert("ANTHROPIC_API_KEY".into(), "fixture-api-key".into());
+                for size in [128, 150_000] {
+                    spec.prompt = Some("x".repeat(size));
+                    let baseline = plan_launch(&spec, &context).unwrap();
+                    for ttl in ["5m", "1h"] {
+                        let mut poisoned = context.clone();
+                        for key in ambient {
+                            poisoned
+                                .inherited_env
+                                .insert(key.into(), if ttl == "5m" { "1h" } else { "5m" }.into());
+                        }
+                        assert_eq!(plan_launch(&spec, &poisoned).unwrap(), baseline);
+                        let mut document = serde_json::to_value(&spec).unwrap();
+                        document["prompt_cache_ttl"] = json!(ttl);
+                        let declared: RunSpec = serde_json::from_value(document).unwrap();
+                        let mut plan = plan_launch(&declared, &poisoned).unwrap();
+                        assert_eq!(plan.settings["promptCacheTtl"], ttl);
+                        for key in ambient {
+                            assert!(
+                                !plan.env.contains_key(key),
+                                "ambient {key} reached the child"
+                            );
+                        }
+                        assert_eq!(
+                            plan.settings
+                                .as_object_mut()
+                                .unwrap()
+                                .remove("promptCacheTtl"),
+                            Some(json!(ttl))
+                        );
+                        assert_eq!(plan, baseline, "TTL changes no other launch field");
+                    }
+                }
+            }
+        }
     }
 
     #[test]

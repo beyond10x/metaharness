@@ -26,6 +26,79 @@ use metaharness::{
 const INIT: &str = r#"{"emit":"session.started","harness_version":"2.1.240","output_style":"default","plugins":[],"mcp_servers":[],"credential_source":"operator-login","inputs_digest":"tree"}"#;
 const END: &str = r#"{"emit":"session.ended","is_error":false,"subtype":"success"}"#;
 
+#[test]
+fn prompt_cache_ttl_is_refused_by_shared_startup_for_every_unsupported_kind() {
+    for kind in [Kind::Codex, Kind::B10x] {
+        for ttl in ["5m", "1h"] {
+            let mut document = serde_json::to_value(RunSpec::new(kind)).unwrap();
+            document["prompt_cache_ttl"] = serde_json::json!(ttl);
+            let spec: RunSpec = serde_json::from_value(document).unwrap();
+            let builder = Metaharness::from_spec(spec.clone());
+            assert_eq!(builder.spec(), &spec);
+            let refusal = metaharness::check_spec(builder.spec())
+                .expect_err("startup must refuse unsupported TTL");
+            assert!(
+                refusal.to_string().contains("--prompt-cache-ttl"),
+                "{refusal}"
+            );
+            assert!(refusal.to_string().contains(kind.as_str()), "{refusal}");
+        }
+        assert!(metaharness::check_spec(&RunSpec::new(kind)).is_ok());
+    }
+}
+
+#[test]
+fn prompt_cache_ttl_sdk_and_from_spec_reach_the_actual_per_run_settings_file() {
+    use metaharness::protocol::PromptCacheTtl;
+
+    for (ttl, text) in [
+        (PromptCacheTtl::FiveMinutes, "5m"),
+        (PromptCacheTtl::OneHour, "1h"),
+    ] {
+        let builder = Metaharness::new(Kind::Claude)
+            .with_prompt("the complete synthetic context")
+            .with_credentials(CredentialSource::None)
+            .with_effort("low")
+            .with_max_turns(32)
+            .with_prompt_cache_ttl(ttl);
+        let mut document = serde_json::to_value(builder.spec()).unwrap();
+        assert_eq!(document["prompt_cache_ttl"], text);
+        let spec: RunSpec = serde_json::from_value(document.clone()).unwrap();
+        assert_eq!(&spec, builder.spec());
+        document.as_object_mut().unwrap().remove("prompt_cache_ttl");
+        let omitted: RunSpec = serde_json::from_value(document.clone()).unwrap();
+        assert_eq!(serde_json::to_value(omitted).unwrap(), document);
+
+        // Both public library faces reach the real scratch settings writer. The supplied runner
+        // records a spawn in memory and never executes a vendor or copies a credential.
+        for builder in [builder, Metaharness::from_spec(spec)] {
+            let log = ScriptedLog::new();
+            let mut runner = ScriptedRunner::new(vec![ScriptStep::line(END)], log.clone());
+            let run = builder
+                .start_with_clock(
+                    Input::FromSpec,
+                    &mut runner,
+                    &mut ScriptedSeams,
+                    Box::new(ManualClock::new()),
+                )
+                .unwrap();
+            let launches = log.launched();
+            let argv = &launches[0];
+            let at = argv.iter().position(|arg| arg == "--settings").unwrap();
+            let settings: serde_json::Value =
+                serde_json::from_slice(&std::fs::read(&argv[at + 1]).unwrap()).unwrap();
+            assert_eq!(settings["promptCacheTtl"], text);
+            assert_eq!(
+                settings["permissions"],
+                serde_json::json!({"allow":[], "deny":[]})
+            );
+            assert_eq!(settings["hooks"]["PreToolUse"].as_array().unwrap().len(), 1);
+            assert_eq!(run.spec().prompt_cache_ttl, Some(ttl));
+            assert!(log.credential_copies().is_empty());
+        }
+    }
+}
+
 fn call(id: &str, tool: &str) -> String {
     format!(
         r#"{{"emit":"tool.requested","call_id":"{id}","name":"{tool}","input":{{"command":"ls"}}}}"#
@@ -307,6 +380,7 @@ fn every_builder_method_sets_one_field_of_the_one_options_type() {
         subscription_token_env: None,
         subscription_token_pointer: None,
         effort: Some("medium".to_string()),
+        prompt_cache_ttl: None,
         max_turns: Some(30),
         max_budget_usd: None,
         plugin_dir: vec!["plugins/one".into()],

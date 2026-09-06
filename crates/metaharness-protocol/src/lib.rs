@@ -76,7 +76,9 @@ pub use projection::{
     CONTROL_PLANE_EVENTS, IrFamily, ProjectionReport, ir_family, project, required_ir_fields,
 };
 pub use seam::{HarnessSeam, SeamFactory};
-pub use spec::{CredentialSource, DecisionMode, Kind, RunSpec, ScopeAnnounce, ToolSurface};
+pub use spec::{
+    CredentialSource, DecisionMode, Kind, PromptCacheTtl, RunSpec, ScopeAnnounce, ToolSurface,
+};
 pub use trace_ir::{
     AdapterRef, AssistantRequest, CLOSED_FAMILY, IR_ADAPTER, IR_FORMAT, MetaharnessBlock,
     StreamClose, TraceIrDocument, TraceIrEvent, UNK_FAMILY, UNK_REASON, parse_timestamp_ms,
