@@ -1,0 +1,30 @@
+[package]
+name = "metaharness-aep"
+description = "Concrete model execution under the AEP governor."
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+repository.workspace = true
+rust-version.workspace = true
+
+[dependencies]
+metaharness = { path = "../metaharness" }
+aep-cli = { git = "https://github.com/beyond10x/aep", rev = "a23176ae0ee2b1cf5ef249bca66bb13f04abdbe5" }
+aep-domain = { git = "https://github.com/beyond10x/aep", rev = "a23176ae0ee2b1cf5ef249bca66bb13f04abdbe5" }
+aep-driver = { git = "https://github.com/beyond10x/aep", rev = "a23176ae0ee2b1cf5ef249bca66bb13f04abdbe5" }
+aep-driver-spec = { git = "https://github.com/beyond10x/aep", rev = "a23176ae0ee2b1cf5ef249bca66bb13f04abdbe5" }
+aep-engine = { git = "https://github.com/beyond10x/aep", rev = "a23176ae0ee2b1cf5ef249bca66bb13f04abdbe5" }
+aep-project = { git = "https://github.com/beyond10x/aep", rev = "a23176ae0ee2b1cf5ef249bca66bb13f04abdbe5" }
+trace-domain = { git = "https://github.com/beyond10x/aep", rev = "a23176ae0ee2b1cf5ef249bca66bb13f04abdbe5" }
+clap.workspace = true
+serde.workspace = true
+serde_json.workspace = true
+sha2.workspace = true
+serde_yaml = "0.9"
+anyhow = "1"
+
+[dev-dependencies]
+aep-schema = { git = "https://github.com/beyond10x/aep", rev = "a23176ae0ee2b1cf5ef249bca66bb13f04abdbe5" }
+
+[lints]
+workspace = true

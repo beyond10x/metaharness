@@ -40,6 +40,12 @@ pub struct Cli {
 /// What the binary can do.
 #[derive(Subcommand, Debug)]
 pub enum Verb {
+    /// Execute AEP-governed work through a concrete harness.
+    Aep {
+        /// AEP operation.
+        #[command(subcommand)]
+        command: Box<AepCommand>,
+    },
     /// Run a harness session: events as JSON lines on stdout, commands as JSON lines on stdin.
     ///
     /// Boxed because the run options dwarf every other verb's, and the enum is sized by its
@@ -64,6 +70,17 @@ pub enum Verb {
     /// `--mcp-config` naming *this binary and this subcommand*, so the server the vendor starts is
     /// the one already installed — design § 7.5, strategy C.
     McpServe(McpServeArgs),
+}
+
+/// Operations supplied by the AEP integration.
+#[derive(Subcommand, Debug)]
+pub enum AepCommand {
+    /// Walk a governed run, inspect it, or evaluate a harness.
+    Drive {
+        /// Driver operation.
+        #[command(subcommand)]
+        command: metaharness_aep::drive::DriveCommand,
+    },
 }
 
 /// `run` carries the library's option struct and nothing else.
@@ -180,6 +197,19 @@ pub struct DoctorArgs {
 #[must_use]
 pub fn execute(cli: Cli) -> i32 {
     match cli.command {
+        Verb::Aep { command } => {
+            let AepCommand::Drive { command } = *command;
+            let code = metaharness_aep::execute(command);
+            if code == std::process::ExitCode::SUCCESS {
+                0
+            } else if code == std::process::ExitCode::from(2) {
+                2
+            } else if code == std::process::ExitCode::from(3) {
+                3
+            } else {
+                1
+            }
+        }
         Verb::Run(args) => run(args.spec),
         Verb::Capabilities(args) => capabilities(&args),
         Verb::Conformance(args) => conformance(args.kind, args.contract),

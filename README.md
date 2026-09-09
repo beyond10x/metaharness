@@ -39,7 +39,13 @@ metaharness
 | scored by | [AEP](https://github.com/beyond10x/aep) | supplies the workflows and trace expectations the evals under `evals/` judge a run against |
 | mapped in | [atlas](https://github.com/beyond10x/atlas) | how this repo fits the rest of `beyond10x` |
 
-Nothing consumes metaharness as a dependency yet. An external driver integrates through the sealed
+`metaharness aep drive` hosts AEP-governed model execution through an exact AEP library dependency.
+Use `metaharness aep drive run --help` for task, map, spend and `--aep-binary` inputs; the planning
+executable is separate from this runner. `metaharness aep drive resume` accepts compatible retained
+runs and preserves their recorded budget and plugins. Live evaluation uses
+`metaharness aep drive eval run`; recorded streams remain readable by `aep drive eval run --stream`.
+
+An external driver integrates through the sealed
 frame document (`--frame step.frame.json`) and the event/command protocol — it writes a file and
 never links this workspace.
 

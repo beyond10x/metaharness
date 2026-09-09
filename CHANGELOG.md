@@ -5,6 +5,13 @@ was amended and the amendment is named here.
 
 ## [Unreleased]
 
+### Added
+
+- `metaharness aep drive` owns concrete model execution, native hooks and live evaluation
+  above AEP's neutral governor. Pass the planning executable with `--aep-binary`; compatible
+  retained runs preserve their plugin selections and spend ceilings. AEP remains the owner
+  of command/operator driving and offline evidence ingestion.
+
 ### Fixed
 
 - **The AEP eval's `checks/` read the charter documents where they actually live, and E4

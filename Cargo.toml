@@ -1,6 +1,7 @@
 [workspace]
 resolver = "3"
 members = [
+    "crates/metaharness-aep",
     "crates/metaharness",
     "crates/metaharness-protocol",
     "crates/metaharness-claude",

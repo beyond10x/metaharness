@@ -78,8 +78,8 @@ boundary; changing any of it is its own change with its own review.
 - **Per-call tool decisions.** Which tools the harness may call is decided per call, by the
   embedder, through the protocol — never once at launch. A decision path that answers without
   consulting the embedder is a silent allow.
-- **`metaharness.frame/1` is a cross-repository contract.** The frame is minted by
-  `AEP`' driver and consumed here: digest-verified on load, and refused **by name**
+- **`metaharness.frame/1` is a preserved contract.** The concrete `metaharness-aep` driver mints
+  the same frame bytes consumed by the adapters: digest-verified on load, and refused **by name**
   when unreadable, untagged, misshapen or edited after sealing. Never widen that reader to accept a
   document failing any of the four checks, and never reorder tag → shape → digest. The other side
   pins the same bytes; changing the format is a coordinated migration under the atlas rule, not an
