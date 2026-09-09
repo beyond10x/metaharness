@@ -9,13 +9,13 @@ rust-version.workspace = true
 
 [dependencies]
 metaharness = { path = "../metaharness" }
-aep-cli = { git = "https://github.com/beyond10x/aep", rev = "ecf35aaa2130d0f67c0ffdb69905ec05f13f9158" }
-aep-domain = { git = "https://github.com/beyond10x/aep", rev = "ecf35aaa2130d0f67c0ffdb69905ec05f13f9158" }
-aep-driver = { git = "https://github.com/beyond10x/aep", rev = "ecf35aaa2130d0f67c0ffdb69905ec05f13f9158" }
-aep-driver-spec = { git = "https://github.com/beyond10x/aep", rev = "ecf35aaa2130d0f67c0ffdb69905ec05f13f9158" }
-aep-engine = { git = "https://github.com/beyond10x/aep", rev = "ecf35aaa2130d0f67c0ffdb69905ec05f13f9158" }
-aep-project = { git = "https://github.com/beyond10x/aep", rev = "ecf35aaa2130d0f67c0ffdb69905ec05f13f9158" }
-trace-domain = { git = "https://github.com/beyond10x/aep", rev = "ecf35aaa2130d0f67c0ffdb69905ec05f13f9158" }
+aep-cli = { git = "https://github.com/beyond10x/aep", rev = "a23176ae0ee2b1cf5ef249bca66bb13f04abdbe5" }
+aep-domain = { git = "https://github.com/beyond10x/aep", rev = "a23176ae0ee2b1cf5ef249bca66bb13f04abdbe5" }
+aep-driver = { git = "https://github.com/beyond10x/aep", rev = "a23176ae0ee2b1cf5ef249bca66bb13f04abdbe5" }
+aep-driver-spec = { git = "https://github.com/beyond10x/aep", rev = "a23176ae0ee2b1cf5ef249bca66bb13f04abdbe5" }
+aep-engine = { git = "https://github.com/beyond10x/aep", rev = "a23176ae0ee2b1cf5ef249bca66bb13f04abdbe5" }
+aep-project = { git = "https://github.com/beyond10x/aep", rev = "a23176ae0ee2b1cf5ef249bca66bb13f04abdbe5" }
+trace-domain = { git = "https://github.com/beyond10x/aep", rev = "a23176ae0ee2b1cf5ef249bca66bb13f04abdbe5" }
 clap.workspace = true
 serde.workspace = true
 serde_json.workspace = true
@@ -24,7 +24,7 @@ serde_yaml = "0.9"
 anyhow = "1"
 
 [dev-dependencies]
-aep-schema = { git = "https://github.com/beyond10x/aep", rev = "ecf35aaa2130d0f67c0ffdb69905ec05f13f9158" }
+aep-schema = { git = "https://github.com/beyond10x/aep", rev = "a23176ae0ee2b1cf5ef249bca66bb13f04abdbe5" }
 
 [lints]
 workspace = true

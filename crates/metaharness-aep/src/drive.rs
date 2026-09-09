@@ -2507,6 +2507,10 @@ struct Host {
     aep_binary: Option<PathBuf>,
 }
 impl ExecutionHost for Host {
+    fn resume_command(&self) -> &'static str {
+        "metaharness aep drive resume"
+    }
+
     fn prepare(
         &self,
         inputs: &Inputs,

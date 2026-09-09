@@ -2,15 +2,20 @@
 format: aep.planning-md/1
 id: migration-plan:aep-runtime-extraction
 kind: migration-plan
-status: active
+status: implemented
 title: Move concrete AEP execution above the foundation
-revision: 2
+revision: 4
 ---
 ## Decision
-The operator approved extraction on 2026-09-09: model-backed runs move to `metaharness aep drive`; migrate eval and Agentplugins callers now; preserve compatible paused runs. AEP retains neutral governor, run machinery, command/operator driving and offline evidence ingestion. No foundation runtime dependency on installed Metaharness or Harness.
+The operator approved runtime extraction on 2026-09-09. Metaharness hosts concrete model execution at `metaharness aep drive`, above the neutral AEP foundation (Atlas ADR 0047).
 
-## Implementation
-Make AEP CLI importable, share neutral run-host services, move concrete executor, frame/event translation, native hooks and live evaluation into Metaharness. Pin all AEP dependencies to one published commit. Keep existing authorization, spend, frozen wire and resume integrity rules. Record Atlas ADR 0047 and actual catalog direction, then complete fresh foundation composition and final planning validation.
+## Repository scope
+Move the concrete executor, sealed frame producer, event translation, native hooks and live evaluation into Metaharness. Pin all AEP crates to one exact published revision. Select the planning executable separately; render its actual native mount path and the host's actual continuation command. Preserve authorization, plugin forwarding, spend reservation, compatible legacy launch records and frozen wire contracts.
 
-## Acceptance
-Foundation gates pass without tooling executables. Offline adapter tests retain denial, frame, budget, plugin and legacy-resume behavior. Callers invoke the real replacement command. Exact-hash composition receipt and final ER planning evidence exist before completion. Retire only reviewed recoverable worktrees; preserve unrelated changes. No tags, deployment, paid run or connectors_v2 enrollment.
+## Repository acceptance
+The complete `task check` passes with the published Git pin and no local Cargo patch. Offline tests cover denial, frame integrity, budgets, plugin forwarding, live-evaluation refusals, native hooks and a legacy paused run whose configuration and spend ledger survive resume without a model launch. Both paused-run outputs name `metaharness aep drive resume`.
+
+## Coordination
+AEP publishes the neutral host before this adapter integrates; Agentplugins migrates callers afterward. Atlas's migration-plan:aep-runtime-extraction and task:foundation-composition-evidence own the coordinated catalog updates, final foundation receipt and ER planning validation. This record's implemented status describes the Metaharness source implementation, not completion of Atlas's remaining verification.
+
+No tag, release, deployment or paid evaluation is authorized.

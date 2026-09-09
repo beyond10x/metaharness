@@ -74,6 +74,10 @@ fn legacy_launch_resumes_without_spending_or_losing_configuration() {
         String::from_utf8_lossy(&started.stderr)
     );
     let run = project.join(".engineering/runs/RESUME-1/1");
+    assert!(
+        String::from_utf8_lossy(&started.stdout)
+            .contains("resume with: metaharness aep drive resume RESUME-1/1")
+    );
     let launch_path = run.join("launch.json");
     let mut launch: serde_json::Value =
         serde_json::from_slice(&std::fs::read(&launch_path).unwrap()).unwrap();
@@ -93,6 +97,10 @@ fn legacy_launch_resumes_without_spending_or_losing_configuration() {
         String::from_utf8_lossy(&resumed.stderr)
     );
     assert_eq!(std::fs::read(run.join("spend.json")).unwrap(), ledger);
+    assert!(
+        String::from_utf8_lossy(&resumed.stdout)
+            .contains("resume with: metaharness aep drive resume RESUME-1/1")
+    );
     assert!(!run.join("transcripts").exists());
     let after: serde_json::Value =
         serde_json::from_slice(&std::fs::read(launch_path).unwrap()).unwrap();
