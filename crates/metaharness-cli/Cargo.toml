@@ -16,6 +16,7 @@ name = "metaharness"
 path = "src/main.rs"
 
 [dependencies]
+metaharness-aep = { path = "../metaharness-aep" }
 clap = { workspace = true }
 # The `clap` feature carries `RunSpec`'s own `derive(Args)` through, so the `run` verb's flags
 # are the library's option struct and cannot drift from it (design D11).

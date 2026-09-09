@@ -237,6 +237,7 @@ fn run(cli: Cli) -> Result<i32, String> {
 fn native(args: NativeArgs) -> Result<i32, String> {
     authorize_native(args.spend, args.budget_usd.as_deref())?;
     let resolved = resolve(&args.common)?;
+    build_metaharness(&resolved)?;
     ensure_cgroup_scope(&resolved)?;
     check_native_binary(&resolved)?;
     let fixture = prepare(&resolved, "native", NATIVE_TASK_ID)?;
@@ -424,11 +425,12 @@ fn driven(args: DrivenArgs) -> Result<i32, String> {
     let _paid_lock = paid_lock(&resolved.scratch_root)?;
     let drive_log = fixture.work.join("drive.log");
     let drive_err = fixture.work.join("drive.err");
-    let mut command = Command::new(&resolved.protocol);
+    let mut command = aep_drive_command(&resolved);
     command
         .current_dir(&fixture.project)
-        .arg("drive")
         .arg("run")
+        .arg("--aep-binary")
+        .arg(&resolved.protocol)
         .arg("--project")
         .arg(&fixture.project)
         .arg("--map")
@@ -617,7 +619,8 @@ fn build_protocol(resolved: &Resolved) -> Result<(), String> {
             .current_dir(&resolved.aep_repo)
             .arg("build")
             .arg("-p")
-            .arg("protocol-cli")
+            .arg("aep-cli")
+            .arg("--locked")
             .arg("--quiet"),
         None,
     )?;
@@ -1225,8 +1228,8 @@ fn write_hooks(resolved: &Resolved, fixture: &Fixture, map: &Path) -> Result<Pat
             {
                 "on": "transition",
                 "command": [
-                    resolved.protocol,
-                    "drive", "transition",
+                    resolved.repo.join("target/debug/metaharness"),
+                    "aep", "drive", "transition",
                     "--project", fixture.project,
                     "--root", fixture.tree,
                     "--task", fixture.project.join(".engineering/task.yaml"),
@@ -1236,7 +1239,7 @@ fn write_hooks(resolved: &Resolved, fixture: &Fixture, map: &Path) -> Result<Pat
             {
                 "on": "before-call",
                 "tools": ["file_write", "file_edit"],
-                "command": [resolved.protocol, "drive", "hook"]
+                "command": [resolved.repo.join("target/debug/metaharness"), "aep", "drive", "hook"]
             }
         ]
     });
@@ -1246,6 +1249,12 @@ fn write_hooks(resolved: &Resolved, fixture: &Fixture, map: &Path) -> Result<Pat
     )
     .map_err(|error| format!("write hooks: {error}"))?;
     Ok(path)
+}
+
+fn aep_drive_command(resolved: &Resolved) -> Command {
+    let mut command = Command::new(resolved.repo.join("target/debug/metaharness"));
+    command.args(["aep", "drive"]);
+    command
 }
 
 fn probe_governor(
@@ -1263,9 +1272,8 @@ fn probe_governor(
         "of": max_attempts,
         "workspace": fixture.project,
     });
-    let mut command = Command::new(&resolved.protocol);
+    let mut command = aep_drive_command(resolved);
     command
-        .arg("drive")
         .arg("transition")
         .arg("--project")
         .arg(&fixture.project)
