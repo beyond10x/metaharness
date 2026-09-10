@@ -5,12 +5,19 @@ was amended and the amendment is named here.
 
 ## [Unreleased]
 
+## [0.7.0] — 2026-09-10
+
 ### Added
 
 - `metaharness aep drive` owns concrete model execution, native hooks and live evaluation
   above AEP's neutral governor. Pass the planning executable with `--aep-binary`; compatible
   retained runs preserve their plugin selections and spend ceilings. AEP remains the owner
   of command/operator driving and offline evidence ingestion.
+
+### Changed
+
+- Publish source with standalone bot tooling, independently of Atlas checkout freshness and
+  organization dependency admission, while retaining repository correctness and release checks.
 
 ### Fixed
 
@@ -52,7 +59,9 @@ was amended and the amendment is named here.
 
 ### Notes
 
-- `run-checks.sh` still exits 1, and the 58 red rows are enumerated in `evals/aep/checks/README.md`
+- This source release was cut without running gates, tests, paid evaluations or binary packaging,
+  at the operator's request. The dated observations below are retained historical evidence.
+- On 2026-09-04, `run-checks.sh` exited 1; its 58 red rows are enumerated in `evals/aep/checks/README.md`
   by what each waits for: 37 on `run-agents.sh`, 11 on recordings of three **paid** live runs, 7 on
   a README section for that runner — none of which `W4-1/1` ever built — 2 on a pre-task revision
   `b83c623` that no AEP checkout can reach since the plugins moved to `agentplugins`, and
