@@ -16,6 +16,7 @@ the migration leaves the pinned frame and transcript wire formats unchanged.
 
 | | |
 |---|---|
+| **AEP-governed model execution** | `metaharness aep drive` hosts model-backed maps, native execution hooks and live evaluation through AEP's neutral library. AEP retains planning, governance, command/operator execution, run storage and offline stream ingestion. Compatible paused runs keep their recorded spend limits. |
 | **Claude Code, driven end to end** | `metaharness run claude --hermetic -p "…"` spawns 2.1.240 into a scratch config home, installs a blocking `PreToolUse` hook, answers it per call, streams protocol events on stdout, takes steering on stdin, retains the raw transcript, and exits on the hermetic floor's verdict. |
 | **Codex, driven end to end (CX-M2)** | `metaharness run codex --hermetic -p "…"` starts a real `codex exec` into a scratch `CODEX_HOME`, copies `auth.json` per spawn, declares a blocking `PreToolUse` hook, and tails the **session rollout** for events. |
 | **Free verbs** | `capabilities`, `conformance` and `doctor` work with **no model and no credential**. `conformance claude` runs **24** vectors; `conformance codex` runs **17**, four of which drive a real process and the real hook program; `conformance b10x` runs **7** recorded launch/loop/version/enforcement checks. |

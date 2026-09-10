@@ -25,6 +25,36 @@ task check     # cargo fmt --check && cargo clippy -D warnings && cargo test --w
 
 Nothing under `evals/` runs in `task check`. A paid run is never part of a gate.
 
+## AEP-governed workflows
+
+Metaharness 0.7.0 hosts model-backed AEP workflows through `metaharness aep drive`. AEP supplies
+the governor, planning commands and retained run storage; Harness supplies the native agent loop.
+The AEP CLI refuses model-backed maps before allocating a run and names this host.
+
+From an AEP project with its task and step map already configured, inspect the command and run
+state first:
+
+```bash
+metaharness aep drive run --help
+aep drive status
+```
+
+Starting a model is an explicit paid operation. Supply the plugin directory you intend to load
+and both spend bounds:
+
+```bash
+METAHARNESS_LIVE=1 metaharness aep drive run --project . --map development/default \
+  --plugin-dir /path/to/agentplugins/plugins/aep-plan --pause-on-approval \
+  --budget-usd 10 --assume-usd-per-run 1
+```
+
+Use `metaharness aep drive resume RUN_ID` with the same live opt-in for a compatible paused
+model-backed run. A resume may narrow its recorded budget, never raise it. Use `--aep-binary`
+when the planning executable must be selected explicitly. Live evaluation is
+`metaharness aep drive eval run`; `aep drive eval run --stream` reads recorded evidence offline.
+See the [AEP integration guide](https://beyond10x.github.io/docs/aep/guides/integrate-a-harness/)
+for step maps, operator pauses and native transition hooks.
+
 ## 1. Is the installed vendor the one the adapter was written against?
 
 ```bash

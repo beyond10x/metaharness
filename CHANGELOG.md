@@ -5,6 +5,11 @@ was amended and the amendment is named here.
 
 ## [Unreleased]
 
+### Fixed
+
+- Public quickstart and status now document `metaharness aep drive`, its explicit live spend
+  bounds, compatible paused-run migration and AEP's retained offline responsibilities.
+
 ## [0.7.0] — 2026-09-10
 
 ### Added
