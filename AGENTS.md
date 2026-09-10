@@ -1,9 +1,8 @@
 # AGENTS.md — metaharness
 
-The contract for changing **this** repository. Org-wide rules — the naming convention, the language rule (anything that runs is Rust, not Python), the
-former-brand rule (atlas ADR 0001) and its four exemption categories, and the rule that renaming
-anything another repo verifies is a coordinated migration with an ADR — live in
-[`atlas/AGENTS.md`](https://github.com/beyond10x/atlas) and are not restated here.
+The contract for changing **this** repository. Organization naming, Rust implementation and
+public privacy rules apply. Changing bytes another repository verifies requires a coordinated
+migration and an ADR; historical brand exemptions do not authorize new public associations.
 
 `README.md` says what metaharness is and how to run one. This file says what must not break.
 
@@ -262,6 +261,17 @@ The full gate comes first; component steps alone are not enough.
 - Task runner is `Taskfile.yml` (go-task). Do not add a Makefile.
 - A claim on the public site obeys the same rule as a claim in the code: pinned to a version and
   verified against it, or labelled unverified.
+
+## Source publication
+
+This repository owns its correctness checks, required reviews and release artifacts. Ordinary
+commits, pushes and releases require no Atlas checkout, current Atlas main or organization-wide
+dependency admission. Use standalone `b10x-gates bot --repo . -- <git-command>` with protected local
+credentials and the existing `b10x-bot[bot]` identity. Preserve repository and worktree hooks.
+
+Atlas documentation validation belongs to documentation operations; it is not a prerequisite for
+source publication. Documentation failures affect documentation delivery. Organization privacy
+rules still apply; historical brand exemptions do not authorize new public associations.
 
 <!-- b10x-docs-operations:start -->
 ## Public documentation operations
