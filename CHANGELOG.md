@@ -5,10 +5,44 @@ was amended and the amendment is named here.
 
 ## [Unreleased]
 
+### Changed
+
+- **Re-pinned both git dependencies to their current releases** (invariant 10: say which in the
+  changelog). harness `0f2edfef9f6dc3333b9377a730dfb40aeff14351` (`0.11.1`) →
+  `90f10a4314c1c630691c85e812bd8d5d23d73fcc` (`0.12.1`, 2026-09-11, the tip of harness `main`), in
+  `crates/metaharness-b10x/Cargo.toml` and `crates/metaharness-tools/Cargo.toml`. AEP
+  `a23176ae0ee2b1cf5ef249bca66bb13f04abdbe5` (`0.54.0-33-g`, untagged) →
+  `28abe09bb6e5b0a6b4db839f6bf5693957d39324` (`0.55.0`, 2026-09-10), in
+  `crates/metaharness-aep/Cargo.toml`. Both new revisions are reachable from their repository's
+  `main` and both old ones are their ancestors. `Cargo.lock` moved with them — the harness crates
+  `0.11.1 → 0.12.1`, the AEP crates `0.54.0 → 0.55.0` — and `task check` is green across the move
+  with no source change, so neither release altered an API this workspace consumes.
+- **`metaharness-b10x::HARNESS_REVISION` and `PINNED_VERSIONS` were deliberately left at `0.10.2`**
+  (`c1493a79331f315cac24aa3818ddaa1eb41c8b25`). They are the AEP eval's provenance pair for an
+  *installed* `b10x-harness` binary, not the Cargo build pin, and moving the revision without
+  re-observing the adapter's version-specific claims against `0.12.1` would make the pair
+  unsatisfiable and break invariant 4. Re-observing is its own change.
+
 ### Fixed
 
 - Public quickstart and status now document `metaharness aep drive`, its explicit live spend
   bounds, compatible paused-run migration and AEP's retained offline responsibilities.
+- **Documents that described a repository that had moved.** `README.md` § *Status* named `0.5.0`
+  at a `0.7.0` tree and had no `aep drive` row; its *Layout* table listed 7 of 11 workspace
+  members. `AGENTS.md` § *Live-evaluating* named `aep drive run` and `aep drive transition`, which
+  AEP refuses by name since ADR 0047 — the verbs are `metaharness aep drive run|transition|hook`.
+  `AGENTS.md` invariant 2 and `README.md` § *The three promises* now declare the core-crate spawn
+  runners (`spawn.rs`, `spawn_codex.rs`) as the one exception to "harness-specific code lives in
+  the adapter crate" instead of contradicting the tree. `AGENTS.md` § *What this repository owns*
+  reads binary-first, which is what the consumer count says. `.cargo/config.toml` no longer calls
+  `beyond10x/harness` private; it is public, and the comment now states the reason the setting
+  remains.
+
+### Added
+
+- **The gate runs in CI.** `.github/workflows/gate.yml` runs `task check` on every pull request and
+  every push to `main`, plus a build on the declared `rust-version`. `AGENTS.md` § *The gate* had
+  described such a CI since before one existed; no workflow in the tree ran cargo at all.
 
 ## [0.7.0] — 2026-09-10
 

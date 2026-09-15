@@ -4,8 +4,8 @@ version = 4
 
 [[package]]
 name = "aep-backend-entity"
-version = "0.54.0"
-source = "git+https://github.com/beyond10x/aep?rev=a23176ae0ee2b1cf5ef249bca66bb13f04abdbe5#a23176ae0ee2b1cf5ef249bca66bb13f04abdbe5"
+version = "0.55.0"
+source = "git+https://github.com/beyond10x/aep?rev=28abe09bb6e5b0a6b4db839f6bf5693957d39324#28abe09bb6e5b0a6b4db839f6bf5693957d39324"
 dependencies = [
  "aep-backend-memory",
  "aep-contract",
@@ -18,8 +18,8 @@ dependencies = [
 
 [[package]]
 name = "aep-backend-hybrid"
-version = "0.54.0"
-source = "git+https://github.com/beyond10x/aep?rev=a23176ae0ee2b1cf5ef249bca66bb13f04abdbe5#a23176ae0ee2b1cf5ef249bca66bb13f04abdbe5"
+version = "0.55.0"
+source = "git+https://github.com/beyond10x/aep?rev=28abe09bb6e5b0a6b4db839f6bf5693957d39324#28abe09bb6e5b0a6b4db839f6bf5693957d39324"
 dependencies = [
  "aep-backend-entity",
  "aep-backend-markdown",
@@ -33,8 +33,8 @@ dependencies = [
 
 [[package]]
 name = "aep-backend-markdown"
-version = "0.54.0"
-source = "git+https://github.com/beyond10x/aep?rev=a23176ae0ee2b1cf5ef249bca66bb13f04abdbe5#a23176ae0ee2b1cf5ef249bca66bb13f04abdbe5"
+version = "0.55.0"
+source = "git+https://github.com/beyond10x/aep?rev=28abe09bb6e5b0a6b4db839f6bf5693957d39324#28abe09bb6e5b0a6b4db839f6bf5693957d39324"
 dependencies = [
  "aep-backend-entity",
  "aep-backend-memory",
@@ -51,8 +51,8 @@ dependencies = [
 
 [[package]]
 name = "aep-backend-memory"
-version = "0.54.0"
-source = "git+https://github.com/beyond10x/aep?rev=a23176ae0ee2b1cf5ef249bca66bb13f04abdbe5#a23176ae0ee2b1cf5ef249bca66bb13f04abdbe5"
+version = "0.55.0"
+source = "git+https://github.com/beyond10x/aep?rev=28abe09bb6e5b0a6b4db839f6bf5693957d39324#28abe09bb6e5b0a6b4db839f6bf5693957d39324"
 dependencies = [
  "aep-contract",
  "aep-domain",
@@ -61,8 +61,8 @@ dependencies = [
 
 [[package]]
 name = "aep-backend-postgres"
-version = "0.54.0"
-source = "git+https://github.com/beyond10x/aep?rev=a23176ae0ee2b1cf5ef249bca66bb13f04abdbe5#a23176ae0ee2b1cf5ef249bca66bb13f04abdbe5"
+version = "0.55.0"
+source = "git+https://github.com/beyond10x/aep?rev=28abe09bb6e5b0a6b4db839f6bf5693957d39324#28abe09bb6e5b0a6b4db839f6bf5693957d39324"
 dependencies = [
  "aep-backend-entity",
  "aep-contract",
@@ -76,8 +76,8 @@ dependencies = [
 
 [[package]]
 name = "aep-backend-sqlite"
-version = "0.54.0"
-source = "git+https://github.com/beyond10x/aep?rev=a23176ae0ee2b1cf5ef249bca66bb13f04abdbe5#a23176ae0ee2b1cf5ef249bca66bb13f04abdbe5"
+version = "0.55.0"
+source = "git+https://github.com/beyond10x/aep?rev=28abe09bb6e5b0a6b4db839f6bf5693957d39324#28abe09bb6e5b0a6b4db839f6bf5693957d39324"
 dependencies = [
  "aep-backend-entity",
  "aep-contract",
@@ -87,8 +87,8 @@ dependencies = [
 
 [[package]]
 name = "aep-cli"
-version = "0.54.0"
-source = "git+https://github.com/beyond10x/aep?rev=a23176ae0ee2b1cf5ef249bca66bb13f04abdbe5#a23176ae0ee2b1cf5ef249bca66bb13f04abdbe5"
+version = "0.55.0"
+source = "git+https://github.com/beyond10x/aep?rev=28abe09bb6e5b0a6b4db839f6bf5693957d39324#28abe09bb6e5b0a6b4db839f6bf5693957d39324"
 dependencies = [
  "aep-backend-entity",
  "aep-backend-hybrid",
@@ -122,8 +122,8 @@ dependencies = [
 
 [[package]]
 name = "aep-conformance"
-version = "0.54.0"
-source = "git+https://github.com/beyond10x/aep?rev=a23176ae0ee2b1cf5ef249bca66bb13f04abdbe5#a23176ae0ee2b1cf5ef249bca66bb13f04abdbe5"
+version = "0.55.0"
+source = "git+https://github.com/beyond10x/aep?rev=28abe09bb6e5b0a6b4db839f6bf5693957d39324#28abe09bb6e5b0a6b4db839f6bf5693957d39324"
 dependencies = [
  "aep-contract",
  "aep-domain",
@@ -132,8 +132,8 @@ dependencies = [
 
 [[package]]
 name = "aep-contract"
-version = "0.54.0"
-source = "git+https://github.com/beyond10x/aep?rev=a23176ae0ee2b1cf5ef249bca66bb13f04abdbe5#a23176ae0ee2b1cf5ef249bca66bb13f04abdbe5"
+version = "0.55.0"
+source = "git+https://github.com/beyond10x/aep?rev=28abe09bb6e5b0a6b4db839f6bf5693957d39324#28abe09bb6e5b0a6b4db839f6bf5693957d39324"
 dependencies = [
  "aep-domain",
  "schemars",
@@ -143,8 +143,8 @@ dependencies = [
 
 [[package]]
 name = "aep-domain"
-version = "0.54.0"
-source = "git+https://github.com/beyond10x/aep?rev=a23176ae0ee2b1cf5ef249bca66bb13f04abdbe5#a23176ae0ee2b1cf5ef249bca66bb13f04abdbe5"
+version = "0.55.0"
+source = "git+https://github.com/beyond10x/aep?rev=28abe09bb6e5b0a6b4db839f6bf5693957d39324#28abe09bb6e5b0a6b4db839f6bf5693957d39324"
 dependencies = [
  "proptest",
  "schemars",
@@ -155,8 +155,8 @@ dependencies = [
 
 [[package]]
 name = "aep-driver"
-version = "0.54.0"
-source = "git+https://github.com/beyond10x/aep?rev=a23176ae0ee2b1cf5ef249bca66bb13f04abdbe5#a23176ae0ee2b1cf5ef249bca66bb13f04abdbe5"
+version = "0.55.0"
+source = "git+https://github.com/beyond10x/aep?rev=28abe09bb6e5b0a6b4db839f6bf5693957d39324#28abe09bb6e5b0a6b4db839f6bf5693957d39324"
 dependencies = [
  "aep-backend-markdown",
  "aep-domain",
@@ -170,8 +170,8 @@ dependencies = [
 
 [[package]]
 name = "aep-driver-spec"
-version = "0.54.0"
-source = "git+https://github.com/beyond10x/aep?rev=a23176ae0ee2b1cf5ef249bca66bb13f04abdbe5#a23176ae0ee2b1cf5ef249bca66bb13f04abdbe5"
+version = "0.55.0"
+source = "git+https://github.com/beyond10x/aep?rev=28abe09bb6e5b0a6b4db839f6bf5693957d39324#28abe09bb6e5b0a6b4db839f6bf5693957d39324"
 dependencies = [
  "aep-domain",
  "schemars",
@@ -182,8 +182,8 @@ dependencies = [
 
 [[package]]
 name = "aep-engine"
-version = "0.54.0"
-source = "git+https://github.com/beyond10x/aep?rev=a23176ae0ee2b1cf5ef249bca66bb13f04abdbe5#a23176ae0ee2b1cf5ef249bca66bb13f04abdbe5"
+version = "0.55.0"
+source = "git+https://github.com/beyond10x/aep?rev=28abe09bb6e5b0a6b4db839f6bf5693957d39324#28abe09bb6e5b0a6b4db839f6bf5693957d39324"
 dependencies = [
  "aep-contract",
  "aep-domain",
@@ -193,8 +193,8 @@ dependencies = [
 
 [[package]]
 name = "aep-ess-evidence"
-version = "0.54.0"
-source = "git+https://github.com/beyond10x/aep?rev=a23176ae0ee2b1cf5ef249bca66bb13f04abdbe5#a23176ae0ee2b1cf5ef249bca66bb13f04abdbe5"
+version = "0.55.0"
+source = "git+https://github.com/beyond10x/aep?rev=28abe09bb6e5b0a6b4db839f6bf5693957d39324#28abe09bb6e5b0a6b4db839f6bf5693957d39324"
 dependencies = [
  "aep-domain",
  "serde",
@@ -204,8 +204,8 @@ dependencies = [
 
 [[package]]
 name = "aep-project"
-version = "0.54.0"
-source = "git+https://github.com/beyond10x/aep?rev=a23176ae0ee2b1cf5ef249bca66bb13f04abdbe5#a23176ae0ee2b1cf5ef249bca66bb13f04abdbe5"
+version = "0.55.0"
+source = "git+https://github.com/beyond10x/aep?rev=28abe09bb6e5b0a6b4db839f6bf5693957d39324#28abe09bb6e5b0a6b4db839f6bf5693957d39324"
 dependencies = [
  "aep-domain",
  "aep-driver-spec",
@@ -219,16 +219,16 @@ dependencies = [
 
 [[package]]
 name = "aep-render"
-version = "0.54.0"
-source = "git+https://github.com/beyond10x/aep?rev=a23176ae0ee2b1cf5ef249bca66bb13f04abdbe5#a23176ae0ee2b1cf5ef249bca66bb13f04abdbe5"
+version = "0.55.0"
+source = "git+https://github.com/beyond10x/aep?rev=28abe09bb6e5b0a6b4db839f6bf5693957d39324#28abe09bb6e5b0a6b4db839f6bf5693957d39324"
 dependencies = [
  "aep-domain",
 ]
 
 [[package]]
 name = "aep-schema"
-version = "0.54.0"
-source = "git+https://github.com/beyond10x/aep?rev=a23176ae0ee2b1cf5ef249bca66bb13f04abdbe5#a23176ae0ee2b1cf5ef249bca66bb13f04abdbe5"
+version = "0.55.0"
+source = "git+https://github.com/beyond10x/aep?rev=28abe09bb6e5b0a6b4db839f6bf5693957d39324#28abe09bb6e5b0a6b4db839f6bf5693957d39324"
 dependencies = [
  "aep-backend-markdown",
  "aep-domain",
@@ -345,8 +345,8 @@ checksum = "f2032f911046de80f0a198e0901378627c33f59ea0ac00e363d481118bd70a53"
 
 [[package]]
 name = "b10x-harness-loop"
-version = "0.11.1"
-source = "git+https://github.com/beyond10x/harness?rev=0f2edfef9f6dc3333b9377a730dfb40aeff14351#0f2edfef9f6dc3333b9377a730dfb40aeff14351"
+version = "0.12.1"
+source = "git+https://github.com/beyond10x/harness?rev=90f10a4314c1c630691c85e812bd8d5d23d73fcc#90f10a4314c1c630691c85e812bd8d5d23d73fcc"
 dependencies = [
  "b10x-harness-wire",
  "jsonschema",
@@ -358,8 +358,8 @@ dependencies = [
 
 [[package]]
 name = "b10x-harness-toolchain"
-version = "0.11.1"
-source = "git+https://github.com/beyond10x/harness?rev=0f2edfef9f6dc3333b9377a730dfb40aeff14351#0f2edfef9f6dc3333b9377a730dfb40aeff14351"
+version = "0.12.1"
+source = "git+https://github.com/beyond10x/harness?rev=90f10a4314c1c630691c85e812bd8d5d23d73fcc#90f10a4314c1c630691c85e812bd8d5d23d73fcc"
 dependencies = [
  "regex",
  "serde",
@@ -370,8 +370,8 @@ dependencies = [
 
 [[package]]
 name = "b10x-harness-tools"
-version = "0.11.1"
-source = "git+https://github.com/beyond10x/harness?rev=0f2edfef9f6dc3333b9377a730dfb40aeff14351#0f2edfef9f6dc3333b9377a730dfb40aeff14351"
+version = "0.12.1"
+source = "git+https://github.com/beyond10x/harness?rev=90f10a4314c1c630691c85e812bd8d5d23d73fcc#90f10a4314c1c630691c85e812bd8d5d23d73fcc"
 dependencies = [
  "b10x-harness-toolchain",
  "b10x-harness-wire",
@@ -384,8 +384,8 @@ dependencies = [
 
 [[package]]
 name = "b10x-harness-wire"
-version = "0.11.1"
-source = "git+https://github.com/beyond10x/harness?rev=0f2edfef9f6dc3333b9377a730dfb40aeff14351#0f2edfef9f6dc3333b9377a730dfb40aeff14351"
+version = "0.12.1"
+source = "git+https://github.com/beyond10x/harness?rev=90f10a4314c1c630691c85e812bd8d5d23d73fcc#90f10a4314c1c630691c85e812bd8d5d23d73fcc"
 dependencies = [
  "httpdate",
  "serde",
@@ -701,7 +701,7 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "39cab71617ae0d63f51a36d69f866391735b51691dbda63cf6f96d042b63efeb"
 dependencies = [
  "libc",
- "windows-sys 0.61.2",
+ "windows-sys 0.52.0",
 ]
 
 [[package]]
@@ -1686,7 +1686,7 @@ dependencies = [
  "errno",
  "libc",
  "linux-raw-sys",
- "windows-sys 0.61.2",
+ "windows-sys 0.52.0",
 ]
 
 [[package]]
@@ -1978,7 +1978,7 @@ dependencies = [
  "getrandom 0.4.3",
  "once_cell",
  "rustix",
- "windows-sys 0.61.2",
+ "windows-sys 0.52.0",
 ]
 
 [[package]]
@@ -2072,8 +2072,8 @@ dependencies = [
 
 [[package]]
 name = "trace-domain"
-version = "0.54.0"
-source = "git+https://github.com/beyond10x/aep?rev=a23176ae0ee2b1cf5ef249bca66bb13f04abdbe5#a23176ae0ee2b1cf5ef249bca66bb13f04abdbe5"
+version = "0.55.0"
+source = "git+https://github.com/beyond10x/aep?rev=28abe09bb6e5b0a6b4db839f6bf5693957d39324#28abe09bb6e5b0a6b4db839f6bf5693957d39324"
 dependencies = [
  "regex",
  "schemars",
@@ -2085,8 +2085,8 @@ dependencies = [
 
 [[package]]
 name = "trace-spec"
-version = "0.54.0"
-source = "git+https://github.com/beyond10x/aep?rev=a23176ae0ee2b1cf5ef249bca66bb13f04abdbe5#a23176ae0ee2b1cf5ef249bca66bb13f04abdbe5"
+version = "0.55.0"
+source = "git+https://github.com/beyond10x/aep?rev=28abe09bb6e5b0a6b4db839f6bf5693957d39324#28abe09bb6e5b0a6b4db839f6bf5693957d39324"
 dependencies = [
  "aep-domain",
  "serde",

@@ -57,6 +57,14 @@ recorded faces close, rather than letting an incomplete crate become a command s
 through. The locally verified facts and next probes are in
 `docs/research/2026-08-31-*-adapter-surface.md`.
 
+**Declared exception to "a roadmap item becomes an epic before code" (AGENTS.md § *Where work is
+tracked*).** That slice was built straight from this section: `metaharness-pi` and
+`metaharness-opencode` are workspace members (`Cargo.toml`) with no epic and no story in
+`.engineering/planning`, and none is being backfilled — a backfilled epic for finished work records
+nothing the changelog and this page do not already record. The rule is not waived going forward:
+whatever slice is taken next here — the `Kind` promotion that closes the two recorded faces above is
+one candidate, and which slice it is has not been decided — opens an epic before its first commit.
+
 ## 3. metaharness usage ≡ flux usage — **narrowed by the operator, 2026-08-23**
 
 > Operator, 2026-08-23, verbatim: *"i dont want to embed any flux related"* — said while

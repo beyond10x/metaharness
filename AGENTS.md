@@ -20,8 +20,16 @@ A change here that moves none of these is a question for the operator, not a tas
 ## What this repository owns
 
 One interface to many agent harnesses: emit events, receive steering commands, run hermetically,
-decide the tool surface per call. Library first (`metaharness`, builder API), binary second
-(`metaharness-cli`, `metaharness run <kind>`).
+decide the tool surface per call. **Binary first** (`metaharness-cli`: `metaharness run <kind>`,
+`metaharness aep drive`), library second (`metaharness`, builder API). That ordering is what is
+true rather than what was intended: no repository in the organization takes a crate of this
+workspace as a Cargo dependency, while 31 files in five sibling repositories name
+`metaharness aep drive` (counted 2026-09-15 over `~/beyond10x`: aep 9, agentplugins 11, atlas 7,
+harness-builder 2, org-brain-successor 2), and `README.md` § *Where it sits*
+says an external driver integrates through the sealed frame document and **never links this
+workspace**. The builder API is the shape the binary is built from and the surface an embedder
+inside this workspace uses; it is not a published consumer surface, and a change that is
+convenient for the binary and awkward for the library is not thereby wrong.
 
 ## Invariants
 
@@ -30,8 +38,16 @@ Each is a claim that can be checked. Breaking one is a design change, not a refa
 1. **`metaharness-protocol` depends on no adapter crate.** Its `[dependencies]` are `clap`
    (optional), `serde`, `serde_json`, `sha2` and nothing else. An adapter reaching into the protocol
    crate's dependency list inverts the seam the workspace exists to hold.
-2. **Everything harness-specific lives in `metaharness-<kind>`.** A vendor field name, a vendor
-   binary's flag, a vendor's transcript shape: in the adapter crate, nowhere else.
+2. **Everything harness-specific lives in `metaharness-<kind>`, with one declared exception.** A
+   vendor field name, a vendor binary's flag, a vendor's transcript shape: in the adapter crate,
+   nowhere else. The exception is the **spawn runners**, which live in the core crate because each
+   is an implementation of the core's own `ProcessRunner` trait (`crates/metaharness/src/process.rs`)
+   and the trait is what the run loop holds: `crates/metaharness/src/spawn.rs` (`SpawnRunner` —
+   Claude Code, record and calls down one pipe) and `crates/metaharness/src/spawn_codex.rs`
+   (`CodexSpawnRunner` — `codex exec`, whose record is the `$CODEX_HOME/sessions/…/rollout-*.jsonl`
+   file it discovers and tails), with their recorded vectors `spawn_vectors.rs` and
+   `spawn_codex_vectors.rs`. Nothing else vendor-specific is admitted here; a third vendor's launch
+   is an argument for moving both of these out, not for adding a third beside them.
 3. **Absence of evidence is not a property.** Hermeticity, tool restriction and denial behaviour are
    asserted from the run's own record — never from configuration, a directory layout or a flag that
    was passed. A run that pinned nothing is *nobody found out*, not *nothing moved*; that confusion
@@ -110,18 +126,36 @@ task check
 `cargo fmt --check`, then `cargo clippy --workspace --all-targets -- -D warnings`, then
 `cargo test --workspace`. Green before any push.
 
+CI runs this same `task check` on every pull request and on every push to `main`
+(`.github/workflows/gate.yml`, job **Gate**), plus a second job that builds on the declared
+`rust-version`. It is not a copied step list: the workflow invokes the Taskfile, so the two cannot
+drift.
+
 **A green local gate does not guarantee a green CI.** The steps mirror each other; the toolchain
 does not. CI installs whatever `stable` is that day, and a newer clippy can fail a commit that
 passed locally on an older one. Run `rustup update` before pushing anything you will not get a
 second chance at, and read the gate's own exit status — never a pipeline's. `task check 2>&1 | tail`
 reports `tail`'s status, not the gate's.
 
+**A workflow that runs is not a workflow that blocks.** Whether **Gate** is a *required* status
+check is repository settings, not a file in this tree, and this checkout cannot state what they
+say. Until it is required, a red Gate is visible on the pull request and merges anyway — so
+§ *Release completion*'s "required source checks" is only as strong as that setting.
+
 ## Live-evaluating our own harness
 
-`aep-eval driven` drives a real `aep drive run` through metaharness against
+The verbs below are **`metaharness aep drive …`**, never `aep drive …`. Since ADR 0047 the AEP
+binary refuses `run` with a model, `transition` and `hook` by name and points at this binary
+(`aep/crates/edge/aep-cli/src/drive.rs`); `metaharness-aep` hosts them above the pinned AEP library
+and `crates/metaharness-cli/src/lib.rs` carries the `Aep` verb. The surface is
+`run`, `resume`, `status`, `eval`, and the hidden `hook` and `transition` a native loop calls back
+into (`crates/metaharness-aep/src/drive.rs`, `DriveCommand`).
+
+`aep-eval driven` drives a real `metaharness aep drive run` against
 a scratch copy of AEP, on either arm, and scores the transcripts. It is how the
 native harness is compared against a vendor one on the same work. The runner is the Rust binary in
-`crates/metaharness-aep-eval`; both arms use its shared fixture and preflight.
+`crates/metaharness-aep-eval`; both arms use its shared fixture and preflight
+(`crates/metaharness-aep-eval/src/lib.rs`, `aep_drive_command`).
 The Claude fixture carries the source-built `aep` binary under `.engineering/toolchain` and
 its derived map names that file. Letting Claude resolve an ambient install while b10x receives the
 source-built staged driver compares two protocol versions rather than two harnesses.
@@ -133,8 +167,10 @@ cargo run -p metaharness-aep-eval -- driven --arm claude
 
 `aep-eval native` is the third shape: the same work walked **natively** —
 `b10x-harness workflow run` over the flow `aep govern workflow flow` projects from `adp/default/2`
-with the eval's step map, governed at every section boundary by `aep drive transition`
-through the loop's `transition` hook (atlas ADR 0004). Without `--spend` it does everything free —
+with the eval's step map, governed at every section boundary by `metaharness aep drive transition`
+through the loop's `transition` hook, and answering before-call on `file_write`/`file_edit` with
+`metaharness aep drive hook` (atlas ADR 0004; both commands are written into the hooks file by
+`write_hooks`). Without `--spend` it does everything free —
 assembles the scratch project, proves the subject lifecycle is visible through a command executed
 inside substrate, projects the flow, writes the hooks file, consults the governor by hand at the
 first boundary, prints the plan — and stops at the one command that spends. It is a
@@ -193,7 +229,7 @@ long and the interesting lines are in the middle. Redirect to a file and grep it
 ### Things that were true and cost a paid run each
 
 - **A flag must be forwarded by every link in the chain**, and the chain is
-  `aep drive` → `metaharness run <arm>` → the harness binary. `--plugin-dir` was wired through
+  `metaharness aep drive run` → `metaharness run <arm>` → the harness binary. `--plugin-dir` was wired through
   metaharness and the loop and still arrived empty, because AEP'
   `b10x_argv` never emitted it. Reading the code did not show this; a paid run did. When a flag
   does not arrive, check **every** link before suspecting the one you changed.
@@ -243,6 +279,10 @@ the loop could see until 2026-08-29, and the column measured one tier while read
 Cut `CHANGELOG.md` under a version heading at a fully gated `main` commit, then write an annotated
 tag whose name is the bare version — `0.1.0`, the version and nothing else (atlas § *Naming*).
 The full gate comes first; component steps alone are not enough.
+
+`README.md` § *Status* names the current tag and its date in one line. **Move it in the same commit
+that cuts the changelog**, so `git describe --tags --abbrev=0` and that line never disagree — they
+disagreed from `0.5.0` to `0.7.0` because nothing in this checklist said to.
 
 ## Where work is tracked
 

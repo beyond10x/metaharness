@@ -23,7 +23,11 @@ metaharness
 ## The three promises
 
 1. **Unified**: one event stream and one command set; everything harness-specific lives in that
-   harness's adapter crate and nowhere else.
+   harness's adapter crate, with one declared exception — the spawn runners
+   `crates/metaharness/src/spawn.rs` (`SpawnRunner`, Claude Code) and
+   `crates/metaharness/src/spawn_codex.rs` (`CodexSpawnRunner`, `codex exec` and the
+   `$CODEX_HOME` rollout file it discovers), with their recorded vectors, sit in the core crate
+   because each is an implementation of the core's own `ProcessRunner` trait.
 2. **Hermetic**: a run shares credentials with the operator and nothing else — no ambient plugins,
    no account-level MCP servers, no inherited environment. Hermeticity is asserted from the
    transcript, not assumed from a directory.
@@ -51,7 +55,7 @@ never links this workspace.
 
 ## Status
 
-**Pre-v1. Tagged `0.5.0` (2026-09-03).** The design in `docs/design/` is binding: where this code
+**Pre-v1. Tagged `0.7.0` (2026-09-10).** The design in `docs/design/` is binding: where this code
 and that document disagree, the document is amended rather than the disagreement left in the code.
 
 | verb | state |
@@ -59,6 +63,7 @@ and that document disagree, the document is amended rather than the disagreement
 | `run claude` | drives the real binary end to end; verified against a paid run |
 | `run codex` | drives real `codex exec`; verified against a paid run |
 | `run b10x` | observes the b10x loop |
+| `aep drive` | hosts AEP-governed execution above the pinned AEP library — `run`, `resume`, `status`, `eval`, and the hidden `hook` and `transition` verbs a native loop calls back into; the 0.7.0 headline. Verified free in `task check`: the hook and transition answers, resume compatibility and the pre-spend gates on `eval run` (`crates/metaharness-cli/tests/aep_native.rs`, `aep_resume.rs`, `aep_eval_live.rs`). `run` and a live `eval run` reach a model and are not in the gate |
 | `capabilities`, `conformance`, `doctor` | work with no model and no credential |
 | `mcp-serve` | serves the owned tool surface over MCP on stdio |
 | `project` | writes a `trace-ir/1` document from an event stream, byte-stable; `--html` renders one or two runs as one static page. The stream's own `stream.closed` marker becomes a terminal node, and the document states whether the stream is whole |
@@ -93,11 +98,15 @@ cargo run -p metaharness-cli -- doctor claude
 
 | path | holds |
 |---|---|
-| `crates/metaharness` | the library: builder, run, hermetic floor, audit |
+| `crates/metaharness` | the library: builder, run, hermetic floor, audit — and the two `ProcessRunner` spawn runners, `spawn.rs` (Claude Code) and `spawn_codex.rs` (`codex exec`), the declared exception to promise 1 |
 | `crates/metaharness-protocol` | the harness-neutral wire — events a run emits, commands that steer it, `RunSpec` |
 | `crates/metaharness-claude` | the Claude Code adapter, and nothing else |
 | `crates/metaharness-codex` | the Codex adapter, and nothing else |
 | `crates/metaharness-b10x` | the b10x adapter: a loop we own, observed rather than driven |
+| `crates/metaharness-pi` | the Pi adapter, contract-first: recorded launch and version pair, not yet a `Kind` |
+| `crates/metaharness-opencode` | the OpenCode adapter, contract-first: recorded launch and version pair, not yet a `Kind` |
+| `crates/metaharness-aep` | `metaharness aep drive` — concrete model execution, native hooks and live evaluation above the pinned AEP library |
+| `crates/metaharness-aep-eval` | the `aep-eval` runner: the native and driven arms of the AEP comparison, and their census |
 | `crates/metaharness-tools` | the owned tool surface, served to a vendor harness over MCP |
 | `crates/metaharness-cli` | the `metaharness` binary |
 | `docs/design/` | the binding design documents and their amendments |
