@@ -368,3 +368,5 @@ Repositories without a release unit retain their existing publication policy. Th
 boundary supersedes older instructions that attach synchronous documentation ceremony to each
 source release.
 <!-- b10x-release-operations:end -->
+
+**Measured 2026-09-15, outside the managed block above:** `gh api repos/beyond10x/metaharness/rules/branches/main` returns six rule entries (four ref-protection rules and two email patterns) and no `required_status_checks`, so "required source checks" names nothing on `main` today — the six Gate-red commits from `7cf2193` to `4a21dcc` were pushed with nothing blocking them; read the phrase as unsatisfied until a ruleset names **Gate**, which is a repository setting no commit here can make.

@@ -20,8 +20,17 @@ page mapping "adapter contract" onto that tooling's vocabulary.
 
 **Answered and built, 2026-08-23.** `docs/design/adapter-contract-v0.1.md` is that page and its
 four milestones are all built: the record (CT-1), recorded real wire on both faces (CT-2), the
-version pair (CT-3) and the per-adapter authoring shape (CT-4). The reuse is the vocabulary and
-not a dependency — `AEP` never appears in a `Cargo.toml` here. What the last
+version pair (CT-3) and the per-adapter authoring shape (CT-4). The reuse is the vocabulary and not
+AEP's contract tooling: no file under `crates/` names `aep_contract` or `aep_conformance`, and both
+crates reach `Cargo.lock` only as transitive dependencies of the pinned crates (`aep-cli`, `aep-engine`, the backends). **This once read "`AEP`
+never appears in a `Cargo.toml` here", and that stopped being true at 0.7.0 — corrected
+2026-09-15.** `crates/metaharness-aep/Cargo.toml:12-18,27` pins eight AEP crates at rev
+`28abe09bb6e5b0a6b4db839f6bf5693957d39324` — `aep-cli`, `aep-domain`, `aep-driver`,
+`aep-driver-spec`, `aep-engine`, `aep-project` and `trace-domain`, plus `aep-schema` as a
+dev-dependency — and `README.md:46` calls that an exact AEP library dependency. It is a dependency
+of the shipped binary: `metaharness-cli` takes `metaharness-aep`, so those crates are linked into
+`metaharness` itself and `aep drive` is what they carry. What this item reused is still only the
+vocabulary; the pin arrived later and for a different reason. What the last
 milestone surfaced is carried in that page: the two adapters were not symmetrical, because codex
 tested no launch face, and the checklist said so out loud instead of leaving it absent. **That gap
 is closed as of 2026-08-23** — six recorded C1 expectations, `checked: 10 → 17` on codex — and the
@@ -64,6 +73,18 @@ tracked*).** That slice was built straight from this section: `metaharness-pi` a
 nothing the changelog and this page do not already record. The rule is not waived going forward:
 whatever slice is taken next here — the `Kind` promotion that closes the two recorded faces above is
 one candidate, and which slice it is has not been decided — opens an epic before its first commit.
+
+**Second declared exception, 2026-09-15, and the promise above narrowed to what the rule says.** The
+slice actually taken next was neither candidate: it was the `Gate` workflow and the environment
+coupling it exposed, and it opened no epic before its first commit. `aep plan artifact board` holds
+14 artifacts today — 12 `implemented` and 2 `draft` stories,
+`story:task-check-passes-on-a-machine-without-the-operators-binaries` and
+`story:scripted-b10x-run-does-not-need-the-binary` — and nothing in any open state, so the sentence
+above was broken by the commits between `7cf2193` and `4a21dcc`. No epic is being backfilled over
+those two drafts, for the reason the first exception gives: they already name the work. The promise
+is narrowed here to the rule it came from — **a roadmap item** becomes an epic before code
+(AGENTS.md § *Where work is tracked*). Repairing this repository's own gate is not a roadmap item
+and never was one; a slice taken from a numbered section of this page is, and that rule stands.
 
 ## 3. metaharness usage ≡ flux usage — **narrowed by the operator, 2026-08-23**
 
