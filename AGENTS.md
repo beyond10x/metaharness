@@ -261,6 +261,21 @@ long and the interesting lines are in the middle. Redirect to a file and grep it
   `specify` prompt now asks for `run ["env"]` deliberately.
 - **`unk` is not a pass.** An empty selection reads `unk` and never `ok`, on purpose: a step that
   never made the call cannot satisfy a row by having nothing to judge.
+- **A pin move is a paid run, and the cheapest one is not a walk.** Moving
+  `metaharness-b10x`'s `HARNESS_REVISION`/`PINNED_VERSIONS` to harness `0.12.1` cost **$0.017481** —
+  one `metaharness run b10x --strict-version --decisions observe`, two turns, one `file_read` — not
+  a native walk. `--strict-version` refuses before the spawn when the resolved binary is off the
+  pin, so the run's own exit code is the provenance. Build the binary at the pinned revision and
+  put it on the child's `PATH` — which is `$HOME/.local/bin:/usr/local/bin:/usr/bin:/bin`,
+  constructed from the *process's* `HOME` and never inherited, so an install elsewhere plus a
+  `PATH` export changes nothing and only `HOME` does. `--decisions` defaults to `frame` and b10x
+  refuses it by name; the observe-only arm has to be asked for.
+- **What that run found, neither of which reading the code showed.** 0.12.1 reports
+  `usage.cache_creation_input_tokens` and the seam hardcoded `None` over it; and
+  `b10x-harness` has had an MCP client since before this pin, while the adapter still carried
+  "no MCP client at all" as a standing fact. A pin that lags is not inert — it is a set of claims
+  about a binary that has moved (2026-09-15,
+  `docs/research/2026-09-15-b10x-harness-0.12.1-adapter-surface.md`).
 
 ### What the four enforcement tiers are, as flags
 

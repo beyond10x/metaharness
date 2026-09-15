@@ -25,11 +25,34 @@ was amended and the amendment is named here.
   `main` and both old ones are their ancestors. `Cargo.lock` moved with them — the harness crates
   `0.11.1 → 0.12.1`, the AEP crates `0.54.0 → 0.55.0` — and `task check` is green across the move
   with no source change, so neither release altered an API this workspace consumes.
-- **`metaharness-b10x::HARNESS_REVISION` and `PINNED_VERSIONS` were deliberately left at `0.10.2`**
-  (`c1493a79331f315cac24aa3818ddaa1eb41c8b25`). They are the AEP eval's provenance pair for an
-  *installed* `b10x-harness` binary, not the Cargo build pin, and moving the revision without
-  re-observing the adapter's version-specific claims against `0.12.1` would make the pair
-  unsatisfiable and break invariant 4. Re-observing is its own change.
+- **`metaharness-b10x::HARNESS_REVISION` and `PINNED_VERSIONS` moved to harness `0.12.1`**
+  (`90f10a4314c1c630691c85e812bd8d5d23d73fcc`), from `0.10.2` /
+  `c1493a79331f315cac24aa3818ddaa1eb41c8b25`. They are the AEP eval's provenance pair for an
+  *installed* `b10x-harness` binary, not the Cargo build pin, so they were deliberately left behind
+  when the Cargo pin moved above: moving them without re-observing the adapter's version-specific
+  claims would have made invariant 4 a claim about a binary nobody had read. **The re-observation
+  is the change, and it was one paid run** — `metaharness run b10x --strict-version` against a
+  `0.12.1` binary built from that revision, 2026-09-15, 2 turns, 15 events, **0 `opaque`**, exit 0,
+  `session.ended.total_cost_usd` $0.017481. `--strict-version` refuses before the spawn when the
+  resolved binary is off the pin, so the exit code is the provenance. The terminal event is
+  unchanged and every record kind the run emitted is read. Recorded in
+  `docs/research/2026-09-15-b10x-harness-0.12.1-adapter-surface.md`, including what the run did
+  **not** establish; `metaharness doctor b10x` against `0.12.1` is exit 0 on both rows.
+  **The contract record's `provider` moves with the pin**, as it did for claude's a10:
+  `crates/metaharness/fixtures/golden/contract-result-b10x.json` now reads `b10x 0.12.1`,
+  regenerated deliberately through `regenerate_the_contract_records` — one line, `checked: 7`,
+  `failed: 0`, `breaking_changes: 0` all unchanged and claude and codex byte-identical, so nothing
+  but the binary a consumer is reading about has moved.
+- **`usage.cache_creation_input_tokens` is read instead of dropped.** The b10x seam hardcoded
+  `None`, which invariant 3 reads as *nobody found out*; the paid run saw the loop report 2,183 and
+  132 on the two `usage` lines of a two-turn run. Absent still reads `None`, which is an older
+  loop's silence stated as silence. Found by the run, not by reading the code.
+- **The adapter no longer claims `b10x-harness` has no MCP client.** It has one at `0.12.1` —
+  `--mcp-profile`, `--mcp-registry` — and writes an `mcp` field in its opening record that the
+  0.9.1 golden capture does not carry. `mcp_servers` is still the hardcoded `[]`, **deliberately**:
+  the run observed that field only as `[]`, so an element's shape is unestablished and guessing it
+  is what this adapter refuses to do. The comments in `crates/metaharness-b10x/src/lib.rs` and
+  `seam.rs` now say what is true and what is owed instead of repeating a retired standing fact.
 
 ### Fixed
 

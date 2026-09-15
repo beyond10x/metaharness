@@ -36,9 +36,16 @@
 //!
 //! Skills and named agents are read from the opening record: the loop gained both after this
 //! adapter was introduced, so hardcoding empty lists would now assert something about a run that
-//! may have been offered several. It still has no MCP client, slash-command surface or vendor
-//! permission mode. Those absences are standing facts; fields this adapter has not established
-//! remain `null` rather than being guessed empty.
+//! may have been offered several. It has no slash-command surface and no vendor permission mode,
+//! and those absences are standing facts; fields this adapter has not established remain `null`
+//! rather than being guessed empty.
+//!
+//! **MCP has stopped being one of those absences.** 0.12.1 publishes `--mcp-profile` and
+//! `--mcp-registry` and writes an `mcp` field in its opening record, which the 0.9.1 capture in
+//! `fixtures/golden/` does not carry. `mcp_servers` is still the hardcoded `[]` the old standing
+//! fact justified, because the 2026-09-15 observation saw that field only as `[]` and the shape of
+//! an element is unestablished — see `B10xSeam`'s own note and
+//! `docs/research/2026-09-15-b10x-harness-0.12.1-adapter-surface.md`.
 
 #![allow(missing_docs)]
 
@@ -70,11 +77,11 @@ pub const ADAPTER_CLASS: &str = "direct_provider";
 /// Pinned for the reason the other adapters pin: every version-specific claim in here — the field
 /// names of the loop record, the shape of its terminal event — was observed against these, and a
 /// run against another is unverified rather than wrong.
-pub const PINNED_VERSIONS: [&str; 1] = ["0.10.2"];
+pub const PINNED_VERSIONS: [&str; 1] = ["0.12.1"];
 
 /// The immutable harness source revision this adapter is built against.
 ///
 /// The version identifies the released CLI; the revision identifies the Rust crates Cargo
 /// resolves. Both are checked by the AEP eval before it trusts an installed
 /// binary, so a filesystem timestamp is never mistaken for provenance.
-pub const HARNESS_REVISION: &str = "c1493a79331f315cac24aa3818ddaa1eb41c8b25";
+pub const HARNESS_REVISION: &str = "90f10a4314c1c630691c85e812bd8d5d23d73fcc";

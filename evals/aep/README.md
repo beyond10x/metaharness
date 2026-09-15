@@ -51,6 +51,17 @@ That is the expected admission result, not a skipped test and not permission to 
 measurement request. No paid arm was run. The next free comparison needs a delegated cgroup that
 serves CPU, memory, process and block-I/O accounting together.
 
+### Paid pin observation — Harness 0.12.1, 2026-09-15
+
+Not a walk and not an arm: the smallest recorded run this repository can make, taken to move
+`metaharness-b10x`'s provenance pair from `0.10.2` / `c1493a7` to `0.12.1` / `90f10a4`.
+`metaharness run b10x --strict-version --decisions observe` against a `0.12.1` binary built from
+that revision — 2 turns, one `file_read`, 15 events on `metaharness.event/1`, **0 `opaque`**, exit
+0, `session.ended.total_cost_usd` **$0.017481** from the rate card above. It found two things the
+code did not show: a dropped `usage.cache_creation_input_tokens`, and an MCP client the adapter
+still said this harness did not have. The record, including what it did **not** establish, is
+`docs/research/2026-09-15-b10x-harness-0.12.1-adapter-surface.md`.
+
 ### Results — eleven paid native walks, Haiku 4.5 and Opus 5, 2026-08-29/31
 
 Each walk found one thing and cost the next one nothing. Token figures are the loop's own

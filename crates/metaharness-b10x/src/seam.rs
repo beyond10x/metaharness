@@ -221,18 +221,25 @@ impl HarnessSeam for B10xSeam {
                     // `null`, which is "nobody looked". Two of them are now what the comment
                     // always claimed.**
                     //
-                    // `mcp_servers` and `skills` are facts about the harness, not guesses about
-                    // the run: `b10x-harness` has no MCP client at all — its README states the
-                    // refusal and the reason, that a client of a protocol whose tools nothing here
-                    // confines is not something this loop will be — and it has no skills
-                    // mechanism. "None were offered" is knowable without observing anything, the
-                    // same standing fact `credential_source` above states, and the driven eval's
-                    // `no-mcp-servers` row read `unk` on every native run because of it.
+                    // `mcp_servers` and `skills` were facts about the harness rather than
+                    // guesses about the run, and `skills` has since stopped being one. **This row
+                    // is now owed the same move, and the 0.12.1 observation is why.** The
+                    // standing claim behind the hardcoded `[]` was that `b10x-harness` has no MCP
+                    // client at all; 0.12.1 has one — `--mcp-profile` and `--mcp-registry`
+                    // (`b10x-harness run --help`, read 2026-09-15) — and its `started` record
+                    // carries an `mcp` field, which the 0.9.1 capture in `fixtures/golden/` does
+                    // not. So the harness can now report servers and this asserts it reported
+                    // none.
+                    //
+                    // It is deliberately **not** read here yet: the 2026-09-15 run observed the
+                    // field only as `[]`, so the shape of an element is unestablished, and
+                    // inventing one would be the guess this adapter refuses to make elsewhere.
+                    // What closes it is a run that publishes a profile, recorded the way the
+                    // `skills` move was — `docs/research/2026-09-15-b10x-harness-0.12.1-adapter-surface.md`.
                     //
                     // The opposite call from `withheld` below, and the difference is what the
                     // silence is about: nothing on the wire separates a build that withheld
-                    // nothing from one too old to say so, whereas no build of this harness has
-                    // ever had an MCP client to report.
+                    // nothing from one too old to say so.
                     mcp_servers: Some(Vec::new()),
                     // **Read from the record now that the loop has skills to report.** It was a
                     // hardcoded `[]` on the grounds that this harness had no skills mechanism;
@@ -316,7 +323,13 @@ impl HarnessSeam for B10xSeam {
                     input_tokens: number("input_tokens"),
                     output_tokens: number("output_tokens"),
                     cache_read_input_tokens: number("cached_input_tokens"),
-                    cache_creation_input_tokens: None,
+                    // **Read from the record since the 0.12.1 observation.** It was a hardcoded
+                    // `None` because the 0.9.1 capture the golden fixture holds carries no such
+                    // field; the paid run on 2026-09-15 saw `cache_creation_input_tokens` 2183 and
+                    // 132 on the two `usage` lines of a two-turn run, so `None` here stopped being
+                    // "nobody looked" and became a figure the adapter dropped on the floor. Absent
+                    // still reads `None`, which is the older loop's silence stated as silence.
+                    cache_creation_input_tokens: number("cache_creation_input_tokens"),
                     service_tier: None,
                     thinking_tokens: None,
                     iterations: None,
