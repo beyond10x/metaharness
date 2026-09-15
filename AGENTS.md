@@ -138,9 +138,12 @@ second chance at, and read the gate's own exit status — never a pipeline's. `t
 reports `tail`'s status, not the gate's.
 
 **A workflow that runs is not a workflow that blocks.** Whether **Gate** is a *required* status
-check is repository settings, not a file in this tree, and this checkout cannot state what they
-say. Until it is required, a red Gate is visible on the pull request and merges anyway — so
-§ *Release completion*'s "required source checks" is only as strong as that setting.
+check is repository settings, not a file in this tree, so this checkout cannot prove what they say —
+read them with `gh api repos/beyond10x/metaharness/rules/branches/main` rather than trusting this
+sentence. As measured on 2026-09-15 they do require it: ruleset 23472397 `main-requires-the-gate`
+names **Gate** and **MSRV 1.98** with no bypass actor. Before it existed a red Gate was visible on
+the pull request and merged anyway, and § *Release completion*'s "required source checks" named
+nothing.
 
 ## Live-evaluating our own harness
 
@@ -369,4 +372,4 @@ boundary supersedes older instructions that attach synchronous documentation cer
 source release.
 <!-- b10x-release-operations:end -->
 
-**Measured 2026-09-15, outside the managed block above:** `gh api repos/beyond10x/metaharness/rules/branches/main` returns six rule entries (four ref-protection rules and two email patterns) and no `required_status_checks`, so "required source checks" names nothing on `main` today — the six Gate-red commits from `7cf2193` to `4a21dcc` were pushed with nothing blocking them; read the phrase as unsatisfied until a ruleset names **Gate**, which is a repository setting no commit here can make.
+**Measured 2026-09-15, outside the managed block above:** `gh api repos/beyond10x/metaharness/rules/branches/main` now returns seven rule entries — four ref-protection rules, two email patterns and a `required_status_checks` rule naming **Gate** and **MSRV 1.98**, both GitHub Actions (integration 15368). It comes from ruleset 23472397, `main-requires-the-gate`, created 2026-09-15 with `bypass_actors: []`, so nobody can merge past a red Gate. Until that ruleset existed the phrase "required source checks" in § *Release completion* named nothing, and the six Gate-red commits from `7cf2193` to `4a21dcc` were pushed with nothing blocking them. `gate.yml:20-23` runs both jobs on `pull_request` as well as on a push to `main`, so a commit carries its own verdict before a fast-forward lands it.
