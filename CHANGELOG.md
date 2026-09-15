@@ -5,6 +5,14 @@ was amended and the amendment is named here.
 
 ## [Unreleased]
 
+### Fixed
+
+- **`metaharness aep drive` now refuses an `llm` map when `metaharness` is not on the PATH**, as
+  its pre-flight text always said. The check read `std::env::current_exe().is_ok()`, which is true
+  in every process, so the refusal never fired and the test covering it passed only on a machine
+  that had the binary installed (Gate run 34912870204, the first machine without one).
+  `metaharness_preflight` now asks `aep_cli::drive::on_path`, the lookup the spawn by name uses.
+
 ### Changed
 
 - **Re-pinned both git dependencies to their current releases** (invariant 10: say which in the

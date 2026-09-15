@@ -1700,7 +1700,7 @@ fn resumed_spend_terms_with_live(
 
 fn metaharness_preflight(map: &StepMap) -> Option<String> {
     let llm_steps = llm_step_count(map);
-    if llm_steps == 0 || std::env::current_exe().is_ok() {
+    if llm_steps == 0 || aep_cli::drive::on_path(METAHARNESS_BINARY) {
         return None;
     }
     Some(format!(
