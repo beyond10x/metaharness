@@ -63,16 +63,19 @@ jobs:
 
       - uses: Swatinem/rust-cache@6323deb102c322ba6fcbdcafc7e3dddab59af2b6 # v2
 
-      # `task check` needs `b10x-harness` on the PATH: the b10x adapter resolves the binary when a
-      # run starts, even a scripted run that never launches it (`tests/stream_closed.rs`,
-      # `every_harness_kind_closes_its_stream`). A laptop has the binary; the runner gets it here at
-      # the harness revision `crates/metaharness-b10x/Cargo.toml` pins, so the two are judged alike.
-      - name: Install b10x-harness at the pinned harness revision
+      # `task check` needs `b10x-harness` where a run looks for it: the b10x adapter resolves the
+      # binary when a run starts, even a scripted run that never launches it
+      # (`tests/stream_closed.rs`, `every_harness_kind_closes_its_stream`), and it searches the
+      # PATH it constructs for the child — `~/.local/bin:/usr/local/bin:/usr/bin:/bin`
+      # (`crates/metaharness/src/builder.rs`) — not the runner's own. A laptop keeps the binary in
+      # `~/.local/bin`; the runner gets it there, at the harness revision
+      # `crates/metaharness-b10x/Cargo.toml` pins, so the two are judged alike.
+      - name: Install b10x-harness into ~/.local/bin at the pinned harness revision
         run: |
           rev="$(grep -oE 'rev = "[0-9a-f]{40}"' crates/metaharness-b10x/Cargo.toml | head -1 | grep -oE '[0-9a-f]{40}')"
           test -n "$rev"
-          cargo install --git https://github.com/beyond10x/harness --rev "$rev" --locked b10x-harness-cli
-          b10x-harness --version
+          cargo install --git https://github.com/beyond10x/harness --rev "$rev" --locked --root "$HOME/.local" b10x-harness-cli
+          "$HOME/.local/bin/b10x-harness" --version
 
       # The gate's own exit status, never a pipeline's (AGENTS.md § The gate).
       - name: Run the repository gate
