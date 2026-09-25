@@ -5,6 +5,8 @@ was amended and the amendment is named here.
 
 ## [Unreleased]
 
+## [0.8.0] — 2026-09-25
+
 ### Added
 
 - **Prebuilt binaries with every release.** `.github/workflows/release.yml` builds `metaharness` for
