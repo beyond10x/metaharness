@@ -5,6 +5,15 @@ was amended and the amendment is named here.
 
 ## [Unreleased]
 
+## [0.8.0] — 2026-09-25
+
+### Added
+
+- **Prebuilt binaries with every release.** `.github/workflows/release.yml` builds `metaharness` for
+  `x86_64`/`aarch64` Linux and macOS when a tag is pushed, checks each binary reports the tag, and
+  attaches `metaharness-<version>-<target>.tar.gz` and `SHA256SUMS` to the GitHub Release, so
+  `b10x` and people without a Rust toolchain can install it. `cargo install` is unchanged.
+
 ### Fixed
 
 - **`metaharness aep drive` now refuses an `llm` map when `metaharness` is not on the PATH**, as
