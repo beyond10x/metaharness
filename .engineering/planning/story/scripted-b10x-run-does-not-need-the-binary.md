@@ -1,5 +1,5 @@
 ---
-format: aep.planning-md/1
+format: aep.planning-md/3
 id: story:scripted-b10x-run-does-not-need-the-binary
 kind: story
 status: draft

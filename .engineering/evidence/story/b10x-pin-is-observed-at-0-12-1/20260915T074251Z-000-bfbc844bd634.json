@@ -1,0 +1,13 @@
+{
+  "at": "2026-09-15T07:42:51Z",
+  "actor": "human:timo",
+  "artifact": "story:b10x-pin-is-observed-at-0-12-1",
+  "kind": "story",
+  "revision": 6,
+  "change": {
+    "change": "evidence",
+    "kind": "test_result",
+    "source": "task check at the worktree head: cargo fmt --check, cargo clippy --workspace --all-targets -D warnings, cargo test --workspace, exit 0",
+    "reference": "Taskfile.yml"
+  }
+}

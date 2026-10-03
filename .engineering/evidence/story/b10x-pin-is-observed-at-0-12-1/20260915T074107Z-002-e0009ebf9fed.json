@@ -1,0 +1,13 @@
+{
+  "at": "2026-09-15T07:41:07Z",
+  "actor": "human:timo",
+  "artifact": "story:b10x-pin-is-observed-at-0-12-1",
+  "kind": "story",
+  "revision": 2,
+  "change": {
+    "change": "evidence",
+    "kind": "health_observation",
+    "source": "metaharness doctor b10x against the 0.12.1 binary: exit 0, on the adapter's pin, every flag the adapter sends is one the binary declares",
+    "reference": "crates/metaharness/src/doctor.rs"
+  }
+}

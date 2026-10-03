@@ -1,0 +1,13 @@
+{
+  "at": "2026-09-03T09:18:00Z",
+  "actor": "human:timo",
+  "artifact": "story:pinned-plugin-loads-in-the-session",
+  "kind": "story",
+  "revision": 1,
+  "change": {
+    "change": "evidence",
+    "kind": "test_result",
+    "source": "task check (fmt, clippy -D warnings, cargo test --workspace) on the 0.6.1 release commit",
+    "reference": "60ffe8d"
+  }
+}

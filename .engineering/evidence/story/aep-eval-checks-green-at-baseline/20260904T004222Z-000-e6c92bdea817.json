@@ -1,0 +1,12 @@
+{
+  "at": "2026-09-04T00:42:22Z",
+  "actor": "human:timo",
+  "artifact": "story:aep-eval-checks-green-at-baseline",
+  "kind": "story",
+  "revision": 5,
+  "change": {
+    "change": "evidence",
+    "kind": "test_result",
+    "source": "task check in worktree wt-85abf3604797 on 3901222: exit 0, 603 tests; run-checks.sh 2 pass/67 fail -> 11 pass/58 fail against agentplugins 0.7.0 + aep 0.51.0, 9 rows forward, 0 backward"
+  }
+}

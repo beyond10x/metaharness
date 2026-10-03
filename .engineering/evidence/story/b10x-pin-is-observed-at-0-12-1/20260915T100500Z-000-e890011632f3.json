@@ -1,0 +1,13 @@
+{
+  "at": "2026-09-15T10:05:00Z",
+  "actor": "human:timo",
+  "artifact": "story:b10x-pin-is-observed-at-0-12-1",
+  "kind": "story",
+  "revision": 7,
+  "change": {
+    "change": "evidence",
+    "kind": "health_observation",
+    "source": "Qualifies the test_result of 2026-09-15T07:42:51Z: that was a machine-local task check on the operator's laptop, which has metaharness and b10x-harness installed. Gate run 34947429804 ran the same task check on 4a21dcc — the commit carrying that record — and exited non-zero at crates/metaharness-cli/tests/aep_resume.rs:70, 'this map has 1 llm step(s) and metaharness is not on PATH'. That is a machine dependency of the test, not the b10x pin: the pin's own evidence is unaffected and the story stays implemented. CI verification is pending on the fix recorded against story:task-check-passes-on-a-machine-without-the-operators-binaries.",
+    "reference": "https://github.com/beyond10x/metaharness/actions/runs/34947429804"
+  }
+}

@@ -1,0 +1,13 @@
+{
+  "at": "2026-09-15T10:04:53Z",
+  "actor": "human:timo",
+  "artifact": "story:task-check-passes-on-a-machine-without-the-operators-binaries",
+  "kind": "story",
+  "revision": 1,
+  "change": {
+    "change": "evidence",
+    "kind": "test_result",
+    "source": "cargo test -p metaharness-cli --test aep_resume --locked: 1 passed, exit 0, run twice on 2026-09-15 — once on the operator's PATH and once against a PATH holding neither metaharness nor b10x-harness, where the same test binary failed at line 70 before the fix. Local, CI pending: the Gate has not yet run this test file on a clean runner.",
+    "reference": "crates/metaharness-cli/tests/aep_resume.rs"
+  }
+}

@@ -1,5 +1,5 @@
 ---
-format: aep.planning-md/1
+format: aep.planning-md/3
 id: story:bookkeeping-list-names-the-sixth-shape
 kind: story
 status: implemented
@@ -7,6 +7,10 @@ title: The record count never decided anything, so the sixth bookkeeping shape i
 relations:
 - decomposes: epic:runs-side-by-side
 revision: 4
+transitions:
+- {from: "draft", to: "proposed", at: "2026-09-03T15:16:20Z", actor: "human:timo", revision: 2, decided_on: {"recorded":{"test_result":1}}, imported: true}
+- {from: "proposed", to: "active", at: "2026-09-03T15:16:20Z", actor: "human:timo", revision: 3, decided_on: {"recorded":{"test_result":1}}, imported: true}
+- {from: "active", to: "implemented", at: "2026-09-03T15:16:20Z", actor: "human:timo", revision: 4, decided_on: {"recorded":{"test_result":1}}, imported: true}
 ---
 # Story: the record count never decided anything, so the sixth shape is named too
 

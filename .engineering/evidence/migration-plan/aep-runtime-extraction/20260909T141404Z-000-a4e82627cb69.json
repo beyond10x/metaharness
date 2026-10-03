@@ -1,0 +1,13 @@
+{
+  "at": "2026-09-09T14:14:04Z",
+  "actor": "human:timo",
+  "artifact": "migration-plan:aep-runtime-extraction",
+  "kind": "migration-plan",
+  "revision": 3,
+  "change": {
+    "change": "evidence",
+    "kind": "test_result",
+    "source": "task check passed against published AEP a23176ae0ee2b1cf5ef249bca66bb13f04abdbe5 without Cargo patches; legacy paused-run test verifies both runnable host hints and unchanged spend ledger",
+    "reference": "~/.cache/atlas-reconcile-20260909/metaharness-hint-final-gate.log"
+  }
+}
