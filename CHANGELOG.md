@@ -7,6 +7,11 @@ was amended and the amendment is named here.
 
 ### Added
 
+- Native b10x runs accept repeated `--process-write-subtree DIR` for exact confined
+  process write directories. Empty remains read-only; file-tool globs never become
+  process mounts. Unsupported adapters, absent confinement and invalid declarations
+  are refused before launch (amendment a24).
+
 - Codex terminal records expose an authoritative final answer and scoped observed model selections.
   Structured retained tool completions expose correlated outcomes and numeric exits where observed;
   missing, conflicting and legacy content-only results stay unknown. These mappings are source-backed

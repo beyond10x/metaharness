@@ -220,6 +220,8 @@ pub struct B10xLaunch {
     pub driver: Option<String>,
     /// Where the run may write, ordered, as `<glob>=<allowed|partial-only|denied>`.
     pub write_scope: Vec<String>,
+    /// Exact workspace-relative directories confined native processes may write.
+    pub process_write_subtree: Vec<String>,
     /// Files the run is given before it starts, instead of discovering them.
     pub context: Vec<String>,
     /// Bind the tools to the scope without stating it in the instruction.
@@ -262,6 +264,7 @@ impl B10xLaunch {
             driver: None,
             plugin_dir: Vec::new(),
             write_scope: Vec::new(),
+            process_write_subtree: Vec::new(),
             context: Vec::new(),
             scope_silent: false,
             prices: None,
@@ -356,6 +359,13 @@ impl B10xLaunch {
         self
     }
 
+    /// Declare one exact directory for confined process writes, independently of file scopes.
+    #[must_use]
+    pub fn with_process_write_subtree(mut self, directory: impl Into<String>) -> Self {
+        self.process_write_subtree.push(directory.into());
+        self
+    }
+
     /// The same launch, priced at the rates in this card.
     #[must_use]
     pub fn with_prices(mut self, card: impl AsRef<Path>) -> Self {
@@ -445,6 +455,7 @@ pub fn emitted_flags() -> Vec<(String, bool)> {
         .speaking(Wire::AnthropicMessages)
         .with_toolchain("a-toolchain")
         .with_write_scope("a/glob=allowed")
+        .with_process_write_subtree("target")
         .with_scope_silent()
         .with_context("a/file")
         .with_prices("a/card.toml")
@@ -576,6 +587,10 @@ pub fn argv(launch: &B10xLaunch) -> Vec<String> {
     for rule in &launch.write_scope {
         argv.push("--write-scope".to_owned());
         argv.push(rule.clone());
+    }
+    for directory in &launch.process_write_subtree {
+        argv.push("--process-write-subtree".to_owned());
+        argv.push(directory.clone());
     }
     if launch.scope_silent {
         argv.push("--scope-announce".to_owned());

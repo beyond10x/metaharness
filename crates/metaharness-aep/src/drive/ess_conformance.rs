@@ -31,6 +31,73 @@ fn checked(ok: bool, accepted: &str, refused: &str, error: &str) -> Observed {
     }
 }
 
+fn process_write_plan(input: &Value) -> Observed {
+    use metaharness::protocol::{CredentialSource, DecisionMode, Kind};
+    use metaharness::{Input, Metaharness, ScriptedLog, ScriptedRunner};
+    use metaharness_b10x::B10xSeams;
+    let root = tempfile::tempdir().unwrap();
+    let cwd = root.path().join("work");
+    fs::create_dir(&cwd).unwrap();
+    let mut builder = Metaharness::new(Kind::B10x)
+        .with_credentials(CredentialSource::None)
+        .with_decisions(DecisionMode::Observe)
+        .with_model("ess-fixture")
+        .with_model_endpoint("http://fixture.invalid")
+        .with_cwd(cwd)
+        .with_substrate_embedded(true);
+    let probe = input["probe"].as_str().unwrap();
+    builder = match probe {
+        "empty" => builder,
+        "explicit" => builder
+            .with_process_write_subtree("target")
+            .with_process_write_subtree("generated"),
+        "invalid" => builder.with_process_write_subtree("../outside"),
+        "file-scope-only" => builder.with_write_scope("**=allowed"),
+        other => panic!("unsupported process write probe {other}"),
+    };
+    let log = ScriptedLog::new();
+    let mut runner = ScriptedRunner::of_lines(Vec::<String>::new(), log.clone());
+    let result = builder.start_with(
+        Input::Prompt("fixture".to_owned()),
+        &mut runner,
+        &mut B10xSeams::new(None, None, None),
+    );
+    let admitted = result.is_ok();
+    let launched = log.launched();
+    let paths: Vec<&str> = launched
+        .iter()
+        .flat_map(|argv| argv.windows(2))
+        .filter(|pair| pair[0] == "--process-write-subtree")
+        .map(|pair| pair[1].as_str())
+        .collect();
+    let count = paths.len();
+    let outcome = if !admitted {
+        assert_eq!(log.spawns(), 0);
+        "process-invalid-directory"
+    } else if count == 2 {
+        assert_eq!(paths, ["target", "generated"]);
+        "process-explicit-subtrees"
+    } else {
+        assert_eq!(
+            count, 0,
+            "an unexpected process grant must fail conformance"
+        );
+        if launched
+            .iter()
+            .any(|argv| argv.iter().any(|arg| arg == "--write-scope"))
+        {
+            "file-scope-is-not-process-scope"
+        } else {
+            "process-read-only-default"
+        }
+    };
+    event(
+        outcome,
+        "metaharness.workspace.ProcessWritePlanned",
+        json!({"admitted":admitted,"count":count}),
+    )
+}
+
 fn completion(input: &Value) -> Observed {
     let record = metaharness_codex::conformance::completion(
         input["error_property"].as_str().unwrap(),
@@ -390,6 +457,7 @@ fn execute(command: &str, input: &Value) -> Observed {
         | "metaharness.spending.RecordInvocationAdmission" => retained(command),
         "metaharness.session.FinishCodexCompletion" => completion(input),
         "metaharness.session.CloseUnsteeredStream" => closure(input),
+        "metaharness.workspace.DeclareProcessWrites" => process_write_plan(input),
         "metaharness.workspace.CheckSelectedName" => checked(
             metaharness_b10x::workspace_component_is_adoptable(input["name"].as_str().unwrap()),
             "eligible-component",
@@ -606,7 +674,7 @@ fn ess_generated_scenarios_drive_production_targets() {
     if external.is_none() {
         assert_eq!(
             scenarios.len(),
-            36,
+            40,
             "review and update coverage deliberately"
         );
         assert_eq!(
@@ -617,6 +685,7 @@ fn ess_generated_scenarios_drive_production_targets() {
             "FinishCodexCompletion",
             "CloseUnsteeredStream",
             "CheckSelectedName",
+            "DeclareProcessWrites",
             "CheckFiniteTerms",
             "CheckUncappedAuthorization",
             "ReadSealedFrame",
