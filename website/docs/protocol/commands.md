@@ -25,7 +25,7 @@ A control this adapter cannot honour is refused **by name, at run start** rather
 | Command | Needs | Notes |
 |---|---|---|
 | `tool.decide` | `call` tier | Decide one pending tool call. |
-| `frame.set` | `call` tier | Put a new [frame](../frames.mdx) in force at the next boundary. |
+| `frame.set` | `call` tier | Put a new [frame](../frames.md) in force at the next boundary. |
 | `message.inject` | `turn` tier | Add text to the conversation between turns. |
 | `steer` | a mid-turn tier | Steer a running turn. **Claude Code headless has no such tier** — on that adapter this is always refused by name. |
 | `permission.set` | `run` tier | Change the permission posture mid-run, in the vendor's own vocabulary. |

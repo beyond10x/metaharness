@@ -40,7 +40,7 @@ Read them with `metaharness capabilities <kind>`.
 
 | Mode | Behaviour |
 |---|---|
-| `frame` *(default)* | The adapter decides from the [frame's](./frames.mdx) admitted set. No round trip. |
+| `frame` *(default)* | The adapter decides from the [frame's](./frames.md) admitted set. No round trip. |
 | `ask` | The embedder decides. The run blocks — one round trip per call. |
 | `observe` | Nobody decides. Every call is allowed and recorded, through the same seam. |
 

@@ -18,11 +18,11 @@ Six verbs. Three of them need no model, no network and no credential.
 | `capabilities <KIND>` | What an adapter says it can do: declared tiers, pinned versions, operation rendering. |
 | `conformance <KIND>` | The free conformance vectors: no model, no network, no credential. |
 | `doctor <KIND>` | The installed vendor version against the adapter's pin. |
-| `project --events <FILE>` | Project an event stream into `trace-ir/1`. **Refuses with exit 2** — see [Status](../status.mdx). |
+| `project --events <FILE>` | Project an event stream into `trace-ir/1`. **Refuses with exit 2** — see [Status](../status.md). |
 | `audit --transcript <FILE>` | Judge a transcript offline. **Refuses with exit 2**. |
 
 `<KIND>` is `claude`, `codex` or `b10x`. The first two are vendors metaharness drives; the third is
-the beyond10x loop, which it observes — see [the b10x adapter](../harnesses/b10x.mdx).
+the beyond10x loop, which it observes — see [the b10x adapter](../harnesses/b10x.md).
 
 ## `metaharness run`
 
@@ -40,7 +40,7 @@ the beyond10x loop, which it observes — see [the b10x adapter](../harnesses/b1
 
 | Flag | Default | Meaning |
 |---|---|---|
-| `--hermetic [off\|on\|strict]` | `off`; bare `--hermetic` means `on` | See [the hermetic contract](../hermetic.mdx). |
+| `--hermetic [off\|on\|strict]` | `off`; bare `--hermetic` means `on` | See [the hermetic contract](../hermetic.md). |
 | `--credentials <SOURCE>` | `operator-login` | `operator-login`, `api-key`, `loopback`, or `none`. |
 | `--plugin-dir <DIR>` | *(none)* | Plugin directories to load, **and only these**. Repeatable. Copied into the scratch tree and digested before the child starts; on `b10x`, handed to the loop as its own `--plugin-dir`. |
 | `--strict-version` | off | Refuse before the run when the installed vendor version is outside the adapter's pin, instead of warning. |
@@ -66,13 +66,13 @@ environment at all.
 placeholder and **no credential file**, and one custody attaches the real token on the way out. On
 Claude Code the child is pointed at the proxy by `ANTHROPIC_BASE_URL`; on codex by a
 `[model_providers.metaharness_loopback]` entry in the scratch `CODEX_HOME`. A **ChatGPT-plan** codex
-login is refused by name — see [the codex adapter](../harnesses/codex.mdx).
+login is refused by name — see [the codex adapter](../harnesses/codex.md).
 
 ### Control
 
 | Flag | Default | Meaning |
 |---|---|---|
-| `--frame <FILE>` | — | A sealed `metaharness.frame/1` document. See [frames](../frames.mdx). |
+| `--frame <FILE>` | — | A sealed `metaharness.frame/1` document. See [frames](../frames.md). |
 | `--decisions <MODE>` | `frame` | `frame` (the adapter decides from the admitted set) or `ask` (the embedder decides; one round trip per call). |
 | `--tool-surface <SURFACE>` | `native` | `native`, or `owned` — which this build **refuses**. |
 
@@ -119,7 +119,7 @@ scope travels sealed in `Frame.subjects`, and a flag would be a second, unsealed
 | `--context <FILE>` | A file the run is given before it starts; paid on every turn of a stateless loop. A missing file refuses the run. |
 
 What the launch emits, and how the seam reads the record back, is on
-[the b10x adapter](../harnesses/b10x.mdx).
+[the b10x adapter](../harnesses/b10x.md).
 
 ## `--cwd`: the declaration that trades two rows for real work
 

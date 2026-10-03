@@ -96,11 +96,11 @@ What happens:
 
 1. `claude` is spawned into a **scratch config home** — not yours.
 2. A blocking `PreToolUse` hook is installed, and metaharness answers it **per call**.
-3. The session streams out of stdout as [protocol events](./protocol/events.mdx), one JSON object
+3. The session streams out of stdout as [protocol events](./protocol/events.md), one JSON object
    per line.
-4. Steering [commands](./protocol/commands.mdx) are read from stdin, one JSON object per line.
+4. Steering [commands](./protocol/commands.md) are read from stdin, one JSON object per line.
 5. The raw vendor transcript is retained for the auditor.
-6. The process exits on the [hermetic floor's](./hermetic.mdx) verdict.
+6. The process exits on the [hermetic floor's](./hermetic.md) verdict.
 
 ### Deciding each call yourself
 
@@ -110,7 +110,7 @@ metaharness run claude --hermetic --decisions ask -p "…"
 
 With `--decisions ask`, every tool call arrives as a `tool.requested` event carrying
 `decision_required: true`, and the run blocks until you answer with `tool.decide`. See
-[the control seam](./control-seam.mdx).
+[the control seam](./control-seam.md).
 
 ### Governing a run from outside the process
 
@@ -118,7 +118,7 @@ With `--decisions ask`, every tool call arrives as a `tool.requested` event carr
 metaharness run claude --hermetic --frame step.frame.json -p "…"
 ```
 
-The [frame](./frames.mdx) is a sealed `metaharness.frame/1` document: digest-verified on load and
+The [frame](./frames.md) is a sealed `metaharness.frame/1` document: digest-verified on load and
 enforced from the first turn. This is the seam an external driver integrates through — it writes
 the frame as a file and never links this workspace.
 
