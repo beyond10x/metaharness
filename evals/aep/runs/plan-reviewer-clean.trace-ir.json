@@ -1,6 +1,6 @@
 {
   "format": "trace-ir/1",
-  "transcript_digest": "eac40dfd2c4025256f8ab9b8096db216c9b81c7ecc6d85ba3023568498823897",
+  "transcript_digest": "8a9adac7c4e0e434f448e2527ced6dc7f0fb5fbbb30b62ffde459f82d9143a38",
   "adapter": {
     "name": "metaharness/project",
     "written_against": [
@@ -300,6 +300,9 @@
       "kind": {
         "event": "stream_closed",
         "events": 13,
+        "process": {
+          "kind": "unknown"
+        },
         "reason": "completed",
         "run_id": "plan-reviewer-clean"
       }

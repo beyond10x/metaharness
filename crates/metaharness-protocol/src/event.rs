@@ -20,6 +20,25 @@ use crate::command::{CommandOutcome, Decision};
 use crate::frame::{Digest, StepRef};
 use crate::hermetic::HermeticAttestation;
 
+/// Operating-system evidence for the run's native child, distinct from its terminal verdict.
+#[derive(Debug, Default, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(tag = "kind", rename_all = "snake_case")]
+pub enum ProcessTermination {
+    /// A measured normal exit, including nonzero failure codes.
+    Exited {
+        /// The actual process exit code.
+        code: i32,
+    },
+    /// A measured signal termination on a platform that reports signals.
+    Signaled {
+        /// The operating system's signal number.
+        signal: i32,
+    },
+    /// No native status was measured; never evidence of exit zero.
+    #[default]
+    Unknown,
+}
+
 /// Short codes for [`Event::Warning`], so an embedder can match on one without matching prose.
 pub mod warning_code {
     /// The vendor binary's version is outside the adapter's pin (design § 8.4 O1).
@@ -704,6 +723,9 @@ pub enum Event {
     /// carries the one thing that record cannot — *and then the file stopped*.
     #[serde(rename = "stream.closed")]
     StreamClosed {
+        /// Runner-owned native status. Old streams and synthetic runners have no observation.
+        #[serde(default)]
+        process: ProcessTermination,
         /// How many lines preceded this one.
         ///
         /// **Checked rather than believed.** A reader compares it against the lines it actually

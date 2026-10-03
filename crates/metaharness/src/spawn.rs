@@ -388,8 +388,8 @@ pub struct SpawnedProcess {
 enum Exited {
     /// Nobody has waited for it yet.
     NotYet,
-    /// It exited, with this code, or on a signal when `None`.
-    With(Option<i32>),
+    /// The actual OS status, retained intact even when `try_wait` observed it first.
+    With(std::process::ExitStatus),
 }
 
 impl std::fmt::Debug for SpawnedProcess {
@@ -573,15 +573,22 @@ impl HarnessProcess for SpawnedProcess {
     }
 
     fn wait(&mut self) -> std::io::Result<Option<i32>> {
-        if let Exited::With(code) = self.exit {
-            return Ok(code);
+        if let Exited::With(status) = self.exit {
+            return Ok(status.code());
         }
         let Some(child) = self.child.as_mut() else {
             return Ok(None);
         };
-        let code = child.wait()?.code();
-        self.exit = Exited::With(code);
-        Ok(code)
+        let status = child.wait()?;
+        self.exit = Exited::With(status);
+        Ok(status.code())
+    }
+
+    fn termination(&self) -> metaharness_protocol::ProcessTermination {
+        match self.exit {
+            Exited::With(status) => crate::process::observed_termination(status),
+            Exited::NotYet => metaharness_protocol::ProcessTermination::Unknown,
+        }
     }
 }
 

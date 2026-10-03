@@ -1923,3 +1923,31 @@ seam, never a test-only environment flag or a fallback after real launch failure
 | **not verified**, and labelled as such in place | Q1–Q16 |
 | **observed in a live governed run and reported by the operator**, not reproduced here | amendment a1's failure: the expired OAuth session |
 | **a claim the first draft made and the review removed**, each with a Q row in its place | the trace-ir document form (Q9), the command-hook timeout (Q10), matcher `""` as proven (Q11), the hook `allow` conflict order (Q12), and `--frame`'s on-disk format (§ 9.3) |
+
+## Amendment a21 — native termination evidence (2026-10-03)
+
+GitHub #17 separates three facts: the adapter's terminal verdict, complete normalized
+framing, and the operating system's result for the native child. `stream.closed` gains
+an additive `process` observation bound to its existing run_id: `{kind: exited, code: N}`,
+`{kind: signaled, signal: N}` or `{kind: unknown}`. The real runner owns that observation,
+including a status obtained by try_wait before EOF. Old streams deserialize a missing
+field as unknown. A scripted runner must not manufacture a native exit from synthetic EOF.
+A missing status or failed wait remains unknown. No vendor fields enter the core.
+
+The final marker remains unique and last. Its reason continues to describe normalized
+terminal/steering outcome; native termination is not folded into that reason. This
+corrects the initial #11 implementation's conflation of a nonzero wait result with
+terminal failure. A valid terminal record followed by exit7 may therefore have a
+completed normalized stream and unaudited transport exit0, but its process observation
+is exited/code7 and a consumer requiring native success must refuse it. Explicit
+terminal failure and incomplete terminal evidence still produce a nonzero CLI result,
+as required by a18; positive native exit0 never repairs those failures. Consumer
+admission must require all of its terminal, framing, content and native-status evidence.
+The AEP host rejects an observed failed native process even when CLI transport exits0.
+
+There is no new event tag or frame/1 change. Readers that ignore unknown object fields
+can retain old behavior; readers requiring native success must require this field and
+refuse its absence. Contract source is prepared on the integration branch before any
+consumer is changed; publishing and cross-repository adoption remain outside this
+unpublished wave. Executable Rust fixtures cover actual zero, nonzero and signal status,
+plus absent observations, terminal failure with exit0, and cleanup. No model is needed.

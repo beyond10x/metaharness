@@ -298,6 +298,31 @@ fn query(observed: &Observed, view: &str) -> Result<Value, String> {
 
 fn execute(command: &str, input: &Value) -> Observed {
     match command {
+        "metaharness.observations.ReadNativeTermination" => {
+            use metaharness::protocol::ProcessTermination;
+            let mut closure = json!({"event":"stream.closed","events":0,"run_id":"ess-native","reason":"completed"});
+            match input["evidence"].as_str().unwrap() {
+                "missing" => (),
+                "exited-zero" => closure["process"] = json!({"kind":"exited","code":0}),
+                "exited-nonzero" => closure["process"] = json!({"kind":"exited","code":7}),
+                "signaled" => closure["process"] = json!({"kind":"signaled","signal":9}),
+                other => panic!("unsupported native evidence {other}"),
+            }
+            let Event::StreamClosed { process, .. } = serde_json::from_value(closure).unwrap()
+            else {
+                unreachable!()
+            };
+            let (outcome, known, native_success) = match process {
+                ProcessTermination::Unknown => ("unobserved", false, false),
+                ProcessTermination::Exited { code: 0 } => ("measured-success", true, true),
+                _ => ("measured-failure", true, false),
+            };
+            event(
+                outcome,
+                "metaharness.observations.NativeStatusClassified",
+                json!({"known":known,"native_success":native_success}),
+            )
+        }
         "metaharness.session.RecordClosedStream"
         | "metaharness.spending.RecordFiniteLedger"
         | "metaharness.spending.RecordInvocationAdmission" => retained(command),
@@ -519,7 +544,7 @@ fn ess_generated_scenarios_drive_production_targets() {
     if external.is_none() {
         assert_eq!(
             scenarios.len(),
-            24,
+            27,
             "review and update coverage deliberately"
         );
         assert_eq!(
@@ -535,6 +560,7 @@ fn ess_generated_scenarios_drive_production_targets() {
             "ReadSealedFrame",
             "GovernCodexCall",
             "ReadSelectedWorkspaceFile",
+            "ReadNativeTermination",
         ] {
             assert!(
                 scenarios.keys().any(|id| id.contains(command)),

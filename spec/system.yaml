@@ -6,3 +6,4 @@ domains:
   - metaharness.workspace
   - metaharness.spending
   - metaharness.boundaries
+  - metaharness.observations

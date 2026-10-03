@@ -296,6 +296,7 @@ fn tool_and_accounting_events() -> Vec<Event> {
         },
         Event::StreamClosed {
             events: 19,
+            process: metaharness_protocol::ProcessTermination::Unknown,
             reason: CloseReason::Completed,
             run_id: "r-1".into(),
         },
@@ -737,6 +738,7 @@ fn closing_a_stream_counts_the_lines_before_it_and_names_its_run_twice() {
         line.event,
         Event::StreamClosed {
             events: 3,
+            process: metaharness_protocol::ProcessTermination::Unknown,
             reason: CloseReason::SteerHalt,
             run_id: "r-1".into(),
         }

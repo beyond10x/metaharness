@@ -229,12 +229,12 @@ pub struct Run {
     outbox: VecDeque<Emission>,
     next_command_id: u64,
     finished: bool,
-    /// A steering command or failed child exit overriding the terminal record.
+    native_termination: metaharness_protocol::ProcessTermination,
+    /// A steering command overriding the terminal record.
     ///
     /// [`None`] is not *the run is still going*: it is *nothing overrode the record*, and the
     /// closing marker then reads its reason out of the terminal record itself
-    /// ([`Run::reason_from_record`]). Child exit status can contradict a successful
-    /// terminal record, and an explicit steering stop retains its own reason.
+    /// ([`Run::reason_from_record`]). Native termination is observed separately.
     closing: Option<CloseReason>,
     saw_terminal_record: bool,
     events: Vec<Event>,
@@ -336,6 +336,7 @@ impl Run {
             next_command_id: 1,
             finished: false,
             closing: None,
+            native_termination: metaharness_protocol::ProcessTermination::Unknown,
             saw_terminal_record: false,
             events: Vec::new(),
             warned_no_frame: false,
@@ -1126,7 +1127,9 @@ impl Run {
     fn close_stream(&mut self) -> Option<EventLine> {
         let steered = self.closing.take();
         let reason = steered.unwrap_or_else(|| self.reason_from_record());
-        let line = self.stream.close(reason)?;
+        let line = self
+            .stream
+            .close_with_process(reason, self.native_termination)?;
         self.events.push(line.event.clone());
         Some(line)
     }
@@ -1173,11 +1176,13 @@ impl Run {
     }
 
     fn wind_up(&mut self) {
-        // EOF alone says nothing about success. The Codex tail ends only after
-        // the child has exited; the other runners also expose their status here.
-        // Never replace the reason for an explicit steering stop with its signal.
-        if !matches!(self.process.wait(), Ok(Some(0))) && self.closing.is_none() {
-            self.closing = Some(CloseReason::Error);
+        if self.finished {
+            return;
+        }
+        // Transport completion and terminal evidence are distinct from native success.
+        // Wait before closing and retain only the runner's measured OS observation.
+        if self.process.wait().is_ok() {
+            self.native_termination = self.process.termination();
         }
         self.abandon_pending("the stream ended", warning::PENDING_CALL_ABANDONED);
         self.report_silent_child();

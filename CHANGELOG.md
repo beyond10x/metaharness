@@ -30,6 +30,10 @@ was amended and the amendment is named here.
 
 ### Changed
 
+- `stream.closed.process` reports measured native exit code, signal or unknown. Terminal verdict,
+  framing and native success remain separate: consumers requiring native success must inspect
+  this additive observation. Older records and synthetic runners read as unknown (amendment a21).
+
 - Link AEP 0.68.0 at `6d7a44d3607d2d9a6ffdf0a165993c546c43d0db`, preserve exact eval binary
   matching, and use current command admission and `aep.project/5` in scratch eval projects.
 - Migrate the repository planning store to `aep.project/5` with `aep.planning-md/3` artifacts.

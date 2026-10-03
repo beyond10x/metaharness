@@ -514,8 +514,8 @@ pub struct CodexProcess {
 enum Exited {
     /// Nobody has waited for it yet.
     NotYet,
-    /// It exited, with this code, or on a signal when `None`.
-    With(Option<i32>),
+    /// The actual OS status, retained intact even when `try_wait` observed it first.
+    With(std::process::ExitStatus),
 }
 
 impl std::fmt::Debug for CodexProcess {
@@ -646,7 +646,7 @@ impl CodexProcess {
         };
         match child.try_wait() {
             Ok(Some(status)) => {
-                self.exit = Exited::With(status.code());
+                self.exit = Exited::With(status);
                 true
             }
             Ok(None) => false,
@@ -751,18 +751,25 @@ impl HarnessProcess for CodexProcess {
     }
 
     fn wait(&mut self) -> std::io::Result<Option<i32>> {
-        if let Exited::With(code) = self.exit {
+        if let Exited::With(status) = self.exit {
             self.mark_child_gone();
-            return Ok(code);
+            return Ok(status.code());
         }
         let Some(child) = self.child.as_mut() else {
             self.mark_child_gone();
             return Ok(None);
         };
-        let code = child.wait()?.code();
-        self.exit = Exited::With(code);
+        let status = child.wait()?;
+        self.exit = Exited::With(status);
         self.mark_child_gone();
-        Ok(code)
+        Ok(status.code())
+    }
+
+    fn termination(&self) -> metaharness_protocol::ProcessTermination {
+        match self.exit {
+            Exited::With(status) => crate::process::observed_termination(status),
+            Exited::NotYet => metaharness_protocol::ProcessTermination::Unknown,
+        }
     }
 }
 

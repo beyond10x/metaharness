@@ -6,4 +6,5 @@ specification:
   - domains/workspace.yaml
   - domains/spending.yaml
   - domains/boundaries.yaml
+  - domains/observations.yaml
 scenarios: []

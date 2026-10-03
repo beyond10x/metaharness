@@ -235,6 +235,12 @@ pub trait HarnessProcess {
     /// Whatever the platform said.
     fn wait(&mut self) -> std::io::Result<Option<i32>>;
 
+    /// Measured native termination after waiting. Replay/custom runners default to unknown.
+    /// Implementations must retain the actual OS status, not infer it from terminal output.
+    fn termination(&self) -> metaharness_protocol::ProcessTermination {
+        metaharness_protocol::ProcessTermination::Unknown
+    }
+
     /// Everything the child wrote to stderr, where the runner retained it.
     ///
     /// **The only thing that says why a run produced no records at all.** A child that dies on its
@@ -247,6 +253,23 @@ pub trait HarnessProcess {
     fn stderr(&self) -> String {
         String::new()
     }
+}
+
+pub(crate) fn observed_termination(
+    status: std::process::ExitStatus,
+) -> metaharness_protocol::ProcessTermination {
+    use metaharness_protocol::ProcessTermination;
+    if let Some(code) = status.code() {
+        return ProcessTermination::Exited { code };
+    }
+    #[cfg(unix)]
+    {
+        use std::os::unix::process::ExitStatusExt;
+        if let Some(signal) = status.signal() {
+            return ProcessTermination::Signaled { signal };
+        }
+    }
+    ProcessTermination::Unknown
 }
 
 /// Perform the plan's credential copies.

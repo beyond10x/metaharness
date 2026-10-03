@@ -631,6 +631,36 @@ fn metaharness_outcome(
 ) -> StepOutcome {
     match status {
         Ok(status) if status.success() => {
+            // Transport exit0 is not the native child's result (amendment a21).
+            // This reads only our normalized protocol; no vendor record is interpreted here.
+            if let Ok(events) = fs::read_to_string(transcript) {
+                for line in events.lines() {
+                    let Ok(record) = serde_json::from_str::<serde_json::Value>(line) else {
+                        continue;
+                    };
+                    if record["event"] != "stream.closed" {
+                        continue;
+                    }
+                    let Ok(process) = serde_json::from_value::<
+                        metaharness::protocol::ProcessTermination,
+                    >(record["process"].clone()) else {
+                        continue;
+                    };
+                    if matches!(process, metaharness::protocol::ProcessTermination::Exited { code } if code != 0)
+                        || matches!(
+                            process,
+                            metaharness::protocol::ProcessTermination::Signaled { .. }
+                        )
+                    {
+                        return StepOutcome::NoVerdict {
+                            reason: format!(
+                                "native child terminated {process:?}; the event stream is at {}",
+                                transcript.display()
+                            ),
+                        };
+                    }
+                }
+            }
             // An `llm` step never carries evidence, and the type is what makes that true.
             // What the model achieved that is checkable is observed by the command step
             // after it.

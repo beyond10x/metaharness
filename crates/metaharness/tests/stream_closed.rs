@@ -262,6 +262,7 @@ fn a_marker_whose_count_disagrees_with_the_stream_decides_nothing() {
         },
         Event::StreamClosed {
             events: 99,
+            process: metaharness::protocol::ProcessTermination::Unknown,
             reason: CloseReason::Completed,
             run_id: "r".to_string(),
         },
@@ -467,7 +468,7 @@ mod codex_terminal_regression {
     }
 
     #[test]
-    fn native_process_failure_overrides_a_successful_terminal_record() {
+    fn custom_wait_codes_do_not_fabricate_native_observations_or_terminal_failure() {
         use metaharness::{HarnessProcess, LaunchPlanView, ProcessRunner, ScriptedProcess};
 
         struct ExitingRunner(Option<i32>);
@@ -511,9 +512,16 @@ mod codex_terminal_regression {
             run.drain().expect("drains");
             assert_eq!(
                 closing(&run).map(|(_, reason)| reason),
-                Ok(CloseReason::Error)
+                Ok(CloseReason::Completed)
             );
-            assert_ne!(run.exit(None).code(), 0);
+            assert_eq!(run.exit(None).code(), 0);
+            assert!(matches!(
+                run.events().last(),
+                Some(Event::StreamClosed {
+                    process: metaharness::protocol::ProcessTermination::Unknown,
+                    ..
+                })
+            ));
         }
     }
 }

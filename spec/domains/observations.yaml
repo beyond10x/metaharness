@@ -1,0 +1,59 @@
+domain: metaharness.observations
+summary: Observed native termination and adapter evidence, distinct from requested configuration.
+# Draft typed homes for GitHub issues 17–20. Executable commands follow each implementation.
+# Unknown is a result, not an inferred zero, model, answer or tool success.
+types:
+  - name: metaharness.observations.ProcessTermination
+    kind: enum
+    variants: [exited, signaled, unknown]
+  - name: metaharness.observations.NativeEvidence
+    kind: enum
+    variants: [missing, exited-zero, exited-nonzero, signaled]
+  - name: metaharness.observations.NativeExit
+    kind: struct
+    fields:
+      - {name: kind, type: metaharness.observations.ProcessTermination}
+      - {name: code, type: Optional<Integer>, presence: null_when_absent}
+      - {name: signal, type: Optional<Integer>, presence: null_when_absent}
+  - name: metaharness.observations.FinalAnswer
+    kind: struct
+    fields:
+      - {name: turn_id, type: Optional<String>, presence: null_when_absent}
+      - {name: text, type: Optional<String>, presence: null_when_absent}
+  - name: metaharness.observations.ModelIdentity
+    kind: struct
+    fields:
+      - {name: turn_id, type: Optional<String>, presence: null_when_absent}
+      - {name: model, type: Optional<String>, presence: null_when_absent}
+  - name: metaharness.observations.ToolOutcome
+    kind: struct
+    fields:
+      - {name: call_id, type: String}
+      - {name: is_error, type: Optional<Boolean>, presence: null_when_absent}
+      - {name: exit_code, type: Optional<Integer>, presence: null_when_absent}
+
+commands:
+  - name: metaharness.observations.ReadNativeTermination
+    input:
+      - {name: evidence, type: metaharness.observations.NativeEvidence}
+    outcomes:
+      - name: measured-success
+        when: evidence == exited-zero
+        emits: [metaharness.observations.NativeStatusClassified]
+        payload:
+          metaharness.observations.NativeStatusClassified: {known: true, native_success: true}
+      - name: measured-failure
+        when:
+          any: [evidence == exited-nonzero, evidence == signaled]
+        emits: [metaharness.observations.NativeStatusClassified]
+        payload:
+          metaharness.observations.NativeStatusClassified: {known: true, native_success: false}
+      - name: unobserved
+        emits: [metaharness.observations.NativeStatusClassified]
+        payload:
+          metaharness.observations.NativeStatusClassified: {known: false, native_success: false}
+events:
+  - name: metaharness.observations.NativeStatusClassified
+    fields:
+      - {name: known, type: Boolean}
+      - {name: native_success, type: Boolean}

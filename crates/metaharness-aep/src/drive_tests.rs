@@ -2813,3 +2813,17 @@ fn managed_workspace_accepts_explicit_relative_project() {
     assert!(adoptable(Path::new(".")), "the managed test checkout is a selected valid directory");
     assert!(!adoptable(Path::new("/not-present/bad.name")));
 }
+
+#[cfg(unix)]
+#[test]
+fn native_failure_is_not_hidden_by_successful_metaharness_transport() {
+ use std::os::unix::process::ExitStatusExt;
+ let directory=tempfile::tempdir().unwrap();
+ let transcript=directory.path().join("events.jsonl");
+ for process in [serde_json::json!({"kind":"exited","code":7}),serde_json::json!({"kind":"signaled","signal":9})] {
+  std::fs::write(&transcript,serde_json::json!({"event":"stream.closed","process":process}).to_string()+"\n").unwrap();
+  assert!(matches!(metaharness_outcome(Ok(std::process::ExitStatus::from_raw(0)),"",&transcript),StepOutcome::NoVerdict{..}));
+ }
+ std::fs::write(&transcript,serde_json::json!({"event":"stream.closed","process":{"kind":"exited","code":0}}).to_string()+"\n").unwrap();
+ assert!(matches!(metaharness_outcome(Ok(std::process::ExitStatus::from_raw(0)),"",&transcript),StepOutcome::Nothing));
+}

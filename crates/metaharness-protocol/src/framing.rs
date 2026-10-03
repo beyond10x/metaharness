@@ -190,12 +190,22 @@ impl EventStream {
     /// writes one marker and not two. A stream that has been closed frames nothing further; the
     /// caller that would have is the defect, and the closed stream is not the place to hide it.
     pub fn close(&mut self, reason: CloseReason) -> Option<EventLine> {
+        self.close_with_process(reason, crate::ProcessTermination::Unknown)
+    }
+
+    /// Close once with the native termination measured by the runner.
+    pub fn close_with_process(
+        &mut self,
+        reason: CloseReason,
+        process: crate::ProcessTermination,
+    ) -> Option<EventLine> {
         if self.closed {
             return None;
         }
         self.closed = true;
         let events = self.emitted();
         Some(self.stamp(Emission::untimed(Event::StreamClosed {
+            process,
             events,
             reason,
             run_id: self.run.to_string(),

@@ -1,6 +1,6 @@
 {
   "format": "trace-ir/1",
-  "transcript_digest": "0a8b738ab785674dcf3929f995035167427080470fb93a62d36c3d8eb2b9b8f9",
+  "transcript_digest": "b8f32fba4803ea4460c3b78996ec253f84e3ad19166b7bf4e50638c215ac3e01",
   "adapter": {
     "name": "metaharness/project",
     "written_against": [
@@ -337,6 +337,9 @@
       "kind": {
         "event": "stream_closed",
         "events": 15,
+        "process": {
+          "kind": "unknown"
+        },
         "reason": "completed",
         "run_id": "decomposer-clean"
       }
