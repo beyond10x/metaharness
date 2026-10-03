@@ -16,7 +16,7 @@ production target in `crates/metaharness-aep/src/drive/ess_conformance.rs`.
 CI installs ESS 0.51.0 from commit
 `0347ffa222939e3791e574d2dbe42d4b4b02d979`. Use that compiler locally.
 
-The committed count is **36 selected scenarios**: 36 passed, zero failed,
+The committed count is **45 selected scenarios**: 45 passed, zero failed,
 skipped, unsupported or synthesis refusals. Unknown suite versions, steps,
 bindings, shapes and predicates fail closed. The target handles only the
 constructs this suite uses; extending the specification may require extending it.
@@ -25,7 +25,7 @@ constructs this suite uses; extending the specification may require extending it
 |---|---|
 | Terminal and unknown evidence | Adapter-owned synthetic inputs traverse RolloutReader; normalized is_error is read back and absent cost must remain None. |
 | Stream closure | A real Run over ScriptedRunner produces closing reason and event count. No vendor process or model starts. |
-| Final answer, model selection and tool outcome | Adapter-owned synthetic inputs traverse the production Codex reader. Nine generated outcome scenarios read normalized terminal and tool fields; absent or contradictory evidence stays unknown. Source mappings are documented in `docs/research/2026-10-03-codex-observations.md`, with native qualification pending. |
+| Final answer, model selection and tool outcome | Adapter-owned synthetic inputs traverse the production Codex reader. Nine generated outcome scenarios read normalized terminal and tool fields; absent or contradictory evidence stays unknown. Source mappings are documented in `docs/research/2026-10-03-codex-observations.md`, with bounded native fixture observations documented separately. |
 | Native termination | The real protocol reader distinguishes missing, zero, nonzero and signal evidence. Separate Rust executable fixtures drive both real spawn runners through measured exit0, exit7 and SIGKILL, unavailable wait status, and terminal failure with exit0. |
 | Frame integrity | The AEP driver mints a frame and Frame::parse_document reads it; modified and untagged frames are refused. |
 | Tool decisions | Production Codex mapping and answer_events consult a real AEP engine; malformed, patch and unsupported calls are denied. |
@@ -112,5 +112,29 @@ runtime types remain authoritative in this retrofit; unsigned bounds and ordered
 I/O also have production Rust tests.
 
 The suite does not qualify new vendor versions. Paid probes and real transcripts
-remain outside the gate and public source. Existing vendor pins remain unchanged
-until their live compatibility evidence is complete.
+remain outside the gate and public source. Vendor pins advance only for the explicitly qualified surfaces recorded in the
+current native reports; untested claims remain unverified.
+
+## Final 0.9.0 extension
+
+Amendment a23 adds five steering scenarios, and a24 adds four process-write
+admission/argv scenarios. The combined45-scenario model passes with no skipped,
+unsupported or refused obligations. Its guard-negation audit kills25of25mutants,
+with no survivors, inconclusive, stillborn, unwitnessed or equivalent results.
+Eleven mutants add synthesis refusals but each is killed by executed scenarios;
+the baseline has none. Earlier36-scenario/18-mutant results above are historical.
+
+Planted production defects also fail by name: premature idle EOF fails three quiet
+scenarios, waiting until a pending decision deadline fails pending-decision-steering,
+and dropping the no-wire interrupt fallback fails quiet-wireless-interrupt. All were
+restored and rerun green. Independent read-only review found the startup fixture
+race, progress throttling and a leading-hyphen argv edge; each was corrected.
+
+Process-write scenarios inspect actual production admission and argv. Native
+probes on this host record explicit run withholding and no effects; they do not
+claim successful kernel containment. The retained Rust probe checks declared writes,
+EROFS on undeclared existing directories and outside denial on a capable host.
+Integer event literals are compared through exact decimal parsing into i64; the new
+count assertions first failed on 2.0 versus 2 serialization. Independent review
+then caught large-integer rounding; a reproduced red regression now passes after
+exact decimal normalization. Unknown shapes and out-of-range expectations still fail closed.

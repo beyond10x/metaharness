@@ -1,4 +1,4 @@
-//! One repeated CLI option reaches the shared public RunSpec without becoming a file glob.
+//! One repeated CLI option reaches the shared public `RunSpec` without becoming a file glob.
 use clap::Parser as _;
 use metaharness_cli::{Cli, Verb};
 

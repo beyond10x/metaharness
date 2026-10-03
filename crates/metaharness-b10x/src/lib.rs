@@ -77,14 +77,14 @@ pub const ADAPTER_CLASS: &str = "direct_provider";
 /// Pinned for the reason the other adapters pin: every version-specific claim in here — the field
 /// names of the loop record, the shape of its terminal event — was observed against these, and a
 /// run against another is unverified rather than wrong.
-pub const PINNED_VERSIONS: [&str; 1] = ["0.12.1"];
+pub const PINNED_VERSIONS: [&str; 1] = ["0.13.3"];
 
 /// The immutable harness source revision this adapter is built against.
 ///
 /// The version identifies the released CLI; the revision identifies the Rust crates Cargo
 /// resolves. Both are checked by the AEP eval before it trusts an installed
 /// binary, so a filesystem timestamp is never mistaken for provenance.
-pub const HARNESS_REVISION: &str = "90f10a4314c1c630691c85e812bd8d5d23d73fcc";
+pub const HARNESS_REVISION: &str = "798325f03cf5a18df8fadb346d31b314826136ec";
 
 /// Whether a directory component satisfies the pinned substrate adoption syntax.
 ///

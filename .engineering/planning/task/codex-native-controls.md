@@ -2,14 +2,15 @@
 format: aep.planning-md/3
 id: task:codex-native-controls
 kind: task
-status: active
+status: implemented
 title: Observe native Codex cancellation and controls without credentials
 relations:
 - decomposes: story:current-adapter-compatibility
-revision: 4
+revision: 5
 transitions:
 - {from: "draft", to: "proposed", at: "2026-10-03T10:50:43Z", actor: "human:timo", revision: 2}
 - {from: "proposed", to: "active", at: "2026-10-03T10:50:43Z", actor: "human:timo", revision: 3}
+- {from: "active", to: "implemented", at: "2026-10-03T12:02:42Z", actor: "human:timo", revision: 5}
 ---
 ## Acceptance
 

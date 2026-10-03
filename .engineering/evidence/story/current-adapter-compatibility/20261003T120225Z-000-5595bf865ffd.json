@@ -1,0 +1,13 @@
+{
+  "at": "2026-10-03T12:02:25Z",
+  "actor": "human:timo",
+  "artifact": "story:current-adapter-compatibility",
+  "kind": "story",
+  "revision": 21,
+  "change": {
+    "change": "evidence",
+    "kind": "test_result",
+    "source": "Final native candidate484ea4f:Codex6passed,Claude4passed,b10x7passed; taskcheck779passed31ignored; scoped pin/source qualification",
+    "reference": "docs/research/2026-10-03-adapter-compatibility.md"
+  }
+}

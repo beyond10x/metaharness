@@ -10,7 +10,7 @@ establish hosted authentication, model quality or paid spend.
 |---|---|---|
 | Codex | 0.153.4 | Advance from0.145.0 after the final integrated-driver rerun. |
 | Claude | 2.1.288 | Retain2.1.259: three built-in plugins leave H1a unqualified. |
-| b10x | 0.13.3 | Retain0.12.1 pending source/role qualification. |
+| b10x | 0.13.3 | Advance to0.13.3 with source798325f and strict native prompted-role evidence. |
 
 | Required surface | Codex0.153.4 | Claude2.1.288 | b10x0.13.3 |
 |---|---|---|---|
@@ -19,7 +19,7 @@ establish hosted authentication, model quality or paid spend.
 | Tools and decisions | Actual command exits0/7, patch effect/completion, hook allow/deny; full CLI ask deny prevents marker | Actual Bash allow writes marker; deny prevents it and emits error outcome | Actual file_read bytes and missing-file error; observe-only, no decision seam |
 | Cancellation | Halt/interrupt terminate with signal9; command acknowledgement correlated | Halt/interrupt meet two-second command bound | Corrected halt/interrupt both meet two-second bound after no-wire fallback |
 | Model and usage | Selected model and synthetic token usage; absent cost unknown | Native model and fixture usage; vendor price is synthetic, not paid spend | Native model and fixture usage; absent monetary cost unknown |
-| Declared controls | Unsupported ceilings refused offline; frame/ask policy offline; native ask deny and stop controls | Native one-turn ceiling stops repeated tools; hermetic H1a gap retained | Native one-turn ceiling; strict-version mismatch refused before spawn; native role/source pair pending |
+| Declared controls | Unsupported ceilings refused offline; frame/ask policy offline; native ask deny and stop controls | Native one-turn ceiling stops repeated tools; hermetic H1a gap retained | Native one-turn ceiling; strict-version current binary accepted; prompted read-only role and source pair observed |
 
 The reports [Codex](2026-10-03-native-codex-fixture.md),
 [Claude](2026-10-03-native-claude-fixture.md) and
@@ -42,7 +42,8 @@ records still produce unknown outcomes. Advancing a pin does not widen these cla
 
 Claude's three built-in plugins violate the empty-plugin H1a assertion; no floor
 verdict is softened. Its current-version observations remain useful without changing
-the older pin. Native b10x launch/role and process-write containment need their own
-observations; a prompted read-only scoper is not named-agent loading or a governed
-AEP engine run. The ESS suite validates bounded production observations and does not
+the older pin. Native b10x strict-version launch and prompted read-only scoper are observed against
+the selected source/version pair; this is not named-agent loading or a governed AEP
+engine run. Native process-write execution is withheld on this host, with no fallback
+or effects; successful kernel containment remains unverified. The ESS suite validates bounded production observations and does not
 itself qualify vendor versions. No paid request has been made for this work.

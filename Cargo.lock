@@ -331,8 +331,8 @@ checksum = "f2032f911046de80f0a198e0901378627c33f59ea0ac00e363d481118bd70a53"
 
 [[package]]
 name = "b10x-harness-loop"
-version = "0.12.1"
-source = "git+https://github.com/beyond10x/harness?rev=90f10a4314c1c630691c85e812bd8d5d23d73fcc#90f10a4314c1c630691c85e812bd8d5d23d73fcc"
+version = "0.13.3"
+source = "git+https://github.com/beyond10x/harness?rev=798325f03cf5a18df8fadb346d31b314826136ec#798325f03cf5a18df8fadb346d31b314826136ec"
 dependencies = [
  "b10x-harness-wire",
  "jsonschema",
@@ -344,8 +344,8 @@ dependencies = [
 
 [[package]]
 name = "b10x-harness-toolchain"
-version = "0.12.1"
-source = "git+https://github.com/beyond10x/harness?rev=90f10a4314c1c630691c85e812bd8d5d23d73fcc#90f10a4314c1c630691c85e812bd8d5d23d73fcc"
+version = "0.13.3"
+source = "git+https://github.com/beyond10x/harness?rev=798325f03cf5a18df8fadb346d31b314826136ec#798325f03cf5a18df8fadb346d31b314826136ec"
 dependencies = [
  "regex",
  "serde",
@@ -356,8 +356,8 @@ dependencies = [
 
 [[package]]
 name = "b10x-harness-tools"
-version = "0.12.1"
-source = "git+https://github.com/beyond10x/harness?rev=90f10a4314c1c630691c85e812bd8d5d23d73fcc#90f10a4314c1c630691c85e812bd8d5d23d73fcc"
+version = "0.13.3"
+source = "git+https://github.com/beyond10x/harness?rev=798325f03cf5a18df8fadb346d31b314826136ec#798325f03cf5a18df8fadb346d31b314826136ec"
 dependencies = [
  "b10x-harness-toolchain",
  "b10x-harness-wire",
@@ -370,8 +370,8 @@ dependencies = [
 
 [[package]]
 name = "b10x-harness-wire"
-version = "0.12.1"
-source = "git+https://github.com/beyond10x/harness?rev=90f10a4314c1c630691c85e812bd8d5d23d73fcc#90f10a4314c1c630691c85e812bd8d5d23d73fcc"
+version = "0.13.3"
+source = "git+https://github.com/beyond10x/harness?rev=798325f03cf5a18df8fadb346d31b314826136ec#798325f03cf5a18df8fadb346d31b314826136ec"
 dependencies = [
  "httpdate",
  "serde",
@@ -1057,7 +1057,7 @@ checksum = "cf8baf1c55e62ffcace7a9f06f4bd9cd3f0c4beb022d3b367256b91b87513d98"
 
 [[package]]
 name = "metaharness"
-version = "0.8.0"
+version = "0.9.0"
 dependencies = [
  "getrandom 0.4.3",
  "metaharness-b10x",
@@ -1074,7 +1074,7 @@ dependencies = [
 
 [[package]]
 name = "metaharness-aep"
-version = "0.8.0"
+version = "0.9.0"
 dependencies = [
  "aep-cli",
  "aep-domain",
@@ -1099,7 +1099,7 @@ dependencies = [
 
 [[package]]
 name = "metaharness-aep-eval"
-version = "0.8.0"
+version = "0.9.0"
 dependencies = [
  "clap",
  "metaharness-b10x",
@@ -1111,10 +1111,11 @@ dependencies = [
 
 [[package]]
 name = "metaharness-b10x"
-version = "0.8.0"
+version = "0.9.0"
 dependencies = [
  "b10x-harness-loop",
  "b10x-harness-tools",
+ "clap",
  "metaharness-protocol",
  "serde",
  "serde_json",
@@ -1124,7 +1125,7 @@ dependencies = [
 
 [[package]]
 name = "metaharness-claude"
-version = "0.8.0"
+version = "0.9.0"
 dependencies = [
  "metaharness-protocol",
  "serde",
@@ -1134,7 +1135,7 @@ dependencies = [
 
 [[package]]
 name = "metaharness-cli"
-version = "0.8.0"
+version = "0.9.0"
 dependencies = [
  "clap",
  "metaharness",
@@ -1146,7 +1147,7 @@ dependencies = [
 
 [[package]]
 name = "metaharness-codex"
-version = "0.8.0"
+version = "0.9.0"
 dependencies = [
  "metaharness-protocol",
  "serde_json",
@@ -1155,7 +1156,7 @@ dependencies = [
 
 [[package]]
 name = "metaharness-opencode"
-version = "0.8.0"
+version = "0.9.0"
 dependencies = [
  "metaharness-protocol",
  "serde_json",
@@ -1163,7 +1164,7 @@ dependencies = [
 
 [[package]]
 name = "metaharness-pi"
-version = "0.8.0"
+version = "0.9.0"
 dependencies = [
  "metaharness-protocol",
  "serde_json",
@@ -1171,7 +1172,7 @@ dependencies = [
 
 [[package]]
 name = "metaharness-protocol"
-version = "0.8.0"
+version = "0.9.0"
 dependencies = [
  "clap",
  "serde",
@@ -1181,7 +1182,7 @@ dependencies = [
 
 [[package]]
 name = "metaharness-tools"
-version = "0.8.0"
+version = "0.9.0"
 dependencies = [
  "b10x-harness-tools",
  "b10x-harness-wire",

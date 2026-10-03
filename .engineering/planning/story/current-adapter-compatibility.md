@@ -2,7 +2,7 @@
 format: aep.planning-md/3
 id: story:current-adapter-compatibility
 kind: story
-status: active
+status: implemented
 title: Verify installed adapter releases before advancing pins
 owner: metaharness
 refs:
@@ -24,19 +24,28 @@ scope:
 - confidence: cited
   path: crates/metaharness-codex
 - confidence: cited
+  path: crates/metaharness-opencode/src
+- confidence: cited
+  path: crates/metaharness-pi/src
+- confidence: cited
   path: crates/metaharness-tools/Cargo.toml
 - confidence: cited
+  path: crates/metaharness-tools/src/tests.rs
+- confidence: cited
   path: crates/metaharness/fixtures/golden
+- confidence: cited
+  path: crates/metaharness/src/doctor.rs
 - confidence: cited
   path: docs/design/metaharness-protocol-v0.1.md
 - confidence: inferred
   path: docs/research
 - confidence: cited
   path: docs/research/2026-10-03-adapter-compatibility.md
-revision: 15
+revision: 22
 transitions:
 - {from: "draft", to: "proposed", at: "2026-10-03T10:10:31Z", actor: "human:timo", revision: 9, decided_on: {"recorded":{"review_outcome":1}}}
 - {from: "proposed", to: "active", at: "2026-10-03T10:10:31Z", actor: "human:timo", revision: 10, decided_on: {"recorded":{"review_outcome":1}}}
+- {from: "active", to: "implemented", at: "2026-10-03T12:02:42Z", actor: "human:timo", revision: 22, decided_on: {"recorded":{"test_result":1,"review_outcome":4}}}
 ---
 ## Context
 

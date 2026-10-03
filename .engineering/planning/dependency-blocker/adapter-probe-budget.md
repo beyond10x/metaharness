@@ -2,12 +2,14 @@
 format: aep.planning-md/3
 id: dependency-blocker:adapter-probe-budget
 kind: dependency-blocker
-status: open
+status: cleared
 title: Current vendor qualification awaits a bounded live-probe budget
 relations:
 - blocks: story:current-adapter-compatibility
 withholds: test_result
-revision: 4
+revision: 6
+transitions:
+- {from: "open", to: "cleared", at: "2026-10-03T12:02:25Z", actor: "human:timo", revision: 6}
 ---
 ## Pending decision
 
@@ -32,3 +34,7 @@ Read-only inspection of official Codex rust-v0.153.4 exec/src/lib.rs at 042fb41b
 The credential-free native fixture now supplies the bounded evidence for issues11 and18–20; their blocking edges were removed through the CLI. Actual Codex0.153.4 session metadata confirms paginated history, correlated command outcomes are observed, and denial without a completion remains unknown. The native and full-binary results are recorded in docs/research/2026-10-03-native-codex-fixture.md. No paid request was required for those observations.
 
 Only story:current-adapter-compatibility remains blocked here. Its wider qualification matrix still requires completion; the pending budget answer applies to any hosted requests. Prior paragraphs describe the earlier state and are superseded by this result for issues11 and18–20.
+
+## Cleared by credential-free observations
+
+The required bounded native compatibility matrix is now supplied without any paid or hosted request: Codex6tests, Claude4tests and b10x7tests passed against the immutable0.9.0 candidate. The loopback-only provider/fresh-home boundary is enforced. Codex0.153.4 and b10x0.13.3 pins advance only for observed surfaces; Claude's H1a gap and native process-exec withholding remain unverified. b10x's strict-version prompted scoper observes the selected role text, readonlysurface and realfilebytes against the source/versionpair798325f. Hosted model quality/authentication and money were never required to infer from these fixtures and remain outside the claims. The pending spend answer authorizes no paid requests; it no longer withholds the evidence needed by this story.

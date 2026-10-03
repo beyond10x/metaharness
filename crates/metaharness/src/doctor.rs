@@ -529,7 +529,7 @@ Options:
     #[test]
     fn codex_is_answered_about_from_the_installed_binary_or_refused_as_io() {
         match installed(Kind::Codex) {
-            Ok(installed) => assert_eq!(installed.pinned, vec!["0.145.0".to_string()]),
+            Ok(installed) => assert_eq!(installed.pinned, metaharness_codex::PINNED_VERSIONS),
             Err(refusal) => assert!(matches!(refusal, Refusal::Io { .. })),
         }
     }

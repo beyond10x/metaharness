@@ -1,0 +1,13 @@
+{
+  "at": "2026-10-03T12:02:25Z",
+  "actor": "human:timo",
+  "artifact": "story:silent-stream-steering",
+  "kind": "story",
+  "revision": 10,
+  "change": {
+    "change": "evidence",
+    "kind": "test_result",
+    "source": "Combinedtaskcheck779passed31ignored; native halt/interrupt passed for Codex,Claude,b10x;45ESSscenarios25guardmutantskilled",
+    "reference": "docs/design/metaharness-protocol-v0.1.md"
+  }
+}

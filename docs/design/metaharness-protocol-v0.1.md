@@ -2018,6 +2018,51 @@ path. Native qualification must establish the actual path; resumed, fallback and
 legacy records without structured status still remain unknown. No claim of native
 coverage or pin advance follows from this source correction.
 
+## Amendment a23 — steering during quiet native output (2026-10-03)
+
+The CLI must service commands while a provider emits no records and while a tool
+decision remains pending. The native cancellation fixture found that the child
+reader consumed every polling timeout internally, so the CLI could not observe
+an already received halt until provider output resumed. Likewise, a pending
+decision could send the blocking event API into its entire deadline wait.
+
+Introduce a bounded polling path beside the existing blocking library methods.
+Native process polling performs one existing 20ms receive interval and reports
+line, idle or EOF. A pending unanswered decision remains WouldBlock; idle is
+neither EOF nor a decision request. Existing custom process implementations may
+retain their blocking next_line through a compatibility default; custom runners
+requiring bounded steering must implement the polling method explicitly.
+
+Run polling reports one event, progress, idle, decision-pending or ended. It checks armed
+deadlines on each poll, preserves delivery-time arming and ordering, and never
+waits an entire decision budget. Command admission also expires armed deadlines
+before applying the command: an answer received between polls at or after its
+deadline is too late, and cannot replace the deadline deny. Unarmed requests
+still have no running budget. One input record per poll bounds work even when
+the adapter produces no normalized event. The blocking next_event API continues
+to wait for an event and advances the existing clock to a pending deadline as
+before. The CLI uses polling, draining its command channel between iterations;
+idle and decision-pending iterations use the existing short steering wait.
+Progress means one raw record was consumed without a normalized event; the CLI
+checks stdin and immediately polls again instead of charging an idle wait for
+every buffered control-plane record.
+
+No new wire event, EOF marker or fabricated terminal record is introduced. Halt
+and interrupt retain their existing adapter semantics, decision-before-control
+ordering, command ids, native status and exactly one final stream.closed.
+Deterministic tests cover pending-decision steering and idle-versus-EOF; native
+credential-free timing qualification is separate evidence, not a model claim.
+
+An adapter that declares interrupt honoured but supplies no control line must
+still stop the owned process. The generic run loop uses process kill in that
+case; when a line exists, its adapter-specific routing remains authoritative.
+This fixes the observe-only native loop's acknowledged but ineffective interrupt
+without adding a vendor name or a fictitious wire to the core. Interrupt does
+not invent terminal success or a halt reason: EOF retains actual process status
+and the ordinary terminal-evidence classification. ESS observes the real no-wire
+adapter through a synthetic process, including whether kill was invoked; native
+termination timing remains separate evidence.
+
 ## Amendment a24 — explicit native subprocess write directories (2026-10-03)
 
 Issue #21 adds repeated `--process-write-subtree DIR` to RunSpec, the public
@@ -2078,3 +2123,13 @@ regenerate only derived warning/provider expectations. Fixture tokens and prices
 are synthetic and never actual paid spend. Claude's observed built-in plugins
 leave its H1a floor unqualified; retain its older pin. Native b10x observations
 remain separate from a governed AEP engine run and from its source/version pair.
+
+The b10x source/version pair will advance together to release0.13.3 at
+798325f03cf5a18df8fadb346d31b314826136ec, verified as current remote main and the
+peeled annotated release tag. Its tools/wire source is unchanged from0.12.1;
+loop additions are optional caller-owned memories, absent by default. Qualification
+requires the current native fixture matrix plus a strict-version prompted read-only
+scoper whose actual request and file-read result are observed. This does not claim
+named-agent/delegate loading, confined process success on a host withholding run,
+or governed AEP behavior. Both dependency manifests, lockfile and runtime provenance
+constants move together; retain every narrower unsupported/unverified boundary.

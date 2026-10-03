@@ -498,6 +498,18 @@ fn push_pointer(argv: &mut Vec<String>, pointer: Option<&String>) {
     }
 }
 
+fn push_process_write_subtrees(argv: &mut Vec<String>, directories: &[String]) {
+    for directory in directories {
+        if directory.starts_with('-') {
+            // A valid literal directory must not become a new native CLI option.
+            argv.push(format!("--process-write-subtree={directory}"));
+        } else {
+            argv.push("--process-write-subtree".to_owned());
+            argv.push(directory.clone());
+        }
+    }
+}
+
 #[must_use]
 pub fn argv(launch: &B10xLaunch) -> Vec<String> {
     let mut argv = vec![
@@ -588,10 +600,7 @@ pub fn argv(launch: &B10xLaunch) -> Vec<String> {
         argv.push("--write-scope".to_owned());
         argv.push(rule.clone());
     }
-    for directory in &launch.process_write_subtree {
-        argv.push("--process-write-subtree".to_owned());
-        argv.push(directory.clone());
-    }
+    push_process_write_subtrees(&mut argv, &launch.process_write_subtree);
     if launch.scope_silent {
         argv.push("--scope-announce".to_owned());
         argv.push("silent".to_owned());

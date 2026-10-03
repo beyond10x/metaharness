@@ -3,7 +3,7 @@
 What changed. The design document carries *why*; where code and design disagreed, the design
 was amended and the amendment is named here.
 
-## [Unreleased]
+## [0.9.0] — 2026-10-03
 
 ### Added
 
@@ -15,19 +15,23 @@ was amended and the amendment is named here.
 - Codex terminal records expose an authoritative final answer and scoped observed model selections.
   Structured retained tool completions expose correlated outcomes and numeric exits where observed;
   missing, conflicting and legacy content-only results stay unknown. These mappings are source-backed
-  at Codex 0.153.4; native qualification remains pending (amendment a22).
+  at Codex 0.153.4; native loopback-fixture observations cover these mappings (amendments a22/a25).
 
 - Governed Codex steps use the existing ask seam and current AEP engine for each supported shell
-  call. Unsupported operations are denied. Model and endpoint selection survive resume; current
-  installed vendor releases remain unqualified (design amendment a19).
+  call. Unsupported operations are denied. Model and endpoint selection survive resume; native adapter qualification is scoped separately (design amendments a19/a25).
 - Governed runs can explicitly select `--uncapped-budget --spend-authorization <reference>`.
   Live opt-in remains required. Invocation admission is persisted before spawning, observed costs
   remain optional, and resume cannot change spending mode or authorization (amendment a19).
-- ESS validates the boundary specification in `task check`, executes 36 generated scenarios
-  against production code, and checks suite freshness. Hardening killed 18 guard mutants and
+- ESS validates the boundary specification in `task check`, executes 45 generated scenarios
+  against production code, and checks suite freshness. Hardening killed 25 guard mutants and
   detected planted specification, persistence and terminal-answer defects. See `spec/coverage.md` for its bounds.
 
 ### Fixed
+
+- Steering is processed while native output is quiet or a decision is pending. Late decisions
+  cannot bypass their deadline; consumed control records do not incur an idle delay. Native
+  adapters without a control wire now honor interrupt by terminating their owned process
+  (amendment a23).
 
 - Codex explicit terminal errors survive normalization, stream closure and CLI exit.
   Native process status is retained separately on the final closure. Incomplete terminal evidence cannot claim success (amendment a18).
@@ -40,6 +44,12 @@ was amended and the amendment is named here.
 
 ### Changed
 
+- Pin harness dependencies and runtime provenance together to0.13.3 at
+  `798325f03cf5a18df8fadb346d31b314826136ec`, reachable from harness main and its release tag.
+  Native prompted read-only role observations remain separate from governed AEP runs.
+- Release automation builds read-only artifacts; verified release metadata and uploads use
+  the bot App after the exact tag checks succeed.
+
 - `stream.closed.process` reports measured native exit code, signal or unknown. Terminal verdict,
   framing and native success remain separate: consumers requiring native success must inspect
   this additive observation. Older records and synthetic runners read as unknown (amendment a21).
@@ -47,7 +57,8 @@ was amended and the amendment is named here.
 - Link AEP 0.68.0 at `6d7a44d3607d2d9a6ffdf0a165993c546c43d0db`, preserve exact eval binary
   matching, and use current command admission and `aep.project/5` in scratch eval projects.
 - Migrate the repository planning store to `aep.project/5` with `aep.planning-md/3` artifacts.
-  Vendor compatibility pins are unchanged pending the live qualification tracked in issue #15.
+  Codex advances to0.153.4 and b10x to0.13.3 after bounded native qualification; Claude
+  remains2.1.259 because current built-in plugins leave its H1a floor unqualified.
 
 ## [0.8.0] — 2026-09-25
 

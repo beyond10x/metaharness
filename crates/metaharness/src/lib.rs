@@ -83,13 +83,14 @@ pub use doctor::{FlagFault, Installed, flag_surface, installed};
 pub use loopback::{LoopbackHandle, LoopbackProxy, ProxyReport};
 pub use process::{
     CredentialCopyView, EnvelopeLaunch, EnvelopeStartError, EnvelopeStarted, HarnessProcess,
-    LaunchPlanView, ProcessEnvelope, ProcessRunner, copy_credentials, start_in_envelope,
+    LaunchPlanView, ProcessEnvelope, ProcessPoll, ProcessRunner, copy_credentials,
+    start_in_envelope,
 };
 pub use refusal::Refusal;
 pub use run::{
-    DEADLINE_MARGIN_MS, DEFAULT_VENDOR_HOOK_TIMEOUT_MS, PendingCall, Run, deadline_reason,
-    decider_name, metaharness_deadline_ms, request_digest, seam_name, vendor_hook_timeout_ms,
-    warning,
+    DEADLINE_MARGIN_MS, DEFAULT_VENDOR_HOOK_TIMEOUT_MS, EventPoll, PendingCall, Run,
+    deadline_reason, decider_name, metaharness_deadline_ms, request_digest, seam_name,
+    vendor_hook_timeout_ms, warning,
 };
 pub use scripted::{
     ScriptStep, ScriptedEnvelope, ScriptedLog, ScriptedProcess, ScriptedRunner, ScriptedSeam,

@@ -68,7 +68,8 @@ monetary expenditure.
 This is narrower than hosted-provider or subscription qualification. It does not
 prove real model quality, hosted routing, AEP
 governance, all hermetic controls, or either other vendor's current
-release. The existing pin remains unchanged while issue #15's matrix is incomplete.
+release. Amendment a25 advances the pin to0.153.4 for the qualified surfaces; the
+remaining unverified claims are retained.
 
 All four opt-in tests passed, exercising eight native processes. The full binary
 cases cover terminal success/refusal; command, denial and patch cases exercise
@@ -95,3 +96,11 @@ production launch paths. The namespace was a test condition, not a product
 isolation claim. Private evidence is native-steering-candidate.log alongside the
 original cancel-timing.log. The candidate still requires final integration and
 review; this observation alone is not a release or pin qualification.
+
+## Integrated 0.9.0 candidate
+
+The final six-test native lane passed in56.27seconds against the immutable
+production CLI SHA256484ea4fedfa25d2974982899991e84c9186a0b194ac00cc7d9f736cf6888227b.
+It exercised11actual native processes in a loopback-only namespace with fresh
+homes and no credentials. The corrected cancellation fixture waits for actual
+session startup and provider activity before sending the correlated command.

@@ -16,11 +16,13 @@ placeholder is required. The provider never forwards a request. HTTP reads and
 writes, the native process, and fixture shutdown are bounded. A child guard kills
 and reaps the owned process group on panic. Private records stay outside Git.
 
-The observations target installed binary **0.13.3**. The adapter's standing pin
-remains **0.12.1**, and its Cargo source revision remains
-`90f10a4314c1c630691c85e812bd8d5d23d73fcc`. A native `session.started` must name
-0.13.3. This small fixture matrix does not advance either pin or prove a native
-binary was built from that pinned source revision.
+The observations target installed binary **0.13.3**. Amendment a25 advances the
+adapter pin and Cargo source pair to0.13.3 at
+`798325f03cf5a18df8fadb346d31b314826136ec`, verified against remote main and the
+peeled release tag. Native session metadata must name0.13.3. The fixture observes
+behavior, while the source/version checks establish the declared release pair;
+it does not prove binary reproducibility. Earlier pre-pin results below remain
+historical observations.
 
 ## Reproduction
 
@@ -98,10 +100,25 @@ candidate, `halt` passed with native signal 9, CLI exit 3 and `steer-halt` closu
 the native process within two seconds. The full lane reported `4 passed; 1 failed`
 in 2.38 seconds. This valid-command observation exposed a separate no-control-wire
 interrupt defect: the adapter advertises honoured interrupt, but supplies no
-control line and the core did not stop the process. That repair and the final
-integrated-driver rerun remain pending; cancellation is not yet qualified.
+control line and the core did not stop the process. The no-wire fallback repairs that defect. Both halt and interrupt subsequently
+passed against the repaired candidate, preserving measured signal9 and CLI3.
 
 On Rust 1.99, the ordinary package lane retained its 31 passing unit tests and
 two existing ignored fixture-regeneration tests, added five ignored native tests,
 and completed its zero doctests. The default gate intentionally does not execute
 these native tests; it cannot be cited as native qualification.
+
+## Release candidate qualification
+
+The full matrix now includes strict-version acceptance of the qualified0.13.3
+binary, the prompted read-only scoper and the process-write declaration probes.
+The older strict-mismatch refusal above was observed before the deliberate pin
+advance; it is not the current expected result. Role observations and explicit
+withheld-unverified containment limits are recorded in
+2026-10-03-native-b10x-scoper-fixture.md and2026-10-03-native-process-write-subtrees.md.
+
+The final integrated lane passed seven tests in 0.58 seconds against production
+CLI SHA256484ea4fedfa25d2974982899991e84c9186a0b194ac00cc7d9f736cf6888227b.
+The two containment cases explicitly report withheld-unverified, with a named run
+withholding reason and no filesystem effects. They are not containment-success
+observations. The other cases cover actual native launches and the strict pin.

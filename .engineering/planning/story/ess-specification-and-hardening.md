@@ -36,7 +36,7 @@ scope:
   path: docs/design/metaharness-protocol-v0.1.md
 - confidence: cited
   path: spec
-revision: 18
+revision: 19
 transitions:
 - {from: "draft", to: "proposed", at: "2026-10-03T08:02:13Z", actor: "human:timo", revision: 10, decided_on: {"recorded":{"review_outcome":1}}}
 - {from: "proposed", to: "active", at: "2026-10-03T08:02:13Z", actor: "human:timo", revision: 11, decided_on: {"recorded":{"review_outcome":1}}}
@@ -93,3 +93,7 @@ The #17–20 extension is integrated at 3385656e50f3a8694d31896e4a2e80ad3247f7c0
 The expanded guard-negate audit kills 18 of 18 mutants, with no survivor, inconclusive, stillborn, unwitnessed or equivalent result. Six mutants gain refusals but each is killed by executed scenarios; the unchanged baseline has zero refusals. A planted production final-answer omission failed ReadFinalAnswer/outcome/authoritative and restoration passed. Evidence: observations1820/{planted-answer.log,mutation-report.json,integration-task-check.log} in the same private cache. Earlier 24-scenario results remain historical evidence rather than being relabelled.
 
 One earlier uncommitted evidence import contains an absolute local report_input. It is preserved unchanged pending the operator decision; the CLI has no redaction operation. Later evidence uses relative input paths. No historical evidence is hand-edited.
+
+## Release candidate 0.9.0
+
+The combined model executes45generated scenarios, allpassed with0skipped/unsupported/refused. Guard-negation audit kills25of25mutants,0survivors/inconclusive/unwitnessed/equivalent. Additional planted production idle/deadline/no-wire-interrupt defects fail named scenarios and are restored. Independent review found a possible integer comparison false-match past2^53; the Rust regression failed before exact decimal normalization and passes afterward. The full taskcheck exits0 onRust1.99:779passed,31ignored. Native opt-in fixtures are run separately and do not convert ignored counts into conformance coverage. The report/2 import uses relative paths and the exact45scenario suite. Prior24/36scenario evidence remains historical.

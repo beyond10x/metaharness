@@ -1,0 +1,14 @@
+{
+  "at": "2026-10-03T11:45:58Z",
+  "actor": "human:timo",
+  "artifact": "story:current-adapter-compatibility",
+  "kind": "story",
+  "revision": 15,
+  "change": {
+    "change": "evidence",
+    "kind": "review_outcome",
+    "source": "review-result:native-integration-review",
+    "review": "review-result:native-integration-review",
+    "outcome": "fixed"
+  }
+}

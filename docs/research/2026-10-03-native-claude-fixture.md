@@ -92,3 +92,10 @@ cases remain ignored in `task check`. Private evidence for this work is under
 `~/.cache/metaharness-issue-repair/native-claude-fixture`; no actual transcript or
 provider request is committed. Native executions are implementor evidence and
 do not constitute independent review.
+
+## Integrated 0.9.0 candidate
+
+The final four-test lane passed in4.90seconds against immutable production CLI
+SHA256484ea4fedfa25d2974982899991e84c9186a0b194ac00cc7d9f736cf6888227b,
+with7actual native processes in a loopback-only namespace. The three built-in
+plugins remain an explicit H1a gap; no floor assertion or pin was widened.

@@ -1,0 +1,13 @@
+{
+  "at": "2026-10-03T12:02:25Z",
+  "actor": "human:timo",
+  "artifact": "story:native-process-write-subtrees",
+  "kind": "story",
+  "revision": 4,
+  "change": {
+    "change": "evidence",
+    "kind": "test_result",
+    "source": "taskcheck779passed31ignored;45ESSscenarios;native default/explicit declarations preserve named run withholding and noeffects; containment success unverified",
+    "reference": "docs/research/2026-10-03-native-process-write-subtrees.md"
+  }
+}

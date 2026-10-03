@@ -2,14 +2,15 @@
 format: aep.planning-md/3
 id: task:b10x-native-fixture
 kind: task
-status: active
+status: implemented
 title: Observe current native b10x against a credential-free fixture provider
 relations:
 - decomposes: story:current-adapter-compatibility
-revision: 5
+revision: 6
 transitions:
 - {from: "draft", to: "proposed", at: "2026-10-03T11:00:27Z", actor: "human:timo", revision: 2}
 - {from: "proposed", to: "active", at: "2026-10-03T11:00:27Z", actor: "human:timo", revision: 3}
+- {from: "active", to: "implemented", at: "2026-10-03T12:02:42Z", actor: "human:timo", revision: 6}
 ---
 ## Acceptance
 

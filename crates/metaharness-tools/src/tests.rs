@@ -378,7 +378,10 @@ fn a_catalogue_question_and_an_unknown_entry_touch_nothing() {
             "{tool}"
         );
     }
-    assert!(subjects_of_verb(INVOKE_VERB, &json!({"name": "Bash"})).is_empty());
+    assert_eq!(
+        subjects_of_verb(INVOKE_VERB, &json!({"name": "Bash"})),
+        [] as [String; 0]
+    );
     assert!(
         subjects_of_verb("Write", &json!({"file_path": "a"})).is_empty(),
         "not a verb"
@@ -403,5 +406,8 @@ fn a_vendor_call_names_the_path_whichever_argument_holds_it() {
 fn a_shell_command_is_left_alone_rather_than_guessed_at() {
     // A command string is not a program. Pulling an argv[0] out of one is parsing a language this
     // crate does not speak, and a `proc:` subject guessed that way would be a claim about what ran.
-    assert!(subjects_of_vendor_call(&json!({"command": "cargo test --workspace"})).is_empty());
+    assert_eq!(
+        subjects_of_vendor_call(&json!({"command": "cargo test --workspace"})),
+        [] as [String; 0]
+    );
 }

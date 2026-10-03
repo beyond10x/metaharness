@@ -200,6 +200,17 @@ pub fn start_in_envelope(
     })
 }
 
+/// One bounded process-read observation. Silence is not EOF.
+#[derive(Debug, PartialEq, Eq)]
+pub enum ProcessPoll {
+    /// A complete record arrived.
+    Line(String),
+    /// No record arrived during this poll; the stream remains open.
+    Idle,
+    /// The record stream ended.
+    Ended,
+}
+
 /// A started child, as a line stream and a line sink.
 pub trait HarnessProcess {
     /// The next line the child wrote, or `None` at end of stream.
@@ -213,6 +224,19 @@ pub trait HarnessProcess {
     ///
     /// Whatever the platform said, plus `WouldBlock` for the case above.
     fn next_line(&mut self) -> std::io::Result<Option<String>>;
+
+    /// Poll once, retaining `WouldBlock` for an unanswered decision.
+    ///
+    /// Native runners bound this to one receive interval. The compatibility
+    /// default may block: custom runners needing responsive steering must
+    /// override it as well as implementing `next_line`.
+    ///
+    /// # Errors
+    /// As [`HarnessProcess::next_line`].
+    fn poll_line(&mut self) -> std::io::Result<ProcessPoll> {
+        self.next_line()
+            .map(|line| line.map_or(ProcessPoll::Ended, ProcessPoll::Line))
+    }
 
     /// Write one line to the child.
     ///

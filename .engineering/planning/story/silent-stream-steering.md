@@ -2,7 +2,7 @@
 format: aep.planning-md/3
 id: story:silent-stream-steering
 kind: story
-status: active
+status: implemented
 title: Deliver steering while native output is quiet
 relations:
 - decomposes: epic:github-issue-repair
@@ -26,10 +26,11 @@ scope:
   path: spec/conformance.json
 - confidence: cited
   path: spec/domains/session.yaml
-revision: 9
+revision: 11
 transitions:
 - {from: "draft", to: "proposed", at: "2026-10-03T10:57:59Z", actor: "human:timo", revision: 3, decided_on: {"recorded":{"test_result":1}}}
 - {from: "proposed", to: "active", at: "2026-10-03T10:57:59Z", actor: "human:timo", revision: 4, decided_on: {"recorded":{"test_result":1}}}
+- {from: "active", to: "implemented", at: "2026-10-03T12:02:42Z", actor: "human:timo", revision: 11, decided_on: {"recorded":{"test_result":3,"review_outcome":1}}}
 ---
 ## Reproduction and acceptance
 
@@ -54,3 +55,7 @@ The stable1.99 affected-package lint pass found the equivalent assert_is_empty t
 ## Native b10x interrupt follow-up
 
 The corrected native fixture uses the protocol's halt and interrupt commands, requires session.started before sending and checks correlated successful command.result. Halt closes within two seconds against the quiet-stream candidate. Interrupt receives an ok result but leaves the child alive beyond two seconds: the b10x seam advertises honoured interrupt but supplies no control wire, while Run only writes that absent control line. Earlier malformed run.cancel/session.interrupt timeouts are fixture defects and are not causal evidence for the core issue. Extend this accepted story with generic no-control-wire interrupt behavior, a deterministic regression and named ESS scenario; preserve adapters with actual control lines. Record the design before the fix. The source/design/spec paths are already in this story's scope.
+
+## Integrated unit result
+
+Unit8bb5f369 over3576cef0 supplies bounded process/event polling, explicit progress without idle delay, command drainage during quiet output, deadline admission before late answers and generic no-control-wire interrupt termination. Six focused regressions passed after observed red failures; two actual Rust child readers return idle promptly. Full unit workspace770passed/18ignored. ESS41/41, zero skips/refusals; planted idle-to-ended, deadline-wait and wireless-interrupt-no-op faults fail named scenarios. Independent read-only review found and verified fixes for progress throughput and reviewed the interrupt fallback. Integrated source also contains process-write story scenarios, yielding45 expected generated scenarios; combined gate and native driver rerun are pending.

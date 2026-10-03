@@ -65,7 +65,7 @@ mod tests {
             assert!(argv.windows(2).any(|pair| pair == [flag, value]), "{flag}: {argv:?}");
         }
         assert!(!argv.iter().any(|arg| arg == "--plugin-dir" || arg == "--max-turns"));
-        assert!(codex_tools(&config(&[Capability::RepositoryWrite])).is_empty());
+        assert_eq!(codex_tools(&config(&[Capability::RepositoryWrite])), Vec::<String>::new());
         assert_eq!(codex_tools(&config(&[Capability::CommandExecution])), ["Bash"]);
     }
 

@@ -173,6 +173,156 @@ fn closure(input: &Value) -> Observed {
     )
 }
 
+fn polling(input: &Value) -> Observed {
+    use metaharness::protocol::{Command, CommandOutcome, CredentialSource, DecisionMode, Kind};
+    use metaharness::{
+        EventPoll, Input, ManualClock, Metaharness, ScriptStep, ScriptedLog, ScriptedRunner,
+        ScriptedSeams,
+    };
+    if input["probe"] == "quiet-wireless-interrupt" {
+        return wireless_interrupt();
+    }
+    let probe = input["probe"].as_str().unwrap();
+    let mut script = vec![ScriptStep::line(r#"{"emit":"session.started"}"#)];
+    if probe == "pending-halt" {
+        script.extend([
+            ScriptStep::line(r#"{"emit":"tool.requested","call_id":"t1","name":"Bash","input":{"command":"ls"}}"#),
+            ScriptStep::awaiting("t1"),
+        ]);
+    } else {
+        script.extend([ScriptStep::Idle, ScriptStep::Idle]);
+    }
+    let log = ScriptedLog::new();
+    let clock = ManualClock::new();
+    let mut runner = ScriptedRunner::new(script, log.clone());
+    let mut run = Metaharness::new(Kind::Claude)
+        .with_credentials(CredentialSource::None)
+        .with_decisions(DecisionMode::Ask)
+        .start_with_clock(
+            Input::Prompt("poll fixture".into()),
+            &mut runner,
+            &mut ScriptedSeams,
+            Box::new(clock.clone()),
+        )
+        .unwrap();
+    let mut yielded = false;
+    for _ in 0..32 {
+        match run.poll_event().unwrap() {
+            EventPoll::Event(_) | EventPoll::Progress => (),
+            EventPoll::Idle => {
+                yielded = probe != "pending-halt";
+                break;
+            }
+            EventPoll::DecisionPending => {
+                yielded = probe == "pending-halt";
+                break;
+            }
+            EventPoll::Ended => break,
+        }
+    }
+    let (outcome, control) = match probe {
+        "quiet-halt" => (
+            "quiet-native-halt",
+            Some(Command::Halt {
+                reason: "fixture".into(),
+            }),
+        ),
+        "quiet-interrupt" => (
+            "quiet-native-interrupt",
+            Some(Command::Interrupt {
+                reason: "fixture".into(),
+            }),
+        ),
+        "pending-halt" => (
+            "pending-decision-steering",
+            Some(Command::Halt {
+                reason: "fixture".into(),
+            }),
+        ),
+        "quiet-only" => ("quiet-output-is-not-eof", None),
+        other => panic!("unknown probe {other}"),
+    };
+    let control_name = control.as_ref().map(Command::name);
+    if let Some(command) = control {
+        assert!(matches!(
+            run.send_as("ess-steer", command).unwrap(),
+            CommandOutcome::Ok { .. }
+        ));
+        for _ in 0..32 {
+            if !matches!(run.poll_event().unwrap(), EventPoll::Event(_)) {
+                break;
+            }
+        }
+    }
+    let control_written = control_name.is_some_and(|name| {
+        log.written()
+            .iter()
+            .any(|line| serde_json::from_str::<Value>(line).unwrap()["control"] == name)
+    });
+    let closed = run
+        .events()
+        .iter()
+        .any(|event| matches!(event, Event::StreamClosed { .. }));
+    event(
+        outcome,
+        "metaharness.session.PollingObserved",
+        json!({
+            "yielded":yielded, "control_written":control_written,
+        "closed":closed, "deadline_advanced":clock.reading_ms() != 0, "process_killed":log.killed(),
+        }),
+    )
+}
+
+fn wireless_interrupt() -> Observed {
+    use metaharness::protocol::{Command, CommandOutcome, CredentialSource, DecisionMode, Kind};
+    use metaharness::{
+        EventPoll, Input, ManualClock, Metaharness, ScriptStep, ScriptedLog, ScriptedRunner,
+    };
+    let log = ScriptedLog::new();
+    let clock = ManualClock::new();
+    let mut runner = ScriptedRunner::new(vec![ScriptStep::Idle, ScriptStep::Idle], log.clone());
+    let mut run = Metaharness::new(Kind::B10x)
+        .with_credentials(CredentialSource::None)
+        .with_decisions(DecisionMode::Observe)
+        .with_model_endpoint("http://127.0.0.1:1")
+        .with_model("synthetic-never-called")
+        .start_with_clock(
+            Input::Prompt("poll fixture".into()),
+            &mut runner,
+            &mut metaharness_b10x::B10xSeams::new(None, None, None),
+            Box::new(clock.clone()),
+        )
+        .unwrap();
+    let yielded = matches!(run.poll_event().unwrap(), EventPoll::Idle);
+    assert!(matches!(
+        run.send_as(
+            "ess-interrupt",
+            Command::Interrupt {
+                reason: "fixture".into()
+            }
+        )
+        .unwrap(),
+        CommandOutcome::Ok { .. }
+    ));
+    for _ in 0..32 {
+        if !matches!(run.poll_event().unwrap(), EventPoll::Event(_)) {
+            break;
+        }
+    }
+    let closed = run
+        .events()
+        .iter()
+        .any(|event| matches!(event, Event::StreamClosed { .. }));
+    event(
+        "quiet-wireless-interrupt",
+        "metaharness.session.PollingObserved",
+        json!({
+            "yielded":yielded, "control_written":!log.written().is_empty(),
+            "closed":closed, "deadline_advanced":clock.reading_ms() != 0, "process_killed":log.killed(),
+        }),
+    )
+}
+
 fn frame(input: &Value) -> Observed {
     let tools = tests::config(&[]);
     let state = "implement".parse().unwrap();
@@ -424,6 +574,7 @@ fn observed_codex(command: &str, input: &Value) -> Observed {
 
 fn execute(command: &str, input: &Value) -> Observed {
     match command {
+        "metaharness.session.PollSteering" => polling(input),
         "metaharness.observations.ReadFinalAnswer"
         | "metaharness.observations.ReadObservedModel"
         | "metaharness.observations.ReadToolOutcome" => observed_codex(command, input),
@@ -522,10 +673,33 @@ fn event_matches(actual: Option<&Value>, step: &Value) -> Result<bool, String> {
     let Some(actual) = actual else {
         return Ok(false);
     };
-    if let Some(payload) = step.get("payload")
-        && actual != payload
-    {
-        return Ok(false);
+    if let Some(payload) = step.get("payload") {
+        let mut expected = payload.clone();
+        // ESS integer literals may serialize as 2.0. Parse exact decimal spelling,
+        // never f64: rounding could make different large integers falsely match.
+        for (field, shape) in step["shape"].as_object().ok_or("event has no shape")? {
+            if shape["holds"] == "primitive" && shape["kind"] == "integer" {
+                let spelling = expected[field]
+                    .as_number()
+                    .ok_or("integer payload absent")?
+                    .to_string();
+                let integral = if spelling.contains('.') {
+                    spelling
+                        .trim_end_matches('0')
+                        .strip_suffix('.')
+                        .ok_or("nonintegral or unsupported integer spelling")?
+                } else {
+                    &spelling
+                };
+                let integer = integral
+                    .parse::<i64>()
+                    .map_err(|_| "integer payload exceeds the target's exact numeric range")?;
+                expected[field] = json!(integer);
+            }
+        }
+        if actual != &expected {
+            return Ok(false);
+        }
     }
     for (field, shape) in step["shape"]
         .as_object()
@@ -539,6 +713,7 @@ fn event_matches(actual: Option<&Value>, step: &Value) -> Result<bool, String> {
             Some("primitive") => match shape["kind"].as_str() {
                 Some("string") => actual[field].is_string(),
                 Some("boolean") => actual[field].is_boolean(),
+                Some("integer") => actual[field].is_i64() || actual[field].is_u64(),
                 other => return Err(format!("unsupported primitive {other:?}")),
             },
             other => return Err(format!("unsupported event shape {other:?}")),
@@ -548,6 +723,20 @@ fn event_matches(actual: Option<&Value>, step: &Value) -> Result<bool, String> {
         }
     }
     Ok(true)
+}
+
+#[test]
+fn integer_payload_comparison_preserves_exact_values() {
+    let step = |count: Value| json!({"payload":{"count":count},"shape":{"count":{"holds":"primitive","kind":"integer"}}});
+    assert!(event_matches(Some(&json!({"count":2})), &step(json!(2.0))).unwrap());
+    assert!(
+        !event_matches(
+            Some(&json!({"count":9_007_199_254_740_992_i64})),
+            &step(json!(9_007_199_254_740_993_i64))
+        )
+        .unwrap()
+    );
+    assert!(event_matches(Some(&json!({"count":2})), &step(json!(2.25))).is_err());
 }
 
 fn view_matches(actual: &Value, expectation: &Value) -> Result<bool, String> {
@@ -674,7 +863,7 @@ fn ess_generated_scenarios_drive_production_targets() {
     if external.is_none() {
         assert_eq!(
             scenarios.len(),
-            40,
+            45,
             "review and update coverage deliberately"
         );
         assert_eq!(
@@ -682,6 +871,7 @@ fn ess_generated_scenarios_drive_production_targets() {
             "every invariant now has an observable production record"
         );
         for command in [
+            "PollSteering",
             "FinishCodexCompletion",
             "CloseUnsteeredStream",
             "CheckSelectedName",

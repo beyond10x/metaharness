@@ -635,7 +635,7 @@ fn two_pending_calls_may_be_answered_in_the_reverse_order() {
         .unwrap();
     assert!(matches!(second, CommandOutcome::Ok { .. }));
     assert!(matches!(first, CommandOutcome::Ok { .. }));
-    assert!(run.pending_calls().is_empty());
+    assert_eq!(run.pending_calls(), []);
     let written = started.log.written();
     assert!(written[0].contains("\"t2\""));
     assert!(written[1].contains("\"t1\""));
@@ -1038,7 +1038,7 @@ fn a_run_that_declared_no_credential_copies_nothing() {
             Box::new(ManualClock::new()),
         )
         .expect("starts");
-    assert!(log.credential_copies().is_empty());
+    assert_eq!(log.credential_copies(), []);
 }
 
 #[test]

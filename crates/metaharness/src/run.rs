@@ -30,6 +30,21 @@ use crate::clock::Clock;
 use crate::process::HarnessProcess;
 use metaharness_protocol::HarnessSeam;
 
+/// A single run-loop polling observation, separate from the event wire.
+#[derive(Debug)]
+pub enum EventPoll {
+    /// One normalized event, including the final closure.
+    Event(Box<EventLine>),
+    /// One raw record was consumed without a normalized event; poll again after servicing input.
+    Progress,
+    /// The process remains open without a normalized event this time.
+    Idle,
+    /// The process is waiting for an armed tool decision.
+    DecisionPending,
+    /// The final closure has already been delivered.
+    Ended,
+}
+
 /// The terminal record's own word for a budget stop, as this workspace has read it.
 ///
 /// The b10x loop writes `{"kind":"finished","stop":{"kind":"budget-exhausted",…}}` and the adapter
@@ -437,29 +452,60 @@ impl Run {
     /// is reported rather than spun on.
     pub fn next_event(&mut self) -> std::io::Result<Option<EventLine>> {
         loop {
-            if let Some(emission) = self.outbox.pop_front() {
-                return Ok(Some(self.deliver(emission)));
-            }
-            if self.expire_deadlines()? {
-                continue;
-            }
-            if self.finished {
-                return Ok(self.close_stream());
-            }
-            let read = self.process.next_line();
-            match read {
-                Ok(Some(line)) => {
-                    self.bridge.set_census(self.census.clone());
-                    let emissions = self.bridge.push_line(&line);
-                    self.admit(emissions)?;
-                }
-                Ok(None) => self.wind_up(),
-                Err(error) if error.kind() == ErrorKind::WouldBlock => {
-                    self.wait_out_earliest_deadline()?;
-                }
-                Err(error) => return Err(error),
+            match self.poll_event()? {
+                EventPoll::Event(line) => return Ok(Some(*line)),
+                EventPoll::Ended => return Ok(None),
+                EventPoll::Idle | EventPoll::Progress => (),
+                EventPoll::DecisionPending => self.wait_out_earliest_deadline()?,
             }
         }
+    }
+
+    /// Observe queued output or poll one process record without waiting for a decision.
+    ///
+    /// Native runners yield on their short receive timeout. A custom process must
+    /// override [`crate::HarnessProcess::poll_line`] to provide the same bound.
+    /// Silence and a pending decision never mean that the event stream has ended.
+    ///
+    /// # Errors
+    /// As [`Run::next_event`], including an unanswered decision with none pending.
+    pub fn poll_event(&mut self) -> std::io::Result<EventPoll> {
+        use crate::ProcessPoll;
+        if let Some(emission) = self.outbox.pop_front() {
+            return Ok(EventPoll::Event(Box::new(self.deliver(emission))));
+        }
+        self.expire_deadlines()?;
+        if let Some(emission) = self.outbox.pop_front() {
+            return Ok(EventPoll::Event(Box::new(self.deliver(emission))));
+        }
+        if self.finished {
+            return Ok(self
+                .close_stream()
+                .map_or(EventPoll::Ended, |line| EventPoll::Event(Box::new(line))));
+        }
+        match self.process.poll_line() {
+            Ok(ProcessPoll::Line(line)) => {
+                self.bridge.set_census(self.census.clone());
+                let emissions = self.bridge.push_line(&line);
+                self.admit(emissions)?;
+            }
+            Ok(ProcessPoll::Ended) => self.wind_up(),
+            Ok(ProcessPoll::Idle) => return Ok(EventPoll::Idle),
+            Err(error) if error.kind() == ErrorKind::WouldBlock => {
+                self.earliest_deadline()?;
+                return Ok(EventPoll::DecisionPending);
+            }
+            Err(error) => return Err(error),
+        }
+        if let Some(emission) = self.outbox.pop_front() {
+            return Ok(EventPoll::Event(Box::new(self.deliver(emission))));
+        }
+        if self.finished {
+            return Ok(self
+                .close_stream()
+                .map_or(EventPoll::Ended, |line| EventPoll::Event(Box::new(line))));
+        }
+        Ok(EventPoll::Progress)
     }
 
     /// Pump to the end and collect everything, deciding nothing.
@@ -502,6 +548,7 @@ impl Run {
         id: impl Into<String>,
         command: Command,
     ) -> std::io::Result<CommandOutcome> {
+        self.expire_deadlines()?;
         let outcome = self.apply(command)?;
         self.outbox
             .push_back(Emission::untimed(Event::CommandResult {
@@ -1098,6 +1145,12 @@ impl Run {
     }
 
     fn wait_out_earliest_deadline(&mut self) -> std::io::Result<()> {
+        let target = self.earliest_deadline()?;
+        self.clock.sleep_until_ms(target);
+        Ok(())
+    }
+
+    fn earliest_deadline(&self) -> std::io::Result<u64> {
         let Some(target) = self
             .pending
             .iter()
@@ -1109,8 +1162,7 @@ impl Run {
                  side can leave this state, so it is reported rather than spun on",
             ));
         };
-        self.clock.sleep_until_ms(target);
-        Ok(())
+        Ok(target)
     }
 
     /// The last line of the stream, written once, after everything else has been delivered
@@ -1325,9 +1377,11 @@ impl Run {
             }
             Command::Interrupt { .. } => {
                 self.abandon_pending("the run was interrupted", warning::PENDING_CALL_ABANDONED);
-                self.write_control(&Command::Interrupt {
+                if !self.write_control(&Command::Interrupt {
                     reason: String::new(),
-                })?;
+                })? {
+                    self.process.kill()?;
+                }
                 Ok(CommandOutcome::Ok { applies_at: None })
             }
             Command::Halt { .. } => {
@@ -1349,11 +1403,12 @@ impl Run {
         }
     }
 
-    fn write_control(&mut self, command: &Command) -> std::io::Result<()> {
+    fn write_control(&mut self, command: &Command) -> std::io::Result<bool> {
         if let Some(line) = self.bridge.control_line(command) {
             self.process.write_line(&line)?;
+            return Ok(true);
         }
-        Ok(())
+        Ok(false)
     }
 
     /// Rule 3: a decision correlates to one request and cannot be replayed.

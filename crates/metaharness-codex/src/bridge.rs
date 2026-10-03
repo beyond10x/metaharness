@@ -290,7 +290,7 @@ mod tests {
         fn missing_terminal_evidence_does_not_invent_success() {
             let mut seam = seam();
             seam.push_line(PARTIAL);
-            assert!(seam.finish().is_empty());
+            assert_eq!(seam.finish(), []);
         }
 
         #[test]
@@ -456,7 +456,7 @@ mod tests {
         match &emitted[0].event {
             Event::ToolRequested { call_id, name, .. } => {
                 assert_eq!(call_id, "k1");
-                assert!(name.is_empty());
+                assert_eq!(name, "");
             }
             other => panic!("{other:?}"),
         }
