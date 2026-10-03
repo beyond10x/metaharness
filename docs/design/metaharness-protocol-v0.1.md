@@ -1822,7 +1822,7 @@ identifier, ADR reference or credentials posture appears in § 2.6 or anywhere e
 
 ---
 
-## Amendment a10 — terminal outcomes and selected workspaces (2026-10-03)
+## Amendment a18 — terminal outcomes and selected workspaces (2026-10-03)
 
 GitHub #11 supplies a terminal failure shape observed on Codex 0.153.4, outside the
 existing verified pin. A non-null `task_complete.error` is explicit failure and must
@@ -1851,7 +1851,7 @@ operator's selection; no ambient directory is silently adopted.
 Independent review corrections and executed evidence for this amendment are recorded
 in the issue-repair AEP work, before any claim that the issues are complete.
 
-## Amendment a11 — governed Codex and explicit spending policy (2026-10-03)
+## Amendment a19 — governed Codex and explicit spending policy (2026-10-03)
 
 Issues #13 and #14 extend the concrete AEP host. They do not change the sealed
 `metaharness.frame/1` format, the AEP engine's authority, or the b10x observe-only seam.

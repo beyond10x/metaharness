@@ -1,0 +1,47 @@
+domain: metaharness.workspace
+summary: Existing selected-directory naming admission, without owning worktree or substrate lifecycle.
+# Source authority: pinned Harness 90f10a4314c1c630691c85e812bd8d5d23d73fcc,
+# crates/harness-substrate/src/embedded.rs:213-250. Metaharness's old prefix
+# predicate at crates/metaharness/src/builder.rs:1784 and
+# crates/metaharness-aep/src/drive.rs:2425 contradicts that dependency.
+# The repair is specified by design amendment a18 dated 2026-10-03.
+types:
+  - name: metaharness.workspace.WorkspaceName
+    kind: newtype
+    of: String
+    alphabet: "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789_-"
+  - name: metaharness.workspace.WorkspaceSelection
+    kind: struct
+    fields:
+      - {name: requested_path, type: String}
+      - {name: canonical_path, type: String}
+      - {name: name, type: metaharness.workspace.WorkspaceName}
+    # A projection of explicit cwd/project selection, not a new durable owner.
+
+errors:
+  - name: metaharness.workspace.InvalidName
+    fields: []
+
+commands:
+  - name: metaharness.workspace.CheckSelectedName
+    # Check the component of an explicitly selected canonical directory.
+    input:
+      - {name: name, type: metaharness.workspace.WorkspaceName}
+    outcomes:
+      - name: empty-name-refused
+        when: name.count == 0
+        error: metaharness.workspace.InvalidName
+      - name: leading-hyphen-refused
+        when: {name: {starts_with: "-"}}
+        error: metaharness.workspace.InvalidName
+      - name: eligible-component
+        accepts: nothing
+    # Invalid characters (including . and ..) are rejected by WorkspaceName's
+    # alphabet, not accepted and converted into another name.
+    # UNMAPPED: a name alone proves no filesystem identity or confinement.
+    # A real target must canonicalize --project . / --cwd, reject absent paths,
+    # exercise substrate's pinned-root/symlink containment, and preserve managed
+    # worktree path, git identity and leases. See builder.rs:492-515,1730-1743;
+    # drive.rs:1875-1910,2339-2354 and the pinned workspace_adopt implementation.
+    # UNMAPPED: when mutation requires confinement, missing confinement is refused;
+    # syntax admission cannot substitute for the actual driver's decision.

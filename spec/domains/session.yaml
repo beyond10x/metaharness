@@ -1,0 +1,135 @@
+domain: metaharness.session
+summary: A bounded projection of Codex completion evidence and normalized stream closure.
+# Existing wire types: crates/metaharness-protocol/src/event.rs:388,706,799.
+# Required repair: docs/design/metaharness-protocol-v0.1.md, "Amendment a18 —
+# terminal outcomes and selected workspaces (2026-10-03)". At the draft baseline,
+# crates/metaharness-codex/src/rollout.rs:135,296 drops explicit failure evidence.
+# These commands name adapter/run-loop operations for a real conformance target;
+# they are not new public CLI verbs or a second vendor decoder.
+types:
+  - name: metaharness.session.TerminalEvidence
+    kind: struct
+    fields:
+      - {name: is_error, type: Optional<Boolean>, presence: null_when_absent}
+      - {name: subtype, type: Optional<String>, presence: null_when_absent}
+      - {name: stop_reason, type: Optional<String>, presence: null_when_absent}
+      - {name: terminal_reason, type: Optional<String>, presence: null_when_absent}
+    # UNMAPPED: the source's total_cost_usd: Option<f64> remains exact in the
+    # separately validated monetary contract. ESS 0.51.0 refuses Binary64 in
+    # conformance codecs and Rust synthesis; this projection excludes its value.
+  - name: metaharness.session.CodexCompletion
+    kind: struct
+    fields:
+      - {name: error, type: Optional<Json>, presence: null_when_absent}
+      - {name: last_agent_message, type: Optional<String>, presence: null_when_absent}
+    # The payload type alone cannot distinguish missing error from error:null.
+    # The evidence discriminants below preserve that distinction for scenarios.
+  - name: metaharness.session.ErrorProperty
+    kind: enum
+    variants: [missing, explicit-null, nonnull]
+  - name: metaharness.session.LastMessageEvidence
+    kind: enum
+    variants: [missing-or-nonstring, blank, nonblank]
+    # blank means String::trim().is_empty(), including whitespace-only strings.
+    # These are raw-payload classes, not a caller-supplied success verdict.
+  - name: metaharness.session.CompletionVerdict
+    kind: enum
+    variants: [success, failure, unknown]
+  - name: metaharness.session.CloseReason
+    kind: enum
+    variants: [completed, budget, killed, error, steer-halt]
+  - name: metaharness.session.StreamClosure
+    kind: struct
+    fields:
+      - {name: run_id, type: String}
+      - {name: events, type: Integer}
+      - {name: reason, type: metaharness.session.CloseReason}
+    invariants: [events >= 0]
+
+commands:
+  - name: metaharness.session.FinishCodexCompletion
+    # Project the last native task_complete through the existing rollout reader.
+    input:
+      - {name: error_property, type: metaharness.session.ErrorProperty}
+      - {name: last_message, type: metaharness.session.LastMessageEvidence}
+    outcomes:
+      - name: explicit-failure
+        when: error_property == nonnull
+        emits: [metaharness.session.CompletionClassified]
+        payload:
+          metaharness.session.CompletionClassified: {verdict: failure}
+      - name: explicit-no-error
+        when: error_property == explicit-null
+        emits: [metaharness.session.CompletionClassified]
+        payload:
+          metaharness.session.CompletionClassified: {verdict: success}
+      - name: positive-completion
+        when: {all: [error_property == missing, last_message == nonblank]}
+        emits: [metaharness.session.CompletionClassified]
+        payload:
+          metaharness.session.CompletionClassified: {verdict: success}
+      - name: incomplete-evidence
+        emits: [metaharness.session.CompletionClassified]
+        payload:
+          metaharness.session.CompletionClassified: {verdict: unknown}
+        summary: Unknown maps to absent normalized is_error, not a fabricated vendor error.
+    # UNMAPPED: absence of task_complete, error/turn.failed records outside this
+    # payload, and preliminary text followed by failure need authored real-reader
+    # sequences. See rollout.rs:99,135,271,286 and GitHub issue 11.
+    # A real target constructs raw synthetic JSON from these shape classes, then
+    # calls the reader; it must not implement the decision table itself. Source:
+    # issue-11 repair's RolloutReader completion_error helper (pending integration).
+    # UNMAPPED: exhaustive JSON payload shapes, failure sticky across later
+    # completions, and a new task_started clearing prior success need raw-reader
+    # sequence vectors. Unknown money remains absent (rollout.rs:150-152), not zero.
+
+  - name: metaharness.session.CloseUnsteeredStream
+    # Classify normalized terminal facts without fabricating success from absence.
+    input:
+      - {name: terminal_present, type: Boolean}
+      - {name: is_error, type: Optional<Boolean>, presence: null_when_absent}
+      - {name: subtype, type: Optional<String>, presence: null_when_absent}
+      - {name: stop_reason, type: Optional<String>, presence: null_when_absent}
+      - {name: terminal_reason, type: Optional<String>, presence: null_when_absent}
+    outcomes:
+      - name: no-terminal-record
+        when: terminal_present == false
+        emits: [metaharness.session.StreamClassified]
+        payload:
+          metaharness.session.StreamClassified: {reason: error}
+      - name: observed-budget-stop
+        when:
+          all:
+            - terminal_present == true
+            - any: [subtype == "budget-exhausted", stop_reason == "budget-exhausted", terminal_reason == "budget-exhausted"]
+        emits: [metaharness.session.StreamClassified]
+        payload:
+          metaharness.session.StreamClassified: {reason: budget}
+      - name: positive-terminal-record
+        when:
+          all:
+            - terminal_present == true
+            - not: is_error == true
+            - any: [is_error == false, subtype == "success"]
+            - none: [subtype == "budget-exhausted", stop_reason == "budget-exhausted", terminal_reason == "budget-exhausted"]
+        emits: [metaharness.session.StreamClassified]
+        payload:
+          metaharness.session.StreamClassified: {reason: completed}
+      - name: failed-or-unknown-terminal
+        emits: [metaharness.session.StreamClassified]
+        payload:
+          metaharness.session.StreamClassified: {reason: error}
+    # Source: crates/metaharness/src/run.rs:1140-1164, clarified with issue-11's
+    # repair before integration: budget precedence, then explicit is_error=true,
+    # then is_error=false OR legacy subtype=success, otherwise unknown/error.
+    # The unknown branch is the a18 repair, not a claim baseline code conforms.
+    # UNMAPPED: steering precedence, final-line order/count, process exit status
+    # and CLI audited/unaudited agreement need real Run/CLI scenarios. The entity
+    # vocabulary is not expanded to invent a second process/session lifecycle.
+
+# These are conformance observations, not newly published runtime wire events.
+events:
+  - name: metaharness.session.CompletionClassified
+    fields: [{name: verdict, type: metaharness.session.CompletionVerdict}]
+  - name: metaharness.session.StreamClassified
+    fields: [{name: reason, type: metaharness.session.CloseReason}]

@@ -1,0 +1,4 @@
+format: ess/16
+system: metaharness
+version: v1
+domains: [metaharness.monetary]

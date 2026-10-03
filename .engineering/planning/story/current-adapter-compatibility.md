@@ -23,7 +23,7 @@ scope:
   path: crates/metaharness-codex
 - confidence: inferred
   path: docs/research
-revision: 3
+revision: 4
 ---
 ## Context
 
@@ -31,7 +31,7 @@ Installed banners are Claude 2.1.288, Codex 0.153.4 and b10x-harness 0.13.3; cur
 
 ## Acceptance
 
-For each proposed new pin, the named compatibility-success, compatibility-terminal-failure, compatibility-tool-decision, compatibility-cancellation, compatibility-model-usage and compatibility-declared-controls matrix changes from unverified to either cited sanitized live evidence backed by synthetic regression vectors or an explicit unsupported refusal, and only a fully justified pin advances.
+For each installed release explicitly named here—Claude 2.1.288, Codex 0.153.4 and b10x-harness 0.13.3—the compatibility-success, compatibility-terminal-failure, compatibility-tool-decision, compatibility-cancellation, compatibility-model-usage and compatibility-declared-controls matrix records a disposition backed by sanitized observed evidence and synthetic regression vectors, keeps untested claims explicitly unverified, and advances a pin only when its required evidence is complete; an empty proposed-pin set does not satisfy this acceptance.
 
 ## Scope and sequence
 

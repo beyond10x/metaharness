@@ -25,7 +25,7 @@ scope:
   path: crates/metaharness/tests/stream_closed.rs
 - confidence: cited
   path: docs/design/metaharness-protocol-v0.1.md
-revision: 11
+revision: 13
 transitions:
 - {from: "draft", to: "proposed", at: "2026-10-02T23:46:32Z", actor: "human:timo", revision: 7}
 - {from: "proposed", to: "active", at: "2026-10-02T23:46:32Z", actor: "human:timo", revision: 8}

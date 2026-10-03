@@ -1,0 +1,7 @@
+format: ess/15
+system: metaharness
+version: v1
+domains:
+  - metaharness.session
+  - metaharness.workspace
+  - metaharness.spending

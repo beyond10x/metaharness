@@ -18,11 +18,11 @@ scope:
   path: crates/metaharness-aep/src/drive_tests.rs
 - confidence: cited
   path: docs/design/metaharness-protocol-v0.1.md
-revision: 2
+revision: 4
 ---
 ## Context
 
-Current drive.rs:1594 requires a positive finite cap and assumed charge; SpendTerms, SpendBudget and spend.json represent only reservations. The requested new policy is specified first by metaharness.spending.Policy, UncappedTerms and InvocationAdmission in spec/domains/spending.yaml (draft worktree), with exact optional observed monetary types in spec/monetary. Design amendment a11 defines policy semantics before implementation. These are Metaharness host terms, not a new AEP workflow or an unbounded engine iteration policy.
+Current drive.rs:1594 requires a positive finite cap and assumed charge; SpendTerms, SpendBudget and spend.json represent only reservations. The requested new policy is specified first by metaharness.spending.Policy, UncappedTerms and InvocationAdmission in spec/domains/spending.yaml (draft worktree), with exact optional observed monetary types in spec/monetary. Design amendment a19 defines policy semantics before implementation. These are Metaharness host terms, not a new AEP workflow or an unbounded engine iteration policy.
 
 ## Acceptance
 

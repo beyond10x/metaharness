@@ -19,7 +19,7 @@ scope:
   path: crates/metaharness/tests/ess_conformance.rs
 - confidence: inferred
   path: spec
-revision: 6
+revision: 7
 ---
 ## Context
 
@@ -31,7 +31,7 @@ Metaharness has an executable specification derived from its actual contracts an
 
 ## Acceptance
 
-The repository's task check validates its ESS specification and executes a nonempty conformance suite against the real Metaharness implementation, with named scenarios for terminal outcomes, unknown evidence, frame integrity, confinement, tool decisions and accounting, and each hardening technique reported as successful has a recorded planted-defect failure followed by a restored green run.
+The repository's task check changes from having no ESS gate to validating its specification and executing real-target conformance with at least one executed passing named scenario for each required obligation—terminal outcomes, unknown evidence, frame integrity, confinement, tool decisions and accounting—with no required scenario skipped, and every hardening technique reported as successful has a recorded planted-defect failure followed by a restored green run.
 
 ## Procedure
 

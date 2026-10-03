@@ -22,11 +22,11 @@ scope:
   path: crates/metaharness-codex
 - confidence: cited
   path: docs/design/metaharness-protocol-v0.1.md
-revision: 2
+revision: 4
 ---
 ## Context
 
-The existing normalized Codex adapter is absent from the concrete AEP host's Harness enum (crates/metaharness-aep/src/drive.rs:1408), so selecting codex cannot invoke it. Design amendment a11 defines the change; the drafted ESS session and invocation types under spec/domains provide the typed home before this story. Existing frame, operation and AEP action types remain authoritative.
+The existing normalized Codex adapter is absent from the concrete AEP host's Harness enum (crates/metaharness-aep/src/drive.rs:1408), so selecting codex cannot invoke it. Design amendment a19 defines the change; the drafted ESS session and invocation types under spec/domains provide the typed home before this story. Existing frame, operation and AEP action types remain authoritative.
 
 ## Acceptance
 
@@ -34,7 +34,7 @@ Where a codex step previously returned unsupported-harness NoVerdict, named real
 
 ## Scope and sequence
 
-crates/metaharness-aep/src/drive.rs and drive_tests.rs own selection, launch, engine mapping, transcript and resume tests. Vendor interpretation, if required for a typed action translation, belongs in crates/metaharness-codex, never a second downstream decoder. docs/design/metaharness-protocol-v0.1.md amendment a11 binds behavior. Shared protocol additions require explicit review and scope update; frame/1 bytes remain unchanged. Runs after #10, #11 and #12 because these land on its seams. #14 follows because it shares admission and accounting surfaces. Real supported controls remain version-bounded; #15 owns new pin evidence.
+crates/metaharness-aep/src/drive.rs and drive_tests.rs own selection, launch, engine mapping, transcript and resume tests. Vendor interpretation, if required for a typed action translation, belongs in crates/metaharness-codex, never a second downstream decoder. docs/design/metaharness-protocol-v0.1.md amendment a19 binds behavior. Shared protocol additions require explicit review and scope update; frame/1 bytes remain unchanged. Runs after #10, #11 and #12 because these land on its seams. #14 follows because it shares admission and accounting surfaces. Real supported controls remain version-bounded; #15 owns new pin evidence.
 
 ## Verification
 

@@ -8,7 +8,7 @@ relations:
 - decides: epic:github-issue-repair
 - decides: story:codex-terminal-failure
 - decides: story:current-aep-runtime
-revision: 5
+revision: 6
 ---
 ## Authorization and boundary
 
@@ -113,3 +113,7 @@ wt-1a1e6a19851f, base 552892018cfca193ec4cfbaa3d7e6b90fcb7cfd1, scratch suffix m
 ## Stable planning identity
 
 After verified migration, set the project selector's planning_scope to metaharness instead of the managed worktree directory name. The CLI currently has no project-selector edit verb; this configuration-only correction leaves CLI-owned artifact transitions and evidence untouched. Schema remains aep.project/5 with the Git store. Validator: 33 artifact(s), valid.
+
+## Resource update and review mechanics
+
+Measured later: 18 GiB free; Codex target 623 MiB and AEP target 805 MiB. Permit one short cached Codex adversary package probe at one cargo job beside the AEP build, retaining separate targets and the 3 GiB stop threshold; no concurrent fresh workspace builds. Four plan-critic perspectives were run without sharing findings, in two capacity-bounded batches because this host has only three worker slots. The unavailable sonnet/high critic pin was not silently substituted: session model used and deviation recorded. Test-only adversary is a separate role from plan critique.
