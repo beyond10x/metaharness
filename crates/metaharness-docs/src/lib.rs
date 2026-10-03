@@ -1,11 +1,12 @@
 //! Credential-free Markdown documentation with local link checks and source provenance.
 mod content;
+mod output;
 mod render;
 mod validate;
 
 use render::Page;
 use std::fmt::Write as _;
-use std::{collections::BTreeMap, fs, path::Path};
+use std::{collections::BTreeMap, path::Path};
 
 const BASE: &str = "/metaharness/";
 const CSS: &str = include_str!("../../../website/styles.css");
@@ -222,27 +223,13 @@ pub fn check() -> Result<(), String> {
     Ok(())
 }
 
-/// Build the entire site into a new or empty directory, with exact source provenance.
+/// Build the site with exact provenance, replacing only complete generated output.
 /// The output directory is the project-site root mounted at `/metaharness/`.
 /// # Errors
-/// Returns an error for invalid source, invalid commit, occupied output or I/O failure.
+/// Returns an error for invalid source, invalid commit, foreign or incomplete output, symlinks or I/O failure.
 pub fn build(out: &Path, commit: &str) -> Result<(), String> {
     let files = render_site(content::PAGES, LANDING, commit)?;
-    if out.is_symlink()
-        || (out.exists()
-            && fs::read_dir(out)
-                .map_err(|e| e.to_string())?
-                .next()
-                .is_some())
-    {
-        return Err("output must be a new or empty directory, never a symlink".into());
-    }
-    for (name, bytes) in &files {
-        let path = out.join(name);
-        fs::create_dir_all(path.parent().ok_or("output has no parent")?)
-            .map_err(|e| e.to_string())?;
-        fs::write(&path, bytes).map_err(|e| format!("{}: {e}", path.display()))?;
-    }
+    output::write(out, &files)?;
     println!(
         "Built 13 documentation pages and landing at {}",
         out.display()

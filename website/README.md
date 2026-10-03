@@ -16,8 +16,11 @@ The output directory is the site root mounted at `/metaharness/`; it contains
 The accompanying `.well-known/b10x-routes.json` lists each public page and its
 sorted rendered anchor IDs, stamped with the same source commit.
 The build refuses invalid provenance, duplicate routes and broken internal links
-or heading fragments. Output must be a new or empty directory. Build output is
-never committed. Publication is owned by the repository workflow.
+or heading fragments. Output may be a new or empty directory, or a complete
+previous Metaharness build with matching project provenance and the exact generated
+file inventory. A rebuild stages the whole site before replacing that output;
+foreign or incomplete output, extra files/directories and symlinks are refused
+without modifying the previous site. Build output is never committed. Publication is owned by the repository workflow.
 
 Keep the existing page paths and headings stable: they are public deep links.
 Use relative `.md` links between documentation pages. Tables, fenced code,
