@@ -997,7 +997,7 @@ mod tests {
     #[test]
     fn source_lines_are_one_based_and_count_blank_lines_too() {
         let mut reader = new_reader();
-        assert!(reader.push_line("   ").is_empty());
+        assert_eq!(reader.push_line("   "), [] as [Emission; 0]);
         let event = only(reader.push_line(r#"{"type":"nope"}"#));
         let Event::Opaque { source_line, .. } = event else {
             panic!("expected opaque");
@@ -1348,7 +1348,7 @@ mod tests {
         let mut reader = new_reader();
         reader.push_line(r#"{"type":"system","subtype":"init","tools":[]}"#);
         assert!(!reader.saw_terminal_record());
-        assert!(reader.finish().is_empty());
+        assert_eq!(reader.finish(), [] as [Emission; 0]);
     }
 
     /// The vendor's words, passed through and never paraphrased. Detection is weak by

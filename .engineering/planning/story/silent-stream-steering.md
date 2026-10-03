@@ -26,7 +26,7 @@ scope:
   path: spec/conformance.json
 - confidence: cited
   path: spec/domains/session.yaml
-revision: 8
+revision: 9
 transitions:
 - {from: "draft", to: "proposed", at: "2026-10-03T10:57:59Z", actor: "human:timo", revision: 3, decided_on: {"recorded":{"test_result":1}}}
 - {from: "proposed", to: "active", at: "2026-10-03T10:57:59Z", actor: "human:timo", revision: 4, decided_on: {"recorded":{"test_result":1}}}
@@ -50,3 +50,7 @@ Core process polling and run loop, CLI drive loop, their regression tests, bindi
 Scope correction from the implementation worker: the generated suite is spec/conformance.json; spec/generated does not exist. The machine-readable scope now names the actual suite. Proposed PollSteering is an internal conformance operation over the existing running/control contract, measuring real Run polling and control delivery for quiet-halt, quiet-interrupt, pending-halt and quiet-only. It does not introduce a public wire entity or claim native timing.
 
 The stable1.99 affected-package lint pass found the equivalent assert_is_empty test lint at crates/metaharness-aep/src/drive_tests.rs:68. Add that test-only file to the unit's scope for the behavior-preserving assertion adjustment; this is not a runtime or monetary change. The worker is also checking a deadline edge introduced by polling: a queued tool answer must not be admitted after its armed deadline merely because command delivery falls between polls. A deterministic ManualClock regression must establish the behavior before changing command admission.
+
+## Native b10x interrupt follow-up
+
+The corrected native fixture uses the protocol's halt and interrupt commands, requires session.started before sending and checks correlated successful command.result. Halt closes within two seconds against the quiet-stream candidate. Interrupt receives an ok result but leaves the child alive beyond two seconds: the b10x seam advertises honoured interrupt but supplies no control wire, while Run only writes that absent control line. Earlier malformed run.cancel/session.interrupt timeouts are fixture defects and are not causal evidence for the core issue. Extend this accepted story with generic no-control-wire interrupt behavior, a deterministic regression and named ESS scenario; preserve adapters with actual control lines. Record the design before the fix. The source/design/spec paths are already in this story's scope.

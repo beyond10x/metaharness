@@ -6,7 +6,7 @@ status: active
 title: Observe current native b10x against a credential-free fixture provider
 relations:
 - decomposes: story:current-adapter-compatibility
-revision: 3
+revision: 4
 transitions:
 - {from: "draft", to: "proposed", at: "2026-10-03T11:00:27Z", actor: "human:timo", revision: 2}
 - {from: "proposed", to: "active", at: "2026-10-03T11:00:27Z", actor: "human:timo", revision: 3}
@@ -18,3 +18,7 @@ Use opt-in Rust tests with the real installed b10x-harness0.13.3 and an owned lo
 ## Scope
 
 crates/metaharness-b10x/tests/native_fixture.rs, its Cargo.toml, Cargo.lock for required dev dependencies, docs/research/2026-10-03-native-b10x-fixture.md. Parent story owns the machine-readable scope. Separate managed tree, bot commits, no AEP writes, pushes or PRs. One integration PR remains coordinator-owned.
+
+## Independent review correction
+
+Read-only adversary plan_parallel reviewed33c18027 and found unsupported cancellation command names and an unjustified production-causal report. Coordinator corrected the fixture to halt/interrupt with observed startup, correlated command.result and native closure assertions. The corrected candidate run reports4passed/1failed: halt green, interrupt acknowledged but not effective within two seconds. This new valid-command failure is tracked by story:silent-stream-steering. Original malformed-command logs remain preserved as fixture failures; documentation attribution will be retracted.

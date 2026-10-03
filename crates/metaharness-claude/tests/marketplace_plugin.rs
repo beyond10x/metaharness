@@ -279,8 +279,14 @@ fn a_run_with_no_plugin_attests_an_empty_list() {
     let mut spec = RunSpec::new(Kind::Claude);
     spec.prompt = Some("work".to_string());
     let plan = plan_launch(&spec, &context()).expect("plans");
-    assert!(plan.attestation.installed_plugins.is_empty());
-    assert!(plan.marketplace_installs.is_empty());
+    assert_eq!(
+        plan.attestation.installed_plugins,
+        [] as [metaharness_protocol::InstalledPlugin; 0]
+    );
+    assert_eq!(
+        plan.marketplace_installs,
+        [] as [metaharness_protocol::PluginInstall; 0]
+    );
     let json = serde_json::to_string(&plan.attestation).expect("renders");
     assert!(json.contains(r#""installed_plugins":[]"#), "{json}");
 }

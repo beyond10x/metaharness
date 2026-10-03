@@ -396,7 +396,7 @@ mod tests {
         let reason = response["hookSpecificOutput"]["permissionDecisionReason"]
             .as_str()
             .expect("a reason is always present");
-        assert!(!reason.trim().is_empty());
+        assert_ne!(reason.trim(), "");
     }
 
     #[test]
