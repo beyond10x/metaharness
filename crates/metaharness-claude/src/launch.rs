@@ -1909,7 +1909,7 @@ mod tests {
             plan.env.get("ANTHROPIC_API_KEY").map(String::as_str),
             Some("sk-test")
         );
-        assert!(plan.credential_copies.is_empty());
+        assert_eq!(plan.credential_copies, [] as [CredentialCopy; 0]);
     }
 
     #[test]
@@ -2266,8 +2266,11 @@ mod tests {
     #[test]
     fn a_run_with_no_plugin_attests_an_empty_list_and_never_an_absent_key() {
         let plan = plan();
-        assert!(plan.plugin_installs.is_empty());
-        assert!(plan.attestation.installed_plugins.is_empty());
+        assert_eq!(plan.plugin_installs, [] as [PluginInstall; 0]);
+        assert_eq!(
+            plan.attestation.installed_plugins,
+            [] as [InstalledPlugin; 0]
+        );
         let json = serde_json::to_string(&plan.attestation).expect("the attestation serializes");
         assert!(json.contains(r#""installed_plugins":[]"#), "{json}");
         assert!(!plan.args.iter().any(|argument| argument == "--plugin-dir"));
@@ -2542,7 +2545,10 @@ mod tests {
             "Bash(git status:*),Read".to_string(),
         ];
         assert_eq!(bare_allowed_tools(&args), vec!["Read".to_string()]);
-        assert!(bare_allowed_tools(&["--allowedTools=Bash(ls:*)".to_string()]).is_empty());
+        assert_eq!(
+            bare_allowed_tools(&["--allowedTools=Bash(ls:*)".to_string()]),
+            [] as [String; 0]
+        );
     }
 
     /// A frame-mode run needs no call-level seam, so the same argv is not shadowed for it: the
