@@ -38,7 +38,7 @@ scope:
   path: evals/aep/runs
 - confidence: cited
   path: spec
-revision: 7
+revision: 8
 transitions:
 - {from: "draft", to: "proposed", at: "2026-10-03T09:13:46Z", actor: "human:timo", revision: 3, executor: "agent:codex-metaharness", correlation: "issue-repair-wave"}
 - {from: "proposed", to: "active", at: "2026-10-03T09:13:46Z", actor: "human:timo", revision: 4, executor: "agent:codex-metaharness", correlation: "issue-repair-wave"}
@@ -64,3 +64,7 @@ The combined #18–20 unit implements amendment a22 against official Codex rust-
 ESS scenario names: ReadFinalAnswer/outcome/{authoritative,unavailable}; ReadObservedModel/outcome/{observed-selection,unreported}; ReadToolOutcome/outcome/{command-success,command-failure,failure-without-code,success-without-code,unverified}, under metaharness.observations. The production target reads normalized events from the real adapter reader. Separate Rust tests cover malformed and contradictory metadata, wrong family/turn, missing final text and model changes. A green synthetic suite does not replace native observations.
 
 Default legacy Codex history does not persist command completion status and discards the internal function-output success flag. Content-only commands remain unknown. A verified additional transport or history mode is still needed for native command coverage; budget approval alone does not solve this source gap. Patch structured completions and paginated command items are supported when present.
+
+## Source correction: persistent Codex exec history
+
+Read-only inspection of official Codex rust-v0.153.4 exec/src/lib.rs at 042fb41b7c813ac7999105e886b2b7aa715b5081 changes the earlier inference: thread_start_params_from_config requests Paginated history when not ephemeral. Metaharness refuses --ephemeral. start_thread falls back to unspecified/default legacy only on the explicit server error that paginated threads require listing support. The enum default is therefore not proof that this selected exec path normally uses legacy history. Existing support for retained CommandExecution items can cover the normal persistent path; native qualification must observe which path was taken. Legacy/resumed/fallback records that omit status remain unknown. No additional history flag or alternate vendor parser is currently justified.

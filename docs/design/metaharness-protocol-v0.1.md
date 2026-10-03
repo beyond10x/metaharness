@@ -1995,7 +1995,7 @@ all records, with the last observation and any contradiction taken into account.
 known results survive a later content-only representation. Authorization remains only
 in tool.decided and is never derived from success, failure or native auto-approval.
 
-Codex's default legacy rollout does not retain ExecCommandEnd, and its function-call
+Codex's legacy rollout does not retain ExecCommandEnd, and its function-call
 output serializer discards the internal success flag. Paginated history retains
 CommandExecution items; legacy history retains patch_apply_end. This implementation
 does not silently switch vendor history mode or parse formatted output. A legacy command
@@ -2003,3 +2003,17 @@ without structured outcome therefore remains unverified; enabling another transp
 history mode requires a separately verified correlation and native observation. The
 binary wire additions are optional fields on existing events; no event tags or frame/1
 bytes change. Source contract and synthetic regressions precede consumer adoption.
+
+### a22 source correction — the persistent exec entry point
+
+At the same official 0.153.4 source commit, exec/src/lib.rs
+`thread_start_params_from_config` explicitly selects Paginated history for a
+non-ephemeral thread. Metaharness refuses --ephemeral because it requires a retained
+rollout. The earlier reading of ThreadHistoryMode::default as the exec default was
+incomplete: the entry point overrides it. `start_thread` falls back to the default
+only for the named server compatibility error about paginated listing support.
+Thus no launch flag or additional transcript transport is justified by that default
+alone. The existing structured item mapping can observe the normal persistent exec
+path. Native qualification must establish the actual path; resumed, fallback and
+legacy records without structured status still remain unknown. No claim of native
+coverage or pin advance follows from this source correction.

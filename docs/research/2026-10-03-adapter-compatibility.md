@@ -57,8 +57,11 @@ change does not satisfy the issue.
 Source-backed Codex #18–20 mappings and their limits are recorded in
 [Codex observation provenance](2026-10-03-codex-observations.md). Final-answer,
 turn model and tool outcome regressions are green offline. Native acceptance is
-still open. Default legacy history omits command completion status, so #20 also
-needs a verified additional observation path; a budget alone cannot fill that gap.
+still open. Legacy history omits command completion status. Source inspection now establishes
+that persistent Codex exec 0.153.4 requests Paginated history, which can retain the
+structured completions already supported here. The earlier assumption that the
+enum default described exec was incomplete; native probes must establish the actual
+path, including any fallback, before an additional transport is justified.
 The final 36-scenario suite kills 18 of 18 guard-negation mutants and catches a
 planted production final-answer defect. These counts qualify this bounded model,
 not installed vendor behavior.

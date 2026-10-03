@@ -1,0 +1,13 @@
+{
+  "at": "2026-10-03T10:06:32Z",
+  "actor": "human:timo",
+  "artifact": "story:codex-tool-outcomes",
+  "kind": "story",
+  "revision": 8,
+  "change": {
+    "change": "evidence",
+    "kind": "test_result",
+    "source": "Read-only official Codex 0.153.4 source review: persistent exec selects Paginated at exec/src/lib.rs:1199; fallback only on named server listing-support refusal at 1165-1170. This corrects default-legacy inference; native qualification still pending.",
+    "reference": "https://github.com/openai/codex/blob/042fb41b7c813ac7999105e886b2b7aa715b5081/codex-rs/exec/src/lib.rs"
+  }
+}

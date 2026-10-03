@@ -63,16 +63,11 @@ jobs:
           path: dist/*.tar.gz
           if-no-files-found: error
 
-  publish:
-    name: Publish release assets
+  verify:
+    name: Verify release archives
     needs: package
     runs-on: ubuntu-latest
-    permissions:
-      contents: write
     steps:
-      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
-        with:
-          fetch-depth: 0
       - uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
         with:
           pattern: release-*
@@ -88,16 +83,10 @@ jobs:
           sha256sum metaharness-*.tar.gz > SHA256SUMS
           sha256sum --check SHA256SUMS
           cat SHA256SUMS
-      # A release written by hand keeps its notes; otherwise the annotated tag's message becomes
-      # them. Either way the archives are attached, idempotently.
-      - name: Publish
-        env:
-          GH_TOKEN: ${{ github.token }}
-        run: |
-          set -euo pipefail
-          if ! gh release view "$GITHUB_REF_NAME" >/dev/null 2>&1; then
-            notes="${RUNNER_TEMP}/notes.md"
-            git for-each-ref --format='%(contents)' "refs/tags/$GITHUB_REF_NAME" > "$notes"
-            gh release create "$GITHUB_REF_NAME" --verify-tag --title "Metaharness $GITHUB_REF_NAME" --notes-file "$notes"
-          fi
-          gh release upload "$GITHUB_REF_NAME" dist/* --clobber
+      # Publication is an operator-side b10x-bot action after the exact tag run succeeds.
+      # Candidate source never receives an App credential or a token with write permission.
+      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: release-checksums
+          path: dist/SHA256SUMS
+          if-no-files-found: error

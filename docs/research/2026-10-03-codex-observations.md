@@ -32,9 +32,18 @@ serializes its body without its internal success flag. A string such as
 `Process exited with code 0` is therefore content, not normalized exit evidence.
 
 The adapter neither enables another history mode nor parses that string.
-Legacy commands without structured completion remain unverified, so #20 is not
-fully qualified for the default native path. An additional supported transport
-or history mode needs a separately verified native correlation before adoption.
+Legacy commands without structured completion remain unverified. Native qualification
+is still required, but the enum default does not establish the default exec path.
+The official [exec entry point](https://github.com/openai/codex/blob/042fb41b7c813ac7999105e886b2b7aa715b5081/codex-rs/exec/src/lib.rs)
+requests Paginated history in `thread_start_params_from_config` for persistent
+threads. Metaharness refuses --ephemeral. `start_thread` falls back to the default
+only for the specific server error about required paginated listing support.
+This corrects the earlier source inference that a new exec thread normally uses
+legacy history. Existing structured completion support may therefore cover normal
+new threads without a new flag or transport; native probes must establish that.
+Resumed or fallback legacy threads still require unknown outcomes where metadata
+is absent. Another transport needs verified correlation only if actual observations
+show it is needed.
 Authorization is exclusively `tool.decided`; a tool outcome never authorizes it.
 
 Multiple `tool.result` records can describe one call: later structured evidence

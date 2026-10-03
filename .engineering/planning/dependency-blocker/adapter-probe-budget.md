@@ -11,7 +11,7 @@ relations:
 - blocks: story:codex-observed-model
 - blocks: story:codex-tool-outcomes
 withholds: test_result
-revision: 2
+revision: 3
 ---
 ## Pending decision
 
@@ -26,3 +26,7 @@ Issue #11 still needs its bounded native unsupported-model failure observation. 
 Operator: choose the permitted total live-probe spend, or explicitly select offline-only delivery. Coordinator: record the authorization, run bounded sequential probes in private scratch, preserve unknown costs and actual child versions, add sanitized regressions, and clear this blocker only when its withheld evidence is available. An offline-only choice scopes delivery; it does not turn unobserved behavior into passing evidence.
 
 Issues #18–20 also require native final-answer authority, observed model selection and supported command/patch outcomes. Source-backed mappings and regressions are implemented under amendment a22. #20 additionally has a legacy-retention gap: the default history lacks command status, so a supported additional native observation path must be qualified rather than inferring success from output.
+
+## Source correction: persistent Codex exec history
+
+Read-only inspection of official Codex rust-v0.153.4 exec/src/lib.rs at 042fb41b7c813ac7999105e886b2b7aa715b5081 changes the earlier inference: thread_start_params_from_config requests Paginated history when not ephemeral. Metaharness refuses --ephemeral. start_thread falls back to unspecified/default legacy only on the explicit server error that paginated threads require listing support. The enum default is therefore not proof that this selected exec path normally uses legacy history. Existing support for retained CommandExecution items can cover the normal persistent path; native qualification must observe which path was taken. Legacy/resumed/fallback records that omit status remain unknown. No additional history flag or alternate vendor parser is currently justified.

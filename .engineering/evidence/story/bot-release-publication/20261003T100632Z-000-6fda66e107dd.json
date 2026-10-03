@@ -1,0 +1,13 @@
+{
+  "at": "2026-10-03T10:06:32Z",
+  "actor": "human:timo",
+  "artifact": "story:bot-release-publication",
+  "kind": "story",
+  "revision": 4,
+  "change": {
+    "change": "evidence",
+    "kind": "test_result",
+    "source": "Ruby YAML structural validation: full four-platform package job and archive/checksum checks identical to baseline; verification dependency and checksum artifact retained; no write credential or release mutation remains. GitHub tag workflow not yet run.",
+    "reference": "~/.cache/metaharness-issue-repair/release-preparation/workflow-check.log"
+  }
+}

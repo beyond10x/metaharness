@@ -22,7 +22,7 @@ refs:
   reference: beyond10x/metaharness#16
 relations:
 - informed_by: epic:runs-side-by-side
-revision: 9
+revision: 10
 ---
 ## Requested outcome
 
@@ -78,3 +78,7 @@ All source changes are on integration/metaharness-issue-repair, source commit 33
 The final offline gate passed 761 tests, 13 ignored, and all 36 ESS scenarios. Hardening killed 18/18 guard mutants and caught the planted final-answer omission. Coordinator review is explicit; independent workers exhausted quota. The native budget decision remains open, and #20 additionally needs a verified observation path for legacy commands. docs/research/2026-10-03-codex-observations.md records that source gap.
 
 Next owner: the coordinator continuing this approved wave after the operator resolves native probe spending. Use worktree inspect for wt-8e8abedfd902, acquire a new session lease, inspect exact Git/AEP status, and retain the one-PR integration boundary. Private evidence and worktree recovery inventory live under ~/.cache/metaharness-issue-repair. A single older evidence import remains uncommitted because report_input contains a local absolute path; it has not been edited or deleted.
+
+## Source correction: persistent Codex exec history
+
+Read-only inspection of official Codex rust-v0.153.4 exec/src/lib.rs at 042fb41b7c813ac7999105e886b2b7aa715b5081 changes the earlier inference: thread_start_params_from_config requests Paginated history when not ephemeral. Metaharness refuses --ephemeral. start_thread falls back to unspecified/default legacy only on the explicit server error that paginated threads require listing support. The enum default is therefore not proof that this selected exec path normally uses legacy history. Existing support for retained CommandExecution items can cover the normal persistent path; native qualification must observe which path was taken. Legacy/resumed/fallback records that omit status remain unknown. No additional history flag or alternate vendor parser is currently justified.
