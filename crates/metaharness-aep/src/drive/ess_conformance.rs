@@ -106,6 +106,103 @@ fn closure(input: &Value) -> Observed {
     )
 }
 
+fn polling(input: &Value) -> Observed {
+    use metaharness::protocol::{Command, CommandOutcome, CredentialSource, DecisionMode, Kind};
+    use metaharness::{
+        EventPoll, Input, ManualClock, Metaharness, ScriptStep, ScriptedLog, ScriptedRunner,
+        ScriptedSeams,
+    };
+    let probe = input["probe"].as_str().unwrap();
+    let mut script = vec![ScriptStep::line(r#"{"emit":"session.started"}"#)];
+    if probe == "pending-halt" {
+        script.extend([
+            ScriptStep::line(r#"{"emit":"tool.requested","call_id":"t1","name":"Bash","input":{"command":"ls"}}"#),
+            ScriptStep::awaiting("t1"),
+        ]);
+    } else {
+        script.extend([ScriptStep::Idle, ScriptStep::Idle]);
+    }
+    let log = ScriptedLog::new();
+    let clock = ManualClock::new();
+    let mut runner = ScriptedRunner::new(script, log.clone());
+    let mut run = Metaharness::new(Kind::Claude)
+        .with_credentials(CredentialSource::None)
+        .with_decisions(DecisionMode::Ask)
+        .start_with_clock(
+            Input::Prompt("poll fixture".into()),
+            &mut runner,
+            &mut ScriptedSeams,
+            Box::new(clock.clone()),
+        )
+        .unwrap();
+    let mut yielded = false;
+    for _ in 0..32 {
+        match run.poll_event().unwrap() {
+            EventPoll::Event(_) => (),
+            EventPoll::Idle => {
+                yielded = probe != "pending-halt";
+                break;
+            }
+            EventPoll::DecisionPending => {
+                yielded = probe == "pending-halt";
+                break;
+            }
+            EventPoll::Ended => break,
+        }
+    }
+    let (outcome, control) = match probe {
+        "quiet-halt" => (
+            "quiet-native-halt",
+            Some(Command::Halt {
+                reason: "fixture".into(),
+            }),
+        ),
+        "quiet-interrupt" => (
+            "quiet-native-interrupt",
+            Some(Command::Interrupt {
+                reason: "fixture".into(),
+            }),
+        ),
+        "pending-halt" => (
+            "pending-decision-steering",
+            Some(Command::Halt {
+                reason: "fixture".into(),
+            }),
+        ),
+        "quiet-only" => ("quiet-output-is-not-eof", None),
+        other => panic!("unknown probe {other}"),
+    };
+    let control_name = control.as_ref().map(Command::name);
+    if let Some(command) = control {
+        assert!(matches!(
+            run.send_as("ess-steer", command).unwrap(),
+            CommandOutcome::Ok { .. }
+        ));
+        for _ in 0..32 {
+            if !matches!(run.poll_event().unwrap(), EventPoll::Event(_)) {
+                break;
+            }
+        }
+    }
+    let control_written = control_name.is_some_and(|name| {
+        log.written()
+            .iter()
+            .any(|line| serde_json::from_str::<Value>(line).unwrap()["control"] == name)
+    });
+    let closed = run
+        .events()
+        .iter()
+        .any(|event| matches!(event, Event::StreamClosed { .. }));
+    event(
+        outcome,
+        "metaharness.session.PollingObserved",
+        json!({
+            "yielded":yielded, "control_written":control_written,
+            "closed":closed, "deadline_advanced":clock.reading_ms() != 0,
+        }),
+    )
+}
+
 fn frame(input: &Value) -> Observed {
     let tools = tests::config(&[]);
     let state = "implement".parse().unwrap();
@@ -357,6 +454,7 @@ fn observed_codex(command: &str, input: &Value) -> Observed {
 
 fn execute(command: &str, input: &Value) -> Observed {
     match command {
+        "metaharness.session.PollSteering" => polling(input),
         "metaharness.observations.ReadFinalAnswer"
         | "metaharness.observations.ReadObservedModel"
         | "metaharness.observations.ReadToolOutcome" => observed_codex(command, input),
@@ -606,7 +704,7 @@ fn ess_generated_scenarios_drive_production_targets() {
     if external.is_none() {
         assert_eq!(
             scenarios.len(),
-            36,
+            40,
             "review and update coverage deliberately"
         );
         assert_eq!(
@@ -614,6 +712,7 @@ fn ess_generated_scenarios_drive_production_targets() {
             "every invariant now has an observable production record"
         );
         for command in [
+            "PollSteering",
             "FinishCodexCompletion",
             "CloseUnsteeredStream",
             "CheckSelectedName",

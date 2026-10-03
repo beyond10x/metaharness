@@ -377,21 +377,20 @@ fn drive(run: &mut Run, commands: &Receiver<String>) -> std::io::Result<()> {
         while let Ok(line) = commands.try_recv() {
             steer(run, &line)?;
         }
-        // A call is pending and the embedder owes an answer, so the loop waits on **stdin**
-        // rather than on the child: diving back into the run here would spend that call's whole
-        // budget without ever looking for the answer that was already on its way.
-        if !run.pending_calls().is_empty() {
-            match commands.recv_timeout(STEER_POLL) {
-                Ok(line) => {
-                    steer(run, &line)?;
-                    continue;
+        match run.poll_event()? {
+            metaharness::EventPoll::Event(line) => emit(&line),
+            metaharness::EventPoll::Ended => return Ok(()),
+            metaharness::EventPoll::Idle | metaharness::EventPoll::DecisionPending => {
+                // Both provider silence and an unanswered decision must yield to
+                // stdin. Never spend the whole decision budget inside next_event.
+                match commands.recv_timeout(STEER_POLL) {
+                    Ok(line) => steer(run, &line)?,
+                    Err(RecvTimeoutError::Timeout) => (),
+                    // Disconnection returns immediately; retain a bounded sleep
+                    // rather than busy-spinning a synthetic/custom idle process.
+                    Err(RecvTimeoutError::Disconnected) => std::thread::sleep(STEER_POLL),
                 }
-                Err(RecvTimeoutError::Timeout | RecvTimeoutError::Disconnected) => {}
             }
-        }
-        match run.next_event()? {
-            Some(line) => emit(&line),
-            None => return Ok(()),
         }
     }
 }
@@ -580,4 +579,177 @@ fn refuse(refusal: &Refusal) -> i32 {
     }
     eprintln!("metaharness: {refusal}");
     RunExit::Broken.code()
+}
+
+#[cfg(test)]
+mod steering_tests {
+    use super::*;
+    use metaharness::protocol::{
+        Command, CommandLine, CredentialSource, DecidedBy, DecisionMode, Event,
+    };
+    use metaharness::{
+        HarnessProcess, LaunchPlanView, ManualClock, ProcessRunner, ScriptStep, ScriptedLog,
+        ScriptedRunner, ScriptedSeams,
+    };
+    use std::sync::mpsc::{Sender, channel};
+
+    struct AtDecision {
+        process: Box<dyn HarnessProcess>,
+        sender: Option<Sender<String>>,
+        command: Command,
+    }
+
+    impl HarnessProcess for AtDecision {
+        fn next_line(&mut self) -> std::io::Result<Option<String>> {
+            self.process.next_line()
+        }
+        fn poll_line(&mut self) -> std::io::Result<metaharness::ProcessPoll> {
+            let result = self.process.poll_line();
+            if (matches!(result, Ok(metaharness::ProcessPoll::Idle))
+                || result
+                    .as_ref()
+                    .is_err_and(|error| error.kind() == std::io::ErrorKind::WouldBlock))
+                && let Some(sender) = self.sender.take()
+            {
+                sender
+                    .send(
+                        serde_json::to_string(&CommandLine::new(
+                            "late-steer",
+                            self.command.clone(),
+                        ))
+                        .unwrap(),
+                    )
+                    .unwrap();
+            }
+            result
+        }
+        fn write_line(&mut self, line: &str) -> std::io::Result<()> {
+            self.process.write_line(line)
+        }
+        fn kill(&mut self) -> std::io::Result<()> {
+            self.process.kill()
+        }
+        fn wait(&mut self) -> std::io::Result<Option<i32>> {
+            self.process.wait()
+        }
+    }
+
+    struct AtDecisionRunner {
+        script: ScriptedRunner,
+        command: Command,
+        sender: Option<Sender<String>>,
+    }
+
+    impl ProcessRunner for AtDecisionRunner {
+        fn requires_executable(&self) -> bool {
+            false
+        }
+        fn start(&mut self, plan: &LaunchPlanView) -> std::io::Result<Box<dyn HarnessProcess>> {
+            Ok(Box::new(AtDecision {
+                process: self.script.start(plan)?,
+                sender: self.sender.take(),
+                command: self.command.clone(),
+            }))
+        }
+    }
+
+    #[test]
+    fn pending_decision_steering_does_not_wait_for_the_entire_deadline() {
+        let (sender, commands) = channel();
+        let log = ScriptedLog::new();
+        let clock = ManualClock::new();
+        let mut runner = AtDecisionRunner {
+            script: ScriptedRunner::new(
+                vec![
+                    ScriptStep::line(r#"{"emit":"session.started"}"#),
+                    ScriptStep::line(
+                        r#"{"emit":"tool.requested","call_id":"t1","name":"Bash","input":{"command":"ls"}}"#,
+                    ),
+                    ScriptStep::awaiting("t1"),
+                ],
+                log,
+            ),
+            sender: Some(sender),
+            command: Command::Halt {
+                reason: "fixture".into(),
+            },
+        };
+        let mut run = Metaharness::new(Kind::Claude)
+            .with_credentials(CredentialSource::None)
+            .with_decisions(DecisionMode::Ask)
+            .start_with_clock(
+                Input::Prompt("fixture".into()),
+                &mut runner,
+                &mut ScriptedSeams,
+                Box::new(clock.clone()),
+            )
+            .unwrap();
+        drive(&mut run, &commands).unwrap();
+        assert!(
+            !run.events().iter().any(|event| matches!(
+                event,
+                Event::ToolDecided {
+                    decided_by: DecidedBy::Deadline,
+                    ..
+                }
+            )),
+            "stdin steering was held until the decision deadline"
+        );
+        assert_eq!(
+            clock.reading_ms(),
+            0,
+            "steering must not consume the decision budget"
+        );
+    }
+    #[test]
+    fn quiet_output_delivers_halt_and_interrupt_before_the_next_record() {
+        for command in [
+            Command::Halt {
+                reason: "fixture".into(),
+            },
+            Command::Interrupt {
+                reason: "fixture".into(),
+            },
+        ] {
+            let name = command.name();
+            let (sender, commands) = channel();
+            let log = ScriptedLog::new();
+            let mut runner = AtDecisionRunner {
+                script: ScriptedRunner::new(
+                    vec![
+                        ScriptStep::Idle,
+                        ScriptStep::line(r#"{"emit":"session.ended","is_error":false}"#),
+                    ],
+                    log.clone(),
+                ),
+                sender: Some(sender),
+                command,
+            };
+            let mut run = Metaharness::new(Kind::Claude)
+                .with_credentials(CredentialSource::None)
+                .with_decisions(DecisionMode::Observe)
+                .start_with(
+                    Input::Prompt("fixture".into()),
+                    &mut runner,
+                    &mut ScriptedSeams,
+                )
+                .unwrap();
+            drive(&mut run, &commands).unwrap();
+            assert!(log.written().iter().any(|line| {
+                serde_json::from_str::<serde_json::Value>(line).unwrap()["control"] == name
+            }));
+            assert_eq!(run.events().iter().filter(|event| matches!(event, Event::CommandResult { id, .. } if id == "late-steer")).count(), 1);
+            assert_eq!(
+                run.events()
+                    .iter()
+                    .filter(|event| matches!(event, Event::StreamClosed { .. }))
+                    .count(),
+                1
+            );
+            assert!(matches!(
+                run.events().last(),
+                Some(Event::StreamClosed { .. })
+            ));
+        }
+    }
 }

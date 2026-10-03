@@ -7,6 +7,9 @@ summary: A bounded projection of Codex completion evidence and normalized stream
 # These commands name adapter/run-loop operations for a real conformance target;
 # they are not new public CLI verbs or a second vendor decoder.
 types:
+  - name: metaharness.session.SteeringProbe
+    kind: enum
+    variants: [quiet-halt, quiet-interrupt, pending-halt, quiet-only]
   - name: metaharness.session.TerminalEvidence
     kind: struct
     fields:
@@ -47,6 +50,29 @@ types:
     invariants: [events >= 0]
 
 commands:
+  - name: metaharness.session.PollSteering
+    # Production Run polling/control over a bounded synthetic process, not native timing.
+    input: [{name: probe, type: metaharness.session.SteeringProbe}]
+    outcomes:
+      - name: quiet-native-halt
+        when: probe == quiet-halt
+        emits: [metaharness.session.PollingObserved]
+        payload:
+          metaharness.session.PollingObserved: {yielded: true, control_written: true, closed: true, deadline_advanced: false}
+      - name: quiet-native-interrupt
+        when: probe == quiet-interrupt
+        emits: [metaharness.session.PollingObserved]
+        payload:
+          metaharness.session.PollingObserved: {yielded: true, control_written: true, closed: false, deadline_advanced: false}
+      - name: pending-decision-steering
+        when: probe == pending-halt
+        emits: [metaharness.session.PollingObserved]
+        payload:
+          metaharness.session.PollingObserved: {yielded: true, control_written: true, closed: true, deadline_advanced: false}
+      - name: quiet-output-is-not-eof
+        emits: [metaharness.session.PollingObserved]
+        payload:
+          metaharness.session.PollingObserved: {yielded: true, control_written: false, closed: false, deadline_advanced: false}
   - name: metaharness.session.RecordClosedStream
     # Run the empty synthetic process through the production loop and retain its closure.
     input: []
@@ -131,6 +157,12 @@ commands:
 
 # These are conformance observations, not newly published runtime wire events.
 events:
+  - name: metaharness.session.PollingObserved
+    fields:
+      - {name: yielded, type: Boolean}
+      - {name: control_written, type: Boolean}
+      - {name: closed, type: Boolean}
+      - {name: deadline_advanced, type: Boolean}
   - name: metaharness.session.ClosureRecorded
     fields: [{name: record_id, type: String}]
   - name: metaharness.session.CompletionClassified

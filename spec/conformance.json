@@ -4,7 +4,7 @@
     "authored_sources": {},
     "counts": {
       "authored": 0,
-      "generated": 36,
+      "generated": 40,
       "outside": 0,
       "refused": 0
     },
@@ -33,6 +33,10 @@
       "metaharness.session.FinishCodexCompletion/outcome/explicit-failure",
       "metaharness.session.FinishCodexCompletion/outcome/incomplete-evidence",
       "metaharness.session.FinishCodexCompletion/outcome/positive-completion",
+      "metaharness.session.PollSteering/outcome/pending-decision-steering",
+      "metaharness.session.PollSteering/outcome/quiet-native-halt",
+      "metaharness.session.PollSteering/outcome/quiet-native-interrupt",
+      "metaharness.session.PollSteering/outcome/quiet-output-is-not-eof",
       "metaharness.session.RecordClosedStream/outcome/recorded",
       "metaharness.session.StreamClosure/invariant/at/metaharness.session.RetainedClosure/closure",
       "metaharness.spending.CheckFiniteTerms/outcome/invalid-finite-terms",
@@ -60,8 +64,8 @@
     }
   },
   "provenance": {
-    "contract_digest": "1f764dd402e91422910780182d48dd1f235f7b756e6b72bca9a0eb48d4f3d3ad",
-    "spec_digest": "d9ddef341a2de70c15e79ac60d68f70c624fe320fbfff69c6124165c2793d64c",
+    "contract_digest": "8b7caf12d4fd92f194ffef0e5a4e9d1a7bd2922c2e87fb55dc8ed5f449188784",
+    "spec_digest": "a5a5e732ab496662068bb51629a3e2dd140afc6427d4909ec07ca80860536f17",
     "specification_version": "v1",
     "suite_version": "ess-conformance/23",
     "system": "metaharness"
@@ -116,6 +120,10 @@
         {
           "kind": "event",
           "name": "metaharness.session.CompletionClassified"
+        },
+        {
+          "kind": "event",
+          "name": "metaharness.session.PollingObserved"
         },
         {
           "kind": "event",
@@ -194,6 +202,10 @@
           "step": "expect_no_event"
         },
         {
+          "event": "metaharness.session.PollingObserved",
+          "step": "expect_no_event"
+        },
+        {
           "event": "metaharness.session.StreamClassified",
           "step": "expect_no_event"
         },
@@ -256,6 +268,10 @@
         {
           "kind": "event",
           "name": "metaharness.session.CompletionClassified"
+        },
+        {
+          "kind": "event",
+          "name": "metaharness.session.PollingObserved"
         },
         {
           "kind": "event",
@@ -331,6 +347,10 @@
         },
         {
           "event": "metaharness.session.CompletionClassified",
+          "step": "expect_no_event"
+        },
+        {
+          "event": "metaharness.session.PollingObserved",
           "step": "expect_no_event"
         },
         {
@@ -420,6 +440,10 @@
         },
         {
           "kind": "event",
+          "name": "metaharness.session.PollingObserved"
+        },
+        {
+          "kind": "event",
           "name": "metaharness.session.StreamClassified"
         },
         {
@@ -491,6 +515,10 @@
           "step": "expect_no_event"
         },
         {
+          "event": "metaharness.session.PollingObserved",
+          "step": "expect_no_event"
+        },
+        {
           "event": "metaharness.session.StreamClassified",
           "step": "expect_no_event"
         },
@@ -553,6 +581,10 @@
         {
           "kind": "event",
           "name": "metaharness.session.CompletionClassified"
+        },
+        {
+          "kind": "event",
+          "name": "metaharness.session.PollingObserved"
         },
         {
           "kind": "event",
@@ -627,6 +659,10 @@
           "step": "expect_no_event"
         },
         {
+          "event": "metaharness.session.PollingObserved",
+          "step": "expect_no_event"
+        },
+        {
           "event": "metaharness.session.StreamClassified",
           "step": "expect_no_event"
         },
@@ -689,6 +725,10 @@
         {
           "kind": "event",
           "name": "metaharness.session.CompletionClassified"
+        },
+        {
+          "kind": "event",
+          "name": "metaharness.session.PollingObserved"
         },
         {
           "kind": "event",
@@ -763,6 +803,10 @@
           "step": "expect_no_event"
         },
         {
+          "event": "metaharness.session.PollingObserved",
+          "step": "expect_no_event"
+        },
+        {
           "event": "metaharness.session.StreamClassified",
           "step": "expect_no_event"
         },
@@ -825,6 +869,10 @@
         {
           "kind": "event",
           "name": "metaharness.session.CompletionClassified"
+        },
+        {
+          "kind": "event",
+          "name": "metaharness.session.PollingObserved"
         },
         {
           "kind": "event",
@@ -899,6 +947,10 @@
           "step": "expect_no_event"
         },
         {
+          "event": "metaharness.session.PollingObserved",
+          "step": "expect_no_event"
+        },
+        {
           "event": "metaharness.session.StreamClassified",
           "step": "expect_no_event"
         },
@@ -961,6 +1013,10 @@
         {
           "kind": "event",
           "name": "metaharness.session.CompletionClassified"
+        },
+        {
+          "kind": "event",
+          "name": "metaharness.session.PollingObserved"
         },
         {
           "kind": "event",
@@ -1035,6 +1091,10 @@
           "step": "expect_no_event"
         },
         {
+          "event": "metaharness.session.PollingObserved",
+          "step": "expect_no_event"
+        },
+        {
           "event": "metaharness.session.StreamClassified",
           "step": "expect_no_event"
         },
@@ -1097,6 +1157,10 @@
         {
           "kind": "event",
           "name": "metaharness.session.CompletionClassified"
+        },
+        {
+          "kind": "event",
+          "name": "metaharness.session.PollingObserved"
         },
         {
           "kind": "event",
@@ -1171,6 +1235,10 @@
           "step": "expect_no_event"
         },
         {
+          "event": "metaharness.session.PollingObserved",
+          "step": "expect_no_event"
+        },
+        {
           "event": "metaharness.session.StreamClassified",
           "step": "expect_no_event"
         },
@@ -1233,6 +1301,10 @@
         {
           "kind": "event",
           "name": "metaharness.session.CompletionClassified"
+        },
+        {
+          "kind": "event",
+          "name": "metaharness.session.PollingObserved"
         },
         {
           "kind": "event",
@@ -1309,6 +1381,10 @@
         },
         {
           "event": "metaharness.session.CompletionClassified",
+          "step": "expect_no_event"
+        },
+        {
+          "event": "metaharness.session.PollingObserved",
           "step": "expect_no_event"
         },
         {
@@ -1394,6 +1470,10 @@
         },
         {
           "kind": "event",
+          "name": "metaharness.session.PollingObserved"
+        },
+        {
+          "kind": "event",
           "name": "metaharness.session.StreamClassified"
         },
         {
@@ -1470,6 +1550,10 @@
           "step": "expect_no_event"
         },
         {
+          "event": "metaharness.session.PollingObserved",
+          "step": "expect_no_event"
+        },
+        {
           "event": "metaharness.session.StreamClassified",
           "step": "expect_no_event"
         },
@@ -1532,6 +1616,10 @@
         {
           "kind": "event",
           "name": "metaharness.session.CompletionClassified"
+        },
+        {
+          "kind": "event",
+          "name": "metaharness.session.PollingObserved"
         },
         {
           "kind": "event",
@@ -1611,6 +1699,10 @@
           "step": "expect_no_event"
         },
         {
+          "event": "metaharness.session.PollingObserved",
+          "step": "expect_no_event"
+        },
+        {
           "event": "metaharness.session.StreamClassified",
           "step": "expect_no_event"
         },
@@ -1673,6 +1765,10 @@
         {
           "kind": "event",
           "name": "metaharness.session.CompletionClassified"
+        },
+        {
+          "kind": "event",
+          "name": "metaharness.session.PollingObserved"
         },
         {
           "kind": "event",
@@ -1747,6 +1843,10 @@
           "step": "expect_no_event"
         },
         {
+          "event": "metaharness.session.PollingObserved",
+          "step": "expect_no_event"
+        },
+        {
           "event": "metaharness.session.StreamClassified",
           "step": "expect_no_event"
         },
@@ -1809,6 +1909,10 @@
         {
           "kind": "event",
           "name": "metaharness.session.CompletionClassified"
+        },
+        {
+          "kind": "event",
+          "name": "metaharness.session.PollingObserved"
         },
         {
           "kind": "event",
@@ -1883,6 +1987,10 @@
           "step": "expect_no_event"
         },
         {
+          "event": "metaharness.session.PollingObserved",
+          "step": "expect_no_event"
+        },
+        {
           "event": "metaharness.session.StreamClassified",
           "step": "expect_no_event"
         },
@@ -1945,6 +2053,10 @@
         {
           "kind": "event",
           "name": "metaharness.session.CompletionClassified"
+        },
+        {
+          "kind": "event",
+          "name": "metaharness.session.PollingObserved"
         },
         {
           "kind": "event",
@@ -2029,6 +2141,10 @@
           "step": "expect_no_event"
         },
         {
+          "event": "metaharness.session.PollingObserved",
+          "step": "expect_no_event"
+        },
+        {
           "event": "metaharness.session.StreamClassified",
           "step": "expect_no_event"
         },
@@ -2091,6 +2207,10 @@
         {
           "kind": "event",
           "name": "metaharness.session.CompletionClassified"
+        },
+        {
+          "kind": "event",
+          "name": "metaharness.session.PollingObserved"
         },
         {
           "kind": "event",
@@ -2175,6 +2295,10 @@
           "step": "expect_no_event"
         },
         {
+          "event": "metaharness.session.PollingObserved",
+          "step": "expect_no_event"
+        },
+        {
           "event": "metaharness.session.StreamClassified",
           "step": "expect_no_event"
         },
@@ -2237,6 +2361,10 @@
         {
           "kind": "event",
           "name": "metaharness.session.CompletionClassified"
+        },
+        {
+          "kind": "event",
+          "name": "metaharness.session.PollingObserved"
         },
         {
           "kind": "event",
@@ -2321,6 +2449,10 @@
           "step": "expect_no_event"
         },
         {
+          "event": "metaharness.session.PollingObserved",
+          "step": "expect_no_event"
+        },
+        {
           "event": "metaharness.session.StreamClassified",
           "step": "expect_no_event"
         },
@@ -2383,6 +2515,10 @@
         {
           "kind": "event",
           "name": "metaharness.session.CompletionClassified"
+        },
+        {
+          "kind": "event",
+          "name": "metaharness.session.PollingObserved"
         },
         {
           "kind": "event",
@@ -2467,6 +2603,10 @@
           "step": "expect_no_event"
         },
         {
+          "event": "metaharness.session.PollingObserved",
+          "step": "expect_no_event"
+        },
+        {
           "event": "metaharness.session.StreamClassified",
           "step": "expect_no_event"
         },
@@ -2529,6 +2669,10 @@
         {
           "kind": "event",
           "name": "metaharness.session.CompletionClassified"
+        },
+        {
+          "kind": "event",
+          "name": "metaharness.session.PollingObserved"
         },
         {
           "kind": "event",
@@ -2613,6 +2757,10 @@
           "step": "expect_no_event"
         },
         {
+          "event": "metaharness.session.PollingObserved",
+          "step": "expect_no_event"
+        },
+        {
           "event": "metaharness.session.StreamClassified",
           "step": "expect_no_event"
         },
@@ -2675,6 +2823,10 @@
         {
           "kind": "event",
           "name": "metaharness.session.CompletionClassified"
+        },
+        {
+          "kind": "event",
+          "name": "metaharness.session.PollingObserved"
         },
         {
           "kind": "event",
@@ -2772,6 +2924,10 @@
         },
         {
           "event": "metaharness.session.CompletionClassified",
+          "step": "expect_no_event"
+        },
+        {
+          "event": "metaharness.session.PollingObserved",
           "step": "expect_no_event"
         },
         {
@@ -2935,6 +3091,10 @@
         },
         {
           "kind": "event",
+          "name": "metaharness.session.PollingObserved"
+        },
+        {
+          "kind": "event",
           "name": "metaharness.session.StreamClassified"
         },
         {
@@ -3029,6 +3189,10 @@
         },
         {
           "event": "metaharness.session.CompletionClassified",
+          "step": "expect_no_event"
+        },
+        {
+          "event": "metaharness.session.PollingObserved",
           "step": "expect_no_event"
         },
         {
@@ -3159,6 +3323,10 @@
         },
         {
           "kind": "event",
+          "name": "metaharness.session.PollingObserved"
+        },
+        {
+          "kind": "event",
           "name": "metaharness.session.StreamClassified"
         },
         {
@@ -3256,6 +3424,10 @@
           "step": "expect_no_event"
         },
         {
+          "event": "metaharness.session.PollingObserved",
+          "step": "expect_no_event"
+        },
+        {
           "event": "metaharness.spending.AdmissionRecorded",
           "step": "expect_no_event"
         },
@@ -3322,6 +3494,10 @@
         {
           "kind": "event",
           "name": "metaharness.session.CompletionClassified"
+        },
+        {
+          "kind": "event",
+          "name": "metaharness.session.PollingObserved"
         },
         {
           "kind": "event",
@@ -3404,6 +3580,10 @@
           "step": "expect_no_event"
         },
         {
+          "event": "metaharness.session.PollingObserved",
+          "step": "expect_no_event"
+        },
+        {
           "event": "metaharness.session.StreamClassified",
           "step": "expect_no_event"
         },
@@ -3474,6 +3654,10 @@
         {
           "kind": "event",
           "name": "metaharness.session.CompletionClassified"
+        },
+        {
+          "kind": "event",
+          "name": "metaharness.session.PollingObserved"
         },
         {
           "kind": "event",
@@ -3556,6 +3740,10 @@
           "step": "expect_no_event"
         },
         {
+          "event": "metaharness.session.PollingObserved",
+          "step": "expect_no_event"
+        },
+        {
           "event": "metaharness.session.StreamClassified",
           "step": "expect_no_event"
         },
@@ -3626,6 +3814,10 @@
         {
           "kind": "event",
           "name": "metaharness.session.CompletionClassified"
+        },
+        {
+          "kind": "event",
+          "name": "metaharness.session.PollingObserved"
         },
         {
           "kind": "event",
@@ -3708,6 +3900,10 @@
           "step": "expect_no_event"
         },
         {
+          "event": "metaharness.session.PollingObserved",
+          "step": "expect_no_event"
+        },
+        {
           "event": "metaharness.session.StreamClassified",
           "step": "expect_no_event"
         },
@@ -3739,6 +3935,642 @@
             "outcome": "positive-completion"
           },
           "step": "expect_outcome"
+        }
+      ]
+    },
+    "metaharness.session.PollSteering/outcome/pending-decision-steering": {
+      "purpose": "`metaharness.session.PollSteering` answers `pending-decision-steering` for an input that satisfies that branch's guard",
+      "source": [
+        {
+          "kind": "type",
+          "name": "metaharness.session.SteeringProbe"
+        },
+        {
+          "kind": "command",
+          "name": "metaharness.session.PollSteering"
+        },
+        {
+          "kind": "outcome",
+          "name": {
+            "command": "metaharness.session.PollSteering",
+            "outcome": "pending-decision-steering"
+          }
+        },
+        {
+          "kind": "event",
+          "name": "metaharness.boundaries.CallDecided"
+        },
+        {
+          "kind": "event",
+          "name": "metaharness.boundaries.FileRead"
+        },
+        {
+          "kind": "event",
+          "name": "metaharness.boundaries.FrameRead"
+        },
+        {
+          "kind": "event",
+          "name": "metaharness.observations.NativeStatusClassified"
+        },
+        {
+          "kind": "event",
+          "name": "metaharness.observations.PresenceRead"
+        },
+        {
+          "kind": "event",
+          "name": "metaharness.observations.ToolOutcomeRead"
+        },
+        {
+          "kind": "event",
+          "name": "metaharness.session.ClosureRecorded"
+        },
+        {
+          "kind": "event",
+          "name": "metaharness.session.CompletionClassified"
+        },
+        {
+          "kind": "event",
+          "name": "metaharness.session.PollingObserved"
+        },
+        {
+          "kind": "event",
+          "name": "metaharness.session.StreamClassified"
+        },
+        {
+          "kind": "event",
+          "name": "metaharness.spending.AdmissionRecorded"
+        },
+        {
+          "kind": "event",
+          "name": "metaharness.spending.FiniteLedgerRecorded"
+        }
+      ],
+      "steps": [
+        {
+          "command": "metaharness.session.PollSteering",
+          "input": {
+            "probe": {
+              "kind": "literal",
+              "value": "pending-halt"
+            }
+          },
+          "step": "execute_command"
+        },
+        {
+          "outcome": {
+            "command": "metaharness.session.PollSteering",
+            "outcome": "pending-decision-steering"
+          },
+          "step": "expect_outcome"
+        },
+        {
+          "event": "metaharness.session.PollingObserved",
+          "payload": {
+            "closed": true,
+            "control_written": true,
+            "deadline_advanced": false,
+            "yielded": true
+          },
+          "shape": {
+            "closed": {
+              "holds": "primitive",
+              "kind": "boolean"
+            },
+            "control_written": {
+              "holds": "primitive",
+              "kind": "boolean"
+            },
+            "deadline_advanced": {
+              "holds": "primitive",
+              "kind": "boolean"
+            },
+            "yielded": {
+              "holds": "primitive",
+              "kind": "boolean"
+            }
+          },
+          "step": "expect_event"
+        },
+        {
+          "event": "metaharness.boundaries.CallDecided",
+          "step": "expect_no_event"
+        },
+        {
+          "event": "metaharness.boundaries.FileRead",
+          "step": "expect_no_event"
+        },
+        {
+          "event": "metaharness.boundaries.FrameRead",
+          "step": "expect_no_event"
+        },
+        {
+          "event": "metaharness.observations.NativeStatusClassified",
+          "step": "expect_no_event"
+        },
+        {
+          "event": "metaharness.observations.PresenceRead",
+          "step": "expect_no_event"
+        },
+        {
+          "event": "metaharness.observations.ToolOutcomeRead",
+          "step": "expect_no_event"
+        },
+        {
+          "event": "metaharness.session.ClosureRecorded",
+          "step": "expect_no_event"
+        },
+        {
+          "event": "metaharness.session.CompletionClassified",
+          "step": "expect_no_event"
+        },
+        {
+          "event": "metaharness.session.StreamClassified",
+          "step": "expect_no_event"
+        },
+        {
+          "event": "metaharness.spending.AdmissionRecorded",
+          "step": "expect_no_event"
+        },
+        {
+          "event": "metaharness.spending.FiniteLedgerRecorded",
+          "step": "expect_no_event"
+        }
+      ]
+    },
+    "metaharness.session.PollSteering/outcome/quiet-native-halt": {
+      "purpose": "`metaharness.session.PollSteering` answers `quiet-native-halt` for an input that satisfies that branch's guard",
+      "source": [
+        {
+          "kind": "type",
+          "name": "metaharness.session.SteeringProbe"
+        },
+        {
+          "kind": "command",
+          "name": "metaharness.session.PollSteering"
+        },
+        {
+          "kind": "outcome",
+          "name": {
+            "command": "metaharness.session.PollSteering",
+            "outcome": "quiet-native-halt"
+          }
+        },
+        {
+          "kind": "event",
+          "name": "metaharness.boundaries.CallDecided"
+        },
+        {
+          "kind": "event",
+          "name": "metaharness.boundaries.FileRead"
+        },
+        {
+          "kind": "event",
+          "name": "metaharness.boundaries.FrameRead"
+        },
+        {
+          "kind": "event",
+          "name": "metaharness.observations.NativeStatusClassified"
+        },
+        {
+          "kind": "event",
+          "name": "metaharness.observations.PresenceRead"
+        },
+        {
+          "kind": "event",
+          "name": "metaharness.observations.ToolOutcomeRead"
+        },
+        {
+          "kind": "event",
+          "name": "metaharness.session.ClosureRecorded"
+        },
+        {
+          "kind": "event",
+          "name": "metaharness.session.CompletionClassified"
+        },
+        {
+          "kind": "event",
+          "name": "metaharness.session.PollingObserved"
+        },
+        {
+          "kind": "event",
+          "name": "metaharness.session.StreamClassified"
+        },
+        {
+          "kind": "event",
+          "name": "metaharness.spending.AdmissionRecorded"
+        },
+        {
+          "kind": "event",
+          "name": "metaharness.spending.FiniteLedgerRecorded"
+        }
+      ],
+      "steps": [
+        {
+          "command": "metaharness.session.PollSteering",
+          "input": {
+            "probe": {
+              "kind": "literal",
+              "value": "quiet-halt"
+            }
+          },
+          "step": "execute_command"
+        },
+        {
+          "outcome": {
+            "command": "metaharness.session.PollSteering",
+            "outcome": "quiet-native-halt"
+          },
+          "step": "expect_outcome"
+        },
+        {
+          "event": "metaharness.session.PollingObserved",
+          "payload": {
+            "closed": true,
+            "control_written": true,
+            "deadline_advanced": false,
+            "yielded": true
+          },
+          "shape": {
+            "closed": {
+              "holds": "primitive",
+              "kind": "boolean"
+            },
+            "control_written": {
+              "holds": "primitive",
+              "kind": "boolean"
+            },
+            "deadline_advanced": {
+              "holds": "primitive",
+              "kind": "boolean"
+            },
+            "yielded": {
+              "holds": "primitive",
+              "kind": "boolean"
+            }
+          },
+          "step": "expect_event"
+        },
+        {
+          "event": "metaharness.boundaries.CallDecided",
+          "step": "expect_no_event"
+        },
+        {
+          "event": "metaharness.boundaries.FileRead",
+          "step": "expect_no_event"
+        },
+        {
+          "event": "metaharness.boundaries.FrameRead",
+          "step": "expect_no_event"
+        },
+        {
+          "event": "metaharness.observations.NativeStatusClassified",
+          "step": "expect_no_event"
+        },
+        {
+          "event": "metaharness.observations.PresenceRead",
+          "step": "expect_no_event"
+        },
+        {
+          "event": "metaharness.observations.ToolOutcomeRead",
+          "step": "expect_no_event"
+        },
+        {
+          "event": "metaharness.session.ClosureRecorded",
+          "step": "expect_no_event"
+        },
+        {
+          "event": "metaharness.session.CompletionClassified",
+          "step": "expect_no_event"
+        },
+        {
+          "event": "metaharness.session.StreamClassified",
+          "step": "expect_no_event"
+        },
+        {
+          "event": "metaharness.spending.AdmissionRecorded",
+          "step": "expect_no_event"
+        },
+        {
+          "event": "metaharness.spending.FiniteLedgerRecorded",
+          "step": "expect_no_event"
+        }
+      ]
+    },
+    "metaharness.session.PollSteering/outcome/quiet-native-interrupt": {
+      "purpose": "`metaharness.session.PollSteering` answers `quiet-native-interrupt` for an input that satisfies that branch's guard",
+      "source": [
+        {
+          "kind": "type",
+          "name": "metaharness.session.SteeringProbe"
+        },
+        {
+          "kind": "command",
+          "name": "metaharness.session.PollSteering"
+        },
+        {
+          "kind": "outcome",
+          "name": {
+            "command": "metaharness.session.PollSteering",
+            "outcome": "quiet-native-interrupt"
+          }
+        },
+        {
+          "kind": "event",
+          "name": "metaharness.boundaries.CallDecided"
+        },
+        {
+          "kind": "event",
+          "name": "metaharness.boundaries.FileRead"
+        },
+        {
+          "kind": "event",
+          "name": "metaharness.boundaries.FrameRead"
+        },
+        {
+          "kind": "event",
+          "name": "metaharness.observations.NativeStatusClassified"
+        },
+        {
+          "kind": "event",
+          "name": "metaharness.observations.PresenceRead"
+        },
+        {
+          "kind": "event",
+          "name": "metaharness.observations.ToolOutcomeRead"
+        },
+        {
+          "kind": "event",
+          "name": "metaharness.session.ClosureRecorded"
+        },
+        {
+          "kind": "event",
+          "name": "metaharness.session.CompletionClassified"
+        },
+        {
+          "kind": "event",
+          "name": "metaharness.session.PollingObserved"
+        },
+        {
+          "kind": "event",
+          "name": "metaharness.session.StreamClassified"
+        },
+        {
+          "kind": "event",
+          "name": "metaharness.spending.AdmissionRecorded"
+        },
+        {
+          "kind": "event",
+          "name": "metaharness.spending.FiniteLedgerRecorded"
+        }
+      ],
+      "steps": [
+        {
+          "command": "metaharness.session.PollSteering",
+          "input": {
+            "probe": {
+              "kind": "literal",
+              "value": "quiet-interrupt"
+            }
+          },
+          "step": "execute_command"
+        },
+        {
+          "outcome": {
+            "command": "metaharness.session.PollSteering",
+            "outcome": "quiet-native-interrupt"
+          },
+          "step": "expect_outcome"
+        },
+        {
+          "event": "metaharness.session.PollingObserved",
+          "payload": {
+            "closed": false,
+            "control_written": true,
+            "deadline_advanced": false,
+            "yielded": true
+          },
+          "shape": {
+            "closed": {
+              "holds": "primitive",
+              "kind": "boolean"
+            },
+            "control_written": {
+              "holds": "primitive",
+              "kind": "boolean"
+            },
+            "deadline_advanced": {
+              "holds": "primitive",
+              "kind": "boolean"
+            },
+            "yielded": {
+              "holds": "primitive",
+              "kind": "boolean"
+            }
+          },
+          "step": "expect_event"
+        },
+        {
+          "event": "metaharness.boundaries.CallDecided",
+          "step": "expect_no_event"
+        },
+        {
+          "event": "metaharness.boundaries.FileRead",
+          "step": "expect_no_event"
+        },
+        {
+          "event": "metaharness.boundaries.FrameRead",
+          "step": "expect_no_event"
+        },
+        {
+          "event": "metaharness.observations.NativeStatusClassified",
+          "step": "expect_no_event"
+        },
+        {
+          "event": "metaharness.observations.PresenceRead",
+          "step": "expect_no_event"
+        },
+        {
+          "event": "metaharness.observations.ToolOutcomeRead",
+          "step": "expect_no_event"
+        },
+        {
+          "event": "metaharness.session.ClosureRecorded",
+          "step": "expect_no_event"
+        },
+        {
+          "event": "metaharness.session.CompletionClassified",
+          "step": "expect_no_event"
+        },
+        {
+          "event": "metaharness.session.StreamClassified",
+          "step": "expect_no_event"
+        },
+        {
+          "event": "metaharness.spending.AdmissionRecorded",
+          "step": "expect_no_event"
+        },
+        {
+          "event": "metaharness.spending.FiniteLedgerRecorded",
+          "step": "expect_no_event"
+        }
+      ]
+    },
+    "metaharness.session.PollSteering/outcome/quiet-output-is-not-eof": {
+      "purpose": "`metaharness.session.PollSteering` answers `quiet-output-is-not-eof` for an input no other branch's guard claims",
+      "source": [
+        {
+          "kind": "type",
+          "name": "metaharness.session.SteeringProbe"
+        },
+        {
+          "kind": "command",
+          "name": "metaharness.session.PollSteering"
+        },
+        {
+          "kind": "outcome",
+          "name": {
+            "command": "metaharness.session.PollSteering",
+            "outcome": "quiet-output-is-not-eof"
+          }
+        },
+        {
+          "kind": "event",
+          "name": "metaharness.boundaries.CallDecided"
+        },
+        {
+          "kind": "event",
+          "name": "metaharness.boundaries.FileRead"
+        },
+        {
+          "kind": "event",
+          "name": "metaharness.boundaries.FrameRead"
+        },
+        {
+          "kind": "event",
+          "name": "metaharness.observations.NativeStatusClassified"
+        },
+        {
+          "kind": "event",
+          "name": "metaharness.observations.PresenceRead"
+        },
+        {
+          "kind": "event",
+          "name": "metaharness.observations.ToolOutcomeRead"
+        },
+        {
+          "kind": "event",
+          "name": "metaharness.session.ClosureRecorded"
+        },
+        {
+          "kind": "event",
+          "name": "metaharness.session.CompletionClassified"
+        },
+        {
+          "kind": "event",
+          "name": "metaharness.session.PollingObserved"
+        },
+        {
+          "kind": "event",
+          "name": "metaharness.session.StreamClassified"
+        },
+        {
+          "kind": "event",
+          "name": "metaharness.spending.AdmissionRecorded"
+        },
+        {
+          "kind": "event",
+          "name": "metaharness.spending.FiniteLedgerRecorded"
+        }
+      ],
+      "steps": [
+        {
+          "command": "metaharness.session.PollSteering",
+          "input": {
+            "probe": {
+              "kind": "literal",
+              "value": "quiet-only"
+            }
+          },
+          "step": "execute_command"
+        },
+        {
+          "outcome": {
+            "command": "metaharness.session.PollSteering",
+            "outcome": "quiet-output-is-not-eof"
+          },
+          "step": "expect_outcome"
+        },
+        {
+          "event": "metaharness.session.PollingObserved",
+          "payload": {
+            "closed": false,
+            "control_written": false,
+            "deadline_advanced": false,
+            "yielded": true
+          },
+          "shape": {
+            "closed": {
+              "holds": "primitive",
+              "kind": "boolean"
+            },
+            "control_written": {
+              "holds": "primitive",
+              "kind": "boolean"
+            },
+            "deadline_advanced": {
+              "holds": "primitive",
+              "kind": "boolean"
+            },
+            "yielded": {
+              "holds": "primitive",
+              "kind": "boolean"
+            }
+          },
+          "step": "expect_event"
+        },
+        {
+          "event": "metaharness.boundaries.CallDecided",
+          "step": "expect_no_event"
+        },
+        {
+          "event": "metaharness.boundaries.FileRead",
+          "step": "expect_no_event"
+        },
+        {
+          "event": "metaharness.boundaries.FrameRead",
+          "step": "expect_no_event"
+        },
+        {
+          "event": "metaharness.observations.NativeStatusClassified",
+          "step": "expect_no_event"
+        },
+        {
+          "event": "metaharness.observations.PresenceRead",
+          "step": "expect_no_event"
+        },
+        {
+          "event": "metaharness.observations.ToolOutcomeRead",
+          "step": "expect_no_event"
+        },
+        {
+          "event": "metaharness.session.ClosureRecorded",
+          "step": "expect_no_event"
+        },
+        {
+          "event": "metaharness.session.CompletionClassified",
+          "step": "expect_no_event"
+        },
+        {
+          "event": "metaharness.session.StreamClassified",
+          "step": "expect_no_event"
+        },
+        {
+          "event": "metaharness.spending.AdmissionRecorded",
+          "step": "expect_no_event"
+        },
+        {
+          "event": "metaharness.spending.FiniteLedgerRecorded",
+          "step": "expect_no_event"
         }
       ]
     },
@@ -3791,6 +4623,10 @@
         {
           "kind": "event",
           "name": "metaharness.session.CompletionClassified"
+        },
+        {
+          "kind": "event",
+          "name": "metaharness.session.PollingObserved"
         },
         {
           "kind": "event",
@@ -3857,6 +4693,10 @@
         },
         {
           "event": "metaharness.session.CompletionClassified",
+          "step": "expect_no_event"
+        },
+        {
+          "event": "metaharness.session.PollingObserved",
           "step": "expect_no_event"
         },
         {
@@ -3994,6 +4834,10 @@
         },
         {
           "kind": "event",
+          "name": "metaharness.session.PollingObserved"
+        },
+        {
+          "kind": "event",
           "name": "metaharness.session.StreamClassified"
         },
         {
@@ -4067,6 +4911,10 @@
           "step": "expect_no_event"
         },
         {
+          "event": "metaharness.session.PollingObserved",
+          "step": "expect_no_event"
+        },
+        {
           "event": "metaharness.session.StreamClassified",
           "step": "expect_no_event"
         },
@@ -4129,6 +4977,10 @@
         {
           "kind": "event",
           "name": "metaharness.session.CompletionClassified"
+        },
+        {
+          "kind": "event",
+          "name": "metaharness.session.PollingObserved"
         },
         {
           "kind": "event",
@@ -4239,6 +5091,10 @@
           "step": "expect_no_event"
         },
         {
+          "event": "metaharness.session.PollingObserved",
+          "step": "expect_no_event"
+        },
+        {
           "event": "metaharness.session.StreamClassified",
           "step": "expect_no_event"
         },
@@ -4325,6 +5181,10 @@
         {
           "kind": "event",
           "name": "metaharness.session.CompletionClassified"
+        },
+        {
+          "kind": "event",
+          "name": "metaharness.session.PollingObserved"
         },
         {
           "kind": "event",
@@ -4436,6 +5296,10 @@
           "step": "expect_no_event"
         },
         {
+          "event": "metaharness.session.PollingObserved",
+          "step": "expect_no_event"
+        },
+        {
           "event": "metaharness.session.StreamClassified",
           "step": "expect_no_event"
         },
@@ -4525,6 +5389,10 @@
         },
         {
           "kind": "event",
+          "name": "metaharness.session.PollingObserved"
+        },
+        {
+          "kind": "event",
           "name": "metaharness.session.StreamClassified"
         },
         {
@@ -4596,6 +5464,10 @@
         },
         {
           "event": "metaharness.session.CompletionClassified",
+          "step": "expect_no_event"
+        },
+        {
+          "event": "metaharness.session.PollingObserved",
           "step": "expect_no_event"
         },
         {
@@ -4742,6 +5614,10 @@
         },
         {
           "kind": "event",
+          "name": "metaharness.session.PollingObserved"
+        },
+        {
+          "kind": "event",
           "name": "metaharness.session.StreamClassified"
         },
         {
@@ -4809,6 +5685,10 @@
         },
         {
           "event": "metaharness.session.CompletionClassified",
+          "step": "expect_no_event"
+        },
+        {
+          "event": "metaharness.session.PollingObserved",
           "step": "expect_no_event"
         },
         {
@@ -4885,6 +5765,10 @@
         },
         {
           "kind": "event",
+          "name": "metaharness.session.PollingObserved"
+        },
+        {
+          "kind": "event",
           "name": "metaharness.session.StreamClassified"
         },
         {
@@ -4952,6 +5836,10 @@
         },
         {
           "event": "metaharness.session.CompletionClassified",
+          "step": "expect_no_event"
+        },
+        {
+          "event": "metaharness.session.PollingObserved",
           "step": "expect_no_event"
         },
         {
@@ -5093,6 +5981,10 @@
         },
         {
           "kind": "event",
+          "name": "metaharness.session.PollingObserved"
+        },
+        {
+          "kind": "event",
           "name": "metaharness.session.StreamClassified"
         },
         {
@@ -5197,6 +6089,10 @@
           "step": "expect_no_event"
         },
         {
+          "event": "metaharness.session.PollingObserved",
+          "step": "expect_no_event"
+        },
+        {
           "event": "metaharness.session.StreamClassified",
           "step": "expect_no_event"
         },
@@ -5286,6 +6182,10 @@
         },
         {
           "kind": "event",
+          "name": "metaharness.session.PollingObserved"
+        },
+        {
+          "kind": "event",
           "name": "metaharness.session.StreamClassified"
         },
         {
@@ -5353,6 +6253,10 @@
         },
         {
           "event": "metaharness.session.CompletionClassified",
+          "step": "expect_no_event"
+        },
+        {
+          "event": "metaharness.session.PollingObserved",
           "step": "expect_no_event"
         },
         {

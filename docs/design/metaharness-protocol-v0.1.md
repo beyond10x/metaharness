@@ -2017,3 +2017,35 @@ alone. The existing structured item mapping can observe the normal persistent ex
 path. Native qualification must establish the actual path; resumed, fallback and
 legacy records without structured status still remain unknown. No claim of native
 coverage or pin advance follows from this source correction.
+
+## Amendment a23 — steering during quiet native output (2026-10-03)
+
+The CLI must service commands while a provider emits no records and while a tool
+decision remains pending. The native cancellation fixture found that the child
+reader consumed every polling timeout internally, so the CLI could not observe
+an already received halt until provider output resumed. Likewise, a pending
+decision could send the blocking event API into its entire deadline wait.
+
+Introduce a bounded polling path beside the existing blocking library methods.
+Native process polling performs one existing 20ms receive interval and reports
+line, idle or EOF. A pending unanswered decision remains WouldBlock; idle is
+neither EOF nor a decision request. Existing custom process implementations may
+retain their blocking next_line through a compatibility default; custom runners
+requiring bounded steering must implement the polling method explicitly.
+
+Run polling reports one event, idle, decision-pending or ended. It checks armed
+deadlines on each poll, preserves delivery-time arming and ordering, and never
+waits an entire decision budget. Command admission also expires armed deadlines
+before applying the command: an answer received between polls at or after its
+deadline is too late, and cannot replace the deadline deny. Unarmed requests
+still have no running budget. One input record per poll bounds work even when
+the adapter produces no normalized event. The blocking next_event API continues
+to wait for an event and advances the existing clock to a pending deadline as
+before. The CLI uses polling, draining its command channel between iterations;
+idle and decision-pending iterations use the existing short steering wait.
+
+No new wire event, EOF marker or fabricated terminal record is introduced. Halt
+and interrupt retain their existing adapter semantics, decision-before-control
+ordering, command ids, native status and exactly one final stream.closed.
+Deterministic tests cover pending-decision steering and idle-versus-EOF; native
+credential-free timing qualification is separate evidence, not a model claim.

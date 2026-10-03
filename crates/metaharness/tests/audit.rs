@@ -870,7 +870,7 @@ fn a_spec_with_no_auditor_is_a_refusal_and_not_a_skip() {
     )
     .expect_err("refused");
     assert_eq!(refused, Refusal::SpecWithoutAuditor);
-    assert!(auditor.calls().is_empty());
+    assert_eq!(auditor.calls(), Vec::<Vec<String>>::new());
 }
 
 #[test]
