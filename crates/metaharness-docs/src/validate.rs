@@ -48,7 +48,9 @@ impl TokenSink for FactsSink {
                     }
                     match name {
                         "id" => facts.ids.push(value.to_owned()),
-                        "href" | "src" => facts.links.push(value.to_owned()),
+                        "href" | "src" | "poster" | "background" => {
+                            facts.links.push(value.to_owned());
+                        }
                         "lang" if tag.name.as_ref() == "html" && value == "en" => {
                             facts.language = true;
                         }
@@ -250,5 +252,18 @@ mod tests {
             files.insert("styles.css".into(), css.as_bytes().to_vec());
             assert!(site(&files).is_err(), "missed {css}");
         }
+    }
+
+    #[test]
+    fn other_url_valued_image_attributes_are_checked() {
+        for body in [
+            "<video poster='/metaharness/missing.png'></video>",
+            "<table background='/metaharness/missing.png'></table>",
+        ] {
+            assert!(site(&document(body)).is_err(), "missed {body}");
+        }
+        let mut files = document("<video poster='/metaharness/present.png'></video>");
+        files.insert("present.png".into(), Vec::new());
+        site(&files).unwrap();
     }
 }

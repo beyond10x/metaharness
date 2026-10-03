@@ -29,7 +29,7 @@ explicit heading IDs are supported. The full page allowlist and reading order
 live in `crates/metaharness-docs/src/content.rs`; b10x is a first-class navigation
 entry. Design and research documents outside this directory remain unpublished.
 
-The asset contract is deliberately small: local HTML `href` and `src` references
+The asset contract is deliberately small: local HTML `href`, `src`, `poster` and `background` references
 are checked against the generated files. `srcset`/`imagesrcset`, inline styles,
 CSS imports and CSS asset-loading functions are refused as unsupported. The local
 stylesheet uses none of them; its tokens are checked with a Rust CSS parser,
