@@ -8,12 +8,18 @@ owner: metaharness
 relations:
 - informed_by: epic:runs-side-by-side
 - informed_by: epic:github-issue-repair
+- depends_on: story:uncapped-spending-policy
+- depends_on: story:current-adapter-compatibility
 scope:
 - confidence: cited
   path: Taskfile.yml
 - confidence: inferred
+  path: crates/metaharness-aep/src/drive_tests.rs
+- confidence: inferred
+  path: crates/metaharness/tests/ess_conformance.rs
+- confidence: inferred
   path: spec
-revision: 3
+revision: 6
 ---
 ## Context
 
@@ -42,3 +48,7 @@ Inferred: new ESS inputs, Rust conformance integration and Taskfile.yml; existin
 ## Evidence required
 
 ESS validation and synthesized suite identity; real-target conformance report; named planted-defect and restoration results; design-review findings and dispositions; complete task check exit status. A validated draft alone does not close this ticket.
+
+## Draft contract and integration order
+
+The initial isolated draft declares metaharness.session, metaharness.workspace and metaharness.spending plus an exact separately validated monetary projection. ESS 0.51.0 cannot synthesize Binary64 codecs, so optional f64 observations remain typed and explicitly outside generated executable coverage. No decimal/string substitute or fabricated zero is authorized. Generated scenarios and production tests must distinguish absent error from explicit error:null; the initial Optional-only projection was corrected before integration. Final conformance wiring follows the runtime stories to avoid drive_tests.rs and adapter collisions; pure specification drafting precedes them. Frame/tool obligations remain required by acceptance and may be authored real-target scenarios rather than invented duplicate models.

@@ -3,7 +3,7 @@ format: aep.planning-md/3
 id: epic:github-issue-repair
 kind: epic
 status: draft
-title: Resolve Metaharness GitHub issues 10 through 15
+title: Resolve Metaharness GitHub issues 10 through 16
 owner: metaharness
 refs:
 - provider: github
@@ -18,9 +18,11 @@ refs:
   reference: beyond10x/metaharness#14
 - provider: github
   reference: beyond10x/metaharness#15
+- provider: github
+  reference: beyond10x/metaharness#16
 relations:
 - informed_by: epic:runs-side-by-side
-revision: 4
+revision: 6
 ---
 ## Requested outcome
 
@@ -60,3 +62,7 @@ The issue repair is partially decomposed into three source-scoped stories. Imple
 All requested plan changes and the #11 regression patch are collected in the integration worktree on integration/metaharness-issue-repair, based on 13a8378697fec1462b1014b04e5eb556bcba77cd. No new commit, push, PR or issue closure has succeeded. The primary checkout remains unchanged. The test-only worker is complete; its patch is also retained in scratch and copied to integration. These tests intentionally fail until #11 is fixed; no green gate is claimed.
 
 The operator has been asked for a narrow exception to redact only the personal home-directory prefix in two immutable imported evidence references, preserving originals privately. The answer is pending. Do not infer approval from silence. After that decision, make only the permitted evidence correction (or wait for supported AEP redaction), rerun validation and bot commit, finish design/spec preparation and independent plan review, implement and independently review the issues, and run the complete repository gate. Submit no PR until the operator's later submission instruction; the eventual PR collects all work.
+
+## Approved decomposition, current
+
+The operator approved the wave on 2026-10-03. Planning evidence redaction is resolved and the schema-5 migration is committed; the earlier pause text is historical. Issues #10-16 now all map to stories: current-aep-runtime, codex-terminal-failure, managed-workspace-admission, governed-codex, uncapped-spending-policy, current-adapter-compatibility and scripted-b10x-run-does-not-need-the-binary. ESS adoption/hardening is the requested additional ticket. Current partial-order delivery: #10/#11, then #12, then #13 and #16 on disjoint surfaces after checking scopes, then #14/#15 as their shared edits allow, then final real-target ESS reconciliation and integration gate. All source outcomes remain local to one integration branch for one later PR.

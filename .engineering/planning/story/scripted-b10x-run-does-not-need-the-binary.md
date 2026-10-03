@@ -5,45 +5,40 @@ kind: story
 status: draft
 title: A scripted b10x run does not require b10x-harness on the PATH
 summary: Metaharness::start with a ScriptedRunner refuses to start a Kind::B10x run when b10x-harness is absent from the PATH (Launch refusal at crates/metaharness/src/builder.rs:547), although the scripted runner starts no process; the Gate workflow works around it by installing the binary. Observed 2026-09-15 in Gate run 34911935585.
-revision: 1
+refs:
+- provider: github
+  reference: beyond10x/metaharness#16
+relations:
+- decomposes: epic:github-issue-repair
+- depends_on: story:codex-terminal-failure
+- depends_on: story:managed-workspace-admission
+scope:
+- confidence: cited
+  path: .github/workflows/gate.yml
+- confidence: cited
+  path: crates/metaharness/src/builder.rs
+- confidence: cited
+  path: crates/metaharness/src/process.rs
+- confidence: cited
+  path: crates/metaharness/tests/stream_closed.rs
+revision: 7
 ---
-<!-- Starting point for a `story` artifact, seeded by `aep artifact new story <name>`.
-     No frontmatter here on purpose: the `---` block is written by the CLI from the id, kind, status
-     and relations you gave it, and a second copy in this file would be the one that went stale.
-     Delete the italic guidance as you fill each section. -->
-
-# Story: <name>
-
-## Outcome
-
-*What is true for whom once this has shipped, in one sentence. If it names a component rather than a
-person, it is a task — say what changes for someone.*
-
 ## Context
 
-*Why this is worth doing now, and what it depends on. Link the epic or specification it comes from
-rather than restating it; the `derived_from` relation already carries the edge.*
+GitHub #16 corroborates the existing story's summary: start_b10x resolves a real binary and probes its version before invoking a supplied ScriptedRunner, even though that runner starts no vendor process. Source: crates/metaharness/src/builder.rs:544 and :707; ScriptedRunner in crates/metaharness/src/process.rs; every_harness_kind_closes_its_stream in crates/metaharness/tests/stream_closed.rs; CI installation accommodation in .github/workflows/gate.yml. The historical CI run in the original summary has not been re-inspected.
 
 ## Acceptance
 
-*The conditions under which this is done, each one something a person or a check can observe. "Works
-correctly" is not one of them.*
+An isolated scripted b10x execution with no b10x-harness executable completes its synthetic stream without spawning a vendor process, while a real execution with the same unavailable binary is still refused before launch and real version validation remains enforced.
 
-## Out of Scope
+## Scope
 
-*What a reasonable reader would expect to be included and is not — the boundary that stops this
-story quietly becoming an epic.*
+Cited: crates/metaharness/src/builder.rs, crates/metaharness/src/process.rs, crates/metaharness/tests/stream_closed.rs and .github/workflows/gate.yml. Inferable: a runner capability method or explicit launch contract separates process validation from synthetic execution; decide at the runner seam rather than by a test-only environment bypass. Committed executable test helpers must be Rust.
 
-## Ambiguities
+## Integration order
 
-*Each gap this story found and did not close, classified. `inferable` — the answer is already
-written down, so give the `path:line` or the artifact id that settles it.
-`requires-stakeholder-input` — nobody here can decide it, so name who does, and raise that entry as
-a `decision-blocker` with a `blocks` edge to this story, or it is a sentence somebody improvises
-later.*
+After story:codex-terminal-failure (stream_closed.rs collision) and story:managed-workspace-admission (builder.rs collision). Record a red executable-free regression first. Remove the CI binary installation only after full task check proves it unnecessary. Never make real launch/version probes optional or fake their evidence.
 
-## Open Questions
+## Out of scope
 
-*Anything still undecided belongs in `## Ambiguities` above, classified and with its citation or its
-decider. Keep this section for a question that is neither — an unowned question is a story that
-stalls without anybody noticing.*
+Changing real b10x compatibility pins, claiming live compatibility, or changing terminal semantics owned by #11.

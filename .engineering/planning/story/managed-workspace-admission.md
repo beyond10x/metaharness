@@ -10,6 +10,7 @@ refs:
   reference: beyond10x/metaharness#12
 relations:
 - decomposes: epic:github-issue-repair
+- depends_on: story:current-aep-runtime
 scope:
 - confidence: cited
   path: crates/metaharness-aep/src/drive.rs
@@ -21,7 +22,7 @@ scope:
   path: crates/metaharness/src/builder.rs
 - confidence: cited
   path: docs/design/metaharness-protocol-v0.1.md
-revision: 6
+revision: 7
 ---
 ## Context
 
@@ -38,3 +39,7 @@ Cited: crates/metaharness/src/builder.rs (canonical path resolution and eligibil
 ## Evidence
 
 Synthetic red/green admission and invalid-name tests; an actual managed checkout identity/lease before and after a no-model confined probe; independent review of containment assumptions and full task check. A successful argv assertion alone does not establish live confinement.
+
+## Integration order
+
+Wait for story:current-aep-runtime because both edit drive.rs and drive_tests.rs. The coordinator already wrote the shared design amendment before implementation. This order addresses a source collision, not a semantic dependency on a newer Harness pin.

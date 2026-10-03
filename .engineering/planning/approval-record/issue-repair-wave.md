@@ -8,7 +8,7 @@ relations:
 - decides: epic:github-issue-repair
 - decides: story:codex-terminal-failure
 - decides: story:current-aep-runtime
-revision: 2
+revision: 5
 ---
 ## Authorization and boundary
 
@@ -98,3 +98,18 @@ Integration tree: wt-8e8abedfd902; branch integration/metaharness-issue-repair; 
   "unassessed": [],
   "cycles": []
 }
+
+## Unit assignments
+
+- #11: wt-f883821d0c89, base 552892018cfca193ec4cfbaa3d7e6b90fcb7cfd1, build inside tree at target, scratch suffix metaharness-issue-repair/codex-terminal. Agent codex_regression resumes with implementation-brief.md; first build slot.
+- #10: wt-09dc46708126, same base, build inside tree at target, scratch suffix metaharness-issue-repair/aep-runtime. Agent aep_upgrade_scope resumes with brief.md; prepares code then waits for build slot.
+
+Both are isolated managed trees under the workspace profile. Exact absolute paths are in the private unit briefs. No agent writes planning. Integration owns design amendment a10 and changelog aggregation. Stages: dispatched for implementation; no green claim yet.
+
+## ESS drafting assignment
+
+wt-1a1e6a19851f, base 552892018cfca193ec4cfbaa3d7e6b90fcb7cfd1, scratch suffix metaharness-issue-repair/ess-contract, no compiler build. Agent ess_inventory drafts only spec inputs using ess:retrofitting and ess:specifying, distinguishing current behavior from requested policies. This supplies typed homes before later policy stories; it does not claim real-target conformance or completion. Runtime implementation and hardening remain gated on actual verification.
+
+## Stable planning identity
+
+After verified migration, set the project selector's planning_scope to metaharness instead of the managed worktree directory name. The CLI currently has no project-selector edit verb; this configuration-only correction leaves CLI-owned artifact transitions and evidence untouched. Schema remains aep.project/5 with the Git store. Validator: 33 artifact(s), valid.

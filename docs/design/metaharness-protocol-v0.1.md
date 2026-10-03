@@ -1851,6 +1851,56 @@ operator's selection; no ambient directory is silently adopted.
 Independent review corrections and executed evidence for this amendment are recorded
 in the issue-repair AEP work, before any claim that the issues are complete.
 
+## Amendment a11 — governed Codex and explicit spending policy (2026-10-03)
+
+Issues #13 and #14 extend the concrete AEP host. They do not change the sealed
+`metaharness.frame/1` format, the AEP engine's authority, or the b10x observe-only seam.
+
+### Governed Codex
+
+`harness: codex` selects the existing Codex adapter in ask mode. The driver writes
+the same sealed frame and retained event stream as its other governed arms, and
+each effectful admitted call must receive the current step's engine authorization.
+Vendor payload interpretation belongs in the Codex adapter; the AEP host consumes
+its typed translation and never decodes a second vendor transcript or hook format.
+An unsupported or malformed operation is denied, including a patch whose complete
+write set and content guard cannot be established. A missing translation is not an
+allow. No Claude-only instruction-loading exemption transfers to Codex by name.
+
+The selected controls are capabilities, not suggestions: a requested control that
+Codex cannot enforce is refused by name, with no observe-mode fallback. The driver
+must distinguish a successful terminal record, provider failure and interruption;
+preliminary text and exit status alone cannot create a successful session. A resumed
+step retains its task, state, step and attempt identity through the engine's launch
+record. Unknown monetary cost remains unknown. The compatibility evidence for a
+new vendor version is separate from the existence of this executor selection.
+
+### Uncapped outer USD policy
+
+Finite reservation terms remain the default: an LLM map requires a positive outer
+cap and a positive assumed charge, and a resume may only narrow that cap. An
+explicit uncapped option is a separate policy with a nonempty operator authorization
+reference, persisted in the launch and admission ledger. It still requires the live
+opt-in. An omitted budget never selects it. Finite and uncapped flags conflict;
+neither a giant finite amount nor a zero charge represents an uncapped policy.
+
+Every invocation receives a durable admission before spawning. Under finite terms
+that admission reserves the positive assumed charge; under uncapped terms it records
+the invocation and authorization without inventing a reservation amount. Reservation
+totals are not observed spend. Observed costs, when supplied by the normalized
+terminal record, are recorded separately; absent, invalid or incomplete observations
+stay unknown, including after a failed spawn or interrupted run. Failure to persist
+an admission prevents the effect. Resume validates the policy and ledger together,
+preserves its authorization and prior admissions, and cannot convert a finite run
+to uncapped or silently replace the authorizing reference. Existing finite ledgers
+remain readable with their original semantics; inconsistent data is refused.
+
+This changes the outer USD policy only. Iteration, retry, step-visit, cancellation,
+tool-scope and engine limits retain their declared meanings. Uncapped USD authority
+does not assert that a vendor supports unlimited turns or that a governed walk
+has no termination conditions. Offline policy, CLI, persistence and resume tests
+must pass before any live run uses the new mode.
+
 ## Appendix A — every claim's method
 
 | method | rows |
