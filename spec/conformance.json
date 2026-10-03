@@ -1,0 +1,3164 @@
+{
+  "coverage": {
+    "authored": [],
+    "authored_sources": {},
+    "counts": {
+      "authored": 0,
+      "generated": 24,
+      "outside": 0,
+      "refused": 0
+    },
+    "generated": [
+      "metaharness.boundaries.GovernCodexCall/outcome/allowed",
+      "metaharness.boundaries.GovernCodexCall/outcome/denied",
+      "metaharness.boundaries.ReadSealedFrame/outcome/admitted",
+      "metaharness.boundaries.ReadSealedFrame/outcome/refused",
+      "metaharness.boundaries.ReadSelectedWorkspaceFile/outcome/read",
+      "metaharness.boundaries.ReadSelectedWorkspaceFile/outcome/refused",
+      "metaharness.session.CloseUnsteeredStream/outcome/failed-or-unknown-terminal",
+      "metaharness.session.CloseUnsteeredStream/outcome/observed-budget-stop",
+      "metaharness.session.CloseUnsteeredStream/outcome/positive-terminal-record",
+      "metaharness.session.FinishCodexCompletion/outcome/explicit-failure",
+      "metaharness.session.FinishCodexCompletion/outcome/incomplete-evidence",
+      "metaharness.session.FinishCodexCompletion/outcome/positive-completion",
+      "metaharness.session.RecordClosedStream/outcome/recorded",
+      "metaharness.session.StreamClosure/invariant/at/metaharness.session.RetainedClosure/closure",
+      "metaharness.spending.CheckFiniteTerms/outcome/invalid-finite-terms",
+      "metaharness.spending.CheckFiniteTerms/outcome/valid-finite-terms",
+      "metaharness.spending.CheckUncappedAuthorization/outcome/explicitly-authorized",
+      "metaharness.spending.CheckUncappedAuthorization/outcome/unauthorized",
+      "metaharness.spending.InvocationAdmission/invariant/at/metaharness.spending.RetainedAdmission/admission",
+      "metaharness.spending.RecordFiniteLedger/outcome/recorded",
+      "metaharness.spending.RecordInvocationAdmission/outcome/recorded",
+      "metaharness.spending.SpendLedger/invariant/at/metaharness.spending.RetainedFiniteLedger/ledger",
+      "metaharness.workspace.CheckSelectedName/outcome/eligible-component",
+      "metaharness.workspace.CheckSelectedName/outcome/invalid-name-refused"
+    ],
+    "knowledge": "complete_inventory",
+    "outside": [],
+    "refused": [],
+    "selection": {
+      "filter": {
+        "kind": "all"
+      },
+      "origins": "generated",
+      "scope": {
+        "kind": "system"
+      }
+    }
+  },
+  "provenance": {
+    "contract_digest": "c3574dcb450fda2ba697761202f63709cc8aef59d6c377805efcde937f9da72c",
+    "spec_digest": "89810481880cbf5c8a54c1f080c8f4e9890cf49e4a165cddf35588dfa89dbf4c",
+    "specification_version": "v1",
+    "suite_version": "ess-conformance/23",
+    "system": "metaharness"
+  },
+  "scenarios": {
+    "metaharness.boundaries.GovernCodexCall/outcome/allowed": {
+      "purpose": "`metaharness.boundaries.GovernCodexCall` answers `allowed` for an input that satisfies that branch's guard",
+      "source": [
+        {
+          "kind": "type",
+          "name": "metaharness.boundaries.CallShape"
+        },
+        {
+          "kind": "command",
+          "name": "metaharness.boundaries.GovernCodexCall"
+        },
+        {
+          "kind": "outcome",
+          "name": {
+            "command": "metaharness.boundaries.GovernCodexCall",
+            "outcome": "allowed"
+          }
+        },
+        {
+          "kind": "event",
+          "name": "metaharness.boundaries.CallDecided"
+        },
+        {
+          "kind": "event",
+          "name": "metaharness.boundaries.FileRead"
+        },
+        {
+          "kind": "event",
+          "name": "metaharness.boundaries.FrameRead"
+        },
+        {
+          "kind": "event",
+          "name": "metaharness.session.ClosureRecorded"
+        },
+        {
+          "kind": "event",
+          "name": "metaharness.session.CompletionClassified"
+        },
+        {
+          "kind": "event",
+          "name": "metaharness.session.StreamClassified"
+        },
+        {
+          "kind": "event",
+          "name": "metaharness.spending.AdmissionRecorded"
+        },
+        {
+          "kind": "event",
+          "name": "metaharness.spending.FiniteLedgerRecorded"
+        }
+      ],
+      "steps": [
+        {
+          "command": "metaharness.boundaries.GovernCodexCall",
+          "input": {
+            "engine_allows": {
+              "kind": "literal",
+              "value": true
+            },
+            "shape": {
+              "kind": "literal",
+              "value": "supported-shell"
+            }
+          },
+          "step": "execute_command"
+        },
+        {
+          "outcome": {
+            "command": "metaharness.boundaries.GovernCodexCall",
+            "outcome": "allowed"
+          },
+          "step": "expect_outcome"
+        },
+        {
+          "event": "metaharness.boundaries.CallDecided",
+          "payload": {
+            "allowed": true
+          },
+          "shape": {
+            "allowed": {
+              "holds": "primitive",
+              "kind": "boolean"
+            }
+          },
+          "step": "expect_event"
+        },
+        {
+          "event": "metaharness.boundaries.FileRead",
+          "step": "expect_no_event"
+        },
+        {
+          "event": "metaharness.boundaries.FrameRead",
+          "step": "expect_no_event"
+        },
+        {
+          "event": "metaharness.session.ClosureRecorded",
+          "step": "expect_no_event"
+        },
+        {
+          "event": "metaharness.session.CompletionClassified",
+          "step": "expect_no_event"
+        },
+        {
+          "event": "metaharness.session.StreamClassified",
+          "step": "expect_no_event"
+        },
+        {
+          "event": "metaharness.spending.AdmissionRecorded",
+          "step": "expect_no_event"
+        },
+        {
+          "event": "metaharness.spending.FiniteLedgerRecorded",
+          "step": "expect_no_event"
+        }
+      ]
+    },
+    "metaharness.boundaries.GovernCodexCall/outcome/denied": {
+      "purpose": "`metaharness.boundaries.GovernCodexCall` answers `denied` for an input no other branch's guard claims",
+      "source": [
+        {
+          "kind": "type",
+          "name": "metaharness.boundaries.CallShape"
+        },
+        {
+          "kind": "command",
+          "name": "metaharness.boundaries.GovernCodexCall"
+        },
+        {
+          "kind": "outcome",
+          "name": {
+            "command": "metaharness.boundaries.GovernCodexCall",
+            "outcome": "denied"
+          }
+        },
+        {
+          "kind": "event",
+          "name": "metaharness.boundaries.CallDecided"
+        },
+        {
+          "kind": "event",
+          "name": "metaharness.boundaries.FileRead"
+        },
+        {
+          "kind": "event",
+          "name": "metaharness.boundaries.FrameRead"
+        },
+        {
+          "kind": "event",
+          "name": "metaharness.session.ClosureRecorded"
+        },
+        {
+          "kind": "event",
+          "name": "metaharness.session.CompletionClassified"
+        },
+        {
+          "kind": "event",
+          "name": "metaharness.session.StreamClassified"
+        },
+        {
+          "kind": "event",
+          "name": "metaharness.spending.AdmissionRecorded"
+        },
+        {
+          "kind": "event",
+          "name": "metaharness.spending.FiniteLedgerRecorded"
+        }
+      ],
+      "steps": [
+        {
+          "command": "metaharness.boundaries.GovernCodexCall",
+          "input": {
+            "engine_allows": {
+              "kind": "literal",
+              "value": false
+            },
+            "shape": {
+              "kind": "literal",
+              "value": "supported-shell"
+            }
+          },
+          "step": "execute_command"
+        },
+        {
+          "outcome": {
+            "command": "metaharness.boundaries.GovernCodexCall",
+            "outcome": "denied"
+          },
+          "step": "expect_outcome"
+        },
+        {
+          "event": "metaharness.boundaries.CallDecided",
+          "payload": {
+            "allowed": false
+          },
+          "shape": {
+            "allowed": {
+              "holds": "primitive",
+              "kind": "boolean"
+            }
+          },
+          "step": "expect_event"
+        },
+        {
+          "event": "metaharness.boundaries.FileRead",
+          "step": "expect_no_event"
+        },
+        {
+          "event": "metaharness.boundaries.FrameRead",
+          "step": "expect_no_event"
+        },
+        {
+          "event": "metaharness.session.ClosureRecorded",
+          "step": "expect_no_event"
+        },
+        {
+          "event": "metaharness.session.CompletionClassified",
+          "step": "expect_no_event"
+        },
+        {
+          "event": "metaharness.session.StreamClassified",
+          "step": "expect_no_event"
+        },
+        {
+          "event": "metaharness.spending.AdmissionRecorded",
+          "step": "expect_no_event"
+        },
+        {
+          "event": "metaharness.spending.FiniteLedgerRecorded",
+          "step": "expect_no_event"
+        },
+        {
+          "command": "metaharness.boundaries.GovernCodexCall",
+          "input": {
+            "engine_allows": {
+              "kind": "literal",
+              "value": true
+            },
+            "shape": {
+              "kind": "literal",
+              "value": "malformed-shell"
+            }
+          },
+          "step": "execute_command"
+        },
+        {
+          "outcome": {
+            "command": "metaharness.boundaries.GovernCodexCall",
+            "outcome": "denied"
+          },
+          "step": "expect_outcome"
+        }
+      ]
+    },
+    "metaharness.boundaries.ReadSealedFrame/outcome/admitted": {
+      "purpose": "`metaharness.boundaries.ReadSealedFrame` answers `admitted` for an input that satisfies that branch's guard",
+      "source": [
+        {
+          "kind": "type",
+          "name": "metaharness.boundaries.FrameEvidence"
+        },
+        {
+          "kind": "command",
+          "name": "metaharness.boundaries.ReadSealedFrame"
+        },
+        {
+          "kind": "outcome",
+          "name": {
+            "command": "metaharness.boundaries.ReadSealedFrame",
+            "outcome": "admitted"
+          }
+        },
+        {
+          "kind": "event",
+          "name": "metaharness.boundaries.CallDecided"
+        },
+        {
+          "kind": "event",
+          "name": "metaharness.boundaries.FileRead"
+        },
+        {
+          "kind": "event",
+          "name": "metaharness.boundaries.FrameRead"
+        },
+        {
+          "kind": "event",
+          "name": "metaharness.session.ClosureRecorded"
+        },
+        {
+          "kind": "event",
+          "name": "metaharness.session.CompletionClassified"
+        },
+        {
+          "kind": "event",
+          "name": "metaharness.session.StreamClassified"
+        },
+        {
+          "kind": "event",
+          "name": "metaharness.spending.AdmissionRecorded"
+        },
+        {
+          "kind": "event",
+          "name": "metaharness.spending.FiniteLedgerRecorded"
+        }
+      ],
+      "steps": [
+        {
+          "command": "metaharness.boundaries.ReadSealedFrame",
+          "input": {
+            "evidence": {
+              "kind": "literal",
+              "value": "sealed"
+            }
+          },
+          "step": "execute_command"
+        },
+        {
+          "outcome": {
+            "command": "metaharness.boundaries.ReadSealedFrame",
+            "outcome": "admitted"
+          },
+          "step": "expect_outcome"
+        },
+        {
+          "event": "metaharness.boundaries.FrameRead",
+          "payload": {
+            "admitted": true
+          },
+          "shape": {
+            "admitted": {
+              "holds": "primitive",
+              "kind": "boolean"
+            }
+          },
+          "step": "expect_event"
+        },
+        {
+          "event": "metaharness.boundaries.CallDecided",
+          "step": "expect_no_event"
+        },
+        {
+          "event": "metaharness.boundaries.FileRead",
+          "step": "expect_no_event"
+        },
+        {
+          "event": "metaharness.session.ClosureRecorded",
+          "step": "expect_no_event"
+        },
+        {
+          "event": "metaharness.session.CompletionClassified",
+          "step": "expect_no_event"
+        },
+        {
+          "event": "metaharness.session.StreamClassified",
+          "step": "expect_no_event"
+        },
+        {
+          "event": "metaharness.spending.AdmissionRecorded",
+          "step": "expect_no_event"
+        },
+        {
+          "event": "metaharness.spending.FiniteLedgerRecorded",
+          "step": "expect_no_event"
+        }
+      ]
+    },
+    "metaharness.boundaries.ReadSealedFrame/outcome/refused": {
+      "purpose": "`metaharness.boundaries.ReadSealedFrame` answers `refused` for an input no other branch's guard claims",
+      "source": [
+        {
+          "kind": "type",
+          "name": "metaharness.boundaries.FrameEvidence"
+        },
+        {
+          "kind": "command",
+          "name": "metaharness.boundaries.ReadSealedFrame"
+        },
+        {
+          "kind": "outcome",
+          "name": {
+            "command": "metaharness.boundaries.ReadSealedFrame",
+            "outcome": "refused"
+          }
+        },
+        {
+          "kind": "event",
+          "name": "metaharness.boundaries.CallDecided"
+        },
+        {
+          "kind": "event",
+          "name": "metaharness.boundaries.FileRead"
+        },
+        {
+          "kind": "event",
+          "name": "metaharness.boundaries.FrameRead"
+        },
+        {
+          "kind": "event",
+          "name": "metaharness.session.ClosureRecorded"
+        },
+        {
+          "kind": "event",
+          "name": "metaharness.session.CompletionClassified"
+        },
+        {
+          "kind": "event",
+          "name": "metaharness.session.StreamClassified"
+        },
+        {
+          "kind": "event",
+          "name": "metaharness.spending.AdmissionRecorded"
+        },
+        {
+          "kind": "event",
+          "name": "metaharness.spending.FiniteLedgerRecorded"
+        }
+      ],
+      "steps": [
+        {
+          "command": "metaharness.boundaries.ReadSealedFrame",
+          "input": {
+            "evidence": {
+              "kind": "literal",
+              "value": "modified"
+            }
+          },
+          "step": "execute_command"
+        },
+        {
+          "outcome": {
+            "command": "metaharness.boundaries.ReadSealedFrame",
+            "outcome": "refused"
+          },
+          "step": "expect_outcome"
+        },
+        {
+          "event": "metaharness.boundaries.FrameRead",
+          "payload": {
+            "admitted": false
+          },
+          "shape": {
+            "admitted": {
+              "holds": "primitive",
+              "kind": "boolean"
+            }
+          },
+          "step": "expect_event"
+        },
+        {
+          "event": "metaharness.boundaries.CallDecided",
+          "step": "expect_no_event"
+        },
+        {
+          "event": "metaharness.boundaries.FileRead",
+          "step": "expect_no_event"
+        },
+        {
+          "event": "metaharness.session.ClosureRecorded",
+          "step": "expect_no_event"
+        },
+        {
+          "event": "metaharness.session.CompletionClassified",
+          "step": "expect_no_event"
+        },
+        {
+          "event": "metaharness.session.StreamClassified",
+          "step": "expect_no_event"
+        },
+        {
+          "event": "metaharness.spending.AdmissionRecorded",
+          "step": "expect_no_event"
+        },
+        {
+          "event": "metaharness.spending.FiniteLedgerRecorded",
+          "step": "expect_no_event"
+        }
+      ]
+    },
+    "metaharness.boundaries.ReadSelectedWorkspaceFile/outcome/read": {
+      "purpose": "`metaharness.boundaries.ReadSelectedWorkspaceFile` answers `read` for an input that satisfies that branch's guard",
+      "source": [
+        {
+          "kind": "type",
+          "name": "metaharness.boundaries.ReadPath"
+        },
+        {
+          "kind": "command",
+          "name": "metaharness.boundaries.ReadSelectedWorkspaceFile"
+        },
+        {
+          "kind": "outcome",
+          "name": {
+            "command": "metaharness.boundaries.ReadSelectedWorkspaceFile",
+            "outcome": "read"
+          }
+        },
+        {
+          "kind": "event",
+          "name": "metaharness.boundaries.CallDecided"
+        },
+        {
+          "kind": "event",
+          "name": "metaharness.boundaries.FileRead"
+        },
+        {
+          "kind": "event",
+          "name": "metaharness.boundaries.FrameRead"
+        },
+        {
+          "kind": "event",
+          "name": "metaharness.session.ClosureRecorded"
+        },
+        {
+          "kind": "event",
+          "name": "metaharness.session.CompletionClassified"
+        },
+        {
+          "kind": "event",
+          "name": "metaharness.session.StreamClassified"
+        },
+        {
+          "kind": "event",
+          "name": "metaharness.spending.AdmissionRecorded"
+        },
+        {
+          "kind": "event",
+          "name": "metaharness.spending.FiniteLedgerRecorded"
+        }
+      ],
+      "steps": [
+        {
+          "command": "metaharness.boundaries.ReadSelectedWorkspaceFile",
+          "input": {
+            "path": {
+              "kind": "literal",
+              "value": "inside"
+            }
+          },
+          "step": "execute_command"
+        },
+        {
+          "outcome": {
+            "command": "metaharness.boundaries.ReadSelectedWorkspaceFile",
+            "outcome": "read"
+          },
+          "step": "expect_outcome"
+        },
+        {
+          "event": "metaharness.boundaries.FileRead",
+          "payload": {
+            "contained": true
+          },
+          "shape": {
+            "contained": {
+              "holds": "primitive",
+              "kind": "boolean"
+            }
+          },
+          "step": "expect_event"
+        },
+        {
+          "event": "metaharness.boundaries.CallDecided",
+          "step": "expect_no_event"
+        },
+        {
+          "event": "metaharness.boundaries.FrameRead",
+          "step": "expect_no_event"
+        },
+        {
+          "event": "metaharness.session.ClosureRecorded",
+          "step": "expect_no_event"
+        },
+        {
+          "event": "metaharness.session.CompletionClassified",
+          "step": "expect_no_event"
+        },
+        {
+          "event": "metaharness.session.StreamClassified",
+          "step": "expect_no_event"
+        },
+        {
+          "event": "metaharness.spending.AdmissionRecorded",
+          "step": "expect_no_event"
+        },
+        {
+          "event": "metaharness.spending.FiniteLedgerRecorded",
+          "step": "expect_no_event"
+        }
+      ]
+    },
+    "metaharness.boundaries.ReadSelectedWorkspaceFile/outcome/refused": {
+      "purpose": "`metaharness.boundaries.ReadSelectedWorkspaceFile` answers `refused` for an input no other branch's guard claims",
+      "source": [
+        {
+          "kind": "type",
+          "name": "metaharness.boundaries.ReadPath"
+        },
+        {
+          "kind": "command",
+          "name": "metaharness.boundaries.ReadSelectedWorkspaceFile"
+        },
+        {
+          "kind": "outcome",
+          "name": {
+            "command": "metaharness.boundaries.ReadSelectedWorkspaceFile",
+            "outcome": "refused"
+          }
+        },
+        {
+          "kind": "event",
+          "name": "metaharness.boundaries.CallDecided"
+        },
+        {
+          "kind": "event",
+          "name": "metaharness.boundaries.FileRead"
+        },
+        {
+          "kind": "event",
+          "name": "metaharness.boundaries.FrameRead"
+        },
+        {
+          "kind": "event",
+          "name": "metaharness.session.ClosureRecorded"
+        },
+        {
+          "kind": "event",
+          "name": "metaharness.session.CompletionClassified"
+        },
+        {
+          "kind": "event",
+          "name": "metaharness.session.StreamClassified"
+        },
+        {
+          "kind": "event",
+          "name": "metaharness.spending.AdmissionRecorded"
+        },
+        {
+          "kind": "event",
+          "name": "metaharness.spending.FiniteLedgerRecorded"
+        }
+      ],
+      "steps": [
+        {
+          "command": "metaharness.boundaries.ReadSelectedWorkspaceFile",
+          "input": {
+            "path": {
+              "kind": "literal",
+              "value": "outside-symlink"
+            }
+          },
+          "step": "execute_command"
+        },
+        {
+          "outcome": {
+            "command": "metaharness.boundaries.ReadSelectedWorkspaceFile",
+            "outcome": "refused"
+          },
+          "step": "expect_outcome"
+        },
+        {
+          "event": "metaharness.boundaries.FileRead",
+          "payload": {
+            "contained": false
+          },
+          "shape": {
+            "contained": {
+              "holds": "primitive",
+              "kind": "boolean"
+            }
+          },
+          "step": "expect_event"
+        },
+        {
+          "event": "metaharness.boundaries.CallDecided",
+          "step": "expect_no_event"
+        },
+        {
+          "event": "metaharness.boundaries.FrameRead",
+          "step": "expect_no_event"
+        },
+        {
+          "event": "metaharness.session.ClosureRecorded",
+          "step": "expect_no_event"
+        },
+        {
+          "event": "metaharness.session.CompletionClassified",
+          "step": "expect_no_event"
+        },
+        {
+          "event": "metaharness.session.StreamClassified",
+          "step": "expect_no_event"
+        },
+        {
+          "event": "metaharness.spending.AdmissionRecorded",
+          "step": "expect_no_event"
+        },
+        {
+          "event": "metaharness.spending.FiniteLedgerRecorded",
+          "step": "expect_no_event"
+        }
+      ]
+    },
+    "metaharness.session.CloseUnsteeredStream/outcome/failed-or-unknown-terminal": {
+      "purpose": "`metaharness.session.CloseUnsteeredStream` answers `failed-or-unknown-terminal` for an input no other branch's guard claims",
+      "source": [
+        {
+          "kind": "type",
+          "name": "metaharness.session.CloseReason"
+        },
+        {
+          "kind": "command",
+          "name": "metaharness.session.CloseUnsteeredStream"
+        },
+        {
+          "kind": "outcome",
+          "name": {
+            "command": "metaharness.session.CloseUnsteeredStream",
+            "outcome": "failed-or-unknown-terminal"
+          }
+        },
+        {
+          "kind": "event",
+          "name": "metaharness.boundaries.CallDecided"
+        },
+        {
+          "kind": "event",
+          "name": "metaharness.boundaries.FileRead"
+        },
+        {
+          "kind": "event",
+          "name": "metaharness.boundaries.FrameRead"
+        },
+        {
+          "kind": "event",
+          "name": "metaharness.session.ClosureRecorded"
+        },
+        {
+          "kind": "event",
+          "name": "metaharness.session.CompletionClassified"
+        },
+        {
+          "kind": "event",
+          "name": "metaharness.session.StreamClassified"
+        },
+        {
+          "kind": "event",
+          "name": "metaharness.spending.AdmissionRecorded"
+        },
+        {
+          "kind": "event",
+          "name": "metaharness.spending.FiniteLedgerRecorded"
+        }
+      ],
+      "steps": [
+        {
+          "command": "metaharness.session.CloseUnsteeredStream",
+          "input": {
+            "is_error": {
+              "kind": "literal",
+              "value": true
+            },
+            "stop_reason": {
+              "kind": "literal",
+              "value": "stop_reason"
+            },
+            "subtype": {
+              "kind": "literal",
+              "value": "subtype"
+            },
+            "terminal_present": {
+              "kind": "literal",
+              "value": true
+            },
+            "terminal_reason": {
+              "kind": "literal",
+              "value": "terminal_reason"
+            }
+          },
+          "step": "execute_command"
+        },
+        {
+          "outcome": {
+            "command": "metaharness.session.CloseUnsteeredStream",
+            "outcome": "failed-or-unknown-terminal"
+          },
+          "step": "expect_outcome"
+        },
+        {
+          "event": "metaharness.session.StreamClassified",
+          "payload": {
+            "reason": "error"
+          },
+          "shape": {
+            "reason": {
+              "holds": "enum",
+              "variants": [
+                "completed",
+                "budget",
+                "killed",
+                "error",
+                "steer-halt"
+              ]
+            }
+          },
+          "step": "expect_event"
+        },
+        {
+          "event": "metaharness.boundaries.CallDecided",
+          "step": "expect_no_event"
+        },
+        {
+          "event": "metaharness.boundaries.FileRead",
+          "step": "expect_no_event"
+        },
+        {
+          "event": "metaharness.boundaries.FrameRead",
+          "step": "expect_no_event"
+        },
+        {
+          "event": "metaharness.session.ClosureRecorded",
+          "step": "expect_no_event"
+        },
+        {
+          "event": "metaharness.session.CompletionClassified",
+          "step": "expect_no_event"
+        },
+        {
+          "event": "metaharness.spending.AdmissionRecorded",
+          "step": "expect_no_event"
+        },
+        {
+          "event": "metaharness.spending.FiniteLedgerRecorded",
+          "step": "expect_no_event"
+        },
+        {
+          "command": "metaharness.session.CloseUnsteeredStream",
+          "input": {
+            "is_error": {
+              "kind": "literal",
+              "value": true
+            },
+            "stop_reason": {
+              "kind": "literal",
+              "value": "budget-exhausted"
+            },
+            "subtype": {
+              "kind": "literal",
+              "value": "subtype"
+            },
+            "terminal_present": {
+              "kind": "literal",
+              "value": false
+            },
+            "terminal_reason": {
+              "kind": "literal",
+              "value": "terminal_reason"
+            }
+          },
+          "step": "execute_command"
+        },
+        {
+          "outcome": {
+            "command": "metaharness.session.CloseUnsteeredStream",
+            "outcome": "failed-or-unknown-terminal"
+          },
+          "step": "expect_outcome"
+        },
+        {
+          "command": "metaharness.session.CloseUnsteeredStream",
+          "input": {
+            "is_error": {
+              "kind": "literal",
+              "value": false
+            },
+            "stop_reason": {
+              "kind": "literal",
+              "value": "stop_reason"
+            },
+            "subtype": {
+              "kind": "literal",
+              "value": "subtype"
+            },
+            "terminal_present": {
+              "kind": "literal",
+              "value": false
+            },
+            "terminal_reason": {
+              "kind": "literal",
+              "value": "terminal_reason"
+            }
+          },
+          "step": "execute_command"
+        },
+        {
+          "outcome": {
+            "command": "metaharness.session.CloseUnsteeredStream",
+            "outcome": "failed-or-unknown-terminal"
+          },
+          "step": "expect_outcome"
+        },
+        {
+          "command": "metaharness.session.CloseUnsteeredStream",
+          "input": {
+            "is_error": {
+              "kind": "literal",
+              "value": true
+            },
+            "stop_reason": {
+              "kind": "literal",
+              "value": "stop_reason"
+            },
+            "subtype": {
+              "kind": "literal",
+              "value": "success"
+            },
+            "terminal_present": {
+              "kind": "literal",
+              "value": true
+            },
+            "terminal_reason": {
+              "kind": "literal",
+              "value": "terminal_reason"
+            }
+          },
+          "step": "execute_command"
+        },
+        {
+          "outcome": {
+            "command": "metaharness.session.CloseUnsteeredStream",
+            "outcome": "failed-or-unknown-terminal"
+          },
+          "step": "expect_outcome"
+        }
+      ]
+    },
+    "metaharness.session.CloseUnsteeredStream/outcome/observed-budget-stop": {
+      "purpose": "`metaharness.session.CloseUnsteeredStream` answers `observed-budget-stop` for an input that satisfies that branch's guard",
+      "source": [
+        {
+          "kind": "type",
+          "name": "metaharness.session.CloseReason"
+        },
+        {
+          "kind": "command",
+          "name": "metaharness.session.CloseUnsteeredStream"
+        },
+        {
+          "kind": "outcome",
+          "name": {
+            "command": "metaharness.session.CloseUnsteeredStream",
+            "outcome": "observed-budget-stop"
+          }
+        },
+        {
+          "kind": "event",
+          "name": "metaharness.boundaries.CallDecided"
+        },
+        {
+          "kind": "event",
+          "name": "metaharness.boundaries.FileRead"
+        },
+        {
+          "kind": "event",
+          "name": "metaharness.boundaries.FrameRead"
+        },
+        {
+          "kind": "event",
+          "name": "metaharness.session.ClosureRecorded"
+        },
+        {
+          "kind": "event",
+          "name": "metaharness.session.CompletionClassified"
+        },
+        {
+          "kind": "event",
+          "name": "metaharness.session.StreamClassified"
+        },
+        {
+          "kind": "event",
+          "name": "metaharness.spending.AdmissionRecorded"
+        },
+        {
+          "kind": "event",
+          "name": "metaharness.spending.FiniteLedgerRecorded"
+        }
+      ],
+      "steps": [
+        {
+          "command": "metaharness.session.CloseUnsteeredStream",
+          "input": {
+            "is_error": {
+              "kind": "literal",
+              "value": true
+            },
+            "stop_reason": {
+              "kind": "literal",
+              "value": "budget-exhausted"
+            },
+            "subtype": {
+              "kind": "literal",
+              "value": "subtype"
+            },
+            "terminal_present": {
+              "kind": "literal",
+              "value": true
+            },
+            "terminal_reason": {
+              "kind": "literal",
+              "value": "terminal_reason"
+            }
+          },
+          "step": "execute_command"
+        },
+        {
+          "outcome": {
+            "command": "metaharness.session.CloseUnsteeredStream",
+            "outcome": "observed-budget-stop"
+          },
+          "step": "expect_outcome"
+        },
+        {
+          "event": "metaharness.session.StreamClassified",
+          "payload": {
+            "reason": "budget"
+          },
+          "shape": {
+            "reason": {
+              "holds": "enum",
+              "variants": [
+                "completed",
+                "budget",
+                "killed",
+                "error",
+                "steer-halt"
+              ]
+            }
+          },
+          "step": "expect_event"
+        },
+        {
+          "event": "metaharness.boundaries.CallDecided",
+          "step": "expect_no_event"
+        },
+        {
+          "event": "metaharness.boundaries.FileRead",
+          "step": "expect_no_event"
+        },
+        {
+          "event": "metaharness.boundaries.FrameRead",
+          "step": "expect_no_event"
+        },
+        {
+          "event": "metaharness.session.ClosureRecorded",
+          "step": "expect_no_event"
+        },
+        {
+          "event": "metaharness.session.CompletionClassified",
+          "step": "expect_no_event"
+        },
+        {
+          "event": "metaharness.spending.AdmissionRecorded",
+          "step": "expect_no_event"
+        },
+        {
+          "event": "metaharness.spending.FiniteLedgerRecorded",
+          "step": "expect_no_event"
+        },
+        {
+          "command": "metaharness.session.CloseUnsteeredStream",
+          "input": {
+            "is_error": {
+              "kind": "literal",
+              "value": true
+            },
+            "stop_reason": {
+              "kind": "literal",
+              "value": "stop_reason"
+            },
+            "subtype": {
+              "kind": "literal",
+              "value": "budget-exhausted"
+            },
+            "terminal_present": {
+              "kind": "literal",
+              "value": true
+            },
+            "terminal_reason": {
+              "kind": "literal",
+              "value": "terminal_reason"
+            }
+          },
+          "step": "execute_command"
+        },
+        {
+          "outcome": {
+            "command": "metaharness.session.CloseUnsteeredStream",
+            "outcome": "observed-budget-stop"
+          },
+          "step": "expect_outcome"
+        },
+        {
+          "command": "metaharness.session.CloseUnsteeredStream",
+          "input": {
+            "is_error": {
+              "kind": "literal",
+              "value": true
+            },
+            "stop_reason": {
+              "kind": "literal",
+              "value": "stop_reason"
+            },
+            "subtype": {
+              "kind": "literal",
+              "value": "subtype"
+            },
+            "terminal_present": {
+              "kind": "literal",
+              "value": true
+            },
+            "terminal_reason": {
+              "kind": "literal",
+              "value": "budget-exhausted"
+            }
+          },
+          "step": "execute_command"
+        },
+        {
+          "outcome": {
+            "command": "metaharness.session.CloseUnsteeredStream",
+            "outcome": "observed-budget-stop"
+          },
+          "step": "expect_outcome"
+        }
+      ]
+    },
+    "metaharness.session.CloseUnsteeredStream/outcome/positive-terminal-record": {
+      "purpose": "`metaharness.session.CloseUnsteeredStream` answers `positive-terminal-record` for an input that satisfies that branch's guard",
+      "source": [
+        {
+          "kind": "type",
+          "name": "metaharness.session.CloseReason"
+        },
+        {
+          "kind": "command",
+          "name": "metaharness.session.CloseUnsteeredStream"
+        },
+        {
+          "kind": "outcome",
+          "name": {
+            "command": "metaharness.session.CloseUnsteeredStream",
+            "outcome": "positive-terminal-record"
+          }
+        },
+        {
+          "kind": "event",
+          "name": "metaharness.boundaries.CallDecided"
+        },
+        {
+          "kind": "event",
+          "name": "metaharness.boundaries.FileRead"
+        },
+        {
+          "kind": "event",
+          "name": "metaharness.boundaries.FrameRead"
+        },
+        {
+          "kind": "event",
+          "name": "metaharness.session.ClosureRecorded"
+        },
+        {
+          "kind": "event",
+          "name": "metaharness.session.CompletionClassified"
+        },
+        {
+          "kind": "event",
+          "name": "metaharness.session.StreamClassified"
+        },
+        {
+          "kind": "event",
+          "name": "metaharness.spending.AdmissionRecorded"
+        },
+        {
+          "kind": "event",
+          "name": "metaharness.spending.FiniteLedgerRecorded"
+        }
+      ],
+      "steps": [
+        {
+          "command": "metaharness.session.CloseUnsteeredStream",
+          "input": {
+            "is_error": {
+              "kind": "literal",
+              "value": false
+            },
+            "stop_reason": {
+              "kind": "literal",
+              "value": "stop_reason"
+            },
+            "subtype": {
+              "kind": "literal",
+              "value": "subtype"
+            },
+            "terminal_present": {
+              "kind": "literal",
+              "value": true
+            },
+            "terminal_reason": {
+              "kind": "literal",
+              "value": "terminal_reason"
+            }
+          },
+          "step": "execute_command"
+        },
+        {
+          "outcome": {
+            "command": "metaharness.session.CloseUnsteeredStream",
+            "outcome": "positive-terminal-record"
+          },
+          "step": "expect_outcome"
+        },
+        {
+          "event": "metaharness.session.StreamClassified",
+          "payload": {
+            "reason": "completed"
+          },
+          "shape": {
+            "reason": {
+              "holds": "enum",
+              "variants": [
+                "completed",
+                "budget",
+                "killed",
+                "error",
+                "steer-halt"
+              ]
+            }
+          },
+          "step": "expect_event"
+        },
+        {
+          "event": "metaharness.boundaries.CallDecided",
+          "step": "expect_no_event"
+        },
+        {
+          "event": "metaharness.boundaries.FileRead",
+          "step": "expect_no_event"
+        },
+        {
+          "event": "metaharness.boundaries.FrameRead",
+          "step": "expect_no_event"
+        },
+        {
+          "event": "metaharness.session.ClosureRecorded",
+          "step": "expect_no_event"
+        },
+        {
+          "event": "metaharness.session.CompletionClassified",
+          "step": "expect_no_event"
+        },
+        {
+          "event": "metaharness.spending.AdmissionRecorded",
+          "step": "expect_no_event"
+        },
+        {
+          "event": "metaharness.spending.FiniteLedgerRecorded",
+          "step": "expect_no_event"
+        }
+      ]
+    },
+    "metaharness.session.FinishCodexCompletion/outcome/explicit-failure": {
+      "purpose": "`metaharness.session.FinishCodexCompletion` answers `explicit-failure` for an input that satisfies that branch's guard",
+      "source": [
+        {
+          "kind": "type",
+          "name": "metaharness.session.CompletionVerdict"
+        },
+        {
+          "kind": "type",
+          "name": "metaharness.session.ErrorProperty"
+        },
+        {
+          "kind": "type",
+          "name": "metaharness.session.LastMessageEvidence"
+        },
+        {
+          "kind": "command",
+          "name": "metaharness.session.FinishCodexCompletion"
+        },
+        {
+          "kind": "outcome",
+          "name": {
+            "command": "metaharness.session.FinishCodexCompletion",
+            "outcome": "explicit-failure"
+          }
+        },
+        {
+          "kind": "event",
+          "name": "metaharness.boundaries.CallDecided"
+        },
+        {
+          "kind": "event",
+          "name": "metaharness.boundaries.FileRead"
+        },
+        {
+          "kind": "event",
+          "name": "metaharness.boundaries.FrameRead"
+        },
+        {
+          "kind": "event",
+          "name": "metaharness.session.ClosureRecorded"
+        },
+        {
+          "kind": "event",
+          "name": "metaharness.session.CompletionClassified"
+        },
+        {
+          "kind": "event",
+          "name": "metaharness.session.StreamClassified"
+        },
+        {
+          "kind": "event",
+          "name": "metaharness.spending.AdmissionRecorded"
+        },
+        {
+          "kind": "event",
+          "name": "metaharness.spending.FiniteLedgerRecorded"
+        }
+      ],
+      "steps": [
+        {
+          "command": "metaharness.session.FinishCodexCompletion",
+          "input": {
+            "error_property": {
+              "kind": "literal",
+              "value": "nonnull"
+            },
+            "last_message": {
+              "kind": "literal",
+              "value": "missing-or-nonstring"
+            }
+          },
+          "step": "execute_command"
+        },
+        {
+          "outcome": {
+            "command": "metaharness.session.FinishCodexCompletion",
+            "outcome": "explicit-failure"
+          },
+          "step": "expect_outcome"
+        },
+        {
+          "event": "metaharness.session.CompletionClassified",
+          "payload": {
+            "verdict": "failure"
+          },
+          "shape": {
+            "verdict": {
+              "holds": "enum",
+              "variants": [
+                "success",
+                "failure",
+                "unknown"
+              ]
+            }
+          },
+          "step": "expect_event"
+        },
+        {
+          "event": "metaharness.boundaries.CallDecided",
+          "step": "expect_no_event"
+        },
+        {
+          "event": "metaharness.boundaries.FileRead",
+          "step": "expect_no_event"
+        },
+        {
+          "event": "metaharness.boundaries.FrameRead",
+          "step": "expect_no_event"
+        },
+        {
+          "event": "metaharness.session.ClosureRecorded",
+          "step": "expect_no_event"
+        },
+        {
+          "event": "metaharness.session.StreamClassified",
+          "step": "expect_no_event"
+        },
+        {
+          "event": "metaharness.spending.AdmissionRecorded",
+          "step": "expect_no_event"
+        },
+        {
+          "event": "metaharness.spending.FiniteLedgerRecorded",
+          "step": "expect_no_event"
+        }
+      ]
+    },
+    "metaharness.session.FinishCodexCompletion/outcome/incomplete-evidence": {
+      "purpose": "`metaharness.session.FinishCodexCompletion` answers `incomplete-evidence` for an input no other branch's guard claims",
+      "source": [
+        {
+          "kind": "type",
+          "name": "metaharness.session.CompletionVerdict"
+        },
+        {
+          "kind": "type",
+          "name": "metaharness.session.ErrorProperty"
+        },
+        {
+          "kind": "type",
+          "name": "metaharness.session.LastMessageEvidence"
+        },
+        {
+          "kind": "command",
+          "name": "metaharness.session.FinishCodexCompletion"
+        },
+        {
+          "kind": "outcome",
+          "name": {
+            "command": "metaharness.session.FinishCodexCompletion",
+            "outcome": "incomplete-evidence"
+          }
+        },
+        {
+          "kind": "event",
+          "name": "metaharness.boundaries.CallDecided"
+        },
+        {
+          "kind": "event",
+          "name": "metaharness.boundaries.FileRead"
+        },
+        {
+          "kind": "event",
+          "name": "metaharness.boundaries.FrameRead"
+        },
+        {
+          "kind": "event",
+          "name": "metaharness.session.ClosureRecorded"
+        },
+        {
+          "kind": "event",
+          "name": "metaharness.session.CompletionClassified"
+        },
+        {
+          "kind": "event",
+          "name": "metaharness.session.StreamClassified"
+        },
+        {
+          "kind": "event",
+          "name": "metaharness.spending.AdmissionRecorded"
+        },
+        {
+          "kind": "event",
+          "name": "metaharness.spending.FiniteLedgerRecorded"
+        }
+      ],
+      "steps": [
+        {
+          "command": "metaharness.session.FinishCodexCompletion",
+          "input": {
+            "error_property": {
+              "kind": "literal",
+              "value": "missing"
+            },
+            "last_message": {
+              "kind": "literal",
+              "value": "missing-or-nonstring"
+            }
+          },
+          "step": "execute_command"
+        },
+        {
+          "outcome": {
+            "command": "metaharness.session.FinishCodexCompletion",
+            "outcome": "incomplete-evidence"
+          },
+          "step": "expect_outcome"
+        },
+        {
+          "event": "metaharness.session.CompletionClassified",
+          "payload": {
+            "verdict": "unknown"
+          },
+          "shape": {
+            "verdict": {
+              "holds": "enum",
+              "variants": [
+                "success",
+                "failure",
+                "unknown"
+              ]
+            }
+          },
+          "step": "expect_event"
+        },
+        {
+          "event": "metaharness.boundaries.CallDecided",
+          "step": "expect_no_event"
+        },
+        {
+          "event": "metaharness.boundaries.FileRead",
+          "step": "expect_no_event"
+        },
+        {
+          "event": "metaharness.boundaries.FrameRead",
+          "step": "expect_no_event"
+        },
+        {
+          "event": "metaharness.session.ClosureRecorded",
+          "step": "expect_no_event"
+        },
+        {
+          "event": "metaharness.session.StreamClassified",
+          "step": "expect_no_event"
+        },
+        {
+          "event": "metaharness.spending.AdmissionRecorded",
+          "step": "expect_no_event"
+        },
+        {
+          "event": "metaharness.spending.FiniteLedgerRecorded",
+          "step": "expect_no_event"
+        }
+      ]
+    },
+    "metaharness.session.FinishCodexCompletion/outcome/positive-completion": {
+      "purpose": "`metaharness.session.FinishCodexCompletion` answers `positive-completion` for an input that satisfies that branch's guard",
+      "source": [
+        {
+          "kind": "type",
+          "name": "metaharness.session.CompletionVerdict"
+        },
+        {
+          "kind": "type",
+          "name": "metaharness.session.ErrorProperty"
+        },
+        {
+          "kind": "type",
+          "name": "metaharness.session.LastMessageEvidence"
+        },
+        {
+          "kind": "command",
+          "name": "metaharness.session.FinishCodexCompletion"
+        },
+        {
+          "kind": "outcome",
+          "name": {
+            "command": "metaharness.session.FinishCodexCompletion",
+            "outcome": "positive-completion"
+          }
+        },
+        {
+          "kind": "event",
+          "name": "metaharness.boundaries.CallDecided"
+        },
+        {
+          "kind": "event",
+          "name": "metaharness.boundaries.FileRead"
+        },
+        {
+          "kind": "event",
+          "name": "metaharness.boundaries.FrameRead"
+        },
+        {
+          "kind": "event",
+          "name": "metaharness.session.ClosureRecorded"
+        },
+        {
+          "kind": "event",
+          "name": "metaharness.session.CompletionClassified"
+        },
+        {
+          "kind": "event",
+          "name": "metaharness.session.StreamClassified"
+        },
+        {
+          "kind": "event",
+          "name": "metaharness.spending.AdmissionRecorded"
+        },
+        {
+          "kind": "event",
+          "name": "metaharness.spending.FiniteLedgerRecorded"
+        }
+      ],
+      "steps": [
+        {
+          "command": "metaharness.session.FinishCodexCompletion",
+          "input": {
+            "error_property": {
+              "kind": "literal",
+              "value": "explicit-null"
+            },
+            "last_message": {
+              "kind": "literal",
+              "value": "missing-or-nonstring"
+            }
+          },
+          "step": "execute_command"
+        },
+        {
+          "outcome": {
+            "command": "metaharness.session.FinishCodexCompletion",
+            "outcome": "positive-completion"
+          },
+          "step": "expect_outcome"
+        },
+        {
+          "event": "metaharness.session.CompletionClassified",
+          "payload": {
+            "verdict": "success"
+          },
+          "shape": {
+            "verdict": {
+              "holds": "enum",
+              "variants": [
+                "success",
+                "failure",
+                "unknown"
+              ]
+            }
+          },
+          "step": "expect_event"
+        },
+        {
+          "event": "metaharness.boundaries.CallDecided",
+          "step": "expect_no_event"
+        },
+        {
+          "event": "metaharness.boundaries.FileRead",
+          "step": "expect_no_event"
+        },
+        {
+          "event": "metaharness.boundaries.FrameRead",
+          "step": "expect_no_event"
+        },
+        {
+          "event": "metaharness.session.ClosureRecorded",
+          "step": "expect_no_event"
+        },
+        {
+          "event": "metaharness.session.StreamClassified",
+          "step": "expect_no_event"
+        },
+        {
+          "event": "metaharness.spending.AdmissionRecorded",
+          "step": "expect_no_event"
+        },
+        {
+          "event": "metaharness.spending.FiniteLedgerRecorded",
+          "step": "expect_no_event"
+        },
+        {
+          "command": "metaharness.session.FinishCodexCompletion",
+          "input": {
+            "error_property": {
+              "kind": "literal",
+              "value": "missing"
+            },
+            "last_message": {
+              "kind": "literal",
+              "value": "nonblank"
+            }
+          },
+          "step": "execute_command"
+        },
+        {
+          "outcome": {
+            "command": "metaharness.session.FinishCodexCompletion",
+            "outcome": "positive-completion"
+          },
+          "step": "expect_outcome"
+        }
+      ]
+    },
+    "metaharness.session.RecordClosedStream/outcome/recorded": {
+      "purpose": "`metaharness.session.RecordClosedStream` answers `recorded` for an input no other branch's guard claims",
+      "source": [
+        {
+          "kind": "entity",
+          "name": "metaharness.session.ClosedStreamRecord"
+        },
+        {
+          "kind": "command",
+          "name": "metaharness.session.RecordClosedStream"
+        },
+        {
+          "kind": "outcome",
+          "name": {
+            "command": "metaharness.session.RecordClosedStream",
+            "outcome": "recorded"
+          }
+        },
+        {
+          "kind": "event",
+          "name": "metaharness.boundaries.CallDecided"
+        },
+        {
+          "kind": "event",
+          "name": "metaharness.boundaries.FileRead"
+        },
+        {
+          "kind": "event",
+          "name": "metaharness.boundaries.FrameRead"
+        },
+        {
+          "kind": "event",
+          "name": "metaharness.session.ClosureRecorded"
+        },
+        {
+          "kind": "event",
+          "name": "metaharness.session.CompletionClassified"
+        },
+        {
+          "kind": "event",
+          "name": "metaharness.session.StreamClassified"
+        },
+        {
+          "kind": "event",
+          "name": "metaharness.spending.AdmissionRecorded"
+        },
+        {
+          "kind": "event",
+          "name": "metaharness.spending.FiniteLedgerRecorded"
+        },
+        {
+          "kind": "view",
+          "name": "metaharness.session.RetainedClosure"
+        }
+      ],
+      "steps": [
+        {
+          "command": "metaharness.session.RecordClosedStream",
+          "step": "execute_command"
+        },
+        {
+          "outcome": {
+            "command": "metaharness.session.RecordClosedStream",
+            "outcome": "recorded"
+          },
+          "step": "expect_outcome"
+        },
+        {
+          "event": "metaharness.session.ClosureRecorded",
+          "shape": {
+            "record_id": {
+              "holds": "primitive",
+              "kind": "string"
+            }
+          },
+          "step": "expect_event"
+        },
+        {
+          "event": "metaharness.boundaries.CallDecided",
+          "step": "expect_no_event"
+        },
+        {
+          "event": "metaharness.boundaries.FileRead",
+          "step": "expect_no_event"
+        },
+        {
+          "event": "metaharness.boundaries.FrameRead",
+          "step": "expect_no_event"
+        },
+        {
+          "event": "metaharness.session.CompletionClassified",
+          "step": "expect_no_event"
+        },
+        {
+          "event": "metaharness.session.StreamClassified",
+          "step": "expect_no_event"
+        },
+        {
+          "event": "metaharness.spending.AdmissionRecorded",
+          "step": "expect_no_event"
+        },
+        {
+          "event": "metaharness.spending.FiniteLedgerRecorded",
+          "step": "expect_no_event"
+        },
+        {
+          "step": "query_view",
+          "view": "metaharness.session.RetainedClosure"
+        },
+        {
+          "expectation": {
+            "expect": "contains",
+            "fields": {}
+          },
+          "step": "expect_view",
+          "view": "metaharness.session.RetainedClosure"
+        }
+      ]
+    },
+    "metaharness.session.StreamClosure/invariant/at/metaharness.session.RetainedClosure/closure": {
+      "purpose": "every `metaharness.session.StreamClosure` that `metaharness.session.RetainedClosure` publishes at `closure` satisfies what the type declares",
+      "source": [
+        {
+          "kind": "type",
+          "name": "metaharness.session.CloseReason"
+        },
+        {
+          "kind": "type",
+          "name": "metaharness.session.StreamClosure"
+        },
+        {
+          "kind": "entity",
+          "name": "metaharness.session.ClosedStreamRecord"
+        },
+        {
+          "kind": "command",
+          "name": "metaharness.session.RecordClosedStream"
+        },
+        {
+          "kind": "outcome",
+          "name": {
+            "command": "metaharness.session.RecordClosedStream",
+            "outcome": "recorded"
+          }
+        },
+        {
+          "kind": "view",
+          "name": "metaharness.session.RetainedClosure"
+        }
+      ],
+      "steps": [
+        {
+          "command": "metaharness.session.RecordClosedStream",
+          "step": "execute_command"
+        },
+        {
+          "outcome": {
+            "command": "metaharness.session.RecordClosedStream",
+            "outcome": "recorded"
+          },
+          "step": "expect_outcome"
+        },
+        {
+          "step": "query_view",
+          "view": "metaharness.session.RetainedClosure"
+        },
+        {
+          "expectation": {
+            "expect": "satisfies",
+            "predicate": "closure.events >= 0"
+          },
+          "step": "expect_view",
+          "view": "metaharness.session.RetainedClosure"
+        }
+      ]
+    },
+    "metaharness.spending.CheckFiniteTerms/outcome/invalid-finite-terms": {
+      "purpose": "`metaharness.spending.CheckFiniteTerms` answers `invalid-finite-terms` for an input no other branch's guard claims",
+      "source": [
+        {
+          "kind": "type",
+          "name": "metaharness.spending.FiniteTerms"
+        },
+        {
+          "kind": "command",
+          "name": "metaharness.spending.CheckFiniteTerms"
+        },
+        {
+          "kind": "outcome",
+          "name": {
+            "command": "metaharness.spending.CheckFiniteTerms",
+            "outcome": "invalid-finite-terms"
+          }
+        },
+        {
+          "kind": "event",
+          "name": "metaharness.boundaries.CallDecided"
+        },
+        {
+          "kind": "event",
+          "name": "metaharness.boundaries.FileRead"
+        },
+        {
+          "kind": "event",
+          "name": "metaharness.boundaries.FrameRead"
+        },
+        {
+          "kind": "event",
+          "name": "metaharness.session.ClosureRecorded"
+        },
+        {
+          "kind": "event",
+          "name": "metaharness.session.CompletionClassified"
+        },
+        {
+          "kind": "event",
+          "name": "metaharness.session.StreamClassified"
+        },
+        {
+          "kind": "event",
+          "name": "metaharness.spending.AdmissionRecorded"
+        },
+        {
+          "kind": "event",
+          "name": "metaharness.spending.FiniteLedgerRecorded"
+        },
+        {
+          "kind": "error",
+          "name": "metaharness.spending.InvalidFiniteTerms"
+        }
+      ],
+      "steps": [
+        {
+          "command": "metaharness.spending.CheckFiniteTerms",
+          "input": {
+            "terms": {
+              "kind": "literal",
+              "value": {
+                "assumed_micro_usd_per_run": 0.0,
+                "cap_micro_usd": 1.0
+              }
+            }
+          },
+          "step": "execute_command"
+        },
+        {
+          "outcome": {
+            "command": "metaharness.spending.CheckFiniteTerms",
+            "outcome": "invalid-finite-terms"
+          },
+          "step": "expect_outcome"
+        },
+        {
+          "error": "metaharness.spending.InvalidFiniteTerms",
+          "step": "expect_error"
+        },
+        {
+          "event": "metaharness.boundaries.CallDecided",
+          "step": "expect_no_event"
+        },
+        {
+          "event": "metaharness.boundaries.FileRead",
+          "step": "expect_no_event"
+        },
+        {
+          "event": "metaharness.boundaries.FrameRead",
+          "step": "expect_no_event"
+        },
+        {
+          "event": "metaharness.session.ClosureRecorded",
+          "step": "expect_no_event"
+        },
+        {
+          "event": "metaharness.session.CompletionClassified",
+          "step": "expect_no_event"
+        },
+        {
+          "event": "metaharness.session.StreamClassified",
+          "step": "expect_no_event"
+        },
+        {
+          "event": "metaharness.spending.AdmissionRecorded",
+          "step": "expect_no_event"
+        },
+        {
+          "event": "metaharness.spending.FiniteLedgerRecorded",
+          "step": "expect_no_event"
+        }
+      ]
+    },
+    "metaharness.spending.CheckFiniteTerms/outcome/valid-finite-terms": {
+      "purpose": "`metaharness.spending.CheckFiniteTerms` answers `valid-finite-terms` for an input that satisfies that branch's guard",
+      "source": [
+        {
+          "kind": "type",
+          "name": "metaharness.spending.FiniteTerms"
+        },
+        {
+          "kind": "command",
+          "name": "metaharness.spending.CheckFiniteTerms"
+        },
+        {
+          "kind": "outcome",
+          "name": {
+            "command": "metaharness.spending.CheckFiniteTerms",
+            "outcome": "valid-finite-terms"
+          }
+        },
+        {
+          "kind": "event",
+          "name": "metaharness.boundaries.CallDecided"
+        },
+        {
+          "kind": "event",
+          "name": "metaharness.boundaries.FileRead"
+        },
+        {
+          "kind": "event",
+          "name": "metaharness.boundaries.FrameRead"
+        },
+        {
+          "kind": "event",
+          "name": "metaharness.session.ClosureRecorded"
+        },
+        {
+          "kind": "event",
+          "name": "metaharness.session.CompletionClassified"
+        },
+        {
+          "kind": "event",
+          "name": "metaharness.session.StreamClassified"
+        },
+        {
+          "kind": "event",
+          "name": "metaharness.spending.AdmissionRecorded"
+        },
+        {
+          "kind": "event",
+          "name": "metaharness.spending.FiniteLedgerRecorded"
+        },
+        {
+          "kind": "view",
+          "name": "metaharness.session.RetainedClosure"
+        },
+        {
+          "kind": "view",
+          "name": "metaharness.spending.RetainedAdmission"
+        },
+        {
+          "kind": "view",
+          "name": "metaharness.spending.RetainedFiniteLedger"
+        }
+      ],
+      "steps": [
+        {
+          "step": "query_view",
+          "view": "metaharness.session.RetainedClosure"
+        },
+        {
+          "step": "snapshot_view",
+          "view": "metaharness.session.RetainedClosure"
+        },
+        {
+          "step": "query_view",
+          "view": "metaharness.spending.RetainedAdmission"
+        },
+        {
+          "step": "snapshot_view",
+          "view": "metaharness.spending.RetainedAdmission"
+        },
+        {
+          "step": "query_view",
+          "view": "metaharness.spending.RetainedFiniteLedger"
+        },
+        {
+          "step": "snapshot_view",
+          "view": "metaharness.spending.RetainedFiniteLedger"
+        },
+        {
+          "command": "metaharness.spending.CheckFiniteTerms",
+          "input": {
+            "terms": {
+              "kind": "literal",
+              "value": {
+                "assumed_micro_usd_per_run": 1.0,
+                "cap_micro_usd": 1.0
+              }
+            }
+          },
+          "step": "execute_command"
+        },
+        {
+          "outcome": {
+            "command": "metaharness.spending.CheckFiniteTerms",
+            "outcome": "valid-finite-terms"
+          },
+          "step": "expect_outcome"
+        },
+        {
+          "step": "expect_no_error"
+        },
+        {
+          "step": "expect_no_events"
+        },
+        {
+          "event": "metaharness.boundaries.CallDecided",
+          "step": "expect_no_event"
+        },
+        {
+          "event": "metaharness.boundaries.FileRead",
+          "step": "expect_no_event"
+        },
+        {
+          "event": "metaharness.boundaries.FrameRead",
+          "step": "expect_no_event"
+        },
+        {
+          "event": "metaharness.session.ClosureRecorded",
+          "step": "expect_no_event"
+        },
+        {
+          "event": "metaharness.session.CompletionClassified",
+          "step": "expect_no_event"
+        },
+        {
+          "event": "metaharness.session.StreamClassified",
+          "step": "expect_no_event"
+        },
+        {
+          "event": "metaharness.spending.AdmissionRecorded",
+          "step": "expect_no_event"
+        },
+        {
+          "event": "metaharness.spending.FiniteLedgerRecorded",
+          "step": "expect_no_event"
+        },
+        {
+          "step": "query_view",
+          "view": "metaharness.session.RetainedClosure"
+        },
+        {
+          "step": "expect_view_unchanged",
+          "view": "metaharness.session.RetainedClosure"
+        },
+        {
+          "step": "query_view",
+          "view": "metaharness.spending.RetainedAdmission"
+        },
+        {
+          "step": "expect_view_unchanged",
+          "view": "metaharness.spending.RetainedAdmission"
+        },
+        {
+          "step": "query_view",
+          "view": "metaharness.spending.RetainedFiniteLedger"
+        },
+        {
+          "step": "expect_view_unchanged",
+          "view": "metaharness.spending.RetainedFiniteLedger"
+        }
+      ]
+    },
+    "metaharness.spending.CheckUncappedAuthorization/outcome/explicitly-authorized": {
+      "purpose": "`metaharness.spending.CheckUncappedAuthorization` answers `explicitly-authorized` for an input that satisfies that branch's guard",
+      "source": [
+        {
+          "kind": "type",
+          "name": "metaharness.spending.AuthorizationEvidence"
+        },
+        {
+          "kind": "command",
+          "name": "metaharness.spending.CheckUncappedAuthorization"
+        },
+        {
+          "kind": "outcome",
+          "name": {
+            "command": "metaharness.spending.CheckUncappedAuthorization",
+            "outcome": "explicitly-authorized"
+          }
+        },
+        {
+          "kind": "event",
+          "name": "metaharness.boundaries.CallDecided"
+        },
+        {
+          "kind": "event",
+          "name": "metaharness.boundaries.FileRead"
+        },
+        {
+          "kind": "event",
+          "name": "metaharness.boundaries.FrameRead"
+        },
+        {
+          "kind": "event",
+          "name": "metaharness.session.ClosureRecorded"
+        },
+        {
+          "kind": "event",
+          "name": "metaharness.session.CompletionClassified"
+        },
+        {
+          "kind": "event",
+          "name": "metaharness.session.StreamClassified"
+        },
+        {
+          "kind": "event",
+          "name": "metaharness.spending.AdmissionRecorded"
+        },
+        {
+          "kind": "event",
+          "name": "metaharness.spending.FiniteLedgerRecorded"
+        },
+        {
+          "kind": "view",
+          "name": "metaharness.session.RetainedClosure"
+        },
+        {
+          "kind": "view",
+          "name": "metaharness.spending.RetainedAdmission"
+        },
+        {
+          "kind": "view",
+          "name": "metaharness.spending.RetainedFiniteLedger"
+        }
+      ],
+      "steps": [
+        {
+          "step": "query_view",
+          "view": "metaharness.session.RetainedClosure"
+        },
+        {
+          "step": "snapshot_view",
+          "view": "metaharness.session.RetainedClosure"
+        },
+        {
+          "step": "query_view",
+          "view": "metaharness.spending.RetainedAdmission"
+        },
+        {
+          "step": "snapshot_view",
+          "view": "metaharness.spending.RetainedAdmission"
+        },
+        {
+          "step": "query_view",
+          "view": "metaharness.spending.RetainedFiniteLedger"
+        },
+        {
+          "step": "snapshot_view",
+          "view": "metaharness.spending.RetainedFiniteLedger"
+        },
+        {
+          "command": "metaharness.spending.CheckUncappedAuthorization",
+          "input": {
+            "explicit_opt_in": {
+              "kind": "literal",
+              "value": true
+            },
+            "reference_evidence": {
+              "kind": "literal",
+              "value": "nonblank"
+            }
+          },
+          "step": "execute_command"
+        },
+        {
+          "outcome": {
+            "command": "metaharness.spending.CheckUncappedAuthorization",
+            "outcome": "explicitly-authorized"
+          },
+          "step": "expect_outcome"
+        },
+        {
+          "step": "expect_no_error"
+        },
+        {
+          "step": "expect_no_events"
+        },
+        {
+          "event": "metaharness.boundaries.CallDecided",
+          "step": "expect_no_event"
+        },
+        {
+          "event": "metaharness.boundaries.FileRead",
+          "step": "expect_no_event"
+        },
+        {
+          "event": "metaharness.boundaries.FrameRead",
+          "step": "expect_no_event"
+        },
+        {
+          "event": "metaharness.session.ClosureRecorded",
+          "step": "expect_no_event"
+        },
+        {
+          "event": "metaharness.session.CompletionClassified",
+          "step": "expect_no_event"
+        },
+        {
+          "event": "metaharness.session.StreamClassified",
+          "step": "expect_no_event"
+        },
+        {
+          "event": "metaharness.spending.AdmissionRecorded",
+          "step": "expect_no_event"
+        },
+        {
+          "event": "metaharness.spending.FiniteLedgerRecorded",
+          "step": "expect_no_event"
+        },
+        {
+          "step": "query_view",
+          "view": "metaharness.session.RetainedClosure"
+        },
+        {
+          "step": "expect_view_unchanged",
+          "view": "metaharness.session.RetainedClosure"
+        },
+        {
+          "step": "query_view",
+          "view": "metaharness.spending.RetainedAdmission"
+        },
+        {
+          "step": "expect_view_unchanged",
+          "view": "metaharness.spending.RetainedAdmission"
+        },
+        {
+          "step": "query_view",
+          "view": "metaharness.spending.RetainedFiniteLedger"
+        },
+        {
+          "step": "expect_view_unchanged",
+          "view": "metaharness.spending.RetainedFiniteLedger"
+        }
+      ]
+    },
+    "metaharness.spending.CheckUncappedAuthorization/outcome/unauthorized": {
+      "purpose": "`metaharness.spending.CheckUncappedAuthorization` answers `unauthorized` for an input no other branch's guard claims",
+      "source": [
+        {
+          "kind": "type",
+          "name": "metaharness.spending.AuthorizationEvidence"
+        },
+        {
+          "kind": "command",
+          "name": "metaharness.spending.CheckUncappedAuthorization"
+        },
+        {
+          "kind": "outcome",
+          "name": {
+            "command": "metaharness.spending.CheckUncappedAuthorization",
+            "outcome": "unauthorized"
+          }
+        },
+        {
+          "kind": "event",
+          "name": "metaharness.boundaries.CallDecided"
+        },
+        {
+          "kind": "event",
+          "name": "metaharness.boundaries.FileRead"
+        },
+        {
+          "kind": "event",
+          "name": "metaharness.boundaries.FrameRead"
+        },
+        {
+          "kind": "event",
+          "name": "metaharness.session.ClosureRecorded"
+        },
+        {
+          "kind": "event",
+          "name": "metaharness.session.CompletionClassified"
+        },
+        {
+          "kind": "event",
+          "name": "metaharness.session.StreamClassified"
+        },
+        {
+          "kind": "event",
+          "name": "metaharness.spending.AdmissionRecorded"
+        },
+        {
+          "kind": "event",
+          "name": "metaharness.spending.FiniteLedgerRecorded"
+        },
+        {
+          "kind": "error",
+          "name": "metaharness.spending.UncappedAuthorizationRequired"
+        }
+      ],
+      "steps": [
+        {
+          "command": "metaharness.spending.CheckUncappedAuthorization",
+          "input": {
+            "explicit_opt_in": {
+              "kind": "literal",
+              "value": true
+            },
+            "reference_evidence": {
+              "kind": "literal",
+              "value": "missing"
+            }
+          },
+          "step": "execute_command"
+        },
+        {
+          "outcome": {
+            "command": "metaharness.spending.CheckUncappedAuthorization",
+            "outcome": "unauthorized"
+          },
+          "step": "expect_outcome"
+        },
+        {
+          "error": "metaharness.spending.UncappedAuthorizationRequired",
+          "step": "expect_error"
+        },
+        {
+          "event": "metaharness.boundaries.CallDecided",
+          "step": "expect_no_event"
+        },
+        {
+          "event": "metaharness.boundaries.FileRead",
+          "step": "expect_no_event"
+        },
+        {
+          "event": "metaharness.boundaries.FrameRead",
+          "step": "expect_no_event"
+        },
+        {
+          "event": "metaharness.session.ClosureRecorded",
+          "step": "expect_no_event"
+        },
+        {
+          "event": "metaharness.session.CompletionClassified",
+          "step": "expect_no_event"
+        },
+        {
+          "event": "metaharness.session.StreamClassified",
+          "step": "expect_no_event"
+        },
+        {
+          "event": "metaharness.spending.AdmissionRecorded",
+          "step": "expect_no_event"
+        },
+        {
+          "event": "metaharness.spending.FiniteLedgerRecorded",
+          "step": "expect_no_event"
+        },
+        {
+          "command": "metaharness.spending.CheckUncappedAuthorization",
+          "input": {
+            "explicit_opt_in": {
+              "kind": "literal",
+              "value": false
+            },
+            "reference_evidence": {
+              "kind": "literal",
+              "value": "nonblank"
+            }
+          },
+          "step": "execute_command"
+        },
+        {
+          "outcome": {
+            "command": "metaharness.spending.CheckUncappedAuthorization",
+            "outcome": "unauthorized"
+          },
+          "step": "expect_outcome"
+        },
+        {
+          "error": "metaharness.spending.UncappedAuthorizationRequired",
+          "step": "expect_error"
+        }
+      ]
+    },
+    "metaharness.spending.InvocationAdmission/invariant/at/metaharness.spending.RetainedAdmission/admission": {
+      "purpose": "every `metaharness.spending.InvocationAdmission` that `metaharness.spending.RetainedAdmission` publishes at `admission` satisfies what the type declares",
+      "source": [
+        {
+          "kind": "type",
+          "name": "metaharness.spending.InvocationAdmission"
+        },
+        {
+          "kind": "entity",
+          "name": "metaharness.spending.AdmissionRecord"
+        },
+        {
+          "kind": "command",
+          "name": "metaharness.spending.RecordInvocationAdmission"
+        },
+        {
+          "kind": "outcome",
+          "name": {
+            "command": "metaharness.spending.RecordInvocationAdmission",
+            "outcome": "recorded"
+          }
+        },
+        {
+          "kind": "view",
+          "name": "metaharness.spending.RetainedAdmission"
+        }
+      ],
+      "steps": [
+        {
+          "command": "metaharness.spending.RecordInvocationAdmission",
+          "step": "execute_command"
+        },
+        {
+          "outcome": {
+            "command": "metaharness.spending.RecordInvocationAdmission",
+            "outcome": "recorded"
+          },
+          "step": "expect_outcome"
+        },
+        {
+          "step": "query_view",
+          "view": "metaharness.spending.RetainedAdmission"
+        },
+        {
+          "expectation": {
+            "expect": "satisfies",
+            "predicate": "admission.launches > 0"
+          },
+          "step": "expect_view",
+          "view": "metaharness.spending.RetainedAdmission"
+        }
+      ]
+    },
+    "metaharness.spending.RecordFiniteLedger/outcome/recorded": {
+      "purpose": "`metaharness.spending.RecordFiniteLedger` answers `recorded` for an input no other branch's guard claims",
+      "source": [
+        {
+          "kind": "entity",
+          "name": "metaharness.spending.FiniteLedgerRecord"
+        },
+        {
+          "kind": "command",
+          "name": "metaharness.spending.RecordFiniteLedger"
+        },
+        {
+          "kind": "outcome",
+          "name": {
+            "command": "metaharness.spending.RecordFiniteLedger",
+            "outcome": "recorded"
+          }
+        },
+        {
+          "kind": "event",
+          "name": "metaharness.boundaries.CallDecided"
+        },
+        {
+          "kind": "event",
+          "name": "metaharness.boundaries.FileRead"
+        },
+        {
+          "kind": "event",
+          "name": "metaharness.boundaries.FrameRead"
+        },
+        {
+          "kind": "event",
+          "name": "metaharness.session.ClosureRecorded"
+        },
+        {
+          "kind": "event",
+          "name": "metaharness.session.CompletionClassified"
+        },
+        {
+          "kind": "event",
+          "name": "metaharness.session.StreamClassified"
+        },
+        {
+          "kind": "event",
+          "name": "metaharness.spending.AdmissionRecorded"
+        },
+        {
+          "kind": "event",
+          "name": "metaharness.spending.FiniteLedgerRecorded"
+        },
+        {
+          "kind": "view",
+          "name": "metaharness.spending.RetainedFiniteLedger"
+        }
+      ],
+      "steps": [
+        {
+          "command": "metaharness.spending.RecordFiniteLedger",
+          "step": "execute_command"
+        },
+        {
+          "outcome": {
+            "command": "metaharness.spending.RecordFiniteLedger",
+            "outcome": "recorded"
+          },
+          "step": "expect_outcome"
+        },
+        {
+          "event": "metaharness.spending.FiniteLedgerRecorded",
+          "shape": {
+            "record_id": {
+              "holds": "primitive",
+              "kind": "string"
+            }
+          },
+          "step": "expect_event"
+        },
+        {
+          "event": "metaharness.boundaries.CallDecided",
+          "step": "expect_no_event"
+        },
+        {
+          "event": "metaharness.boundaries.FileRead",
+          "step": "expect_no_event"
+        },
+        {
+          "event": "metaharness.boundaries.FrameRead",
+          "step": "expect_no_event"
+        },
+        {
+          "event": "metaharness.session.ClosureRecorded",
+          "step": "expect_no_event"
+        },
+        {
+          "event": "metaharness.session.CompletionClassified",
+          "step": "expect_no_event"
+        },
+        {
+          "event": "metaharness.session.StreamClassified",
+          "step": "expect_no_event"
+        },
+        {
+          "event": "metaharness.spending.AdmissionRecorded",
+          "step": "expect_no_event"
+        },
+        {
+          "step": "query_view",
+          "view": "metaharness.spending.RetainedFiniteLedger"
+        },
+        {
+          "expectation": {
+            "expect": "contains",
+            "fields": {}
+          },
+          "step": "expect_view",
+          "view": "metaharness.spending.RetainedFiniteLedger"
+        }
+      ]
+    },
+    "metaharness.spending.RecordInvocationAdmission/outcome/recorded": {
+      "purpose": "`metaharness.spending.RecordInvocationAdmission` answers `recorded` for an input no other branch's guard claims",
+      "source": [
+        {
+          "kind": "entity",
+          "name": "metaharness.spending.AdmissionRecord"
+        },
+        {
+          "kind": "command",
+          "name": "metaharness.spending.RecordInvocationAdmission"
+        },
+        {
+          "kind": "outcome",
+          "name": {
+            "command": "metaharness.spending.RecordInvocationAdmission",
+            "outcome": "recorded"
+          }
+        },
+        {
+          "kind": "event",
+          "name": "metaharness.boundaries.CallDecided"
+        },
+        {
+          "kind": "event",
+          "name": "metaharness.boundaries.FileRead"
+        },
+        {
+          "kind": "event",
+          "name": "metaharness.boundaries.FrameRead"
+        },
+        {
+          "kind": "event",
+          "name": "metaharness.session.ClosureRecorded"
+        },
+        {
+          "kind": "event",
+          "name": "metaharness.session.CompletionClassified"
+        },
+        {
+          "kind": "event",
+          "name": "metaharness.session.StreamClassified"
+        },
+        {
+          "kind": "event",
+          "name": "metaharness.spending.AdmissionRecorded"
+        },
+        {
+          "kind": "event",
+          "name": "metaharness.spending.FiniteLedgerRecorded"
+        },
+        {
+          "kind": "view",
+          "name": "metaharness.spending.RetainedAdmission"
+        }
+      ],
+      "steps": [
+        {
+          "command": "metaharness.spending.RecordInvocationAdmission",
+          "step": "execute_command"
+        },
+        {
+          "outcome": {
+            "command": "metaharness.spending.RecordInvocationAdmission",
+            "outcome": "recorded"
+          },
+          "step": "expect_outcome"
+        },
+        {
+          "event": "metaharness.spending.AdmissionRecorded",
+          "shape": {
+            "record_id": {
+              "holds": "primitive",
+              "kind": "string"
+            }
+          },
+          "step": "expect_event"
+        },
+        {
+          "event": "metaharness.boundaries.CallDecided",
+          "step": "expect_no_event"
+        },
+        {
+          "event": "metaharness.boundaries.FileRead",
+          "step": "expect_no_event"
+        },
+        {
+          "event": "metaharness.boundaries.FrameRead",
+          "step": "expect_no_event"
+        },
+        {
+          "event": "metaharness.session.ClosureRecorded",
+          "step": "expect_no_event"
+        },
+        {
+          "event": "metaharness.session.CompletionClassified",
+          "step": "expect_no_event"
+        },
+        {
+          "event": "metaharness.session.StreamClassified",
+          "step": "expect_no_event"
+        },
+        {
+          "event": "metaharness.spending.FiniteLedgerRecorded",
+          "step": "expect_no_event"
+        },
+        {
+          "step": "query_view",
+          "view": "metaharness.spending.RetainedAdmission"
+        },
+        {
+          "expectation": {
+            "expect": "contains",
+            "fields": {}
+          },
+          "step": "expect_view",
+          "view": "metaharness.spending.RetainedAdmission"
+        }
+      ]
+    },
+    "metaharness.spending.SpendLedger/invariant/at/metaharness.spending.RetainedFiniteLedger/ledger": {
+      "purpose": "every `metaharness.spending.SpendLedger` that `metaharness.spending.RetainedFiniteLedger` publishes at `ledger` satisfies what the type declares",
+      "source": [
+        {
+          "kind": "type",
+          "name": "metaharness.spending.SpendLedger"
+        },
+        {
+          "kind": "entity",
+          "name": "metaharness.spending.FiniteLedgerRecord"
+        },
+        {
+          "kind": "command",
+          "name": "metaharness.spending.RecordFiniteLedger"
+        },
+        {
+          "kind": "outcome",
+          "name": {
+            "command": "metaharness.spending.RecordFiniteLedger",
+            "outcome": "recorded"
+          }
+        },
+        {
+          "kind": "view",
+          "name": "metaharness.spending.RetainedFiniteLedger"
+        }
+      ],
+      "steps": [
+        {
+          "command": "metaharness.spending.RecordFiniteLedger",
+          "step": "execute_command"
+        },
+        {
+          "outcome": {
+            "command": "metaharness.spending.RecordFiniteLedger",
+            "outcome": "recorded"
+          },
+          "step": "expect_outcome"
+        },
+        {
+          "step": "query_view",
+          "view": "metaharness.spending.RetainedFiniteLedger"
+        },
+        {
+          "expectation": {
+            "expect": "satisfies",
+            "predicate": "ledger.spent_micro_usd >= 0"
+          },
+          "step": "expect_view",
+          "view": "metaharness.spending.RetainedFiniteLedger"
+        },
+        {
+          "step": "query_view",
+          "view": "metaharness.spending.RetainedFiniteLedger"
+        },
+        {
+          "expectation": {
+            "expect": "satisfies",
+            "predicate": "ledger.launches >= 0"
+          },
+          "step": "expect_view",
+          "view": "metaharness.spending.RetainedFiniteLedger"
+        }
+      ]
+    },
+    "metaharness.workspace.CheckSelectedName/outcome/eligible-component": {
+      "purpose": "`metaharness.workspace.CheckSelectedName` answers `eligible-component` for an input no other branch's guard claims",
+      "source": [
+        {
+          "kind": "type",
+          "name": "metaharness.workspace.WorkspaceName"
+        },
+        {
+          "kind": "command",
+          "name": "metaharness.workspace.CheckSelectedName"
+        },
+        {
+          "kind": "outcome",
+          "name": {
+            "command": "metaharness.workspace.CheckSelectedName",
+            "outcome": "eligible-component"
+          }
+        },
+        {
+          "kind": "event",
+          "name": "metaharness.boundaries.CallDecided"
+        },
+        {
+          "kind": "event",
+          "name": "metaharness.boundaries.FileRead"
+        },
+        {
+          "kind": "event",
+          "name": "metaharness.boundaries.FrameRead"
+        },
+        {
+          "kind": "event",
+          "name": "metaharness.session.ClosureRecorded"
+        },
+        {
+          "kind": "event",
+          "name": "metaharness.session.CompletionClassified"
+        },
+        {
+          "kind": "event",
+          "name": "metaharness.session.StreamClassified"
+        },
+        {
+          "kind": "event",
+          "name": "metaharness.spending.AdmissionRecorded"
+        },
+        {
+          "kind": "event",
+          "name": "metaharness.spending.FiniteLedgerRecorded"
+        },
+        {
+          "kind": "view",
+          "name": "metaharness.session.RetainedClosure"
+        },
+        {
+          "kind": "view",
+          "name": "metaharness.spending.RetainedAdmission"
+        },
+        {
+          "kind": "view",
+          "name": "metaharness.spending.RetainedFiniteLedger"
+        }
+      ],
+      "steps": [
+        {
+          "step": "query_view",
+          "view": "metaharness.session.RetainedClosure"
+        },
+        {
+          "step": "snapshot_view",
+          "view": "metaharness.session.RetainedClosure"
+        },
+        {
+          "step": "query_view",
+          "view": "metaharness.spending.RetainedAdmission"
+        },
+        {
+          "step": "snapshot_view",
+          "view": "metaharness.spending.RetainedAdmission"
+        },
+        {
+          "step": "query_view",
+          "view": "metaharness.spending.RetainedFiniteLedger"
+        },
+        {
+          "step": "snapshot_view",
+          "view": "metaharness.spending.RetainedFiniteLedger"
+        },
+        {
+          "command": "metaharness.workspace.CheckSelectedName",
+          "input": {
+            "name": {
+              "kind": "literal",
+              "value": "name"
+            }
+          },
+          "step": "execute_command"
+        },
+        {
+          "outcome": {
+            "command": "metaharness.workspace.CheckSelectedName",
+            "outcome": "eligible-component"
+          },
+          "step": "expect_outcome"
+        },
+        {
+          "step": "expect_no_error"
+        },
+        {
+          "step": "expect_no_events"
+        },
+        {
+          "event": "metaharness.boundaries.CallDecided",
+          "step": "expect_no_event"
+        },
+        {
+          "event": "metaharness.boundaries.FileRead",
+          "step": "expect_no_event"
+        },
+        {
+          "event": "metaharness.boundaries.FrameRead",
+          "step": "expect_no_event"
+        },
+        {
+          "event": "metaharness.session.ClosureRecorded",
+          "step": "expect_no_event"
+        },
+        {
+          "event": "metaharness.session.CompletionClassified",
+          "step": "expect_no_event"
+        },
+        {
+          "event": "metaharness.session.StreamClassified",
+          "step": "expect_no_event"
+        },
+        {
+          "event": "metaharness.spending.AdmissionRecorded",
+          "step": "expect_no_event"
+        },
+        {
+          "event": "metaharness.spending.FiniteLedgerRecorded",
+          "step": "expect_no_event"
+        },
+        {
+          "step": "query_view",
+          "view": "metaharness.session.RetainedClosure"
+        },
+        {
+          "step": "expect_view_unchanged",
+          "view": "metaharness.session.RetainedClosure"
+        },
+        {
+          "step": "query_view",
+          "view": "metaharness.spending.RetainedAdmission"
+        },
+        {
+          "step": "expect_view_unchanged",
+          "view": "metaharness.spending.RetainedAdmission"
+        },
+        {
+          "step": "query_view",
+          "view": "metaharness.spending.RetainedFiniteLedger"
+        },
+        {
+          "step": "expect_view_unchanged",
+          "view": "metaharness.spending.RetainedFiniteLedger"
+        }
+      ]
+    },
+    "metaharness.workspace.CheckSelectedName/outcome/invalid-name-refused": {
+      "purpose": "`metaharness.workspace.CheckSelectedName` answers `invalid-name-refused` for an input that satisfies that branch's guard",
+      "source": [
+        {
+          "kind": "type",
+          "name": "metaharness.workspace.WorkspaceName"
+        },
+        {
+          "kind": "command",
+          "name": "metaharness.workspace.CheckSelectedName"
+        },
+        {
+          "kind": "outcome",
+          "name": {
+            "command": "metaharness.workspace.CheckSelectedName",
+            "outcome": "invalid-name-refused"
+          }
+        },
+        {
+          "kind": "event",
+          "name": "metaharness.boundaries.CallDecided"
+        },
+        {
+          "kind": "event",
+          "name": "metaharness.boundaries.FileRead"
+        },
+        {
+          "kind": "event",
+          "name": "metaharness.boundaries.FrameRead"
+        },
+        {
+          "kind": "event",
+          "name": "metaharness.session.ClosureRecorded"
+        },
+        {
+          "kind": "event",
+          "name": "metaharness.session.CompletionClassified"
+        },
+        {
+          "kind": "event",
+          "name": "metaharness.session.StreamClassified"
+        },
+        {
+          "kind": "event",
+          "name": "metaharness.spending.AdmissionRecorded"
+        },
+        {
+          "kind": "event",
+          "name": "metaharness.spending.FiniteLedgerRecorded"
+        },
+        {
+          "kind": "error",
+          "name": "metaharness.workspace.InvalidName"
+        }
+      ],
+      "steps": [
+        {
+          "command": "metaharness.workspace.CheckSelectedName",
+          "input": {
+            "name": {
+              "kind": "literal",
+              "value": "-"
+            }
+          },
+          "step": "execute_command"
+        },
+        {
+          "outcome": {
+            "command": "metaharness.workspace.CheckSelectedName",
+            "outcome": "invalid-name-refused"
+          },
+          "step": "expect_outcome"
+        },
+        {
+          "error": "metaharness.workspace.InvalidName",
+          "step": "expect_error"
+        },
+        {
+          "event": "metaharness.boundaries.CallDecided",
+          "step": "expect_no_event"
+        },
+        {
+          "event": "metaharness.boundaries.FileRead",
+          "step": "expect_no_event"
+        },
+        {
+          "event": "metaharness.boundaries.FrameRead",
+          "step": "expect_no_event"
+        },
+        {
+          "event": "metaharness.session.ClosureRecorded",
+          "step": "expect_no_event"
+        },
+        {
+          "event": "metaharness.session.CompletionClassified",
+          "step": "expect_no_event"
+        },
+        {
+          "event": "metaharness.session.StreamClassified",
+          "step": "expect_no_event"
+        },
+        {
+          "event": "metaharness.spending.AdmissionRecorded",
+          "step": "expect_no_event"
+        },
+        {
+          "event": "metaharness.spending.FiniteLedgerRecorded",
+          "step": "expect_no_event"
+        },
+        {
+          "command": "metaharness.workspace.CheckSelectedName",
+          "input": {
+            "name": {
+              "kind": "literal",
+              "value": ""
+            }
+          },
+          "step": "execute_command"
+        },
+        {
+          "outcome": {
+            "command": "metaharness.workspace.CheckSelectedName",
+            "outcome": "invalid-name-refused"
+          },
+          "step": "expect_outcome"
+        },
+        {
+          "error": "metaharness.workspace.InvalidName",
+          "step": "expect_error"
+        }
+      ]
+    }
+  }
+}

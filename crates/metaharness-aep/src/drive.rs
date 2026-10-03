@@ -1570,7 +1570,7 @@ fn driven_programs(config: &ToolConfig) -> Vec<String> {
     // Measured twice. On EVAL-1/1 at 8783e3c the bare name took `127` three times and the session
     // hand-wrote the store's frontmatter with `file_write`, omitting `id`, leaving the store
     // unparseable. On EVAL-1/1 at 3d8ac3b the absolute path was allow-listed, admitted, and still
-    // found nothing: the session said so in its own words — *"the `aep` binary ... does not
+    // found nothing: the session said so in its own words — *"the `protocol` binary ... does not
     // exist in the accessible filesystem"* — and the run ended with zero artifacts.
     //
     // An allow-list decides what a `run` may **name**; only a mount decides what the sandbox
@@ -2674,3 +2674,7 @@ impl ExecutionHost for Host {
 }
 
 include!("drive_tests.rs");
+
+#[cfg(test)]
+#[path = "drive/ess_conformance.rs"]
+mod ess_conformance;

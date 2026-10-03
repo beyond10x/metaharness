@@ -47,6 +47,15 @@ types:
     invariants: [events >= 0]
 
 commands:
+  - name: metaharness.session.RecordClosedStream
+    # Run the empty synthetic process through the production loop and retain its closure.
+    input: []
+    outcomes:
+      - name: recorded
+        creates: metaharness.session.ClosedStreamRecord
+        instance: record_id
+        emits: [metaharness.session.ClosureRecorded]
+        payload: {metaharness.session.ClosureRecorded: {record_id: {generated: true}}}
   - name: metaharness.session.FinishCodexCompletion
     # Project the last native task_complete through the existing rollout reader.
     input:
@@ -58,13 +67,11 @@ commands:
         emits: [metaharness.session.CompletionClassified]
         payload:
           metaharness.session.CompletionClassified: {verdict: failure}
-      - name: explicit-no-error
-        when: error_property == explicit-null
-        emits: [metaharness.session.CompletionClassified]
-        payload:
-          metaharness.session.CompletionClassified: {verdict: success}
       - name: positive-completion
-        when: {all: [error_property == missing, last_message == nonblank]}
+        when:
+          any:
+            - error_property == explicit-null
+            - all: [error_property == missing, last_message == nonblank]
         emits: [metaharness.session.CompletionClassified]
         payload:
           metaharness.session.CompletionClassified: {verdict: success}
@@ -78,7 +85,7 @@ commands:
     # sequences. See rollout.rs:99,135,271,286 and GitHub issue 11.
     # A real target constructs raw synthetic JSON from these shape classes, then
     # calls the reader; it must not implement the decision table itself. Source:
-    # issue-11 repair's RolloutReader completion_error helper (pending integration).
+    # issue-11 repair's integrated RolloutReader completion_error helper.
     # UNMAPPED: exhaustive JSON payload shapes, failure sticky across later
     # completions, and a new task_started clearing prior success need raw-reader
     # sequence vectors. Unknown money remains absent (rollout.rs:150-152), not zero.
@@ -92,11 +99,6 @@ commands:
       - {name: stop_reason, type: Optional<String>, presence: null_when_absent}
       - {name: terminal_reason, type: Optional<String>, presence: null_when_absent}
     outcomes:
-      - name: no-terminal-record
-        when: terminal_present == false
-        emits: [metaharness.session.StreamClassified]
-        payload:
-          metaharness.session.StreamClassified: {reason: error}
       - name: observed-budget-stop
         when:
           all:
@@ -129,7 +131,21 @@ commands:
 
 # These are conformance observations, not newly published runtime wire events.
 events:
+  - name: metaharness.session.ClosureRecorded
+    fields: [{name: record_id, type: String}]
   - name: metaharness.session.CompletionClassified
     fields: [{name: verdict, type: metaharness.session.CompletionVerdict}]
   - name: metaharness.session.StreamClassified
     fields: [{name: reason, type: metaharness.session.CloseReason}]
+
+# Immutable retained stream closure, not a second running-session lifecycle.
+entities:
+  - name: metaharness.session.ClosedStreamRecord
+    identity: {name: record_id, type: String}
+    fields: [{name: closure, type: metaharness.session.StreamClosure}]
+    lifecycle: {initial: Recorded, states: [Recorded], terminal: [Recorded], transitions: []}
+views:
+  - name: metaharness.session.RetainedClosure
+    source: metaharness.session.ClosedStreamRecord
+    consistency: read_your_writes
+    fields: [{name: closure, type: metaharness.session.StreamClosure}]

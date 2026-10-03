@@ -1,0 +1,61 @@
+domain: metaharness.boundaries
+summary: Observable projections of existing frame validation, governed tool decisions and file confinement.
+# These commands are conformance operations, never new public runtime verbs.
+# Frame::parse_document, drive::answer_events and the owned tool server are the targets.
+types:
+  - name: metaharness.boundaries.FrameEvidence
+    kind: enum
+    variants: [sealed, modified, untagged]
+  - name: metaharness.boundaries.CallShape
+    kind: enum
+    variants: [supported-shell, malformed-shell, patch, unsupported-tool]
+  - name: metaharness.boundaries.ReadPath
+    kind: enum
+    variants: [inside, outside-symlink]
+
+commands:
+  - name: metaharness.boundaries.ReadSealedFrame
+    input: [{name: evidence, type: metaharness.boundaries.FrameEvidence}]
+    outcomes:
+      - name: admitted
+        when: evidence == sealed
+        emits: [metaharness.boundaries.FrameRead]
+        payload: {metaharness.boundaries.FrameRead: {admitted: true}}
+      - name: refused
+        emits: [metaharness.boundaries.FrameRead]
+        payload: {metaharness.boundaries.FrameRead: {admitted: false}}
+
+  - name: metaharness.boundaries.GovernCodexCall
+    input:
+      - {name: shape, type: metaharness.boundaries.CallShape}
+      - {name: engine_allows, type: Boolean}
+    outcomes:
+      - name: allowed
+        when: {all: [shape == supported-shell, engine_allows == true]}
+        emits: [metaharness.boundaries.CallDecided]
+        payload: {metaharness.boundaries.CallDecided: {allowed: true}}
+      - name: denied
+        emits: [metaharness.boundaries.CallDecided]
+        payload: {metaharness.boundaries.CallDecided: {allowed: false}}
+    # Only complete action mappings may reach the real AEP StepAuthorizer. This bounded
+    # projection makes no new claim about any vendor version or unsupported patch semantics.
+
+  - name: metaharness.boundaries.ReadSelectedWorkspaceFile
+    input: [{name: path, type: metaharness.boundaries.ReadPath}]
+    outcomes:
+      - name: read
+        when: path == inside
+        emits: [metaharness.boundaries.FileRead]
+        payload: {metaharness.boundaries.FileRead: {contained: true}}
+      - name: refused
+        emits: [metaharness.boundaries.FileRead]
+        payload: {metaharness.boundaries.FileRead: {contained: false}}
+    # File containment only: this is not process isolation, cgroup admission or lease ownership.
+
+events:
+  - name: metaharness.boundaries.FrameRead
+    fields: [{name: admitted, type: Boolean}]
+  - name: metaharness.boundaries.CallDecided
+    fields: [{name: allowed, type: Boolean}]
+  - name: metaharness.boundaries.FileRead
+    fields: [{name: contained, type: Boolean}]

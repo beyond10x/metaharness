@@ -5,3 +5,4 @@ domains:
   - metaharness.session
   - metaharness.workspace
   - metaharness.spending
+  - metaharness.boundaries

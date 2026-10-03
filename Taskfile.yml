@@ -4,6 +4,8 @@ tasks:
   check:
     desc: The full gate — format, lint, test. Green before any push.
     cmds:
+      - ess specify validate --path spec --strict-requires
+      - ess specify validate --path spec/monetary --strict-requires
       - cargo fmt --check
       - cargo clippy --workspace --all-targets -- -D warnings
       - cargo test --workspace

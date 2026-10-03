@@ -1,98 +1,101 @@
-# Specification draft and coverage boundary
+# Executable contract and coverage boundary
 
-This is a typed draft for the issue-repair integration branch. It does not claim
-that Metaharness conforms, and it does not describe every protocol event, adapter,
-credential rule, sealed frame, tool decision or governed workflow.
+This is a bounded retrofit of Metaharness's observable boundaries. It preserves
+frame/1 and adapter ownership. It does not claim to specify every event,
+credential rule, process-isolation mechanism or vendor version.
 
-`ess-inputs.yaml` pins ESS 0.51.0. `system.yaml` uses `ess/15`. The executable
-projection has three domains:
+ESS 0.51.0 validates both manifests. The core model uses ess/15;
+conformance.json is a declared-coverage ess-conformance/23 suite. Regenerate it:
 
-| Domain | Authority and status |
+```console
+ess verify conform synthesize --path spec --suite-format 5 --strict-requires --out spec/conformance.json
+```
+
+`task check` validates both manifests, checks suite drift, and executes the
+production target in `crates/metaharness-aep/src/drive/ess_conformance.rs`.
+CI installs ESS 0.51.0 from commit
+`0347ffa222939e3791e574d2dbe42d4b4b02d979`. Use that compiler locally.
+
+The committed count is **24 selected scenarios**: 24 passed, zero failed,
+skipped, unsupported or synthesis refusals. Unknown suite versions, steps,
+bindings, shapes and predicates fail closed. The target handles only the
+constructs this suite uses; extending the specification may require extending it.
+
+| Obligation | Production observation |
 |---|---|
-| `metaharness.session` | Existing terminal/closure wire types, plus the required repair in the protocol design's amendment a18 dated 2026-10-03. Baseline code does not yet implement its unknown/failure rules correctly. |
-| `metaharness.workspace` | Naming contract already supported by pinned Harness `90f10a4314c1c630691c85e812bd8d5d23d73fcc`; Metaharness's mirrored `ws_` check is the discrepancy being repaired. |
-| `metaharness.spending` | Existing local finite terms/ledger and explicitly **proposed** uncapped types and authorization checks from issue 14. No claim that uncapped execution already exists. |
+| Terminal and unknown evidence | Adapter-owned synthetic inputs traverse RolloutReader; normalized is_error is read back and absent cost must remain None. |
+| Stream closure | A real Run over ScriptedRunner produces closing reason and event count. No vendor process or model starts. |
+| Frame integrity | The AEP driver mints a frame and Frame::parse_document reads it; modified and untagged frames are refused. |
+| Tool decisions | Production Codex mapping and answer_events consult a real AEP engine; malformed, patch and unsupported calls are denied. |
+| Workspace and file containment | The production name predicate and owned tool server operate on a selected directory; an outside symlink is refused. This does not prove process or cgroup isolation. |
+| Accounting | Real finite and uncapped policy functions execute. Ledger views read files written by SpendBudget and AdmissionBudget, including persisted invocation count. |
 
-Commands are operations a conformance target must drive through the production
-reader, run loop, eligibility check or spending code. They are not added public
-CLI verbs. The two classification events are target observations of existing
-results, not new runtime wire events. Read-only checks use effect-free outcomes.
-No generated reference implementation can establish production conformance.
+The immutable Recorded entities expose existing observations: a closed stream and
+snapshots of retained finite/admission ledgers. They add no running-session
+lifecycle, AEP transition, public command, worktree ownership or mutation API.
+Commands and events here are conformance operations. Closure values come from the
+real run's final event; ledger values are read from disk, not from target bookkeeping.
 
-The draft uses existing/proposed structs rather than inventing an entity lifecycle
-for a value. There are no declared ownership relations: AEP owns execution/step
-lifecycle, worktree owns managed-tree identity and leases, and substrate owns
-confinement. The proposal has no new authority to alter those owners.
+The draft's three unobservable struct invariants now have observable views and
+operations that produce their records. All three synthesis refusals were removed.
+Indistinguishable outcome branches were combined so a target reports observed
+results instead of picking a branch from the model's input guard. Authorization
+evidence distinguishes missing, blank and nonblank references: the earlier
+count > 0 guard incorrectly admitted whitespace-only authority.
 
-## Exact monetary types are a separate, currently non-executable projection
+## Reports
 
-`monetary/ess-inputs.yaml` validates the exact `Optional<Binary64>` observation
-types. The source terminal wire uses `Option<f64>`, and unknown Codex cost is
-`None`. These are kept as declared types, not replaced with decimal/string
-surrogates or zero defaults. This remains part of the same Metaharness system;
-the separate manifest identifies a compiler coverage boundary, not a separate
-service or deployable.
+The target writes ess-conformance-results/1 statuses and invokes
+`ess verify conform report` to produce `target/ess-conformance-report.json`
+(ess-conformance-report/2). Its producer profile is
+`external-scenario-status/1;runner=metaharness-rust-target@1`: Rust executed the
+suite; ESS admitted it and assembled the report. The gate checks the native
+report's conformance_status, not merely the converter's exit code. A compact
+diagnostic report is also written beside it.
 
-ESS 0.51.0 refuses these types in conformance synthesis with
-`UnsupportedPrimitive: finite Binary64 is not admitted by the current conformance
-suite and codecs`, and in Rust generation with `this target has no qualified
-finite Binary64 codec`. Main-model scenarios therefore exclude monetary values.
-The `UNMAPPED:` comments mark this explicitly at both affected core types.
+Mutation runs can explicitly select an emitted suite with METAHARNESS_ESS_SUITE
+and an output path with METAHARNESS_ESS_REPORT. They use this same target.
+Ordinary gate runs use the committed suite and count gate.
 
-## Draft-generation observations
+## Hardening evidence
 
-Core validation: `metaharness v1 — 4 file(s), valid`.
-Monetary validation: `metaharness v1 — 2 file(s), valid`.
+The 2026-10-03 audit followed the planted-defect rule:
 
-Core conformance synthesis produces 15 generated scenarios and three explicit
-`ESS-SYNTH-013` refusals. Struct invariants on `StreamClosure`, `SpendLedger` and
-`InvocationAdmission` currently have no observable view. Those rules remain in
-the specification; a generated suite alone does not test them. Three synthesis
-notes additionally say it has not proved disjointness/overlap coverage between
-terminal outcome guards. No refusal or note is counted as a passing scenario.
+- Changing the specification's explicit-failure payload to success failed
+  FinishCodexCompletion/outcome/explicit-failure. Restoration passed.
+- Removing production admission persistence failed
+  InvocationAdmission/invariant/at/metaharness.spending.RetainedAdmission/admission.
+  Restoration passed. A target remembering only its intended count would miss this.
+- `ess verify conform mutate --class guard-negate --emit ...`, execution of every
+  emitted suite against production, and `--collect ...` killed **10 of 10 mutants**.
+  No survivors, inconclusive, unwitnessed or equivalent mutants. Baseline: 24
+  scenarios, zero refusals. Other mutation classes were not claimed.
 
-Core Rust synthesis emits typed contracts with 27 generated capabilities and two
-implementation obligations. This draft phase did not compile those artifacts,
-implement a target or run the suite. Passed, failed and skipped counts are
-unmeasured, not zero. Generated artifacts and detailed command output are retained
-outside source by the integration coordinator.
+Local design comparison found the unobservable invariants, indistinguishable
+outcomes and blank-reference discrepancy above. It was coordinator review, not an
+independent agent review: workers exhausted their host quota. It covered this
+projection against amendments a18–a20, not every older design section.
 
-## Required production-target work
+Random state-machine exploration, caller replay, exhaustive guard analysis,
+determinism certification and metamorphic certification were not run. This model
+contains bounded observations and immutable snapshots, not the upstream AEP state
+machine. No released specification exists for a release-diff baseline. The suite
+freshness check is not a breaking-change classifier.
 
-- Drive `FinishCodexCompletion` through `RolloutReader::push_line` and `finish`,
-  using only synthetic payloads. Drive `CloseUnsteeredStream` through the real
-  scripted `Run`; assert normalized result, closure and CLI outcome together.
-  The error-property discriminator preserves absent/null/nonnull: explicit null
-  is positive no-error evidence; any nonnull value is failure. With no error key,
-  only a nonblank string last message is positive; blank/malformed/absent is unknown.
-  These rules were reconciled with the issue-11 implementor's completion helper.
-  Stream closure preserves legacy `subtype: success` as positive evidence unless
-  an explicit error or budget stop takes precedence, matching the same repair.
-- Drive `CheckSelectedName` through the shared production predicate, then add
-  filesystem scenarios for canonical selection, actual substrate admission,
-  symlink containment and managed-tree identity/lease preservation. Typed name
-  syntax is never evidence that the process was confined.
-- Drive finite terms through production preflight and real ledger reservation.
-  The three declared struct invariants need observable production state, not a
-  target-maintained mirror. Proposed uncapped checks have no runtime target until
-  issue 14 is implemented.
-- Keep scenario IDs explicit; an unknown/unimplemented scenario must not pass.
-  Real-target runs must record suite identity and passed/failed/skipped counts.
-  Keep paid vendor probes and real transcripts outside the source gate.
+## Exact types and remaining boundaries
 
-Named integration scenarios still required beyond this core suite include
-`codex-partial-text-then-error-fails`, `codex-missing-terminal-is-incomplete`,
-`codex-null-error-legacy-success`, `audited-and-unaudited-exit-agree`,
-`managed-wt-directory-confined`, `relative-project-equivalent-to-canonical`,
-`symlink-escape-refused`, `managed-tree-identity-and-lease-preserved`,
-`reservation-precedes-spawn`, `reservation-persistence-failure-spawns-nothing`,
-`finite-resume-cannot-become-uncapped`, and
-`uncapped-resume-preserves-authorization`. These are a handoff list, not claims
-that corresponding authored scenarios already exist.
+The separate monetary manifest preserves Optional<Binary64> for the source's
+Option<f64>. ESS 0.51.0 declines its conformance codecs and Rust synthesis; no
+surrogate type or zero default is substituted. Production Rust tests cover unknown
+and observed costs, failed persistence, crash/resume, corrupt ledgers, finite
+narrowing and preservation of mode and authorization.
 
-Every `UNMAPPED:` comment in the domain files is outstanding. In particular,
-whether explicitly authorized uncapped-to-finite resume narrowing is supported
-remains undecided; this draft grants no policy transition. Invocation identity,
-observation update ordering and crash recovery are also open implementation-design
-obligations. Current finite defaults and upstream retry/iteration bounds remain
-the baseline requirements.
+Core Rust synthesis produced 59 generated capabilities, four explicit obligations
+and zero refusals; the generated contract crate compiled locally. Generated
+behavior is not the production target and is not production evidence. Existing
+runtime types remain authoritative in this retrofit; unsigned bounds and ordered
+I/O also have production Rust tests.
+
+The suite does not qualify new vendor versions. Paid probes and real transcripts
+remain outside the gate and public source. Existing vendor pins remain unchanged
+until their live compatibility evidence is complete.

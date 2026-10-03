@@ -60,6 +60,9 @@ mod rollout;
 mod seam;
 mod vectors;
 
+#[cfg(feature = "conformance")]
+pub mod conformance;
+
 pub use bridge::{CodexSeam, CodexSeams, hook_request_line};
 pub use hook::{HOOK_WAIT_SECONDS, HookChannelPaths, hook_program};
 pub use launch::{

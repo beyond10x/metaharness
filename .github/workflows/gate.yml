@@ -12,7 +12,7 @@
 # `beyond10x/aep`, and `beyond10x/entity-runtime` behind it — is a public repository, so the
 # anonymous HTTPS fetch the runner's git performs is enough (`.cargo/config.toml`).
 #
-# Nothing paid runs here. `task check` is `cargo fmt --check`, `cargo clippy --workspace
+# Nothing paid runs here. `task check` validates ESS, then runs `cargo fmt --check`, `cargo clippy --workspace
 # --all-targets -- -D warnings` and `cargo test --workspace`; the live runs sit behind
 # `METAHARNESS_LIVE=1` and are never part of it (invariant 5).
 name: Gate
@@ -62,6 +62,9 @@ jobs:
           echo "$(go env GOPATH)/bin" >> "$GITHUB_PATH"
 
       - uses: Swatinem/rust-cache@6323deb102c322ba6fcbdcafc7e3dddab59af2b6 # v2
+
+      - name: Install the ESS compiler pinned by the specification
+        run: cargo install --git https://github.com/beyond10x/ess --rev 0347ffa222939e3791e574d2dbe42d4b4b02d979 --locked ess-cli
 
       # The gate's own exit status, never a pipeline's (AGENTS.md § The gate).
       - name: Run the repository gate

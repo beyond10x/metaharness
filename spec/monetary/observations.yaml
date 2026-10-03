@@ -15,8 +15,8 @@ types:
     kind: struct
     fields:
       - {name: observed_cost_usd, type: Optional<Binary64>, presence: null_when_absent}
-    # PROPOSED issue 14: attach the vendor observation to an admitted invocation.
+    # drive/spending.rs stores the observation on the admitted invocation row.
     # Unknown stays absent. Reservations are not observations and cannot fill it.
-    # UNMAPPED: exact linkage to a durable invocation identifier, cost update
-    # ordering, duplicate observations and crash recovery require the policy
-    # implementation design; no invented relation/cardinality is declared here.
+    # The row's ordinal plus retained run directory identifies the admission.
+    # No observation is created from a reservation, failed spawn or missing terminal.
+    # Ordered I/O and resume corruption checks run in the Rust admission suite.

@@ -28,11 +28,11 @@ commands:
     input:
       - {name: name, type: metaharness.workspace.WorkspaceName}
     outcomes:
-      - name: empty-name-refused
-        when: name.count == 0
-        error: metaharness.workspace.InvalidName
-      - name: leading-hyphen-refused
-        when: {name: {starts_with: "-"}}
+      - name: invalid-name-refused
+        when:
+          any:
+            - name.count == 0
+            - {name: {starts_with: "-"}}
         error: metaharness.workspace.InvalidName
       - name: eligible-component
         accepts: nothing

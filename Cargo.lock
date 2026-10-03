@@ -1088,6 +1088,7 @@ dependencies = [
  "metaharness",
  "metaharness-b10x",
  "metaharness-codex",
+ "metaharness-tools",
  "serde",
  "serde_json",
  "serde_yaml",

@@ -2205,7 +2205,7 @@ transitions:
 /// The profile that makes the fixture load-bearing: it grants `repository.read` and **not**
     /// `repository.write`, so a state whose rendered surface offers `Edit` is a state where the two
     /// layers disagree and the engine is the one that refuses.
-    const AUTHORIZE_PROFILE: &str = r"
+    pub(super) const AUTHORIZE_PROFILE: &str = r"
 id: test.reading
 title: Reading only
 protocol: aep/1
@@ -2227,7 +2227,7 @@ profile: test.reading
         authorizing_execution_with_profile(AUTHORIZE_PROFILE)
     }
 
-    fn authorizing_execution_with_profile(profile: &str) -> (Engine, aep_engine::execution::Execution) {
+    pub(super) fn authorizing_execution_with_profile(profile: &str) -> (Engine, aep_engine::execution::Execution) {
         use aep_engine::ProtocolEngine as _;
         let mut registry = Registry::new();
         registry

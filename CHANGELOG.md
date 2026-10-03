@@ -5,6 +5,36 @@ was amended and the amendment is named here.
 
 ## [Unreleased]
 
+### Added
+
+- Governed Codex steps use the existing ask seam and current AEP engine for each supported shell
+  call. Unsupported operations are denied. Model and endpoint selection survive resume; current
+  installed vendor releases remain unqualified (design amendment a19).
+- Governed runs can explicitly select `--uncapped-budget --spend-authorization <reference>`.
+  Live opt-in remains required. Invocation admission is persisted before spawning, observed costs
+  remain optional, and resume cannot change spending mode or authorization (amendment a19).
+- ESS validates the boundary specification in `task check`, executes 24 generated scenarios
+  against production code, and checks suite freshness. Hardening killed ten guard mutants and
+  detected planted specification and persistence defects. See `spec/coverage.md` for its bounds.
+
+### Fixed
+
+- Codex explicit terminal errors and unsuccessful process exits now survive normalization,
+  stream closure and CLI exit. Incomplete terminal evidence cannot claim success (amendment a18).
+- Explicitly selected managed `wt-*` workspaces use the existing confined native launch without
+  requiring a `ws_` prefix; canonical directory checks and confinement refusals remain enforced
+  (amendment a18).
+- Scripted b10x runners no longer require a vendor executable or invent a version. Real runners
+  retain binary and version checks; the CI gate no longer installs b10x for synthetic tests
+  (amendment a20).
+
+### Changed
+
+- Link AEP 0.68.0 at `6d7a44d3607d2d9a6ffdf0a165993c546c43d0db`, preserve exact eval binary
+  matching, and use current command admission and `aep.project/5` in scratch eval projects.
+- Migrate the repository planning store to `aep.project/5` with `aep.planning-md/3` artifacts.
+  Vendor compatibility pins are unchanged pending the live qualification tracked in issue #15.
+
 ## [0.8.0] — 2026-09-25
 
 ### Added

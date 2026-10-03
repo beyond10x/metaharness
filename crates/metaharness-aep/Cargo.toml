@@ -26,6 +26,8 @@ serde_yaml = "0.9"
 anyhow = "1"
 
 [dev-dependencies]
+metaharness-codex = { path = "../metaharness-codex", features = ["conformance"] }
+metaharness-tools = { path = "../metaharness-tools" }
 tempfile.workspace = true
 aep-schema = { git = "https://github.com/beyond10x/aep", rev = "6d7a44d3607d2d9a6ffdf0a165993c546c43d0db" }
 
