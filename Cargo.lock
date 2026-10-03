@@ -1183,6 +1183,7 @@ dependencies = [
  "html5ever",
  "pulldown-cmark",
  "serde_json",
+ "tempfile",
 ]
 
 [[package]]

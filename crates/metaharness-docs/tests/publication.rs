@@ -128,3 +128,115 @@ fn collect_files(root: &std::path::Path, directory: &std::path::Path, files: &mu
         }
     }
 }
+
+#[test]
+fn repeat_build_replaces_only_a_complete_owned_site() {
+    let out = scratch("repeat-build");
+    let first = "1111111111111111111111111111111111111111";
+    let second = "2222222222222222222222222222222222222222";
+    metaharness_docs::build(&out, first).unwrap();
+    let first_manifest = fs::read(out.join(".well-known/b10x-site.json")).unwrap();
+    metaharness_docs::build(&out, second).unwrap();
+    let second_manifest = fs::read(out.join(".well-known/b10x-site.json")).unwrap();
+    assert_ne!(first_manifest, second_manifest);
+    let manifest: serde_json::Value = serde_json::from_slice(&second_manifest).unwrap();
+    assert_eq!(manifest["commit"], second);
+    let inventory: serde_json::Value =
+        serde_json::from_slice(&fs::read(out.join(".well-known/b10x-routes.json")).unwrap())
+            .unwrap();
+    assert_eq!(inventory["commit"], second);
+    metaharness_docs::build(&out, second).unwrap();
+    assert_eq!(
+        second_manifest,
+        fs::read(out.join(".well-known/b10x-site.json")).unwrap()
+    );
+    fs::remove_dir_all(out).unwrap();
+}
+
+#[test]
+fn foreign_incomplete_or_modified_inventory_is_preserved_on_refusal() {
+    let commit = "1111111111111111111111111111111111111111";
+    for mutation in [
+        "extra-file",
+        "extra-directory",
+        "missing-file",
+        "wrong-owner",
+        "wrong-schema",
+        "wrong-base",
+        "invalid-next-commit",
+    ] {
+        let out = scratch(mutation);
+        metaharness_docs::build(&out, commit).unwrap();
+        match mutation {
+            "extra-file" => fs::write(out.join("my-notes.txt"), b"do not delete").unwrap(),
+            "extra-directory" => fs::create_dir(out.join("my-work")).unwrap(),
+            "missing-file" => fs::remove_file(out.join("docs/status/index.html")).unwrap(),
+            "wrong-owner" | "wrong-schema" | "wrong-base" => {
+                let path = out.join(".well-known/b10x-site.json");
+                let mut value: serde_json::Value =
+                    serde_json::from_slice(&fs::read(&path).unwrap()).unwrap();
+                let field = match mutation {
+                    "wrong-owner" => "repository",
+                    "wrong-schema" => "schema",
+                    _ => "baseUrl",
+                };
+                value[field] = serde_json::json!("unrelated");
+                fs::write(path, serde_json::to_vec(&value).unwrap()).unwrap();
+            }
+            _ => {}
+        }
+        let before = snapshot(&out);
+        let next = if mutation == "invalid-next-commit" {
+            "main"
+        } else {
+            commit
+        };
+        assert!(metaharness_docs::build(&out, next).is_err(), "{mutation}");
+        assert_eq!(
+            before,
+            snapshot(&out),
+            "{mutation} changed output despite refusal"
+        );
+        if mutation == "extra-directory" {
+            assert!(out.join("my-work").is_dir());
+        }
+        fs::remove_dir_all(out).unwrap();
+    }
+}
+
+fn snapshot(root: &std::path::Path) -> std::collections::BTreeMap<String, Vec<u8>> {
+    let mut names = Vec::new();
+    collect_files(root, root, &mut names);
+    names
+        .into_iter()
+        .map(|name| {
+            let bytes = fs::read(root.join(&name)).unwrap();
+            (name, bytes)
+        })
+        .collect()
+}
+
+#[cfg(unix)]
+#[test]
+fn symlinked_output_and_members_never_replace_their_targets() {
+    use std::os::unix::fs::symlink;
+    let root = scratch("symlinks");
+    let outside = root.join("outside");
+    fs::create_dir(&outside).unwrap();
+    fs::write(outside.join("sentinel"), "keep").unwrap();
+    let output_link = root.join("linked-output");
+    symlink(&outside, &output_link).unwrap();
+    let commit = "1111111111111111111111111111111111111111";
+    assert!(metaharness_docs::build(&output_link, commit).is_err());
+    let out = root.join("site");
+    metaharness_docs::build(&out, commit).unwrap();
+    fs::remove_file(out.join("styles.css")).unwrap();
+    symlink(outside.join("sentinel"), out.join("styles.css")).unwrap();
+    assert!(metaharness_docs::build(&out, commit).is_err());
+    assert!(out.join("styles.css").is_symlink());
+    assert_eq!(
+        fs::read_to_string(outside.join("sentinel")).unwrap(),
+        "keep"
+    );
+    fs::remove_dir_all(root).unwrap();
+}
