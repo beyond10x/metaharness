@@ -4,7 +4,7 @@
     "authored_sources": {},
     "counts": {
       "authored": 0,
-      "generated": 40,
+      "generated": 41,
       "outside": 0,
       "refused": 0
     },
@@ -37,6 +37,7 @@
       "metaharness.session.PollSteering/outcome/quiet-native-halt",
       "metaharness.session.PollSteering/outcome/quiet-native-interrupt",
       "metaharness.session.PollSteering/outcome/quiet-output-is-not-eof",
+      "metaharness.session.PollSteering/outcome/quiet-wireless-interrupt",
       "metaharness.session.RecordClosedStream/outcome/recorded",
       "metaharness.session.StreamClosure/invariant/at/metaharness.session.RetainedClosure/closure",
       "metaharness.spending.CheckFiniteTerms/outcome/invalid-finite-terms",
@@ -64,8 +65,8 @@
     }
   },
   "provenance": {
-    "contract_digest": "8b7caf12d4fd92f194ffef0e5a4e9d1a7bd2922c2e87fb55dc8ed5f449188784",
-    "spec_digest": "a5a5e732ab496662068bb51629a3e2dd140afc6427d4909ec07ca80860536f17",
+    "contract_digest": "2ac138ef5c350f87f9ac7150904abda26447ae2d27a9d90e335c5770be8fc1f2",
+    "spec_digest": "6ffaa1d964549f91371cab5c37a062f52a8c3570651c2c04ec487812b8ae2813",
     "specification_version": "v1",
     "suite_version": "ess-conformance/23",
     "system": "metaharness"
@@ -4029,6 +4030,7 @@
             "closed": true,
             "control_written": true,
             "deadline_advanced": false,
+            "process_killed": true,
             "yielded": true
           },
           "shape": {
@@ -4041,6 +4043,10 @@
               "kind": "boolean"
             },
             "deadline_advanced": {
+              "holds": "primitive",
+              "kind": "boolean"
+            },
+            "process_killed": {
               "holds": "primitive",
               "kind": "boolean"
             },
@@ -4188,6 +4194,7 @@
             "closed": true,
             "control_written": true,
             "deadline_advanced": false,
+            "process_killed": true,
             "yielded": true
           },
           "shape": {
@@ -4200,6 +4207,10 @@
               "kind": "boolean"
             },
             "deadline_advanced": {
+              "holds": "primitive",
+              "kind": "boolean"
+            },
+            "process_killed": {
               "holds": "primitive",
               "kind": "boolean"
             },
@@ -4347,6 +4358,7 @@
             "closed": false,
             "control_written": true,
             "deadline_advanced": false,
+            "process_killed": false,
             "yielded": true
           },
           "shape": {
@@ -4359,6 +4371,10 @@
               "kind": "boolean"
             },
             "deadline_advanced": {
+              "holds": "primitive",
+              "kind": "boolean"
+            },
+            "process_killed": {
               "holds": "primitive",
               "kind": "boolean"
             },
@@ -4506,6 +4522,7 @@
             "closed": false,
             "control_written": false,
             "deadline_advanced": false,
+            "process_killed": false,
             "yielded": true
           },
           "shape": {
@@ -4518,6 +4535,174 @@
               "kind": "boolean"
             },
             "deadline_advanced": {
+              "holds": "primitive",
+              "kind": "boolean"
+            },
+            "process_killed": {
+              "holds": "primitive",
+              "kind": "boolean"
+            },
+            "yielded": {
+              "holds": "primitive",
+              "kind": "boolean"
+            }
+          },
+          "step": "expect_event"
+        },
+        {
+          "event": "metaharness.boundaries.CallDecided",
+          "step": "expect_no_event"
+        },
+        {
+          "event": "metaharness.boundaries.FileRead",
+          "step": "expect_no_event"
+        },
+        {
+          "event": "metaharness.boundaries.FrameRead",
+          "step": "expect_no_event"
+        },
+        {
+          "event": "metaharness.observations.NativeStatusClassified",
+          "step": "expect_no_event"
+        },
+        {
+          "event": "metaharness.observations.PresenceRead",
+          "step": "expect_no_event"
+        },
+        {
+          "event": "metaharness.observations.ToolOutcomeRead",
+          "step": "expect_no_event"
+        },
+        {
+          "event": "metaharness.session.ClosureRecorded",
+          "step": "expect_no_event"
+        },
+        {
+          "event": "metaharness.session.CompletionClassified",
+          "step": "expect_no_event"
+        },
+        {
+          "event": "metaharness.session.StreamClassified",
+          "step": "expect_no_event"
+        },
+        {
+          "event": "metaharness.spending.AdmissionRecorded",
+          "step": "expect_no_event"
+        },
+        {
+          "event": "metaharness.spending.FiniteLedgerRecorded",
+          "step": "expect_no_event"
+        }
+      ]
+    },
+    "metaharness.session.PollSteering/outcome/quiet-wireless-interrupt": {
+      "purpose": "`metaharness.session.PollSteering` answers `quiet-wireless-interrupt` for an input that satisfies that branch's guard",
+      "source": [
+        {
+          "kind": "type",
+          "name": "metaharness.session.SteeringProbe"
+        },
+        {
+          "kind": "command",
+          "name": "metaharness.session.PollSteering"
+        },
+        {
+          "kind": "outcome",
+          "name": {
+            "command": "metaharness.session.PollSteering",
+            "outcome": "quiet-wireless-interrupt"
+          }
+        },
+        {
+          "kind": "event",
+          "name": "metaharness.boundaries.CallDecided"
+        },
+        {
+          "kind": "event",
+          "name": "metaharness.boundaries.FileRead"
+        },
+        {
+          "kind": "event",
+          "name": "metaharness.boundaries.FrameRead"
+        },
+        {
+          "kind": "event",
+          "name": "metaharness.observations.NativeStatusClassified"
+        },
+        {
+          "kind": "event",
+          "name": "metaharness.observations.PresenceRead"
+        },
+        {
+          "kind": "event",
+          "name": "metaharness.observations.ToolOutcomeRead"
+        },
+        {
+          "kind": "event",
+          "name": "metaharness.session.ClosureRecorded"
+        },
+        {
+          "kind": "event",
+          "name": "metaharness.session.CompletionClassified"
+        },
+        {
+          "kind": "event",
+          "name": "metaharness.session.PollingObserved"
+        },
+        {
+          "kind": "event",
+          "name": "metaharness.session.StreamClassified"
+        },
+        {
+          "kind": "event",
+          "name": "metaharness.spending.AdmissionRecorded"
+        },
+        {
+          "kind": "event",
+          "name": "metaharness.spending.FiniteLedgerRecorded"
+        }
+      ],
+      "steps": [
+        {
+          "command": "metaharness.session.PollSteering",
+          "input": {
+            "probe": {
+              "kind": "literal",
+              "value": "quiet-wireless-interrupt"
+            }
+          },
+          "step": "execute_command"
+        },
+        {
+          "outcome": {
+            "command": "metaharness.session.PollSteering",
+            "outcome": "quiet-wireless-interrupt"
+          },
+          "step": "expect_outcome"
+        },
+        {
+          "event": "metaharness.session.PollingObserved",
+          "payload": {
+            "closed": true,
+            "control_written": false,
+            "deadline_advanced": false,
+            "process_killed": true,
+            "yielded": true
+          },
+          "shape": {
+            "closed": {
+              "holds": "primitive",
+              "kind": "boolean"
+            },
+            "control_written": {
+              "holds": "primitive",
+              "kind": "boolean"
+            },
+            "deadline_advanced": {
+              "holds": "primitive",
+              "kind": "boolean"
+            },
+            "process_killed": {
               "holds": "primitive",
               "kind": "boolean"
             },

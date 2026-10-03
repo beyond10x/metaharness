@@ -35,6 +35,8 @@ use metaharness_protocol::HarnessSeam;
 pub enum EventPoll {
     /// One normalized event, including the final closure.
     Event(Box<EventLine>),
+    /// One raw record was consumed without a normalized event; poll again after servicing input.
+    Progress,
     /// The process remains open without a normalized event this time.
     Idle,
     /// The process is waiting for an armed tool decision.
@@ -453,7 +455,7 @@ impl Run {
             match self.poll_event()? {
                 EventPoll::Event(line) => return Ok(Some(*line)),
                 EventPoll::Ended => return Ok(None),
-                EventPoll::Idle => (),
+                EventPoll::Idle | EventPoll::Progress => (),
                 EventPoll::DecisionPending => self.wait_out_earliest_deadline()?,
             }
         }
@@ -503,7 +505,7 @@ impl Run {
                 .close_stream()
                 .map_or(EventPoll::Ended, |line| EventPoll::Event(Box::new(line))));
         }
-        Ok(EventPoll::Idle)
+        Ok(EventPoll::Progress)
     }
 
     /// Pump to the end and collect everything, deciding nothing.
@@ -1375,9 +1377,11 @@ impl Run {
             }
             Command::Interrupt { .. } => {
                 self.abandon_pending("the run was interrupted", warning::PENDING_CALL_ABANDONED);
-                self.write_control(&Command::Interrupt {
+                if !self.write_control(&Command::Interrupt {
                     reason: String::new(),
-                })?;
+                })? {
+                    self.process.kill()?;
+                }
                 Ok(CommandOutcome::Ok { applies_at: None })
             }
             Command::Halt { .. } => {
@@ -1399,11 +1403,12 @@ impl Run {
         }
     }
 
-    fn write_control(&mut self, command: &Command) -> std::io::Result<()> {
+    fn write_control(&mut self, command: &Command) -> std::io::Result<bool> {
         if let Some(line) = self.bridge.control_line(command) {
             self.process.write_line(&line)?;
+            return Ok(true);
         }
-        Ok(())
+        Ok(false)
     }
 
     /// Rule 3: a decision correlates to one request and cannot be replayed.

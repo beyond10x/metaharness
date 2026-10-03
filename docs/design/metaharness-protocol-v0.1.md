@@ -2033,7 +2033,7 @@ neither EOF nor a decision request. Existing custom process implementations may
 retain their blocking next_line through a compatibility default; custom runners
 requiring bounded steering must implement the polling method explicitly.
 
-Run polling reports one event, idle, decision-pending or ended. It checks armed
+Run polling reports one event, progress, idle, decision-pending or ended. It checks armed
 deadlines on each poll, preserves delivery-time arming and ordering, and never
 waits an entire decision budget. Command admission also expires armed deadlines
 before applying the command: an answer received between polls at or after its
@@ -2043,9 +2043,22 @@ the adapter produces no normalized event. The blocking next_event API continues
 to wait for an event and advances the existing clock to a pending deadline as
 before. The CLI uses polling, draining its command channel between iterations;
 idle and decision-pending iterations use the existing short steering wait.
+Progress means one raw record was consumed without a normalized event; the CLI
+checks stdin and immediately polls again instead of charging an idle wait for
+every buffered control-plane record.
 
 No new wire event, EOF marker or fabricated terminal record is introduced. Halt
 and interrupt retain their existing adapter semantics, decision-before-control
 ordering, command ids, native status and exactly one final stream.closed.
 Deterministic tests cover pending-decision steering and idle-versus-EOF; native
 credential-free timing qualification is separate evidence, not a model claim.
+
+An adapter that declares interrupt honoured but supplies no control line must
+still stop the owned process. The generic run loop uses process kill in that
+case; when a line exists, its adapter-specific routing remains authoritative.
+This fixes the observe-only native loop's acknowledged but ineffective interrupt
+without adding a vendor name or a fictitious wire to the core. Interrupt does
+not invent terminal success or a halt reason: EOF retains actual process status
+and the ordinary terminal-evidence classification. ESS observes the real no-wire
+adapter through a synthetic process, including whether kill was invoked; native
+termination timing remains separate evidence.

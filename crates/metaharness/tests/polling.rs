@@ -193,3 +193,98 @@ fn an_answer_after_the_armed_deadline_cannot_win_between_polls() {
         1
     );
 }
+
+#[test]
+fn an_honoured_interrupt_without_a_control_wire_stops_the_owned_process() {
+    use metaharness::protocol::{
+        CloseReason, Command, CommandOutcome, CredentialSource, DecisionMode, Event, Kind,
+        ProcessTermination,
+    };
+    use metaharness::{EventPoll, Input, Metaharness, ScriptStep, ScriptedLog, ScriptedRunner};
+    let log = ScriptedLog::new();
+    let mut runner = ScriptedRunner::new(vec![ScriptStep::Idle, ScriptStep::Idle], log.clone());
+    let mut run = Metaharness::new(Kind::B10x)
+        .with_credentials(CredentialSource::None)
+        .with_decisions(DecisionMode::Observe)
+        .with_model_endpoint("http://127.0.0.1:1")
+        .with_model("synthetic-never-called")
+        .start_with(
+            Input::Prompt("fixture".into()),
+            &mut runner,
+            &mut metaharness_b10x::B10xSeams::new(None, None, None),
+        )
+        .unwrap();
+    assert!(matches!(run.poll_event().unwrap(), EventPoll::Idle));
+    assert!(matches!(
+        run.send_as(
+            "wireless-interrupt",
+            Command::Interrupt {
+                reason: "fixture".into()
+            }
+        )
+        .unwrap(),
+        CommandOutcome::Ok { .. }
+    ));
+    assert!(
+        log.killed(),
+        "an acknowledged interrupt without a wire must stop its owned process"
+    );
+    assert_eq!(
+        log.written(),
+        Vec::<String>::new(),
+        "no fictitious control wire is written"
+    );
+    run.drain().unwrap();
+    assert!(matches!(
+        run.events().last(),
+        Some(Event::StreamClosed {
+            reason: CloseReason::Error,
+            process: ProcessTermination::Unknown,
+            ..
+        })
+    ));
+    assert_eq!(
+        run.events()
+            .iter()
+            .filter(|event| matches!(event, Event::StreamClosed { .. }))
+            .count(),
+        1
+    );
+    assert_eq!(run.events().iter().filter(|event| matches!(event, Event::CommandResult { id, .. } if id == "wireless-interrupt")).count(), 1);
+}
+
+#[test]
+fn consuming_a_control_record_is_progress_rather_than_provider_silence() {
+    use metaharness::protocol::{CredentialSource, DecisionMode, Kind};
+    use metaharness::{
+        ClaudeSeams, EventPoll, Input, Metaharness, ScriptStep, ScriptedLog, ScriptedRunner,
+    };
+    let mut runner = ScriptedRunner::new(
+        vec![
+            ScriptStep::line(
+                r#"{"type":"tool_progress","tool_use_id":"fixture","tool_name":"Bash","elapsed_time_seconds":1}"#,
+            ),
+            ScriptStep::Idle,
+        ],
+        ScriptedLog::new(),
+    );
+    let mut run = Metaharness::new(Kind::Claude)
+        .with_credentials(CredentialSource::None)
+        .with_decisions(DecisionMode::Observe)
+        .start_with(
+            Input::Prompt("fixture".into()),
+            &mut runner,
+            &mut ClaudeSeams,
+        )
+        .unwrap();
+    let observed = run.poll_event().unwrap();
+    assert!(
+        !matches!(observed, EventPoll::Idle),
+        "a consumed control-plane record must not trigger the CLI idle wait"
+    );
+    assert!(matches!(observed, EventPoll::Progress));
+    assert!(
+        matches!(run.poll_event().unwrap(), EventPoll::Idle),
+        "the following actual silence remains idle"
+    );
+}

@@ -379,6 +379,7 @@ fn drive(run: &mut Run, commands: &Receiver<String>) -> std::io::Result<()> {
         }
         match run.poll_event()? {
             metaharness::EventPoll::Event(line) => emit(&line),
+            metaharness::EventPoll::Progress => (),
             metaharness::EventPoll::Ended => return Ok(()),
             metaharness::EventPoll::Idle | metaharness::EventPoll::DecisionPending => {
                 // Both provider silence and an unanswered decision must yield to
@@ -735,6 +736,12 @@ mod steering_tests {
                 )
                 .unwrap();
             drive(&mut run, &commands).unwrap();
+            if name == "interrupt" {
+                assert!(
+                    !log.killed(),
+                    "a wire-bearing seam retains its own interrupt routing"
+                );
+            }
             assert!(log.written().iter().any(|line| {
                 serde_json::from_str::<serde_json::Value>(line).unwrap()["control"] == name
             }));

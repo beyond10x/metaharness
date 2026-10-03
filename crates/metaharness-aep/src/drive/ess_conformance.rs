@@ -112,6 +112,9 @@ fn polling(input: &Value) -> Observed {
         EventPoll, Input, ManualClock, Metaharness, ScriptStep, ScriptedLog, ScriptedRunner,
         ScriptedSeams,
     };
+    if input["probe"] == "quiet-wireless-interrupt" {
+        return wireless_interrupt();
+    }
     let probe = input["probe"].as_str().unwrap();
     let mut script = vec![ScriptStep::line(r#"{"emit":"session.started"}"#)];
     if probe == "pending-halt" {
@@ -138,7 +141,7 @@ fn polling(input: &Value) -> Observed {
     let mut yielded = false;
     for _ in 0..32 {
         match run.poll_event().unwrap() {
-            EventPoll::Event(_) => (),
+            EventPoll::Event(_) | EventPoll::Progress => (),
             EventPoll::Idle => {
                 yielded = probe != "pending-halt";
                 break;
@@ -198,7 +201,57 @@ fn polling(input: &Value) -> Observed {
         "metaharness.session.PollingObserved",
         json!({
             "yielded":yielded, "control_written":control_written,
-            "closed":closed, "deadline_advanced":clock.reading_ms() != 0,
+        "closed":closed, "deadline_advanced":clock.reading_ms() != 0, "process_killed":log.killed(),
+        }),
+    )
+}
+
+fn wireless_interrupt() -> Observed {
+    use metaharness::protocol::{Command, CommandOutcome, CredentialSource, DecisionMode, Kind};
+    use metaharness::{
+        EventPoll, Input, ManualClock, Metaharness, ScriptStep, ScriptedLog, ScriptedRunner,
+    };
+    let log = ScriptedLog::new();
+    let clock = ManualClock::new();
+    let mut runner = ScriptedRunner::new(vec![ScriptStep::Idle, ScriptStep::Idle], log.clone());
+    let mut run = Metaharness::new(Kind::B10x)
+        .with_credentials(CredentialSource::None)
+        .with_decisions(DecisionMode::Observe)
+        .with_model_endpoint("http://127.0.0.1:1")
+        .with_model("synthetic-never-called")
+        .start_with_clock(
+            Input::Prompt("poll fixture".into()),
+            &mut runner,
+            &mut metaharness_b10x::B10xSeams::new(None, None, None),
+            Box::new(clock.clone()),
+        )
+        .unwrap();
+    let yielded = matches!(run.poll_event().unwrap(), EventPoll::Idle);
+    assert!(matches!(
+        run.send_as(
+            "ess-interrupt",
+            Command::Interrupt {
+                reason: "fixture".into()
+            }
+        )
+        .unwrap(),
+        CommandOutcome::Ok { .. }
+    ));
+    for _ in 0..32 {
+        if !matches!(run.poll_event().unwrap(), EventPoll::Event(_)) {
+            break;
+        }
+    }
+    let closed = run
+        .events()
+        .iter()
+        .any(|event| matches!(event, Event::StreamClosed { .. }));
+    event(
+        "quiet-wireless-interrupt",
+        "metaharness.session.PollingObserved",
+        json!({
+            "yielded":yielded, "control_written":!log.written().is_empty(),
+            "closed":closed, "deadline_advanced":clock.reading_ms() != 0, "process_killed":log.killed(),
         }),
     )
 }
@@ -704,7 +757,7 @@ fn ess_generated_scenarios_drive_production_targets() {
     if external.is_none() {
         assert_eq!(
             scenarios.len(),
-            40,
+            41,
             "review and update coverage deliberately"
         );
         assert_eq!(
