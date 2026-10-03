@@ -1128,6 +1128,7 @@ dependencies = [
  "metaharness-protocol",
  "serde",
  "serde_json",
+ "tempfile",
 ]
 
 [[package]]
