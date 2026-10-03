@@ -1,0 +1,13 @@
+{
+  "at": "2026-10-03T11:43:44Z",
+  "actor": "human:timo",
+  "artifact": "story:silent-stream-steering",
+  "kind": "story",
+  "revision": 9,
+  "change": {
+    "change": "evidence",
+    "kind": "test_result",
+    "source": "Unit8bb5f369:770 workspace tests passed,18 ignored;41 ESS scenarios passed;three planted polling/interrupt faults killed; independent read-only review found no remaining issue",
+    "reference": "docs/design/metaharness-protocol-v0.1.md"
+  }
+}

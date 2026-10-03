@@ -1822,6 +1822,95 @@ identifier, ADR reference or credentials posture appears in § 2.6 or anywhere e
 
 ---
 
+## Amendment a18 — terminal outcomes and selected workspaces (2026-10-03)
+
+GitHub #11 supplies a terminal failure shape observed on Codex 0.153.4, outside the
+existing verified pin. A non-null `task_complete.error` is explicit failure and must
+survive normalization, stream closure and both audited and unaudited CLI exit.
+Preliminary assistant text cannot negate a later failure. An incomplete terminal
+record is unknown, never successful merely because the stream ended. A legacy
+successful completion may omit `error` but supplies `last_agent_message`; preserve
+that positive evidence rather than requiring a field older records never wrote.
+Keep unknown monetary cost absent. No protocol envelope or sealed frame bytes change.
+Synthetic regressions establish the mapping; live compatibility claims remain
+limited to the vendor versions and cases actually observed.
+
+GitHub #12 concerns an obsolete naming check. The pinned Harness revision
+`90f10a4314c1c630691c85e812bd8d5d23d73fcc` already admits existing directory names
+consisting of ASCII alphanumerics, underscore and hyphen, not beginning with a
+hyphen, through `EmbeddedSubstrate::workspace_adopt`. Its pinned-root identity and
+`openat2` checks provide containment; the former `ws_` prefix does not. Metaharness
+must resolve an explicitly selected project or cwd to its canonical directory and
+apply the same component eligibility before requesting confined launch. An eligible
+name alone is not proof of confinement. The actual driver must still admit the
+workspace, and missing confinement remains a refusal when mutation requires it.
+Selection never renames, copies or retires a managed worktree and never changes its
+lease owner. The existing explicit cwd/project and confinement flags express the
+operator's selection; no ambient directory is silently adopted.
+
+Independent review corrections and executed evidence for this amendment are recorded
+in the issue-repair AEP work, before any claim that the issues are complete.
+
+## Amendment a19 — governed Codex and explicit spending policy (2026-10-03)
+
+Issues #13 and #14 extend the concrete AEP host. They do not change the sealed
+`metaharness.frame/1` format, the AEP engine's authority, or the b10x observe-only seam.
+
+### Governed Codex
+
+`harness: codex` selects the existing Codex adapter in ask mode. The driver writes
+the same sealed frame and retained event stream as its other governed arms, and
+each effectful admitted call must receive the current step's engine authorization.
+Vendor payload interpretation belongs in the Codex adapter; the AEP host consumes
+its typed translation and never decodes a second vendor transcript or hook format.
+An unsupported or malformed operation is denied, including a patch whose complete
+write set and content guard cannot be established. A missing translation is not an
+allow. No Claude-only instruction-loading exemption transfers to Codex by name.
+
+The selected controls are capabilities, not suggestions: a requested control that
+Codex cannot enforce is refused by name, with no observe-mode fallback. The driver
+must distinguish a successful terminal record, provider failure and interruption;
+preliminary text and exit status alone cannot create a successful session. A resumed
+step retains its task, state, step and attempt identity through the engine's launch
+record. Unknown monetary cost remains unknown. The compatibility evidence for a
+new vendor version is separate from the existence of this executor selection.
+
+### Uncapped outer USD policy
+
+Finite reservation terms remain the default: an LLM map requires a positive outer
+cap and a positive assumed charge, and a resume may only narrow that cap. An
+explicit uncapped option is a separate policy with a nonempty operator authorization
+reference, persisted in the launch and admission ledger. It still requires the live
+opt-in. An omitted budget never selects it. Finite and uncapped flags conflict;
+neither a giant finite amount nor a zero charge represents an uncapped policy.
+
+Every invocation receives a durable admission before spawning. Under finite terms
+that admission reserves the positive assumed charge; under uncapped terms it records
+the invocation and authorization without inventing a reservation amount. Reservation
+totals are not observed spend. Observed costs, when supplied by the normalized
+terminal record, are recorded separately; absent, invalid or incomplete observations
+stay unknown, including after a failed spawn or interrupted run. Failure to persist
+an admission prevents the effect. Resume validates the policy and ledger together,
+preserves its authorization and prior admissions, and cannot convert a finite run
+to uncapped or silently replace the authorizing reference. Existing finite ledgers
+remain readable with their original semantics; inconsistent data is refused.
+
+This changes the outer USD policy only. Iteration, retry, step-visit, cancellation,
+tool-scope and engine limits retain their declared meanings. Uncapped USD authority
+does not assert that a vendor supports unlimited turns or that a governed walk
+has no termination conditions. Offline policy, CLI, persistence and resume tests
+must pass before any live run uses the new mode.
+
+## Amendment a20 — synthetic runner launch requirements (2026-10-03)
+
+A scripted runner executes retained synthetic lines and starts no vendor process.
+Its explicit runner contract therefore requires no installed vendor executable or
+version probe. Real runners retain executable resolution and version checks; an
+unknown custom runner defaults to those real-process requirements. A synthetic
+runner does not fabricate a verified vendor version: strict-version requests
+without executable evidence are refused. This distinction belongs to the runner
+seam, never a test-only environment flag or a fallback after real launch failure.
+
 ## Appendix A — every claim's method
 
 | method | rows |
@@ -1834,3 +1923,213 @@ identifier, ADR reference or credentials posture appears in § 2.6 or anywhere e
 | **not verified**, and labelled as such in place | Q1–Q16 |
 | **observed in a live governed run and reported by the operator**, not reproduced here | amendment a1's failure: the expired OAuth session |
 | **a claim the first draft made and the review removed**, each with a Q row in its place | the trace-ir document form (Q9), the command-hook timeout (Q10), matcher `""` as proven (Q11), the hook `allow` conflict order (Q12), and `--frame`'s on-disk format (§ 9.3) |
+
+## Amendment a21 — native termination evidence (2026-10-03)
+
+GitHub #17 separates three facts: the adapter's terminal verdict, complete normalized
+framing, and the operating system's result for the native child. `stream.closed` gains
+an additive `process` observation bound to its existing run_id: `{kind: exited, code: N}`,
+`{kind: signaled, signal: N}` or `{kind: unknown}`. The real runner owns that observation,
+including a status obtained by try_wait before EOF. Old streams deserialize a missing
+field as unknown. A scripted runner must not manufacture a native exit from synthetic EOF.
+A missing status or failed wait remains unknown. No vendor fields enter the core.
+
+The final marker remains unique and last. Its reason continues to describe normalized
+terminal/steering outcome; native termination is not folded into that reason. This
+corrects the initial #11 implementation's conflation of a nonzero wait result with
+terminal failure. A valid terminal record followed by exit7 may therefore have a
+completed normalized stream and unaudited transport exit0, but its process observation
+is exited/code7 and a consumer requiring native success must refuse it. Explicit
+terminal failure and incomplete terminal evidence still produce a nonzero CLI result,
+as required by a18; positive native exit0 never repairs those failures. Consumer
+admission must require all of its terminal, framing, content and native-status evidence.
+The AEP host rejects an observed failed native process even when CLI transport exits0.
+
+There is no new event tag or frame/1 change. Readers that ignore unknown object fields
+can retain old behavior; readers requiring native success must require this field and
+refuse its absence. Contract source is prepared on the integration branch before any
+consumer is changed; publishing and cross-repository adoption remain outside this
+unpublished wave. Executable Rust fixtures cover actual zero, nonzero and signal status,
+plus absent observations, terminal failure with exit0, and cleanup. No model is needed.
+
+## Amendment a22 — scoped Codex terminal and tool observations (2026-10-03)
+
+Issues #18–20 concern evidence a binary consumer must not reconstruct from vendor text.
+The source baseline is official Codex tag rust-v0.153.4, commit
+042fb41b7c813ac7999105e886b2b7aa715b5081. Source-backed mappings below remain unverified
+against a fresh native run and do not advance the existing adapter pin.
+
+`session.ended` gains optional `final_answer` (text and optional vendor turn_id) and
+`observed_models` (ordered turn-scoped selection observations). Old records deserialize
+both as absent. Only a successful terminal task_complete.last_agent_message supplies
+final_answer. Intermediate text, message phases and duplicate response/event renderings
+never supply it. Blank or missing final text, an unfinished newer turn, and any explicit
+terminal failure leave it absent. This is authoritative terminal-answer evidence, not a
+claim that its content satisfies a consumer's phase schema.
+
+Model observations name the model from an actual turn_context record, its optional
+turn_id and the normalized turn number, with scope `turn_selection`. Missing/blank model
+fields remain absent; repeated identical context observations are deduplicated. They
+are the vendor's recorded selection, not a requested launch option and not proof of the
+provider/model that ultimately served a rerouted request. The vendor's aggregate token
+counts stay unassigned to a model rather than attributing a cumulative total to the last
+turn's selection. No price is inferred. A terminal record retains observations across
+model changes; no observed terminal record means no terminal aggregate to invent.
+
+`tool.result` gains optional normalized `exit_code` and `outcome_source`. Existing
+is_error stays unknown unless a supported structured completion can be correlated to
+an observed call in the current turn. Supported sources are retained item_completed
+CommandExecution/FileChange items and legacy patch_apply_end records. Upstream creates
+item.id from call_id (core/src/tools/events.rs), so match that id and tool family, and
+match turn_id when both sides carry it. Never correlate by order, command text or output.
+An unmatched or contradictory record preserves unknown status and emits a warning;
+contradiction is sticky for that call. Incomplete commands stay unknown. Structured
+failed/declined outcomes are errors; command success requires completed status with
+measured exit0. Missing or inconsistent required metadata cannot become success.
+Patch status can prove success/failure without pretending there is a numeric exit code.
+
+Raw call-output content may arrive before or after structured completion. It remains
+content, never an outcome decoder. A subsequent tool.result for the same call can enrich
+or invalidate the observation; consumers admit only after complete framing and reconcile
+all records, with the last observation and any contradiction taken into account. Already
+known results survive a later content-only representation. Authorization remains only
+in tool.decided and is never derived from success, failure or native auto-approval.
+
+Codex's legacy rollout does not retain ExecCommandEnd, and its function-call
+output serializer discards the internal success flag. Paginated history retains
+CommandExecution items; legacy history retains patch_apply_end. This implementation
+does not silently switch vendor history mode or parse formatted output. A legacy command
+without structured outcome therefore remains unverified; enabling another transport or
+history mode requires a separately verified correlation and native observation. The
+binary wire additions are optional fields on existing events; no event tags or frame/1
+bytes change. Source contract and synthetic regressions precede consumer adoption.
+
+### a22 source correction — the persistent exec entry point
+
+At the same official 0.153.4 source commit, exec/src/lib.rs
+`thread_start_params_from_config` explicitly selects Paginated history for a
+non-ephemeral thread. Metaharness refuses --ephemeral because it requires a retained
+rollout. The earlier reading of ThreadHistoryMode::default as the exec default was
+incomplete: the entry point overrides it. `start_thread` falls back to the default
+only for the named server compatibility error about paginated listing support.
+Thus no launch flag or additional transcript transport is justified by that default
+alone. The existing structured item mapping can observe the normal persistent exec
+path. Native qualification must establish the actual path; resumed, fallback and
+legacy records without structured status still remain unknown. No claim of native
+coverage or pin advance follows from this source correction.
+
+## Amendment a23 — steering during quiet native output (2026-10-03)
+
+The CLI must service commands while a provider emits no records and while a tool
+decision remains pending. The native cancellation fixture found that the child
+reader consumed every polling timeout internally, so the CLI could not observe
+an already received halt until provider output resumed. Likewise, a pending
+decision could send the blocking event API into its entire deadline wait.
+
+Introduce a bounded polling path beside the existing blocking library methods.
+Native process polling performs one existing 20ms receive interval and reports
+line, idle or EOF. A pending unanswered decision remains WouldBlock; idle is
+neither EOF nor a decision request. Existing custom process implementations may
+retain their blocking next_line through a compatibility default; custom runners
+requiring bounded steering must implement the polling method explicitly.
+
+Run polling reports one event, progress, idle, decision-pending or ended. It checks armed
+deadlines on each poll, preserves delivery-time arming and ordering, and never
+waits an entire decision budget. Command admission also expires armed deadlines
+before applying the command: an answer received between polls at or after its
+deadline is too late, and cannot replace the deadline deny. Unarmed requests
+still have no running budget. One input record per poll bounds work even when
+the adapter produces no normalized event. The blocking next_event API continues
+to wait for an event and advances the existing clock to a pending deadline as
+before. The CLI uses polling, draining its command channel between iterations;
+idle and decision-pending iterations use the existing short steering wait.
+Progress means one raw record was consumed without a normalized event; the CLI
+checks stdin and immediately polls again instead of charging an idle wait for
+every buffered control-plane record.
+
+No new wire event, EOF marker or fabricated terminal record is introduced. Halt
+and interrupt retain their existing adapter semantics, decision-before-control
+ordering, command ids, native status and exactly one final stream.closed.
+Deterministic tests cover pending-decision steering and idle-versus-EOF; native
+credential-free timing qualification is separate evidence, not a model claim.
+
+An adapter that declares interrupt honoured but supplies no control line must
+still stop the owned process. The generic run loop uses process kill in that
+case; when a line exists, its adapter-specific routing remains authoritative.
+This fixes the observe-only native loop's acknowledged but ineffective interrupt
+without adding a vendor name or a fictitious wire to the core. Interrupt does
+not invent terminal success or a halt reason: EOF retains actual process status
+and the ordinary terminal-evidence classification. ESS observes the real no-wire
+adapter through a synthetic process, including whether kill was invoked; native
+termination timing remains separate evidence.
+
+## Amendment a24 — explicit native subprocess write directories (2026-10-03)
+
+Issue #21 adds repeated `--process-write-subtree DIR` to RunSpec, the public
+builder and the b10x launch. It names exact workspace-relative directories for
+confined native processes. An empty declaration emits no flag and leaves the
+native subprocess workspace read-only. File-tool `--write-scope` globs remain
+independent; no process mount is inferred from them. Claude and Codex refuse the
+new control by name, as does b10x without explicit daemon or embedded confinement.
+
+The source contract is Harness 0.13.3, commit
+798325f03cf5a18df8fadb346d31b314826136ec, `process_workspace_access`, and its pinned
+Substrate 0.7.8 commit 05695970b069f79e6678f2f02cbd78bbe5fa2a56,
+`validate_workspace_access`. Native normalization sorts and deduplicates the set;
+this adapter validates that canonical set and forwards every original explicit
+argument unchanged. Empty paths, absolute/root paths, dot/dotdot or empty
+components, NUL, backslash, depth over 64, more than 64 distinct directories and
+ancestor/descendant overlap are refused. Metaharness additionally refuses glob
+metacharacters (`*?[]{}`): native path syntax could treat them as literal directory
+names, but this public declaration deliberately admits no ambiguous glob spelling.
+There is no glob expansion, trimming, normalization or widening to a parent.
+
+Syntax validation proves neither existence nor containment. Substrate still
+requires existing directories, refuses symlinks in every component, pins the
+admitted objects and enforces the actual mount and execution contract. Metaharness
+must not create missing build directories, mount a whole workspace to satisfy a
+narrow declaration, infer toolchain/dependency mounts or substitute an unconfined
+process when the native catalogue withholds execution. Live containment evidence
+must show declared writes succeed and undeclared siblings/outside paths do not;
+a host withholding process capability leaves that observation unverified.
+
+The adapter compatibility pin (0.12.1) and Cargo source revision are unchanged.
+The pinned Harness source90f10a43 already declares this flag and the same read-only
+default; the declaration was missing from Metaharness, not necessarily from older
+native binaries. Both that source and 0.13.3 were inspected. Neither inspection nor
+a synthetic launch qualifies an unobserved binary; strict-version behavior stays
+intact, and actual binary observations must retain their own version.
+`doctor b10x` derives its flag-surface obligation from the maximal launch and must
+include the new flag. Native CLI refusal before a model request stays a refusal,
+never an ignored declaration or unconfined fallback. No event or frame wire changes.
+
+### Amendment a25 — qualify a vendor pin by observed surfaces (2026-10-03)
+
+Advance the Codex adapter pin from0.145.0 to0.153.4 after bounded native fixture
+observations of the actual binary. The owned loopback provider, fresh homes and
+absent credentials isolate launch, hook and rollout behavior without a paid model
+request. Actual native observations establish success/refusal, authoritative final
+answer and model selection, synthetic usage, command exits0/7, allow/deny effects,
+patch completion and process halt/interrupt. The final integration rerun must use
+the exact release candidate driver. Source provenance and native metadata confirm
+the normal persistent Paginated history path; fallback records without structured
+outcomes remain unknown.
+
+This pin names a tested version, not universal conformance. Keep registration and
+turn tiers, plugin enumeration/H1a, replacement-input behavior, hosted provider
+credentials, model quality and monetary cost explicitly unverified where the
+observations do not reach. Historical captures retain their original version;
+regenerate only derived warning/provider expectations. Fixture tokens and prices
+are synthetic and never actual paid spend. Claude's observed built-in plugins
+leave its H1a floor unqualified; retain its older pin. Native b10x observations
+remain separate from a governed AEP engine run and from its source/version pair.
+
+The b10x source/version pair will advance together to release0.13.3 at
+798325f03cf5a18df8fadb346d31b314826136ec, verified as current remote main and the
+peeled annotated release tag. Its tools/wire source is unchanged from0.12.1;
+loop additions are optional caller-owned memories, absent by default. Qualification
+requires the current native fixture matrix plus a strict-version prompted read-only
+scoper whose actual request and file-read result are observed. This does not claim
+named-agent/delegate loading, confined process success on a host withholding run,
+or governed AEP behavior. Both dependency manifests, lockfile and runtime provenance
+constants move together; retain every narrower unsupported/unverified boundary.

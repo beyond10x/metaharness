@@ -1,6 +1,6 @@
 {
   "format": "trace-ir/1",
-  "transcript_digest": "0a8b738ab785674dcf3929f995035167427080470fb93a62d36c3d8eb2b9b8f9",
+  "transcript_digest": "94bb32f1d4a5dbdcb4793021058a8d64d614449c22eee4bdeba29134b617596a",
   "adapter": {
     "name": "metaharness/project",
     "written_against": [
@@ -114,7 +114,9 @@
         "call_id": "toolu_2",
         "content": "[{\"id\":\"epic:passkey-sign-in\",\"status\":\"active\"}]",
         "event": "tool_result",
+        "exit_code": null,
         "is_error": null,
+        "outcome_source": null,
         "tool_use_result": {
           "interrupted": false,
           "stderr": "",
@@ -149,7 +151,9 @@
         "call_id": "toolu_3",
         "content": "story starts at draft",
         "event": "tool_result",
+        "exit_code": null,
         "is_error": null,
+        "outcome_source": null,
         "tool_use_result": {
           "interrupted": false,
           "stderr": "",
@@ -184,7 +188,9 @@
         "call_id": "toolu_4",
         "content": "created story:device-binding (draft)",
         "event": "tool_result",
+        "exit_code": null,
         "is_error": null,
+        "outcome_source": null,
         "tool_use_result": {
           "interrupted": false,
           "stderr": "",
@@ -219,7 +225,9 @@
         "call_id": "toolu_5",
         "content": "created story:cross-device-sign-in (draft)",
         "event": "tool_result",
+        "exit_code": null,
         "is_error": null,
+        "outcome_source": null,
         "tool_use_result": {
           "interrupted": false,
           "stderr": "",
@@ -254,7 +262,9 @@
         "call_id": "toolu_6",
         "content": "9 file(s) in .engineering/planning: 9 artifact(s)\nvalid",
         "event": "tool_result",
+        "exit_code": null,
         "is_error": null,
+        "outcome_source": null,
         "tool_use_result": {
           "interrupted": false,
           "stderr": "",
@@ -272,7 +282,9 @@
         "call_id": "toolu_1",
         "content": "Created story:device-binding and story:cross-device-sign-in under epic:passkey-sign-in. protocol artifact validate: valid.",
         "event": "tool_result",
+        "exit_code": null,
         "is_error": null,
+        "outcome_source": null,
         "tool_use_result": null
       }
     },
@@ -305,9 +317,11 @@
         "duration_api_ms": 17100,
         "duration_ms": 18200,
         "event": "run_outcome",
+        "final_answer": null,
         "is_error": false,
         "model_usage": null,
         "num_turns": 7,
+        "observed_models": null,
         "permission_denials": [],
         "stop_reason": "end_turn",
         "subagents_spawned": 1,
@@ -337,6 +351,9 @@
       "kind": {
         "event": "stream_closed",
         "events": 15,
+        "process": {
+          "kind": "unknown"
+        },
         "reason": "completed",
         "run_id": "decomposer-clean"
       }

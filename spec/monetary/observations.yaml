@@ -1,0 +1,22 @@
+domain: metaharness.monetary
+summary: Exact monetary observation types excluded from the executable core projection.
+# This is another projection of the same Metaharness system, not a separate
+# service. The separate manifest makes the compiler coverage boundary explicit.
+# ESS 0.51.0 validates Binary64 but refuses it in conformance and Rust generation.
+# No decimal/string surrogate or zero default is substituted to get a green suite.
+types:
+  - name: metaharness.monetary.TerminalCost
+    kind: struct
+    fields:
+      - {name: total_cost_usd, type: Optional<Binary64>, presence: null_when_absent}
+    # RETROFIT: crates/metaharness-protocol/src/event.rs:409-410 is Option<f64>.
+    # Codex reports None at crates/metaharness-codex/src/rollout.rs:150-152.
+  - name: metaharness.monetary.InvocationCost
+    kind: struct
+    fields:
+      - {name: observed_cost_usd, type: Optional<Binary64>, presence: null_when_absent}
+    # drive/spending.rs stores the observation on the admitted invocation row.
+    # Unknown stays absent. Reservations are not observations and cannot fill it.
+    # The row's ordinal plus retained run directory identifies the admission.
+    # No observation is created from a reservation, failed spawn or missing terminal.
+    # Ordered I/O and resume corruption checks run in the Rust admission suite.

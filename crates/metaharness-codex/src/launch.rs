@@ -561,7 +561,7 @@ impl fmt::Display for LaunchRefusal {
             ),
             LaunchRefusal::UnsupportedOption { option, why } => write!(
                 f,
-                "the run asked for {option} and codex exec 0.145.0 has no way to express it: \
+                "the run asked for {option} and the pinned codex exec has no way to express it: \
                  {why}. It is refused rather than dropped, because an option that was set and \
                  ignored is a run that is not the one that was asked for"
             ),
@@ -1628,7 +1628,7 @@ mod tests {
             plan.env.get("OPENAI_API_KEY").map(String::as_str),
             Some("sk-test")
         );
-        assert!(plan.credential_copies.is_empty());
+        assert_eq!(plan.credential_copies, []);
     }
 
     #[test]
@@ -2154,8 +2154,8 @@ mod tests {
     #[test]
     fn a_run_with_no_plugin_attests_an_empty_list_and_never_an_absent_key() {
         let plan = plan();
-        assert!(plan.plugin_installs.is_empty());
-        assert!(plan.attestation.installed_plugins.is_empty());
+        assert_eq!(plan.plugin_installs, []);
+        assert_eq!(plan.attestation.installed_plugins, []);
         let json = serde_json::to_string(&plan.attestation).expect("the attestation serializes");
         assert!(json.contains(r#""installed_plugins":[]"#), "{json}");
         assert!(json.contains(r#""decisions":"frame""#), "{json}");

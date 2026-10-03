@@ -1,0 +1,13 @@
+{
+  "at": "2026-09-15T07:41:07Z",
+  "actor": "human:timo",
+  "artifact": "story:b10x-pin-is-observed-at-0-12-1",
+  "kind": "story",
+  "revision": 2,
+  "change": {
+    "change": "evidence",
+    "kind": "metric_observation",
+    "source": "the same run's session.ended.total_cost_usd, priced by evals/aep/opus-5-prices.json: 0.017481 USD over 2185+2317 input, 2183 cached, 49+27 output tokens",
+    "reference": "docs/research/2026-09-15-b10x-harness-0.12.1-adapter-surface.md"
+  }
+}

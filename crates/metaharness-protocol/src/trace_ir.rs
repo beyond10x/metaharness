@@ -510,6 +510,7 @@ mod tests {
                     2,
                     Event::StreamClosed {
                         events: 1,
+                        process: crate::ProcessTermination::Unknown,
                         reason: CloseReason::Completed,
                         run_id: "t".to_string(),
                     },
@@ -561,6 +562,7 @@ mod tests {
                     2,
                     Event::StreamClosed {
                         events: 7,
+                        process: crate::ProcessTermination::Unknown,
                         reason: CloseReason::Completed,
                         run_id: "t".to_string(),
                     },
@@ -577,6 +579,7 @@ mod tests {
     #[test]
     fn a_stream_says_which_of_the_three_completeness_answers_it_is() {
         let closed = |events, run: &str| Event::StreamClosed {
+            process: crate::ProcessTermination::Unknown,
             events,
             reason: CloseReason::Budget,
             run_id: run.to_string(),

@@ -1,0 +1,13 @@
+{
+  "at": "2026-10-03T07:43:08Z",
+  "actor": "human:timo",
+  "artifact": "story:current-aep-runtime",
+  "kind": "story",
+  "revision": 11,
+  "change": {
+    "change": "evidence",
+    "kind": "test_result",
+    "source": "task check: fmt and clippy exit 0, workspace tests exit 0; 729 passed, 13 existing ignored live tests. Corrected hosted refusal command and AEP 0.68 provenance expectations.",
+    "reference": "unit 13f192cd; ~/.cache/metaharness-issue-repair/scripted16/task-check.log"
+  }
+}

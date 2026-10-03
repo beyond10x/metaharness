@@ -166,7 +166,7 @@ fn the_plans_attestation_reaches_the_opening_event() {
         panic!("expected session.started");
     };
     assert_eq!(*hermetic, plan.attestation);
-    assert!(reader.finish().is_empty());
+    assert_eq!(reader.finish(), [] as [metaharness_protocol::Emission; 0]);
 }
 
 #[test]

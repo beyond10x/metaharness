@@ -1,0 +1,143 @@
+domain: metaharness.spending
+summary: Local finite reservations and explicit uncapped invocation authority.
+# RETROFIT authority: crates/metaharness-aep/src/drive.rs:154-279,1594-1638,
+# 1654-1699 and the pre-spawn reserve at :500-518. No upstream AEP workflow,
+# iteration/retry limits or worktree/substrate lifecycle is redeclared here.
+types:
+  - name: metaharness.spending.FiniteTerms
+    kind: struct
+    fields:
+      - {name: cap_micro_usd, type: Integer}
+      - {name: assumed_micro_usd_per_run, type: Integer}
+  - name: metaharness.spending.SpendLedger
+    kind: struct
+    fields:
+      - {name: format, type: String}
+      - {name: spent_micro_usd, type: Integer}
+      - {name: launches, type: Integer}
+    invariants: [spent_micro_usd >= 0, launches >= 0]
+    # The existing aep.drive-spend/1 calls reservations "spent_micro_usd".
+    # They are assumed charges, not observed monetary cost (drive.rs:235-251).
+  - name: metaharness.spending.UncappedTerms
+    kind: struct
+    fields:
+      - {name: authorization_ref, type: String}
+    # drive/spending.rs persists this reference in launch policy and ledger.
+    # Whitespace-only authority is refused; no cap or invented charge exists.
+  - name: metaharness.spending.Policy
+    kind: union
+    tag: mode
+    variants:
+      finite: metaharness.spending.FiniteTerms
+      uncapped: metaharness.spending.UncappedTerms
+    # Integrated host policy. Existing aep.drive-spend/1 remains the finite ledger.
+  - name: metaharness.spending.AuthorizationEvidence
+    kind: enum
+    variants: [missing, blank, nonblank]
+    # Raw reference shape classes: blank includes empty and Unicode whitespace-only.
+  - name: metaharness.spending.InvocationAdmission
+    kind: struct
+    fields:
+      - {name: launches, type: Integer}
+      - {name: authorization_ref, type: String}
+    # UNMAPPED: observed monetary values are declared exactly in the separately
+    # validated monetary contract; the core projection excludes the value while
+    # ESS 0.51.0 refuses Binary64 conformance codecs and Rust synthesis.
+    invariants: [launches > 0]
+    # Read-only projection of the durable ledger: count is invocations.len(), and
+    # authorization_ref is read from policy. Durable admission precedes spawn.
+    # Observations stay absent
+    # when the vendor reports no cost; this is not a zero-cost declaration.
+
+errors:
+  - name: metaharness.spending.InvalidFiniteTerms
+    fields: []
+  - name: metaharness.spending.UncappedAuthorizationRequired
+    fields: []
+
+commands:
+  - name: metaharness.spending.RecordFiniteLedger
+    # Start the production finite ledger and expose its retained zero-admission state.
+    input: []
+    outcomes:
+      - name: recorded
+        creates: metaharness.spending.FiniteLedgerRecord
+        instance: record_id
+        emits: [metaharness.spending.FiniteLedgerRecorded]
+        payload: {metaharness.spending.FiniteLedgerRecorded: {record_id: {generated: true}}}
+  - name: metaharness.spending.RecordInvocationAdmission
+    # Persist one authorized uncapped invocation and expose its retained admission count.
+    input: []
+    outcomes:
+      - name: recorded
+        creates: metaharness.spending.AdmissionRecord
+        instance: record_id
+        emits: [metaharness.spending.AdmissionRecorded]
+        payload: {metaharness.spending.AdmissionRecorded: {record_id: {generated: true}}}
+  - name: metaharness.spending.CheckFiniteTerms
+    # Retrofit the positive finite cap and assumed-charge relation.
+    input:
+      - {name: terms, type: metaharness.spending.FiniteTerms}
+    outcomes:
+      - name: valid-finite-terms
+        when:
+          all:
+            - terms.cap_micro_usd > 0
+            - terms.assumed_micro_usd_per_run > 0
+            - terms.assumed_micro_usd_per_run <= terms.cap_micro_usd
+        accepts: nothing
+      - name: invalid-finite-terms
+        error: metaharness.spending.InvalidFiniteTerms
+    # UNMAPPED: Integer is unbounded; the implementation uses u64 and checked
+    # addition/multiplication. Overflow, exact decimal parsing and ledger
+    # consistency need production money/reservation tests, not float arithmetic.
+    # UNMAPPED: METAHARNESS_LIVE=1, missing flags and model-free maps are outer
+    # admission rules in spend_terms_with_live; this command receives parsed terms.
+
+  - name: metaharness.spending.CheckUncappedAuthorization
+    # Classify a raw operator reference, preserving missing and blank evidence.
+    input:
+      - {name: explicit_opt_in, type: Boolean}
+      - {name: reference_evidence, type: metaharness.spending.AuthorizationEvidence}
+    outcomes:
+      - name: explicitly-authorized
+        when: {all: [explicit_opt_in == true, reference_evidence == nonblank]}
+        accepts: nothing
+      - name: unauthorized
+        error: metaharness.spending.UncappedAuthorizationRequired
+    # UNMAPPED: nonempty syntax is not proof of authorization. The implementation
+    # must persist the operator's declared reference and policy before allocation/
+    # spawn; the proposal does not invent an external authorization service.
+    # UNMAPPED: reservation-before-spawn, atomic persistence failure, invocation
+    # overflow and crash/resume consistency are ordered I/O behavior. The target
+    # must drive real SpendBudget and the proposed uncapped admission implementation.
+    # UNMAPPED: resume must preserve mode/reference and forbid implicit finite to
+    # uncapped widening. Whether an explicit uncapped-to-finite narrowing is allowed
+    # is refused too. Both directions preserve the original mode.
+
+events:
+  - name: metaharness.spending.FiniteLedgerRecorded
+    fields: [{name: record_id, type: String}]
+  - name: metaharness.spending.AdmissionRecorded
+    fields: [{name: record_id, type: String}]
+
+# Read-only snapshots of retained host data. Recorded is an immutable observation,
+# not a new AEP execution lifecycle; no transition or mutation API is invented.
+entities:
+  - name: metaharness.spending.FiniteLedgerRecord
+    identity: {name: record_id, type: String}
+    fields: [{name: ledger, type: metaharness.spending.SpendLedger}]
+    lifecycle: {initial: Recorded, states: [Recorded], terminal: [Recorded], transitions: []}
+  - name: metaharness.spending.AdmissionRecord
+    identity: {name: record_id, type: String}
+    fields: [{name: admission, type: metaharness.spending.InvocationAdmission}]
+    lifecycle: {initial: Recorded, states: [Recorded], terminal: [Recorded], transitions: []}
+views:
+  - name: metaharness.spending.RetainedFiniteLedger
+    source: metaharness.spending.FiniteLedgerRecord
+    consistency: read_your_writes
+    fields: [{name: ledger, type: metaharness.spending.SpendLedger}]
+  - name: metaharness.spending.RetainedAdmission
+    source: metaharness.spending.AdmissionRecord
+    consistency: read_your_writes
+    fields: [{name: admission, type: metaharness.spending.InvocationAdmission}]

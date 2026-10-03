@@ -1,0 +1,13 @@
+{
+  "at": "2026-10-03T07:15:50Z",
+  "actor": "human:timo",
+  "artifact": "story:current-aep-runtime",
+  "kind": "story",
+  "revision": 9,
+  "change": {
+    "change": "evidence",
+    "kind": "test_result",
+    "source": "cargo test --locked -p metaharness-aep -p metaharness-aep-eval; 77 passed, exit 0",
+    "reference": "local-evidence:aep-runtime/full-local.log"
+  }
+}

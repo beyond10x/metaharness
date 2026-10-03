@@ -16,6 +16,8 @@ use aep_driver_spec::map::{LlmStep, ScopeRule, Step, StepMap, WriteScope};
 use aep_driver_spec::tool::ToolConfig;
 use anyhow::{Context, Result, bail};
 use clap::{Args, Subcommand};
+mod spending;
+use spending::{AdmissionBudget, SpendOptions};
 // The one glob matcher in the workspace, and the one a step map's `scope:` is decided with. Taken
 // from `trace-domain` rather than written again here for the reason `AGENTS.md` gives about a
 // second copy of a rule: two matchers would disagree about `*` the first time either was touched,
@@ -49,6 +51,18 @@ const METAHARNESS_LIVE_ENV: &str = "METAHARNESS_LIVE";
 /// everything else, so a `resume` re-reads them instead of being told again.
 #[derive(Debug, Clone, Default, Args, serde::Serialize, serde::Deserialize)]
 pub struct B10xOptions {
+    /// Model override for governed Codex steps; persisted for resume.
+    #[arg(long = "codex-model", value_name = "MODEL")]
+    #[serde(default)]
+    codex_model: Option<String>,
+    /// Foreign endpoint for Codex; always launches without operator credentials.
+    #[arg(
+        long = "codex-endpoint",
+        value_name = "BASE_URL",
+        requires = "codex_model"
+    )]
+    #[serde(default)]
+    codex_endpoint: Option<String>,
     /// The endpoint a `harness: b10x` step's loop is pointed at, as the gateway's root URL.
     #[arg(long = "b10x-endpoint", value_name = "BASE_URL")]
     #[serde(default)]
@@ -153,6 +167,7 @@ impl B10xOptions {
 
 /// The immutable cost terms one launch declares and every resume inherits.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
+#[serde(deny_unknown_fields)]
 struct SpendTerms {
     /// Maximum total reservation.
     cap_micro_usd: u64,
@@ -297,7 +312,7 @@ struct CliExecutors {
     /// The one non-human actor whose recorded approval may answer an `operator` step, so the
     /// pause can say who may answer it.
     /// The run-level reservation ledger, present exactly when this map can spawn a model.
-    spend: Option<SpendBudget>,
+    spend: Option<AdmissionBudget>,
 }
 
 impl CliExecutors {
@@ -322,9 +337,22 @@ impl CliExecutors {
     }
 
     /// Attaches the run-level model-session ceiling after its ledger is durable.
-    fn with_spend(mut self, spend: Option<SpendBudget>) -> Self {
+    fn with_spend(mut self, spend: Option<AdmissionBudget>) -> Self {
         self.spend = spend;
         self
+    }
+
+    fn admit_model(&mut self, context: &StepContext<'_>) -> Result<(), StepOutcome> {
+        let spend = self
+            .spend
+            .as_mut()
+            .ok_or_else(|| StepOutcome::BudgetExhausted {
+                reason: "this step has no model-spend authority; no process was spawned".to_owned(),
+            })?;
+        spend.reserve(context).map_err(|error| match error {
+            ReserveError::Exhausted(reason) => StepOutcome::BudgetExhausted { reason },
+            ReserveError::Persist(reason) => StepOutcome::NoVerdict { reason },
+        })
     }
 
     /// The step's sealed frame document, written beside the transcript it governs.
@@ -333,7 +361,7 @@ impl CliExecutors {
     /// **This is the native arm's half of the content rule.** The vendor arm's calls come back
     /// through the metaharness seam and reach `store_integrity` in this process; the native loop
     /// decides in-process and consults programs, so the same rule is declared here as a program to
-    /// spawn — `protocol drive hook`, this binary by the path `driven_programs` already names,
+    /// spawn — `aep drive hook`, this binary by the path `driven_programs` already names,
     /// calling the same `store_integrity_at`.
     ///
     /// Scoped to `file_edit` alone, because the fence rule is about the text an edit quotes.
@@ -377,7 +405,7 @@ impl CliExecutors {
         fs::write(&path, document)
             .map_err(|error| format!("cannot write {}: {error}", path.display()))?;
 
-        // Beside the frame, when this state refused anything. `protocol observe trace check` reads it as
+        // Beside the frame, when this state refused anything. `aep observe trace check` reads it as
         // it reads any specification.
         if let Some(refusals) = refusal_specification(context.state, context.index, context.tools) {
             let refusals_path = transcripts.join(format!(
@@ -422,6 +450,15 @@ impl CliExecutors {
                 &self.plugin_dirs,
                 prompt,
                 self.b10x.claude_gateway(),
+                aep_driver::attest::session_actor(context.execution)
+                    .map(|actor| actor.to_string())
+                    .as_deref(),
+            ),
+            Harness::Codex => codex_argv(
+                frame_file,
+                &self.working_directory,
+                prompt,
+                &self.b10x,
                 aep_driver::attest::session_actor(context.execution)
                     .map(|actor| actor.to_string())
                     .as_deref(),
@@ -487,7 +524,7 @@ impl CliExecutors {
                 Ok(path) => Some(path),
                 Err(reason) => return StepOutcome::NoVerdict { reason },
             },
-            Harness::ClaudeCode => None,
+            Harness::ClaudeCode | Harness::Codex => None,
         };
         let argv = self.argv_for(
             harness,
@@ -499,21 +536,8 @@ impl CliExecutors {
         );
         // The last action before the paid effect. Persist first: if this process dies after the
         // child starts, a resume must not regain authority that was already handed to a session.
-        let Some(spend) = self.spend.as_mut() else {
-            return StepOutcome::BudgetExhausted {
-                reason: "this map reached an `llm` step without a model-session cost ceiling; no \
-                         metaharness process was spawned"
-                    .to_owned(),
-            };
-        };
-        match spend.reserve() {
-            Ok(()) => {}
-            Err(ReserveError::Exhausted(reason)) => {
-                return StepOutcome::BudgetExhausted { reason };
-            }
-            Err(ReserveError::Persist(reason)) => {
-                return StepOutcome::NoVerdict { reason };
-            }
+        if let Err(outcome) = self.admit_model(context) {
+            return outcome;
         }
         // No `current_dir`: the working directory travels as `--cwd` and metaharness spawns the
         // vendor there itself, with a constructed environment nothing here needs to reach into.
@@ -579,6 +603,14 @@ impl CliExecutors {
         let status = child.wait();
         let stderr_text = stderr_thread.join().unwrap_or_default();
 
+        if let Some(spend) = &mut self.spend
+            && let Err(error) = spend.observe(&transcript)
+        {
+            return StepOutcome::NoVerdict {
+                reason: format!("cannot persist the invocation observation: {error}"),
+            };
+        }
+
         metaharness_outcome(status, &stderr_text, &transcript)
     }
 }
@@ -599,6 +631,36 @@ fn metaharness_outcome(
 ) -> StepOutcome {
     match status {
         Ok(status) if status.success() => {
+            // Transport exit0 is not the native child's result (amendment a21).
+            // This reads only our normalized protocol; no vendor record is interpreted here.
+            if let Ok(events) = fs::read_to_string(transcript) {
+                for line in events.lines() {
+                    let Ok(record) = serde_json::from_str::<serde_json::Value>(line) else {
+                        continue;
+                    };
+                    if record["event"] != "stream.closed" {
+                        continue;
+                    }
+                    let Ok(process) = serde_json::from_value::<
+                        metaharness::protocol::ProcessTermination,
+                    >(record["process"].clone()) else {
+                        continue;
+                    };
+                    if matches!(process, metaharness::protocol::ProcessTermination::Exited { code } if code != 0)
+                        || matches!(
+                            process,
+                            metaharness::protocol::ProcessTermination::Signaled { .. }
+                        )
+                    {
+                        return StepOutcome::NoVerdict {
+                            reason: format!(
+                                "native child terminated {process:?}; the event stream is at {}",
+                                transcript.display()
+                            ),
+                        };
+                    }
+                }
+            }
             // An `llm` step never carries evidence, and the type is what makes that true.
             // What the model achieved that is checkable is observed by the command step
             // after it.
@@ -700,7 +762,7 @@ fn surface_lines(harness: Harness, tools: &ToolConfig, driver: &str) -> String {
     if tools.shell_offered() && !harness.adjudicates() {
         // **The path, not the name.** The CLI is not on this sandbox's `PATH` and is not at the
         // path it occupies on the host: it is mounted read-only at one place, and a step told to
-        // reach the store "through `protocol`" and given no spelling that resolves will hand-write
+        // reach the store "through `aep`" and given no spelling that resolves will hand-write
         // the store instead — which is exactly what EVAL-1/1 did, twice, for two different reasons.
         let _ = write!(
             lines,
@@ -710,7 +772,7 @@ fn surface_lines(harness: Harness, tools: &ToolConfig, driver: &str) -> String {
              artifact …` and `{driver} observe trace …` — the older `artifact …` and \
              `trace …` spellings, without the area word, reach the same commands. That is the \
              whole path and it is not on `PATH`; the \
-             bare name `protocol` does not resolve here. Building and testing are `command` steps \
+             bare name `aep` does not resolve here. Building and testing are `command` steps \
              the driver runs itself, so that their records carry a verifier's provenance instead \
              of yours.\n",
         );
@@ -719,11 +781,11 @@ fn surface_lines(harness: Harness, tools: &ToolConfig, driver: &str) -> String {
             "\n`Bash` runs **one simple invocation per call**. No `&&`, no `|`, no `;`, no `$(…)`, \
              no redirect — a composed command is refused whole, so two things you want are two \
              calls.\n\
-             It runs `protocol plan artifact …` and `protocol observe trace …` \
+             It runs `aep plan artifact …` and `aep observe trace …` \
              and the readers `grep`, `rg`, \
              `ls`, `cat`, `head`, `tail` and `wc` — those only because nothing here can redirect \
              their output into a file. Not `git`, not `cargo`, not `sed`, not `awk`, not `find`, \
-             not `xargs`, not `protocol --help`. \
+             not `xargs`, not `aep --help`. \
              Building and testing are `command` steps the driver runs itself, so that their records \
              carry a verifier's provenance instead of yours — running them here would produce \
              nothing the engine can admit.\n",
@@ -800,12 +862,14 @@ fn prompt_for(step: &LlmStep, context: &StepContext<'_>, driver: &str) -> String
         // Named without a tool on a harness that has no skill mechanism: the b10x catalogue has no
         // entry for `skill.load`, so instructing it to use one would be instructing it to reach
         // for something the loop cannot publish.
-        prompt.push_str(match (step.skills.len() == 1, harness.adjudicates()) {
-            (true, true) => " skill before you act, with the `Skill` tool.\n",
-            (false, true) => " skills before you act, with the `Skill` tool.\n",
-            (true, false) => " skill before you act.\n",
-            (false, false) => " skills before you act.\n",
-        });
+        prompt.push_str(
+            match (step.skills.len() == 1, harness == Harness::ClaudeCode) {
+                (true, true) => " skill before you act, with the `Skill` tool.\n",
+                (false, true) => " skills before you act, with the `Skill` tool.\n",
+                (true, false) => " skill before you act.\n",
+                (false, false) => " skills before you act.\n",
+            },
+        );
     }
     prompt.push_str("\n\nYou are in workflow state `");
     prompt.push_str(context.state.as_str());
@@ -966,6 +1030,21 @@ fn action_for(tool: &str, input: &serde_json::Value) -> Option<ActionRequest> {
     Some(ActionRequest::new(action))
 }
 
+/// Map only the adapter's supported invocation through the shared shell policy.
+fn codex_action(
+    context: &StepContext<'_>,
+    name: &str,
+    input: &serde_json::Value,
+) -> Result<ActionRequest, String> {
+    let command = metaharness_codex::governed_shell_command(name, input)?;
+    driven_surface(context, &serde_json::json!({ "command": command }))?;
+    let mut words = command.split_whitespace();
+    Ok(ActionRequest::new(Action::CommandExecute(CommandExecute {
+        program: words.next().unwrap_or_default().to_owned(),
+        args: words.map(ToOwned::to_owned).collect(),
+    })))
+}
+
 /// The session loop: every event line into the transcript, every decision back down stdin.
 ///
 /// A free function of its streams so the executor stays under its own roof: nothing here knows a
@@ -974,8 +1053,8 @@ fn action_for(tool: &str, input: &serde_json::Value) -> Option<ActionRequest> {
 /// # Two layers, in this order, and the reason it is this one
 ///
 /// 1. **[`decide_tool`]** — the ported hooks and the per-state allowlist. It runs first because it
-///    is the only layer that sees a call's *arguments*: `protocol plan artifact list | tee out` and
-///    `protocol plan artifact list` need the same capability and are not the same act, and no
+///    is the only layer that sees a call's *arguments*: `aep plan artifact list | tee out` and
+///    `aep plan artifact list` need the same capability and are not the same act, and no
 ///    `ActionRequest` can express the difference.
 /// 2. **the engine** — [`action_for`] renders the call as an `ActionRequest` and `authorize`
 ///    decides. Asked only about calls layer 1 admitted, so a refusal is attributed to the layer
@@ -1073,15 +1152,10 @@ fn answer_events(
             let call_id = event["call_id"].as_str().unwrap_or_default();
             let name = event["name"].as_str().unwrap_or_default();
             let deny = |reason: String| serde_json::json!({ "decision": "deny", "reason": reason });
-            let decision = match decide_tool(context, surface, name, &event["input"]) {
-                Err(reason) => deny(format!("the driver's per-call policy refuses: {reason}")),
-                // Nothing renders this call as an action — `Skill` and `WebSearch` are the two, and
-                // [`action_for`] says why — so the engine is not consulted and the policy's allow
-                // stands. Inventing a request would put an act nobody performed in the engine's
-                // record, which is invariant 7's failure one layer up.
-                Ok(()) => match action_for(name, &event["input"]) {
-                    None => serde_json::json!({ "decision": "allow" }),
-                    Some(request) => {
+            let decision = if harness == Harness::Codex {
+                match codex_action(context, name, &event["input"]) {
+                    Err(reason) => deny(format!("the driver's per-call policy refuses: {reason}")),
+                    Ok(request) => {
                         let verdict = authorize(&request);
                         if verdict.is_allowed() {
                             serde_json::json!({ "decision": "allow" })
@@ -1089,7 +1163,26 @@ fn answer_events(
                             deny(engine_refusal(&verdict))
                         }
                     }
-                },
+                }
+            } else {
+                match decide_tool(context, surface, name, &event["input"]) {
+                    Err(reason) => deny(format!("the driver's per-call policy refuses: {reason}")),
+                    // Nothing renders this call as an action — `Skill` and `WebSearch` are the two, and
+                    // [`action_for`] says why — so the engine is not consulted and the policy's allow
+                    // stands. Inventing a request would put an act nobody performed in the engine's
+                    // record, which is invariant 7's failure one layer up.
+                    Ok(()) => match action_for(name, &event["input"]) {
+                        None => serde_json::json!({ "decision": "allow" }),
+                        Some(request) => {
+                            let verdict = authorize(&request);
+                            if verdict.is_allowed() {
+                                serde_json::json!({ "decision": "allow" })
+                            } else {
+                                deny(engine_refusal(&verdict))
+                            }
+                        }
+                    },
+                }
             };
             if decision["decision"] == "deny" {
                 tally.denied += 1;
@@ -1175,7 +1268,7 @@ const METAHARNESS_EVENT_FORMAT: &str = "metaharness.event/1";
 /// metaharness seam before the call runs. Three checks, first refusal wins, every reason written
 /// for the model to act on rather than as a wall:
 ///
-/// 1. **the driven surface** (`Bash`): one `protocol plan artifact` or `protocol observe trace` invocation — no
+/// 1. **the driven surface** (`Bash`): one `aep plan artifact` or `aep observe trace` invocation — no
 ///    pipes, no redirection, no substitution — and no shell at all in a state that does not
 ///    admit `command.execute`;
 /// 2. **the per-state allowlist**: the tool must render from a capability this state admits,
@@ -1307,7 +1400,7 @@ struct TransitionConsultation {
     failed: bool,
 }
 
-/// `protocol drive transition`
+/// `aep drive transition`
 ///
 /// Exit `0` proceeds; exit `2` refuses with `{"reason": …}` on stdout; anything else is a verb that
 /// could not answer, which the loop reads **fail closed** — a governor that could not answer did
@@ -1406,6 +1499,8 @@ const B10X_BINARY: &str = "b10x-harness";
 /// 2 exists to prevent.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 enum Harness {
+    /// Codex uses its adapter's blocking call seam and the engine's action authorizer.
+    Codex,
     /// Claude Code, driven through `metaharness run claude` in ask mode: every call is put to this
     /// process and answered before it runs.
     ClaudeCode,
@@ -1426,17 +1521,24 @@ impl Harness {
             // landed under; both reach the same invocation.
             LlmStep::DEFAULT_HARNESS | METAHARNESS_HARNESS => Some(Self::ClaudeCode),
             B10X_HARNESS => Some(Self::B10x),
+            "codex" => Some(Self::Codex),
             _ => None,
         }
     }
 
     /// Every name this build invokes, for a refusal that lists them rather than hinting.
-    const NAMES: [&'static str; 3] = [LlmStep::DEFAULT_HARNESS, METAHARNESS_HARNESS, B10X_HARNESS];
+    const NAMES: [&'static str; 4] = [
+        LlmStep::DEFAULT_HARNESS,
+        METAHARNESS_HARNESS,
+        B10X_HARNESS,
+        "codex",
+    ];
 
     /// The `metaharness run` kind.
     fn kind(self) -> &'static str {
         match self {
             Self::ClaudeCode => "claude",
+            Self::Codex => "codex",
             Self::B10x => B10X_HARNESS,
         }
     }
@@ -1448,6 +1550,7 @@ impl Harness {
     fn tools(self, config: &ToolConfig) -> Vec<String> {
         match self {
             Self::ClaudeCode => allowed_tools(config),
+            Self::Codex => codex_tools(config),
             Self::B10x => b10x_tools(config),
         }
     }
@@ -1463,6 +1566,7 @@ impl Harness {
     fn operations_or_tools(self, config: &ToolConfig) -> Vec<String> {
         match self {
             Self::ClaudeCode => allowed_tools(config),
+            Self::Codex => codex_tools(config),
             Self::B10x => b10x_operations(config),
         }
     }
@@ -1473,7 +1577,7 @@ impl Harness {
     /// denial count of zero: *nobody asked me* and *nothing was refused* are different findings
     /// and only one of them is about the run.
     fn adjudicates(self) -> bool {
-        matches!(self, Self::ClaudeCode)
+        matches!(self, Self::ClaudeCode | Self::Codex)
     }
 }
 
@@ -1576,20 +1680,6 @@ fn b10x_tools(config: &ToolConfig) -> Vec<String> {
     tools
 }
 
-/// Validates the paid-run opt-in and exact cost terms before a run id or lock exists.
-fn spend_terms(
-    map: &StepMap,
-    budget_usd: Option<&str>,
-    assume_usd_per_run: Option<&str>,
-) -> Result<Option<SpendTerms>> {
-    spend_terms_with_live(
-        map,
-        budget_usd,
-        assume_usd_per_run,
-        std::env::var(METAHARNESS_LIVE_ENV).as_deref() == Ok("1"),
-    )
-}
-
 /// The spend pre-flight with its ambient opt-in already read, so its rules are unit-testable.
 fn spend_terms_with_live(
     map: &StepMap,
@@ -1603,7 +1693,7 @@ fn spend_terms_with_live(
     if !live {
         bail!(
             "this map has {} `llm` step(s), and `{METAHARNESS_LIVE_ENV}=1` is not in this \
-             environment. A model session can cost money; opt in explicitly before `protocol \
+             environment. A model session can cost money; opt in explicitly before `aep \
              drive run` may allocate a run or spawn metaharness",
             llm_step_count(map)
         );
@@ -1635,20 +1725,6 @@ fn spend_terms_with_live(
         cap_micro_usd,
         assumed_micro_usd_per_run,
     }))
-}
-
-/// The remembered terms for a resume, optionally narrowed by this invocation.
-fn resumed_spend_terms(
-    map: &StepMap,
-    remembered: Option<SpendTerms>,
-    budget_usd: Option<&str>,
-) -> Result<Option<SpendTerms>> {
-    resumed_spend_terms_with_live(
-        map,
-        remembered,
-        budget_usd,
-        std::env::var(METAHARNESS_LIVE_ENV).as_deref() == Ok("1"),
-    )
 }
 
 /// Resume cost terms with the ambient opt-in already read, for deterministic tests.
@@ -1722,7 +1798,7 @@ fn metaharness_preflight(map: &StepMap) -> Option<String> {
 ///
 /// Four checks, and the order is the one a person can act on: the seam's binary, then the CLI a
 /// driven session reaches the store through, then everything a `harness: b10x` step needs, then
-/// the binary a `command` step saying `protocol` would spawn. Each is decidable before a run id, a
+/// the binary a `command` step saying `aep` would spawn. Each is decidable before a run id, a
 /// lock, a snapshot or a model bill exists, which is the whole argument for them being here rather
 /// than at the first `llm` step.
 ///
@@ -1738,6 +1814,14 @@ fn metaharness_preflight(map: &StepMap) -> Option<String> {
 /// The read-only note is printed rather than returned, because it refuses nothing: a b10x step in
 /// a state that only reads is legitimate work.
 fn machine_preflights(map: &StepMap, project: &Path, b10x: &B10xOptions) -> Option<String> {
+    if b10x_step_count(map) > 0 && b10x.cgroup_root.is_some() && !adoptable(project) {
+        return Some(format!(
+            "confinement was requested but {} is not an existing adoptable directory: select a \
+             directory whose canonical component uses ASCII alphanumerics, underscore or hyphen \
+             and does not begin with hyphen",
+            project.display()
+        ));
+    }
     if let Some(refusal) = metaharness_preflight(map) {
         return Some(refusal);
     }
@@ -1746,7 +1830,7 @@ fn machine_preflights(map: &StepMap, project: &Path, b10x: &B10xOptions) -> Opti
         .states
         .values()
         .flat_map(|state| &state.steps)
-        .any(|step| matches!(step, Step::Llm(step) if step.harness == "claude-code"))
+        .any(|step| matches!(step, Step::Llm(step) if Harness::named(&step.harness).is_some_and(Harness::adjudicates)))
         && let Some(refusal) = protocol_on_the_session_path()
     {
         return Some(refusal);
@@ -1824,7 +1908,7 @@ fn b10x_preflight(map: &StepMap, options: &B10xOptions) -> Option<String> {
              \n\
              That `PATH` is `{path}` — **constructed by metaharness, not inherited** (H3) — so a \
              loop the operator can run is not automatically one the run can. It is the same \
-             constructed `PATH` the `protocol` CLI has to be installed onto, and for the same \
+             constructed `PATH` the `aep` CLI has to be installed onto, and for the same \
              reason.\n\
              \n\
              Install it where the run will find it:\n\
@@ -1861,11 +1945,8 @@ fn b10x_preflight(map: &StepMap, options: &B10xOptions) -> Option<String> {
 /// would be wrong is a `implement` state discovering it, one turn at a time, in a session that was
 /// told it had `file_write`.
 ///
-/// The rule is metaharness's and it is a naming rule: substrate represents a workspace only when
-/// its directory name starts with `ws_`, and a confined launch over a directory it cannot adopt is
-/// refused rather than degraded. A driven run's working directory is the operator's repository, so
-/// no driven b10x session is confined, so the loop publishes only the three reading entries — the
-/// toolset is computed from what the machine can confine, and unconfined that is reading.
+/// Eligibility follows the pinned substrate component rule; actual confinement is
+/// established by the driver's identity and containment checks, never by the name.
 ///
 /// It is a note and not a refusal for a second reason: what a state admits is decided per state by
 /// the engine at run time, and a pre-flight reading a map cannot know whether any state will reach
@@ -1889,9 +1970,8 @@ fn b10x_read_only_note(
         "the workspace is adoptable but no `--b10x-cgroup-root` was given, so substrate publishes \
          no `run` entry and the catalogue stays read-only"
     } else {
-        "substrate represents a workspace only when its directory name starts with `ws_`, and this \
-         one does not — a governed tree is usually the operator's own repository. A worktree \
-         created for the run can be named to be adoptable"
+        "the selected directory does not resolve to an existing directory with an eligible \
+         substrate component (ASCII alphanumerics, underscore or hyphen; no leading hyphen)"
     };
     Some(format!(
         "a driven `{B10X_HARNESS}` session is **read-only** over {}: {why}. So `file_write`, \
@@ -1908,7 +1988,7 @@ fn b10x_read_only_note(
 /// allowlist, plus a `PATH` computed as `$HOME/.local/bin:/usr/local/bin:/usr/bin:/bin`
 /// (`metaharness-claude`'s `child_path`, which that crate makes public precisely so a pre-flight
 /// can resolve a binary *the way the spawn will*). So a `target/debug` on the operator's `PATH`
-/// reaches this process and never the session, and exporting one before `protocol drive` changes
+/// reaches this process and never the session, and exporting one before `aep drive` changes
 /// nothing about what the model can run.
 ///
 /// Replicated here rather than depended on: this repository takes `entity-runtime` and nothing
@@ -1924,12 +2004,12 @@ fn session_path() -> String {
     }
 }
 
-/// Refuses a run whose `llm` steps are told to use `protocol` when the session will not have it.
+/// Refuses a run whose `llm` steps are told to use `aep` when the session will not have it.
 ///
 /// **Run `W4-3/1`, 2026-08-28, is why, and it cost $1.03 to find out.** The map's steps say *record
-/// it in the planning store*, and the store's only route is the `protocol` CLI — the state's shell
+/// it in the planning store*, and the store's only route is the `aep` CLI — the state's shell
 /// recorded-under-this-name: historical W4-3/1 transcript.
-/// exists for that and admits nothing else. The session ran `protocol artifact --help` and got
+/// exists for that and admits nothing else. The session ran `aep artifact --help` and got
 /// `exit 127, command not found`, four times across two states, because the constructed `PATH`
 /// holds no `target/debug`. Every guard held and the run was simply unable to do its work.
 ///
@@ -1938,19 +2018,19 @@ fn session_path() -> String {
 fn protocol_on_the_session_path() -> Option<String> {
     let path = session_path();
     let found = path.split(':').any(|directory| {
-        let candidate = Path::new(directory).join("protocol");
+        let candidate = Path::new(directory).join("aep");
         candidate.is_file()
     });
     if found {
         return None;
     }
     Some(format!(
-        "a driven `llm` step reaches the planning store through the `protocol` CLI, and the \n\
+        "a driven `llm` step reaches the planning store through the `aep` CLI, and the \n\
          session's `PATH` does not hold it.\n\
          \n\
          That `PATH` is `{path}` — **constructed by metaharness, not inherited**, so exporting \n\
          `target/debug` before this command changes what *this* process can run and nothing about \n\
-         what the model can. A run started anyway walks its states, is refused `protocol` by the \n\
+         what the model can. A run started anyway walks its states, is refused `aep` by the \n\
          shell with `exit 127`, and submits nothing: run `W4-3/1` did exactly that on 2026-08-28 \n\
          for $1.03.\n\
          \n\
@@ -2184,13 +2264,43 @@ fn frame_document(frame: &serde_json::Value) -> Result<String, String> {
     Ok(format!("{text}\n"))
 }
 
-/// The `metaharness run claude` invocation for one step.
-///
-/// `--cwd` is the metaharness a6 declaration: the session works in the governed tree, and
-/// metaharness attests the two hermetic rows that costs instead of claiming them. `--decisions
-/// frame` makes metaharness the per-call decider from the frame's admitted set. The plugins
-/// still travel for their skills; their hooks read a step context this launch does not carry and
-/// no-op, which is the intended shape — one policy, one enforcer.
+/// Advertise only calls with a complete governor mapping.
+fn codex_tools(config: &ToolConfig) -> Vec<String> {
+    if config.shell_offered() {
+        metaharness_codex::render_operation(&metaharness::protocol::Operation::Shell)
+            .map(|tool| vec![tool.to_owned()])
+            .unwrap_or_default()
+    } else {
+        Vec::new()
+    }
+}
+
+fn codex_argv(
+    frame: &Path,
+    directory: &Path,
+    prompt: &str,
+    options: &B10xOptions,
+    actor: Option<&str>,
+) -> Vec<String> {
+    let mut argv = metaharness_argv(frame, directory, &[], prompt, None, actor);
+    Harness::Codex.kind().clone_into(&mut argv[2]);
+    if let Some(model) = &options.codex_model {
+        argv.extend(["--model".to_owned(), model.clone()]);
+    }
+    if let Some(endpoint) = &options.codex_endpoint {
+        argv.extend([
+            "--model-endpoint".to_owned(),
+            endpoint.clone(),
+            "--credentials".to_owned(),
+            "none".to_owned(),
+        ]);
+    }
+    argv
+}
+
+/// The vendor invocation carries the selected directory and sealed frame. Ask mode routes
+/// every decision to this driver's policy and engine. Claude plugins supply instructions;
+/// Codex uses the same launch envelope without those vendor-specific plugins.
 fn metaharness_argv(
     frame: &Path,
     working_directory: &Path,
@@ -2336,10 +2446,8 @@ fn b10x_argv(
             argv.push(pointer.clone());
         }
     }
-    // **Confinement and execution, or neither.** Substrate represents a workspace only when its
-    // directory name starts with `ws_`, so a run over an ordinary checkout is read-only whatever
-    // is asked for — and asking anyway would turn every driven step into a launch refusal. When the
-    // workspace *is* adoptable and a subtree was named, both travel: `--substrate-embedded` makes
+    // **Confinement and execution, or neither.** The selected canonical directory must satisfy
+    // substrate's component rule. When a subtree was named, both travel: `--substrate-embedded` makes
     // `file_write` and `file_edit` appear in the catalogue, and `--cgroup-root` makes `run` appear.
     // One without the other is an arm that can write and not test, or test and not write.
     if let Some(root) = options
@@ -2356,7 +2464,7 @@ fn b10x_argv(
     // `harness-tools`' local operations — which is the same rule as everywhere else on that arm: a
     // tool outside the surface does not exist rather than being refused. Run `b10x-2991520` spent
     // 30 `tool_search` calls, 28 of them distinct, hunting for `run`, `exec`, `shell`, `spawn` and
-    // `execute` because the step it was given needs the `protocol` CLI and nothing could start one.
+    // `execute` because the step it was given needs the `aep` CLI and nothing could start one.
     //
     // The list is the same decision `driven_surface` enforces on the vendor arm, rendered rather
     // than re-decided: the CLI, and the readers a state that admits `repository.read` may use.
@@ -2415,25 +2523,24 @@ fn b10x_argv(
 
 /// Whether substrate will represent this directory as a workspace.
 ///
-/// Its rule, replicated rather than depended on: a directory name starting with `ws_`
-/// (`SUBSTRATE_WORKSPACE_PREFIX` in metaharness's builder). A governed tree is usually the
-/// operator's own repository and is not named that, which is why a driven `b10x` arm is read-only
-/// by default and says so — and why a worktree created for a run *can* be named to be adoptable,
-/// which is the whole of the arrangement.
-///
-/// A relative path has no useful file name — `.` is not `ws_anything` — so a caller who passes
-/// `--project .` from inside an adoptable directory gets the read-only arm and a note saying so.
-/// That is a real trap and the note is where it is caught.
+/// Resolve the operator's selection before asking the adapter's shared syntax rule.
+/// The result grants no authority outside the driver's pinned root.
 fn adoptable(working_directory: &Path) -> bool {
-    working_directory
-        .file_name()
-        .and_then(|name| name.to_str())
-        .is_some_and(|name| name.starts_with("ws_"))
+    fs::canonicalize(working_directory).is_ok_and(|path| {
+        path.is_dir()
+            && path
+                .file_name()
+                .and_then(|name| name.to_str())
+                .is_some_and(metaharness_b10x::workspace_component_is_adoptable)
+    })
 }
 
 /// A governed run and its concrete execution options.
 #[derive(Debug, Args)]
 pub struct HostedRunArgs {
+    /// Explicit outer USD spending policy.
+    #[command(flatten)]
+    pub spend: SpendOptions,
     /// Neutral driver options.
     #[command(flatten)]
     pub common: aep_cli::drive::RunArgs,
@@ -2444,6 +2551,9 @@ pub struct HostedRunArgs {
 /// Resume an existing governed run without changing its engine contract.
 #[derive(Debug, Args)]
 pub struct HostedResumeArgs {
+    /// Optional restatement of the original outer USD spending policy.
+    #[command(flatten)]
+    pub spend: SpendOptions,
     /// Neutral resume options.
     #[command(flatten)]
     pub common: aep_cli::drive::ResumeArgs,
@@ -2461,7 +2571,7 @@ pub enum DriveCommand {
         command: aep_cli::eval::EvalCommand,
     },
     /// Start a governed run.
-    Run(HostedRunArgs),
+    Run(Box<HostedRunArgs>),
     /// Continue a compatible paused run.
     Resume(HostedResumeArgs),
     /// Inspect a retained run.
@@ -2487,6 +2597,7 @@ pub fn run(command: DriveCommand) -> Result<ExitCode> {
             &args.common,
             &Host {
                 b10x: Some(args.b10x),
+                spend: args.spend,
                 aep_binary: None,
             },
         ),
@@ -2494,6 +2605,7 @@ pub fn run(command: DriveCommand) -> Result<ExitCode> {
             &args.common,
             &Host {
                 b10x: None,
+                spend: args.spend,
                 aep_binary: args.aep_binary,
             },
         ),
@@ -2503,6 +2615,7 @@ pub fn run(command: DriveCommand) -> Result<ExitCode> {
     }
 }
 struct Host {
+    spend: SpendOptions,
     b10x: Option<B10xOptions>,
     aep_binary: Option<PathBuf>,
 }
@@ -2532,17 +2645,14 @@ impl ExecutionHost for Host {
         {
             return CommandOnlyHost.prepare(inputs, previous, budget, charge);
         }
-        let remembered = previous
-            .and_then(|record| record.extra.get("spend"))
-            .map(|value| serde_json::from_value::<Option<SpendTerms>>(value.clone()))
-            .transpose()
-            .context("invalid remembered spend terms")?
-            .flatten();
-        let terms = if previous.is_some() {
-            resumed_spend_terms(&inputs.map, remembered, budget)?
-        } else {
-            spend_terms(&inputs.map, budget, charge)?
-        };
+        let terms = spending::policy(
+            &inputs.map,
+            previous,
+            budget,
+            charge,
+            &self.spend,
+            std::env::var(METAHARNESS_LIVE_ENV).as_deref() == Ok("1"),
+        )?;
         let binary = b10x.aep_binary.as_ref().context("pass --aep-binary pointing to the planning executable built from this runner's pinned AEP source")?;
         let binary = fs::canonicalize(binary).context("resolving the selected AEP executable")?;
         let output = Process::new(&binary)
@@ -2562,28 +2672,24 @@ impl ExecutionHost for Host {
             );
         }
         b10x.aep_binary = Some(binary.clone());
-        if let Some(refusal) = machine_preflights(&inputs.map, &inputs.project, &b10x) {
+        let working_directory = fs::canonicalize(&inputs.project)
+            .context("resolving the explicitly selected project directory")?;
+        if let Some(refusal) = machine_preflights(&inputs.map, &working_directory, &b10x) {
             bail!("{refusal}");
         }
         let mut launch_fields = std::collections::BTreeMap::new();
         launch_fields.insert("b10x".to_owned(), serde_json::to_value(&b10x)?);
-        launch_fields.insert("spend".to_owned(), serde_json::to_value(terms)?);
+        launch_fields.insert("spend_policy".to_owned(), serde_json::to_value(&terms)?);
         Ok(PreparedExecution {
             launch_fields,
             protocol_binary: Some(binary),
             executor: Box::new(move |context, resumed| {
                 let spend = terms
-                    .map(|terms| {
-                        if resumed {
-                            SpendBudget::resume(&context.run_directory, terms)
-                        } else {
-                            SpendBudget::start(&context.run_directory, terms)
-                        }
-                    })
+                    .map(|terms| AdmissionBudget::open(&context.run_directory, terms, resumed))
                     .transpose()?;
                 Ok(Box::new(
                     CliExecutors::new(
-                        context.working_directory.clone(),
+                        working_directory.clone(),
                         context.run_directory.clone(),
                         context.plugin_dirs.clone(),
                         context.workflow_id.clone(),
@@ -2598,3 +2704,7 @@ impl ExecutionHost for Host {
 }
 
 include!("drive_tests.rs");
+
+#[cfg(test)]
+#[path = "drive/ess_conformance.rs"]
+mod ess_conformance;

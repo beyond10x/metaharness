@@ -1,0 +1,13 @@
+{
+  "at": "2026-10-03T10:06:32Z",
+  "actor": "human:timo",
+  "artifact": "task:bot-release-publication",
+  "kind": "task",
+  "revision": 3,
+  "change": {
+    "change": "evidence",
+    "kind": "test_result",
+    "source": "Release workflow YAML and structural preservation checks passed; actual release run and uploads remain pending.",
+    "reference": "~/.cache/metaharness-issue-repair/release-preparation/workflow-check.log"
+  }
+}

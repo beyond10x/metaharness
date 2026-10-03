@@ -1,0 +1,13 @@
+{
+  "at": "2026-10-03T09:46:50Z",
+  "actor": "human:timo",
+  "artifact": "story:codex-final-answer",
+  "kind": "story",
+  "revision": 7,
+  "change": {
+    "change": "evidence",
+    "kind": "test_result",
+    "source": "Integration 3385656e task check: exit 0, 761 passed, 13 ignored; 36 production ESS scenarios passed, zero refusals/skips. Offline evidence only; current vendor qualification is unverified.",
+    "reference": "~/.cache/metaharness-issue-repair/observations1820/integration-task-check.log"
+  }
+}

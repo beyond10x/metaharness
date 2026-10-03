@@ -132,7 +132,10 @@ mod tests {
     fn every_filled_contract_row_has_a_green_vector() {
         let vectors = conformance_vectors();
         assert!(vectors.iter().all(|vector| vector.passed), "{vectors:#?}");
-        assert!(CONTRACT_OBLIGATIONS.unmet(&vectors, "pi 0.80.3").is_empty());
+        assert_eq!(
+            CONTRACT_OBLIGATIONS.unmet(&vectors, "pi 0.80.3"),
+            [] as [String; 0]
+        );
     }
 
     #[test]

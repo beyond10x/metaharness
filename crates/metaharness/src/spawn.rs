@@ -388,8 +388,8 @@ pub struct SpawnedProcess {
 enum Exited {
     /// Nobody has waited for it yet.
     NotYet,
-    /// It exited, with this code, or on a signal when `None`.
-    With(Option<i32>),
+    /// The actual OS status, retained intact even when `try_wait` observed it first.
+    With(std::process::ExitStatus),
 }
 
 impl std::fmt::Debug for SpawnedProcess {
@@ -491,35 +491,44 @@ impl HarnessProcess for SpawnedProcess {
 
     fn next_line(&mut self) -> std::io::Result<Option<String>> {
         loop {
-            self.pump()?;
-            if self.stream_ended {
-                return Ok(None);
+            match self.poll_line()? {
+                crate::ProcessPoll::Line(line) => return Ok(Some(line)),
+                crate::ProcessPoll::Idle => (),
+                crate::ProcessPoll::Ended => return Ok(None),
             }
-            match self.lines.recv_timeout(POLL) {
-                Ok(line) => return Ok(Some(line)),
-                Err(RecvTimeoutError::Timeout) => {
-                    self.tick_waiting();
-                    if self.waiting_past_grace() {
-                        // The contract's own words: the stream has not ended, and the child is
-                        // blocked on a decision metaharness holds. Reported rather than waited
-                        // out here, because the budget for that decision belongs to the run loop.
-                        return Err(std::io::Error::new(
-                            std::io::ErrorKind::WouldBlock,
-                            "a PreToolUse hook is waiting on a decision metaharness has not \
+        }
+    }
+
+    fn poll_line(&mut self) -> std::io::Result<crate::ProcessPoll> {
+        self.pump()?;
+        if self.stream_ended {
+            return Ok(crate::ProcessPoll::Ended);
+        }
+        match self.lines.recv_timeout(POLL) {
+            Ok(line) => Ok(crate::ProcessPoll::Line(line)),
+            Err(RecvTimeoutError::Timeout) => {
+                self.tick_waiting();
+                if self.waiting_past_grace() {
+                    // The contract's own words: the stream has not ended, and the child is
+                    // blocked on a decision metaharness holds. Reported rather than waited
+                    // out here, because the budget for that decision belongs to the run loop.
+                    return Err(std::io::Error::new(
+                        std::io::ErrorKind::WouldBlock,
+                        "a PreToolUse hook is waiting on a decision metaharness has not \
                              written",
-                        ));
-                    }
+                    ));
                 }
-                Err(RecvTimeoutError::Disconnected) => {
-                    self.stream_ended = true;
-                    // One last look: a hook may have published while the stream was closing, and
-                    // a request left unanswered is a child that will sit out its own backstop.
-                    self.pump()?;
-                    if let Some(error) = self.take_stream_error() {
-                        return Err(std::io::Error::other(error));
-                    }
-                    return Ok(None);
+                Ok(crate::ProcessPoll::Idle)
+            }
+            Err(RecvTimeoutError::Disconnected) => {
+                self.stream_ended = true;
+                // One last look: a hook may have published while the stream was closing, and
+                // a request left unanswered is a child that will sit out its own backstop.
+                self.pump()?;
+                if let Some(error) = self.take_stream_error() {
+                    return Err(std::io::Error::other(error));
                 }
+                Ok(crate::ProcessPoll::Ended)
             }
         }
     }
@@ -573,15 +582,22 @@ impl HarnessProcess for SpawnedProcess {
     }
 
     fn wait(&mut self) -> std::io::Result<Option<i32>> {
-        if let Exited::With(code) = self.exit {
-            return Ok(code);
+        if let Exited::With(status) = self.exit {
+            return Ok(status.code());
         }
         let Some(child) = self.child.as_mut() else {
             return Ok(None);
         };
-        let code = child.wait()?.code();
-        self.exit = Exited::With(code);
-        Ok(code)
+        let status = child.wait()?;
+        self.exit = Exited::With(status);
+        Ok(status.code())
+    }
+
+    fn termination(&self) -> metaharness_protocol::ProcessTermination {
+        match self.exit {
+            Exited::With(status) => crate::process::observed_termination(status),
+            Exited::NotYet => metaharness_protocol::ProcessTermination::Unknown,
+        }
     }
 }
 

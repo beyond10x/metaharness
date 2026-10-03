@@ -262,6 +262,7 @@ fn a_marker_whose_count_disagrees_with_the_stream_decides_nothing() {
         },
         Event::StreamClosed {
             events: 99,
+            process: metaharness::protocol::ProcessTermination::Unknown,
             reason: CloseReason::Completed,
             run_id: "r".to_string(),
         },
@@ -275,4 +276,295 @@ fn a_marker_whose_count_disagrees_with_the_stream_decides_nothing() {
         "the reason is still the producer's own claim, and is reported as such"
     );
     assert!(seen.render().contains("INCONSISTENT"), "{}", seen.render());
+}
+
+/// Real adapter → core stream closure → the exit value used by the CLI with no
+/// audit. The scripted child starts no process and reads no credentials.
+mod codex_terminal_regression {
+    use super::*;
+
+    #[test]
+    fn other_real_adapters_retain_success_and_reject_failure() {
+        use metaharness::protocol::SeamFactory;
+        for (kind, terminal, expected) in [
+            (
+                Kind::Claude,
+                r#"{"type":"result","subtype":"success","is_error":false}"#,
+                CloseReason::Completed,
+            ),
+            (
+                Kind::Claude,
+                r#"{"type":"result","subtype":"success"}"#,
+                CloseReason::Completed,
+            ),
+            (
+                Kind::Claude,
+                r#"{"type":"result","is_error":true}"#,
+                CloseReason::Error,
+            ),
+            (
+                Kind::B10x,
+                r#"{"kind":"finished","stop":{"kind":"completed"}}"#,
+                CloseReason::Completed,
+            ),
+            (
+                Kind::B10x,
+                r#"{"kind":"finished","stop":{"kind":"error"}}"#,
+                CloseReason::Error,
+            ),
+            (
+                Kind::B10x,
+                r#"{"kind":"finished","stop":{"kind":"budget-exhausted"}}"#,
+                CloseReason::Budget,
+            ),
+        ] {
+            let mut seam: Box<dyn SeamFactory> = match kind {
+                Kind::Claude => Box::new(metaharness::ClaudeSeams),
+                Kind::B10x => Box::new(metaharness_b10x::B10xSeams::new(None, None, None)),
+                Kind::Codex => unreachable!("covered by the Codex-specific cases"),
+            };
+            let mut runner = ScriptedRunner::of_lines([terminal], ScriptedLog::new());
+            let mut run = Metaharness::new(kind)
+                .with_decisions(DecisionMode::Observe)
+                .with_credentials(CredentialSource::None)
+                .with_model_endpoint("https://gw.invalid/v1")
+                .with_model("synthetic-model")
+                .start_with_clock(
+                    Input::Prompt("synthetic terminal".into()),
+                    &mut runner,
+                    seam.as_mut(),
+                    Box::new(ManualClock::new()),
+                )
+                .expect("starts");
+            run.drain().expect("drains");
+            assert_eq!(
+                closing(&run).map(|(_, reason)| reason),
+                Ok(expected),
+                "{kind:?}: {terminal}"
+            );
+            assert_eq!(
+                run.exit(None).code() == 0,
+                expected == CloseReason::Completed
+            );
+            let report = metaharness::AuditReport {
+                rows: Vec::new(),
+                census: metaharness::protocol::DecisionCensus::default(),
+                withheld: None,
+                installed_plugins: Vec::new(),
+                auditor: None,
+                saw_terminal_record: run.saw_terminal_record(),
+                stream: stream_completeness(run.events()),
+            };
+            assert_eq!(
+                run.exit(Some(&report)).code() == 0,
+                expected == CloseReason::Completed
+            );
+        }
+    }
+
+    const FAILURE: &str = r#"{"type":"event_msg","payload":{"type":"task_complete","error":{"message":"synthetic unsupported model"}}}"#;
+    const SUCCESS: &str = r#"{"type":"event_msg","payload":{"type":"task_complete","error":null,"last_agent_message":"done"}}"#;
+    const PARTIAL: &str =
+        r#"{"type":"event_msg","payload":{"type":"agent_message","message":"starting the work"}}"#;
+
+    fn replay(lines: &[&str]) -> Run {
+        let mut runner = ScriptedRunner::of_lines(lines.iter().copied(), ScriptedLog::new());
+        let mut seams = metaharness::CodexSeams;
+        let mut run = Metaharness::new(Kind::Codex)
+            .with_decisions(DecisionMode::Observe)
+            .with_credentials(CredentialSource::None)
+            .start_with_clock(
+                Input::Prompt("synthetic terminal regression".to_string()),
+                &mut runner,
+                &mut seams,
+                Box::new(ManualClock::new()),
+            )
+            .expect("the synthetic run starts");
+        run.drain().expect("the synthetic run drains");
+        run
+    }
+
+    #[test]
+    fn explicit_failure_closes_error() {
+        let run = replay(&[FAILURE]);
+        assert_eq!(
+            closing(&run).map(|(_, reason)| reason),
+            Ok(CloseReason::Error)
+        );
+    }
+
+    #[test]
+    fn explicit_failure_yields_nonzero_cli_exit_value() {
+        let run = replay(&[FAILURE]);
+        assert_ne!(run.exit(None).code(), 0);
+    }
+
+    #[test]
+    fn actual_success_closes_completed_and_exits_zero() {
+        let run = replay(&[SUCCESS]);
+        assert_eq!(
+            closing(&run).map(|(_, reason)| reason),
+            Ok(CloseReason::Completed)
+        );
+        assert_eq!(run.exit(None).code(), 0);
+    }
+
+    #[test]
+    fn preliminary_text_does_not_hide_failure_from_stream_or_exit() {
+        let run = replay(&[PARTIAL, FAILURE]);
+        assert!(run.events().iter().any(|event| matches!(event,
+            Event::Text { text, .. } if text == "starting the work")));
+        assert_eq!(
+            closing(&run).map(|(_, reason)| reason),
+            Ok(CloseReason::Error)
+        );
+        assert_ne!(run.exit(None).code(), 0);
+    }
+
+    #[test]
+    fn missing_terminal_record_cannot_claim_success() {
+        let run = replay(&[PARTIAL]);
+        assert_eq!(
+            closing(&run).map(|(_, reason)| reason),
+            Ok(CloseReason::Error)
+        );
+        assert_ne!(run.exit(None).code(), 0);
+    }
+
+    #[test]
+    fn incomplete_terminal_evidence_cannot_claim_completed() {
+        let run = replay(&[r#"{"type":"event_msg","payload":{"type":"task_complete"}}"#]);
+        assert_ne!(
+            closing(&run).map(|(_, reason)| reason),
+            Ok(CloseReason::Completed)
+        );
+    }
+
+    #[test]
+    fn incomplete_terminal_evidence_cannot_exit_zero() {
+        let run = replay(&[r#"{"type":"event_msg","payload":{"type":"task_complete"}}"#]);
+        assert_ne!(run.exit(None).code(), 0);
+    }
+
+    #[test]
+    fn successful_audit_cannot_mask_failed_or_unknown_termination() {
+        for terminal in [
+            FAILURE,
+            r#"{"type":"event_msg","payload":{"type":"task_complete"}}"#,
+        ] {
+            let run = replay(&[terminal]);
+            let report = metaharness::AuditReport {
+                rows: Vec::new(),
+                census: metaharness::protocol::DecisionCensus::default(),
+                withheld: None,
+                installed_plugins: Vec::new(),
+                auditor: None,
+                saw_terminal_record: run.saw_terminal_record(),
+                stream: stream_completeness(run.events()),
+            };
+            assert_ne!(run.exit(Some(&report)).code(), 0);
+            assert_ne!(report.exit().code(), 0);
+        }
+    }
+
+    #[test]
+    fn custom_wait_codes_do_not_fabricate_native_observations_or_terminal_failure() {
+        use metaharness::{HarnessProcess, LaunchPlanView, ProcessRunner, ScriptedProcess};
+
+        struct ExitingRunner(Option<i32>);
+        struct ExitingProcess(ScriptedProcess, Option<i32>);
+        impl HarnessProcess for ExitingProcess {
+            fn next_line(&mut self) -> std::io::Result<Option<String>> {
+                self.0.next_line()
+            }
+            fn write_line(&mut self, line: &str) -> std::io::Result<()> {
+                self.0.write_line(line)
+            }
+            fn kill(&mut self) -> std::io::Result<()> {
+                self.0.kill()
+            }
+            fn wait(&mut self) -> std::io::Result<Option<i32>> {
+                Ok(self.1)
+            }
+        }
+        impl ProcessRunner for ExitingRunner {
+            fn start(
+                &mut self,
+                _: &LaunchPlanView<'_>,
+            ) -> std::io::Result<Box<dyn HarnessProcess>> {
+                Ok(Box::new(ExitingProcess(
+                    ScriptedProcess::new(vec![ScriptStep::line(SUCCESS)], ScriptedLog::new()),
+                    self.0,
+                )))
+            }
+        }
+        for code in [Some(17), None] {
+            let mut run = Metaharness::new(Kind::Codex)
+                .with_decisions(DecisionMode::Observe)
+                .with_credentials(CredentialSource::None)
+                .start_with_clock(
+                    Input::Prompt("synthetic process exit".into()),
+                    &mut ExitingRunner(code),
+                    &mut metaharness::CodexSeams,
+                    Box::new(ManualClock::new()),
+                )
+                .expect("starts");
+            run.drain().expect("drains");
+            assert_eq!(
+                closing(&run).map(|(_, reason)| reason),
+                Ok(CloseReason::Completed)
+            );
+            assert_eq!(run.exit(None).code(), 0);
+            assert!(matches!(
+                run.events().last(),
+                Some(Event::StreamClosed {
+                    process: metaharness::protocol::ProcessTermination::Unknown,
+                    ..
+                })
+            ));
+        }
+    }
+}
+#[test]
+fn scripted_b10x_keeps_a_logical_program_without_probing_an_installation() {
+    let log = ScriptedLog::new();
+    let mut runner = ScriptedRunner::new(Vec::new(), log.clone());
+    let mut spec = metaharness::protocol::RunSpec::new(Kind::B10x);
+    spec.decisions = DecisionMode::Observe;
+    spec.credentials = metaharness::protocol::CredentialSource::None;
+    spec.model_endpoint = Some("http://127.0.0.1:1".to_owned());
+    spec.model = Some("synthetic-never-called".to_owned());
+    let mut run = Metaharness::from_spec(spec)
+        .start_with_clock(
+            Input::Prompt("synthetic".into()),
+            &mut runner,
+            &mut metaharness_b10x::B10xSeams::new(None, None, None),
+            Box::new(metaharness::ManualClock::new()),
+        )
+        .expect("a scripted run needs no installed vendor");
+    run.drain().unwrap();
+    assert_eq!(log.launched()[0][0], "b10x-harness");
+}
+
+#[test]
+fn scripted_b10x_does_not_fabricate_strict_version_evidence() {
+    let log = ScriptedLog::new();
+    let mut runner = ScriptedRunner::new(Vec::new(), log.clone());
+    let result = Metaharness::new(Kind::B10x)
+        .with_decisions(DecisionMode::Observe)
+        .with_credentials(CredentialSource::None)
+        .with_model_endpoint("http://127.0.0.1:1")
+        .with_model("synthetic-never-called")
+        .with_strict_version(true)
+        .start_with_clock(
+            Input::Prompt("synthetic".into()),
+            &mut runner,
+            &mut ScriptedSeams,
+            Box::new(ManualClock::new()),
+        );
+    let Err(refusal) = result else {
+        panic!("synthetic execution cannot satisfy strict version evidence");
+    };
+    assert!(refusal.to_string().contains("--strict-version"));
+    assert_eq!(log.spawns(), 0);
 }

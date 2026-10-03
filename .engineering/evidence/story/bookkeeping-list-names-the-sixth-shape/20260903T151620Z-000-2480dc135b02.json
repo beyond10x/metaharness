@@ -1,0 +1,13 @@
+{
+  "at": "2026-09-03T15:16:20Z",
+  "actor": "human:timo",
+  "artifact": "story:bookkeeping-list-names-the-sixth-shape",
+  "kind": "story",
+  "revision": 1,
+  "change": {
+    "change": "evidence",
+    "kind": "test_result",
+    "source": "task check",
+    "reference": "ae8d8c6"
+  }
+}

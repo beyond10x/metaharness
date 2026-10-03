@@ -59,6 +59,46 @@ fn stub_the_binaries_on_the_session_path(
 
 #[test]
 fn legacy_launch_resumes_without_spending_or_losing_configuration() {
+    paused_run_resumes(&["--budget-usd", "1", "--assume-usd-per-run", "0.1"]);
+}
+
+#[test]
+fn uncapped_launch_resumes_without_spending_or_replacing_authority() {
+    paused_run_resumes(&[
+        "--uncapped-budget",
+        "--spend-authorization",
+        "operator:approval-14",
+    ]);
+}
+
+#[test]
+fn uncapped_cli_requires_authority_and_conflicts_with_finite_budget() {
+    for arguments in [
+        vec!["--uncapped-budget"],
+        vec!["--spend-authorization", "ref"],
+        vec![
+            "--uncapped-budget",
+            "--spend-authorization",
+            "ref",
+            "--budget-usd",
+            "1",
+        ],
+    ] {
+        let output = Command::new(env!("CARGO_BIN_EXE_metaharness"))
+            .args(["aep", "drive", "run"])
+            .args(arguments)
+            .output()
+            .unwrap();
+        assert_eq!(
+            output.status.code(),
+            Some(2),
+            "{}",
+            String::from_utf8_lossy(&output.stderr)
+        );
+    }
+}
+
+fn paused_run_resumes(spend_args: &[&str]) {
     let root = support::aep_root();
     let scratch = tempfile::tempdir().expect("scratch project");
     let project = scratch.path();
@@ -90,20 +130,18 @@ fn legacy_launch_resumes_without_spending_or_losing_configuration() {
             .output()
             .unwrap()
     };
-    let started = invoke(&[
+    let mut start_args = vec![
         "run",
         "--allow-evidence-gap",
         "--aep-binary",
         aep.to_str().unwrap(),
-        "--budget-usd",
-        "1",
-        "--assume-usd-per-run",
-        "0.1",
         "--b10x-endpoint",
         "http://127.0.0.1:1",
         "--b10x-model",
         "offline-fixture",
-    ]);
+    ];
+    start_args.extend_from_slice(spend_args);
+    let started = invoke(&start_args);
     assert!(
         started.status.success(),
         "{}{}",
@@ -119,6 +157,15 @@ fn legacy_launch_resumes_without_spending_or_losing_configuration() {
     let mut launch: serde_json::Value =
         serde_json::from_slice(&std::fs::read(&launch_path).unwrap()).unwrap();
     launch["b10x"].as_object_mut().unwrap().remove("aep_binary");
+    if launch["spend_policy"]["mode"] == "finite" {
+        let mut finite = launch
+            .as_object_mut()
+            .unwrap()
+            .remove("spend_policy")
+            .unwrap();
+        finite.as_object_mut().unwrap().remove("mode");
+        launch["spend"] = finite;
+    }
     std::fs::write(&launch_path, serde_json::to_vec_pretty(&launch).unwrap()).unwrap();
     let ledger = std::fs::read(run.join("spend.json")).unwrap();
     let resumed = invoke(&[
@@ -142,5 +189,14 @@ fn legacy_launch_resumes_without_spending_or_losing_configuration() {
     let after: serde_json::Value =
         serde_json::from_slice(&std::fs::read(launch_path).unwrap()).unwrap();
     assert_eq!(after["b10x"]["model"], "offline-fixture");
-    assert_eq!(after["spend"], launch["spend"]);
+    if spend_args.contains(&"--uncapped-budget") {
+        assert_eq!(
+            after["spend_policy"]["authorization_ref"],
+            "operator:approval-14"
+        );
+        assert_eq!(after["spend_policy"], launch["spend_policy"]);
+    } else {
+        assert_eq!(after["spend_policy"]["mode"], "finite");
+        assert_eq!(after["spend_policy"]["cap_micro_usd"], 1_000_000);
+    }
 }

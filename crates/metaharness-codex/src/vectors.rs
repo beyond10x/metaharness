@@ -53,7 +53,7 @@ pub const CONTRACT_OBLIGATIONS: ContractObligations = ContractObligations {
     version_pair: Obligation::Filled(&["golden-version-pair"]),
 };
 
-const META: &str = r#"{"timestamp":"2026-08-22T10:00:00.000Z","type":"session_meta","payload":{"id":"01a0-fixture","session_id":"01a0-fixture","cli_version":"0.145.0","cwd":"/scratch/work","originator":"codex_exec","model_provider":"openai"}}"#;
+const META: &str = r#"{"timestamp":"2026-08-22T10:00:00.000Z","type":"session_meta","payload":{"id":"01a0-fixture","session_id":"01a0-fixture","cli_version":"0.153.4","cwd":"/scratch/work","originator":"codex_exec","model_provider":"openai"}}"#;
 const META_UNPINNED: &str = r#"{"timestamp":"2026-08-22T10:00:00.000Z","type":"session_meta","payload":{"id":"01a0-fixture","cli_version":"0.999.0","cwd":"/scratch/work"}}"#;
 const TASK_STARTED: &str = r#"{"timestamp":"2026-08-22T10:00:01.000Z","type":"event_msg","payload":{"type":"task_started","turn_id":"t1"}}"#;
 const CALL: &str = r#"{"timestamp":"2026-08-22T10:00:02.000Z","type":"response_item","payload":{"type":"function_call","call_id":"call-1","name":"exec","arguments":"{\"command\":\"ls\"}"}}"#;
@@ -744,12 +744,16 @@ mod tests {
         let outcome = version_pair_outcome(Some("9.9.9"));
         assert!(outcome.is_warning(), "{outcome:?}");
         assert!(outcome.detail.contains("9.9.9"), "{}", outcome.detail);
-        assert!(outcome.detail.contains("0.145.0"), "{}", outcome.detail);
+        assert!(
+            outcome.detail.contains(crate::PINNED_VERSIONS[0]),
+            "{}",
+            outcome.detail
+        );
     }
 
     #[test]
     fn a_recorded_version_on_the_pin_passes_with_nothing_to_say() {
-        let outcome = version_pair_outcome(Some("0.145.0"));
+        let outcome = version_pair_outcome(Some(crate::PINNED_VERSIONS[0]));
         assert!(outcome.passed && outcome.detail.is_empty(), "{outcome:?}");
     }
 

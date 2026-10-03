@@ -1,11 +1,15 @@
 ---
-format: aep.planning-md/1
+format: aep.planning-md/3
 id: story:task-check-passes-on-a-machine-without-the-operators-binaries
 kind: story
 status: implemented
 title: task check passes on a machine that has none of the operator's binaries
 summary: 'The Gate workflow (gate.yml, 2026-09-15) ran task check on a clean runner four times: run 34911935585 failed because b10x-harness was not on the run''s constructed PATH; run 34912326156 because it was installed into ~/.cargo/bin instead of ~/.local/bin; run 34912870204 because metaharness_preflight never checked the PATH (fixed in aa673e3); run 34913587922 because crates/metaharness-cli/tests/aep_resume.rs:70 (legacy_launch_resumes_without_spending_or_losing_configuration) is refused with ''steps.yaml cannot produce evidence this task''s plan will demand, and --allow-evidence-gap was given: test_result …; static_analysis …'' although the same test passes on the operator''s machine with AEP pinned at 28abe09b. cargo test stops at the first failing target, so later targets are unmeasured. Until every target passes on the runner, the Gate is red on every push.'
 revision: 5
+transitions:
+- {from: "draft", to: "proposed", at: "2026-09-15T15:43:13Z", actor: "human:timo", revision: 3, decided_on: {"recorded":{"test_result":2}}, imported: true}
+- {from: "proposed", to: "active", at: "2026-09-15T15:43:13Z", actor: "human:timo", revision: 4, decided_on: {"recorded":{"test_result":2}}, imported: true}
+- {from: "active", to: "implemented", at: "2026-09-15T15:43:13Z", actor: "human:timo", revision: 5, decided_on: {"recorded":{"test_result":2}}, imported: true}
 ---
 # Story: task check passes on a machine that has none of the operator's binaries
 

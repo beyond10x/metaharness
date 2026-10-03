@@ -1,0 +1,13 @@
+{
+  "at": "2026-09-03T05:50:00Z",
+  "actor": "human:timo",
+  "artifact": "story:stream-closed-marker",
+  "kind": "story",
+  "revision": 1,
+  "change": {
+    "change": "evidence",
+    "kind": "test_result",
+    "source": "task check",
+    "reference": "24d7b10"
+  }
+}

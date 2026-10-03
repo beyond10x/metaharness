@@ -1,0 +1,13 @@
+{
+  "at": "2026-10-03T09:12:27Z",
+  "actor": "human:timo",
+  "artifact": "story:native-process-termination",
+  "kind": "story",
+  "revision": 8,
+  "change": {
+    "change": "evidence",
+    "kind": "test_result",
+    "source": "task check: exit0; 751 passed, 13 existing ignored; unit 8adb8052",
+    "reference": "~/.cache/metaharness-issue-repair/termination17/task-check-5.log"
+  }
+}

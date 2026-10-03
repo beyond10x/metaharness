@@ -274,6 +274,16 @@ impl Metaharness {
         self
     }
 
+    /// Allow confined b10x subprocess writes inside one exact workspace-relative directory.
+    ///
+    /// Repeatable and independent of file-tool scopes. Validated before launch; no declaration
+    /// leaves native subprocess workspace access read-only.
+    #[must_use]
+    pub fn with_process_write_subtree(mut self, directory: impl Into<String>) -> Self {
+        self.spec.process_write_subtree.push(directory.into());
+        self
+    }
+
     /// One more rule about where this run may write. `b10x` only — see [`RunSpec::write_scope`].
     ///
     /// Ordered: first match wins, so the order rules are added in is the order they are read in.
@@ -507,9 +517,9 @@ fn start_b10x(
         return Err(Refusal::Launch {
             detail: format!(
                 "confinement was asked for and the working directory {} cannot be adopted: \
-                 substrate represents a workspace only when its directory name starts with \
-                 `{SUBSTRATE_WORKSPACE_PREFIX}`. Rename it, or drop --cwd and let the run use a \
-                 scratch one",
+                 substrate requires a directory component of ASCII alphanumerics, underscore \
+                 or hyphen, not beginning with hyphen. Select an eligible directory with --cwd \
+                 or use the run's scratch directory",
                 cwd.display()
             ),
         });
@@ -541,18 +551,7 @@ fn start_b10x(
         .get("PATH")
         .expect("the b10x base environment always carries PATH")
         .clone();
-    let program = metaharness_b10x::resolve_program(&named, &child_path)
-        .ok_or_else(|| Refusal::Launch {
-            detail: format!(
-                "`{named}` is not on the PATH this run gives its child ({child_path}). The child's \
-                 environment is constructed rather than inherited (H3), so a binary the operator \
-                 can run is not automatically one the run can: install it there, or name it by \
-                 absolute path"
-            ),
-        })?
-        .display()
-        .to_string();
-    let observed_version = b10x_version(&program);
+    let (program, observed_version) = b10x_program(runner, &named, &child_path)?;
     if spec.strict_version
         && !observed_version
             .as_ref()
@@ -699,11 +698,30 @@ fn start_b10x(
     }))
 }
 
-/// The exact executable's own version token, before a model request can be made.
-///
-/// [`None`] is retained for scripted runners whose fake program is deliberately not installed;
-/// a real `--strict-version` run refuses that absence above. The command receives no run
-/// environment or credential and therefore cannot observe either.
+/// Resolve and probe only runners that launch an executable. Synthetic replay carries no
+/// observed vendor version, so `--strict-version` still refuses its absence.
+fn b10x_program(
+    runner: &dyn ProcessRunner,
+    named: &str,
+    child_path: &str,
+) -> Result<(String, Option<String>), Refusal> {
+    if !runner.requires_executable() {
+        return Ok((named.to_owned(), None));
+    }
+    let program = metaharness_b10x::resolve_program(named, child_path)
+        .ok_or_else(|| Refusal::Launch {
+            detail: format!(
+                "`{named}` is not on the PATH this run gives its child ({child_path}). The child's \
+                 environment is constructed rather than inherited (H3); install the executable \
+                 there or name it by absolute path"
+            ),
+        })?
+        .display()
+        .to_string();
+    let version = b10x_version(&program);
+    Ok((program, version))
+}
+
 fn b10x_version(program: &str) -> Option<String> {
     let output = std::process::Command::new(program)
         .arg("--version")
@@ -1476,17 +1494,15 @@ fn resolve_cwd(spec: &RunSpec, scratch_root: &std::path::Path) -> Result<PathBuf
 
 /// The same, with the scratch directory's own name.
 ///
-/// Named rather than fixed because substrate will only represent a workspace whose directory starts
-/// with `ws_`, and a b10x run that means to write needs one it can adopt. A scratch directory called
-/// `work` leaves that run **silently read-only** — the tools it publishes are what the machine can
-/// confine, so the write entries simply do not appear and nothing says why.
+/// The explicitly selected directory is canonicalized before its parent and component
+/// are handed to substrate. Naming eligibility does not replace driver containment.
 fn resolve_cwd_named(
     spec: &RunSpec,
     scratch_root: &std::path::Path,
     scratch_name: &str,
 ) -> Result<PathBuf, Refusal> {
     match &spec.cwd {
-        Some(directory) if directory.is_dir() => Ok(directory.clone()),
+        Some(directory) if directory.is_dir() => Ok(std::fs::canonicalize(directory)?),
         Some(directory) => Err(Refusal::Io {
             detail: format!(
                 "the operator-named working directory {} does not exist or is not a directory",
@@ -1500,9 +1516,6 @@ fn resolve_cwd_named(
         }
     }
 }
-
-/// The prefix substrate requires of a workspace directory it will represent.
-const SUBSTRATE_WORKSPACE_PREFIX: &str = "ws_";
 
 /// The scratch working directory a confined b10x run gets.
 const B10X_SCRATCH_WORKSPACE: &str = "ws_run";
@@ -1539,6 +1552,21 @@ fn resolve_frame(in_memory: Option<Frame>, spec: &RunSpec) -> Result<Option<Fram
 ///
 /// [`Refusal::NoAdapter`] or [`Refusal::ToolSurfaceOwned`].
 pub fn check_spec(spec: &RunSpec) -> Result<(), Refusal> {
+    if !spec.process_write_subtree.is_empty() {
+        if spec.kind != Kind::B10x {
+            return Err(Refusal::Launch {
+                detail: format!(
+                    "--process-write-subtree is supported only by confined b10x processes, not {}",
+                    spec.kind.as_str()
+                ),
+            });
+        }
+        if spec.substrate.is_none() && !spec.substrate_embedded {
+            return Err(Refusal::Launch { detail: "--process-write-subtree requires --substrate or --substrate-embedded; no unconfined fallback is permitted".to_owned() });
+        }
+        metaharness_b10x::validate_process_write_subtrees(&spec.process_write_subtree)
+            .map_err(|detail| Refusal::Launch { detail })?;
+    }
     // Strategy C is built (`metaharness mcp-serve`), so what is left is a question about the
     // *vendor*: can its built-in tools be taken away and ours put in their place? Claude Code can
     // (`--tools ""` plus `--mcp-config`). Codex cannot — `dynamicTools` is an app-server surface
@@ -1768,6 +1796,9 @@ fn b10x_launch(
     for rule in &spec.write_scope {
         launch = launch.with_write_scope(rule);
     }
+    for directory in &spec.process_write_subtree {
+        launch = launch.with_process_write_subtree(directory);
+    }
     if spec.scope_announce == ScopeAnnounce::Silent {
         launch = launch.with_scope_silent();
     }
@@ -1784,7 +1815,7 @@ fn b10x_launch(
 fn adoptable(cwd: &std::path::Path) -> bool {
     cwd.file_name()
         .and_then(|name| name.to_str())
-        .is_some_and(|name| name.starts_with(SUBSTRATE_WORKSPACE_PREFIX))
+        .is_some_and(metaharness_b10x::workspace_component_is_adoptable)
 }
 
 /// The variable `--credentials api-key` points the b10x loop at.
@@ -2865,9 +2896,44 @@ mod b10x_launch_tests {
     //! was not in that function: it was that nothing called it, and the adapter's own tests went
     //! on passing while every launch died on the loop's argument parsing.
 
+    #[test]
+    fn managed_workspace_admits_valid_components_and_canonicalizes_selection() {
+        for name in ["wt-123abc", "metaharness", "ws_run", "_scratch"] {
+            assert!(super::adoptable(std::path::Path::new(name)), "{name}");
+        }
+        for name in ["-bad", "has space", "../", ".", "bad.name"] {
+            assert!(!super::adoptable(std::path::Path::new(name)), "{name}");
+        }
+        let root = tempfile::tempdir().unwrap();
+        let directory = root.path().join("wt-selected");
+        std::fs::create_dir(&directory).unwrap();
+        let mut selected = spec();
+        selected.cwd = Some(directory.join("."));
+        assert_eq!(
+            super::resolve_cwd_named(&selected, root.path(), "unused").unwrap(),
+            std::fs::canonicalize(directory).unwrap()
+        );
+    }
+
     use metaharness_protocol::{CredentialSource, Kind, RunSpec};
 
     use super::{Refusal, b10x_launch, check_spec, guard_b10x_decision_mode, start_refusals};
+
+    #[test]
+    fn scripted_binary_resolution_needs_no_executable_but_real_resolution_still_does() {
+        let empty = tempfile::tempdir().unwrap();
+        let path = empty.path().to_str().unwrap();
+        let scripted = crate::ScriptedRunner::new(Vec::new(), crate::ScriptedLog::new());
+        assert_eq!(
+            super::b10x_program(&scripted, "b10x-harness", path).unwrap(),
+            ("b10x-harness".to_owned(), None)
+        );
+        let real = crate::SpawnRunner::default();
+        assert!(matches!(
+            super::b10x_program(&real, "b10x-harness", path),
+            Err(Refusal::Launch { .. })
+        ));
+    }
 
     /// A subscription token reaches the loop as its own flags, under its own header name.
     ///
@@ -3206,7 +3272,8 @@ mod b10x_launch_tests {
         // entries never appear, and the run reports that it could not change the file it was asked
         // to change. That reads as a model failure and is a directory naming rule.
         assert!(super::adoptable(std::path::Path::new("/scratch/ws_run")));
-        assert!(!super::adoptable(std::path::Path::new("/scratch/work")));
+        assert!(super::adoptable(std::path::Path::new("/scratch/work")));
+        assert!(!super::adoptable(std::path::Path::new("/scratch/bad.name")));
     }
 
     #[test]

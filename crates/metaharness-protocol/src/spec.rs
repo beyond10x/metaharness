@@ -500,6 +500,14 @@ pub struct RunSpec {
     #[cfg_attr(feature = "clap", arg(long, value_name = "GLOB=SCOPE"))]
     pub write_scope: Vec<String>,
 
+    /// Exact workspace-relative directory a confined native process may write. **b10x only.**
+    ///
+    /// Repeatable; no declaration keeps subprocess workspace access read-only. Independent from
+    /// file-tool write scopes: glob patterns never become process mounts. Requires explicit
+    /// substrate confinement. The native host still checks existing directories and containment.
+    #[cfg_attr(feature = "clap", arg(long, value_name = "DIR"))]
+    pub process_write_subtree: Vec<String>,
+
     /// Whether the declared scope is also stated in the instruction. **`b10x` only.**
     ///
     /// `silent` is an experiment control. A run told the rule and a run refused the rule both end
@@ -570,6 +578,7 @@ impl RunSpec {
             toolchain: None,
             prices: None,
             write_scope: Vec::new(),
+            process_write_subtree: Vec::new(),
             scope_announce: ScopeAnnounce::Stated,
             context: Vec::new(),
             auditor: None,

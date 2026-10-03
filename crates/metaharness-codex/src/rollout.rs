@@ -26,7 +26,7 @@
 //! | `usage.iterations` | **absent.** A `token_count` payload has no per-iteration list to take a length of |
 //! | `usage.speed` | **absent.** No speed tier is reported, as no service tier is |
 //! | `usage.cost_usd` | **absent.** The rollout prices nothing, and there is no per-model split to price; `session.ended.total_cost_usd` is absent for the same reason |
-//! | `tool.result.tool_use_result` | **absent.** A `*_call_output` payload carries `call_id`, `output` and turn metadata, and nothing that answers what a per-tool result record answers |
+//! | `tool.result.tool_use_result` | **source-dependent (a22).** Raw `*_call_output` content supplies none. Supported retained structured completions preserve their item; legacy command output alone remains unverified. |
 //!
 //! Each absence is an `unk` in a checker's verdict and never a pass. Filling one of them from a
 //! neighbouring field — the `output` array as a result record, a cost multiplied out of tokens —
@@ -46,6 +46,7 @@ use crate::{ADAPTER_ID, PINNED_VERSIONS};
 /// clock (every timestamp is the vendor's, passed through), and drops nothing.
 #[derive(Debug)]
 pub struct RolloutReader {
+    observations: crate::observations::Observations,
     transcript: TranscriptRef,
     attestation: HermeticAttestation,
     line_number: u64,
@@ -55,6 +56,9 @@ pub struct RolloutReader {
     /// The last `task_complete` payload, which is the closest thing a rollout has to a terminal
     /// record; [`RolloutReader::finish`] builds `session.ended` from it.
     last_complete: Option<(Option<String>, Value)>,
+    /// An explicit failure belongs to the whole driven session. Later text or an
+    /// ambiguous completion cannot turn it into a successful run.
+    terminal_failure: bool,
     /// The last `token_count` usage, folded into `session.ended` because the rollout never
     /// carries cost and carries usage per turn rather than per session.
     last_usage: Option<Usage>,
@@ -68,6 +72,7 @@ impl RolloutReader {
     #[must_use]
     pub fn new(transcript: TranscriptRef, attestation: HermeticAttestation) -> Self {
         Self {
+            observations: crate::observations::Observations::default(),
             transcript,
             attestation,
             line_number: 0,
@@ -75,6 +80,7 @@ impl RolloutReader {
             saw_task_complete: false,
             turn: 0,
             last_complete: None,
+            terminal_failure: false,
             last_usage: None,
             census: metaharness_protocol::DecisionCensus::default(),
         }
@@ -115,6 +121,11 @@ impl RolloutReader {
             "session_meta" => self.session_meta(payload, line),
             "response_item" => self.response_item(payload, line),
             "event_msg" => self.event_msg(payload, line),
+            "turn_context" if payload.is_object() => {
+                self.observations.model(payload);
+                // Preserve the rest of this record rather than silently claiming to map it all.
+                vec![self.opaque(Some("turn_context"), None, line)]
+            }
             _ => vec![self.opaque(Some(&record_type), payload["type"].as_str(), line)],
         };
         events
@@ -130,14 +141,19 @@ impl RolloutReader {
     ///
     /// A rollout is append-only and has no closing record; `task_complete` is per turn. So the
     /// terminal `session.ended` is built here, from the last `task_complete` and the last
-    /// `token_count` — with `is_error` left absent rather than guessed, because a rollout that
-    /// simply stops does not say why.
+    /// `token_count`. Explicit errors take precedence; a legacy final message is
+    /// positive success evidence. A bare completion remains unknown.
     pub fn finish(&mut self) -> Vec<Emission> {
         let Some((at, complete)) = self.last_complete.take() else {
             return Vec::new();
         };
         let event = Event::SessionEnded {
-            is_error: None,
+            final_answer: crate::observations::final_answer(
+                &complete,
+                completion_error(&complete) == Some(false),
+            ),
+            observed_models: self.observations.models(),
+            is_error: completion_error(&complete),
             subtype: None,
             stop_reason: None,
             terminal_reason: None,
@@ -230,7 +246,8 @@ impl RolloutReader {
                 let raw = payload["arguments"].as_str().unwrap_or_default();
                 let input = serde_json::from_str::<Value>(raw)
                     .unwrap_or_else(|_| Value::String(raw.to_string()));
-                vec![Event::ToolRequested {
+                let mut events = self.observations.call(&call_id, &name, payload);
+                events.push(Event::ToolRequested {
                     // Left empty here on purpose, exactly as `operations` is: what a call touches is
                     // resolved by whoever holds the run's published rendering, and an adapter that
                     // answered for itself would be a second owner of one rule (design § 8.4 O6).
@@ -246,27 +263,14 @@ impl RolloutReader {
                     decision_required: false,
                     deadline_ms: None,
                     seam: metaharness_protocol::Seam::None,
-                }]
+                });
+                events
             }
             "function_call_output" | "custom_tool_call_output" => {
-                let content = payload["output"].clone();
-                let bytes = content.as_str().map(|text| text.len() as u64);
-                vec![Event::ToolResult {
-                    call_id: payload["call_id"].as_str().unwrap_or_default().to_string(),
-                    // The rollout's output envelope carries no error flag this pin has
-                    // verified; absent, never false.
-                    is_error: None,
-                    content: Some(content),
-                    bytes,
-                    // **This vendor writes no per-tool result record** (amendment a9). A
-                    // `*_call_output` payload carries `call_id`, `output` and the turn metadata
-                    // passthrough, and nothing that answers the question Claude Code's
-                    // `tool_use_result` answers — no per-tool `success`, no `commandName`. So an
-                    // expectation reading those fields is `unk` against a driven Codex run, which
-                    // is the honest answer; folding the `output` array in here to fill the field
-                    // would make it a pass.
-                    tool_use_result: None,
-                }]
+                vec![self.observations.output(
+                    payload["call_id"].as_str().unwrap_or_default(),
+                    payload["output"].clone(),
+                )]
             }
             "message" => match payload["role"].as_str() {
                 Some("assistant") => vec![Event::Text {
@@ -284,10 +288,19 @@ impl RolloutReader {
     }
 
     fn event_msg(&mut self, payload: &Value, line: &str) -> Vec<Event> {
+        if let Some(events) = self.observations.structured(payload) {
+            return events;
+        }
         let message_type = payload["type"].as_str().unwrap_or_default();
         match message_type {
             "task_started" => {
                 self.turn += 1;
+                self.observations.turn(self.turn, payload);
+                // A new unfinished turn invalidates an earlier success, but never
+                // erases a failure already observed in this session.
+                if !self.terminal_failure {
+                    self.last_complete = None;
+                }
                 vec![Event::TurnStarted {
                     turn: self.turn,
                     frame_digest: None,
@@ -295,7 +308,10 @@ impl RolloutReader {
             }
             "task_complete" => {
                 self.saw_task_complete = true;
-                self.last_complete = Some((None, payload.clone()));
+                if !self.terminal_failure {
+                    self.terminal_failure = completion_error(payload) == Some(true);
+                    self.last_complete = Some((None, payload.clone()));
+                }
                 vec![Event::TurnEnded {
                     turn: self.turn.max(1),
                     stop_reason: None,
@@ -376,6 +392,20 @@ impl RolloutReader {
             digest: Digest::of(line.as_bytes()),
             source_line: Some(self.line_number),
         }
+    }
+}
+
+/// The distinction between an absent field and explicit null matters: older
+/// records report success through their final message instead. Non-null errors
+/// fail closed even if their payload shape is unfamiliar.
+fn completion_error(complete: &Value) -> Option<bool> {
+    match complete.get("error") {
+        Some(Value::Null) => Some(false),
+        Some(_) => Some(true),
+        None => complete["last_agent_message"]
+            .as_str()
+            .filter(|message| !message.trim().is_empty())
+            .map(|_| false),
     }
 }
 

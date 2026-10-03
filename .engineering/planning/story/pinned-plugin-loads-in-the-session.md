@@ -1,5 +1,5 @@
 ---
-format: aep.planning-md/1
+format: aep.planning-md/3
 id: story:pinned-plugin-loads-in-the-session
 kind: story
 status: implemented
@@ -12,6 +12,10 @@ tags:
 relations:
 - decomposes: epic:runs-side-by-side
 revision: 4
+transitions:
+- {from: "draft", to: "proposed", at: "2026-09-03T09:23:47Z", actor: "human:timo", revision: 2, decided_on: {"recorded":{"test_result":1}}, imported: true}
+- {from: "proposed", to: "active", at: "2026-09-03T09:23:48Z", actor: "human:timo", revision: 3, decided_on: {"recorded":{"test_result":1}}, imported: true}
+- {from: "active", to: "implemented", at: "2026-09-03T09:23:48Z", actor: "human:timo", revision: 4, decided_on: {"recorded":{"test_result":1}}, imported: true}
 ---
 # Story: a pinned plugin loads in the session, the 2.1.259 wire is read, and the cap acts during the run
 

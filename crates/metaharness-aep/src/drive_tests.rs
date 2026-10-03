@@ -1,5 +1,107 @@
 #[cfg(test)]
 mod tests {
+    #[test]
+    fn uncapped_authority_is_an_explicit_host_option() {
+        let help = <HostedRunArgs as clap::Args>::augment_args(clap::Command::new("drive"))
+            .render_long_help().to_string();
+        assert!(help.contains("--uncapped-budget"), "finite caps must not stand in for uncapped authority");
+        assert!(help.contains("--spend-authorization"));
+    }
+    #[test]
+    fn governed_codex_is_selected_as_an_adjudicating_harness() {
+        let selected = Harness::named("codex").expect("the existing adapter is available to drive");
+        assert_eq!(selected.kind(), "codex");
+        assert!(selected.adjudicates());
+    }
+
+    #[test]
+    fn codex_decisions_reach_the_engine_and_unsupported_calls_never_gain_an_exemption() {
+        use aep_engine::ProtocolEngine as _;
+        let state: StateId = "implement".parse().unwrap();
+        let tools = config(&[Capability::RepositoryRead, Capability::CommandExecution]);
+        let task = driven_task();
+        let context = step_context(&tools, &state, &task);
+        for allowed in [false, true] {
+            let profile = if allowed {
+                AUTHORIZE_PROFILE.replace("allow: [repository.read]", "allow: [repository.read, command.execute]")
+            } else { AUTHORIZE_PROFILE.to_owned() };
+            let (engine, mut execution) = authorizing_execution_with_profile(&profile);
+            let mut consulted = 0;
+            let mut authorize = |request: &ActionRequest| {
+                consulted += 1;
+                engine.authorize(&mut execution, request)
+            };
+            let events = requested("Bash", &serde_json::json!({"command":"cat README.md"}))
+                + &requested("apply_patch", &serde_json::json!({"patch":"*** Delete File: .engineering/project.yaml"}))
+                + &requested("Skill", &serde_json::json!({"skill":"anything"}))
+                + &requested("Bash", &serde_json::json!({"command":["git", "status"]}))
+                + &requested("Bash", &serde_json::json!({"command":"cat README.md", "cwd":"/elsewhere"}))
+                + &requested("Bash", &serde_json::json!({"command":"cat README.md; touch escaped"}));
+            let mut commands = Vec::new();
+            let mut transcript = Vec::new();
+            let tally = answer_events(Harness::Codex, &context, no_scope(), events.as_bytes(),
+                &mut commands, &mut transcript, &mut authorize);
+            assert_eq!(consulted, 1, "only the supported simple invocation reaches authorization");
+            assert_eq!(tally.asked, 6);
+            assert_eq!(tally.denied, if allowed {5} else {6});
+            assert_eq!(transcript, events.as_bytes());
+            let decisions: Vec<serde_json::Value> = String::from_utf8(commands).unwrap().lines()
+                .map(|line| serde_json::from_str(line).unwrap()).collect();
+            assert_eq!(decisions[0]["decision"]["decision"], if allowed {"allow"} else {"deny"});
+            assert!(event_names(&execution).iter().any(|name| name.contains("action")), "authorization is recorded by the real engine");
+        }
+    }
+
+    #[test]
+    fn codex_resume_options_launch_the_same_ask_seam_and_do_not_load_claude_plugins() {
+        let original = B10xOptions { codex_model: Some("test-model".to_owned()),
+            codex_endpoint: Some("http://127.0.0.1:1234/v1".to_owned()), ..B10xOptions::default() };
+        let persisted = serde_json::to_vec(&original).unwrap();
+        let resumed: B10xOptions = serde_json::from_slice(&persisted).unwrap();
+        let argv = codex_argv(Path::new("frame.json"), Path::new("/work"), "the task", &resumed, Some("aep:session-1"));
+        assert_eq!(argv[2], "codex");
+        for (flag, value) in [("--frame","frame.json"),("--cwd","/work"),("--decisions","ask"),
+            ("--actor","aep:session-1"),("--credentials","none"),("--model","test-model")] {
+            assert!(argv.windows(2).any(|pair| pair == [flag, value]), "{flag}: {argv:?}");
+        }
+        assert!(!argv.iter().any(|arg| arg == "--plugin-dir" || arg == "--max-turns"));
+        assert_eq!(codex_tools(&config(&[Capability::RepositoryWrite])), Vec::<String>::new());
+        assert_eq!(codex_tools(&config(&[Capability::CommandExecution])), ["Bash"]);
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn governed_codex_terminal_exit_failure_and_interruption_never_complete_a_step() {
+        use std::os::unix::process::ExitStatusExt as _;
+        let transcript = Path::new("retained-codex-events.jsonl");
+        assert!(matches!(metaharness_outcome(Ok(std::process::ExitStatus::from_raw(0)), "", transcript), StepOutcome::Nothing));
+        for raw in [3 << 8, 9] {
+            let outcome = metaharness_outcome(Ok(std::process::ExitStatus::from_raw(raw)), "provider failed", transcript);
+            assert!(matches!(outcome, StepOutcome::NoVerdict { reason } if reason.contains("retained-codex-events.jsonl") && reason.contains("provider failed")));
+        }
+    }
+
+    #[test]
+    fn governed_codex_uses_the_current_frame_coordinates_and_no_skill_exemption() {
+        let tools = config(&[Capability::CommandExecution]);
+        let state: StateId = "implement".parse().unwrap();
+        let task = driven_task();
+        let mut context = step_context(&tools, &state, &task);
+        context.index = 4;
+        context.attempt = 2;
+        let mut step = b10x_step();
+        step.harness = "codex".to_owned();
+        step.skills = vec!["aep:planning".to_owned()];
+        let prompt = prompt_for(&step, &context, "aep");
+        assert!(prompt.contains("task `T-1`") && prompt.contains("workflow state `implement`"));
+        assert!(!prompt.contains("`Skill` tool"));
+        let frame = metaharness_frame(&context, &step.scope, "test/linear", "1");
+        assert_eq!(frame["node"]["id"], "implement");
+        assert_eq!(frame["step"]["index"], 4);
+        assert_eq!(frame["step"]["attempt"], 2);
+        frame_document(&frame).expect("same sealed frame wire used on resume");
+    }
+
     use aep_cli::drive::on_path;
     use aep_domain::ids::ExecutionId;
     use aep_engine::{Engine, Registry};
@@ -7,7 +109,7 @@ mod tests {
 use super::*;
 use aep_domain::capability::Environment;
 use aep_domain::ids::StateId;
-fn config(capabilities: &[Capability]) -> ToolConfig {
+pub(super) fn config(capabilities: &[Capability]) -> ToolConfig {
         ToolConfig::new(capabilities.iter().cloned().collect())
     }
 /// The execution every fixture below belongs to: the first run of task `T-1`.
@@ -24,7 +126,7 @@ fn config(capabilities: &[Capability]) -> ToolConfig {
     /// the string a step map author writes, and a test that read it out of the same constant the
     /// selector reads would pass whatever that constant said.
     /// A one-step map whose `llm` step names the native harness.
-    fn b10x_map() -> StepMap {
+    pub(super) fn b10x_map() -> StepMap {
         aep_schema::parse::step_map(
             "format: aep.driver-steps/1\nid: test/b10x\nworkflow: test/linear/1\n\
              states:\n  implement:\n    steps:\n      - kind: llm\n        prompt: do it\n\
@@ -44,7 +146,7 @@ fn b10x_step() -> LlmStep {
         }
     }
 /// A step context with nothing outstanding, for a test that is about the surface.
-    fn step_context<'a>(
+    pub(super) fn step_context<'a>(
         tools: &'a ToolConfig,
         state: &'a StateId,
         task: &'a aep_domain::task::Task,
@@ -67,7 +169,7 @@ fn b10x_step() -> LlmStep {
     ///
     /// `derived_from` is populated because the identity line names the artifacts, and a fixture
     /// without one would let the line pass by saying nothing.
-    fn driven_task() -> aep_domain::task::Task {
+    pub(super) fn driven_task() -> aep_domain::task::Task {
         aep_schema::parse::task(
             "id: T-1\nkind: feature\nobjective: drive something\nprotocol: aep/1\n\
              profile: test.standard\nderived_from: [story:the-one-being-driven]\n",
@@ -392,7 +494,7 @@ fn b10x_step() -> LlmStep {
             "the composed-command rule is stated: {prompt}"
         );
         assert!(
-            prompt.contains("protocol plan artifact") && prompt.contains("protocol observe trace"),
+            prompt.contains("aep plan artifact") && prompt.contains("aep observe trace"),
             "and the two verb families the surface admits: {prompt}"
         );
 
@@ -411,12 +513,12 @@ fn b10x_step() -> LlmStep {
         // where that change had to be argued: what is forbidden is what *writes* or what runs a
         // program the surface never admitted, not what reads.
         for forbidden in [
-            "protocol plan artifact list && protocol plan artifact graph",
-            "protocol plan artifact list | head",
+            "aep plan artifact list && aep plan artifact graph",
+            "aep plan artifact list | head",
             "git status",
             "cargo test --workspace",
             "sed -i s/a/b/ Cargo.toml",
-            "protocol --help",
+            "aep --help",
         ] {
             assert!(
                 refused(forbidden),
@@ -429,7 +531,7 @@ fn b10x_step() -> LlmStep {
                 &context,
                 no_scope(),
                 "Bash",
-                &serde_json::json!({ "command": "protocol plan artifact list" })
+                &serde_json::json!({ "command": "aep plan artifact list" })
             )
             .is_ok(),
             "the prompt's own example is refused by the policy"
@@ -612,7 +714,7 @@ fn b10x_step() -> LlmStep {
     }
 /// The retired `driven-surface.sh`, case for case: the grant is held to one simple
     // recorded-under-this-name: retained flat-alias compatibility assertion.
-    /// `protocol artifact|trace` invocation, and a state with no shell says so by name.
+    /// `aep artifact|trace` invocation, and a state with no shell says so by name.
     #[test]
     fn the_shell_surface_is_one_simple_protocol_invocation() {
         let state: StateId = "implement".parse().expect("a state id");
@@ -628,28 +730,28 @@ fn b10x_step() -> LlmStep {
         };
 
         // recorded-under-this-name: retained flat-alias compatibility assertion.
-        assert!(bash("protocol artifact list").is_ok());
+        assert!(bash("aep artifact list").is_ok());
         // recorded-under-this-name: retained flat-alias compatibility assertion.
-        assert!(bash("protocol trace check t.jsonl").is_ok());
+        assert!(bash("aep trace check t.jsonl").is_ok());
         // recorded-under-this-name: retained flat-alias compatibility assertion.
-        assert!(bash("/usr/local/bin/protocol artifact list").is_ok());
+        assert!(bash("/usr/local/bin/aep artifact list").is_ok());
 
         assert!(
             // recorded-under-this-name: retained flat-alias compatibility assertion.
-            bash("protocol artifact list | tee out").is_err(),
+            bash("aep artifact list | tee out").is_err(),
             "composition"
         );
         assert!(
             // recorded-under-this-name: retained flat-alias compatibility assertion.
-            bash("protocol artifact list; rm -rf /").is_err(),
+            bash("aep artifact list; rm -rf /").is_err(),
             "chaining"
         );
         // recorded-under-this-name: retained flat-alias compatibility assertion.
-        assert!(bash("protocol artifact list > out").is_err(), "redirection");
+        assert!(bash("aep artifact list > out").is_err(), "redirection");
         // recorded-under-this-name: retained flat-alias compatibility assertion.
-        assert!(bash("protocol artifact $(cat x)").is_err(), "substitution");
+        assert!(bash("aep artifact $(cat x)").is_err(), "substitution");
         assert!(bash("cargo test").is_err(), "another program");
-        assert!(bash("protocol drive run").is_err(), "another verb");
+        assert!(bash("aep drive run").is_err(), "another verb");
         assert!(bash("").is_err(), "an empty command");
 
         let no_shell = config(&[Capability::RepositoryRead]);
@@ -659,7 +761,7 @@ fn b10x_step() -> LlmStep {
             no_scope(),
             "Bash",
             // recorded-under-this-name: retained flat-alias compatibility assertion.
-            &serde_json::json!({ "command": "protocol artifact list" }),
+            &serde_json::json!({ "command": "aep artifact list" }),
         )
         .expect_err("no shell in this state");
         assert!(
@@ -689,21 +791,21 @@ fn b10x_step() -> LlmStep {
             )
         };
 
-        assert!(bash("protocol plan artifact list").is_ok());
-        assert!(bash("protocol plan artifact new story x --title t").is_ok());
-        assert!(bash("protocol observe trace check t.jsonl").is_ok());
-        assert!(bash("/usr/local/bin/protocol plan artifact list").is_ok());
+        assert!(bash("aep plan artifact list").is_ok());
+        assert!(bash("aep plan artifact new story x --title t").is_ok());
+        assert!(bash("aep observe trace check t.jsonl").is_ok());
+        assert!(bash("/usr/local/bin/aep plan artifact list").is_ok());
 
         // The area word is skipped, not blessed: what follows it still has to be one of the two.
-        let refusal = bash("protocol plan serve").expect_err("`serve` is outside the surface");
+        let refusal = bash("aep plan serve").expect_err("`serve` is outside the surface");
         // recorded-under-this-name: retained flat-alias compatibility assertion.
-        assert!(refusal.contains("`protocol serve`"), "{refusal}");
+        assert!(refusal.contains("`aep serve`"), "{refusal}");
         assert!(
-            bash("protocol govern validate --root .").is_err(),
+            bash("aep govern validate --root .").is_err(),
             "an area word does not admit the verbs under it"
         );
         assert!(
-            bash("protocol drive run").is_err(),
+            bash("aep drive run").is_err(),
             "`drive` is an area name as well as the verb it always was, and neither admits `run`"
         );
     }
@@ -853,7 +955,7 @@ fn b10x_step() -> LlmStep {
             "naming the rule that matched, so the map is where a reader goes: {whole}"
         );
         assert!(
-            whole.contains("protocol plan artifact"),
+            whole.contains("aep plan artifact"),
             "and what to use instead, spelled as the step maps now spell it: {whole}"
         );
 
@@ -973,7 +1075,7 @@ fn b10x_step() -> LlmStep {
             "a subagent's tool set is derived by nothing in these decisions"
         );
     }
-/// Gap register `:40`. The document the driver writes has to be one `protocol observe trace check`
+/// Gap register `:40`. The document the driver writes has to be one `aep observe trace check`
     /// can actually read, or it is a file nobody consumes that looks like an audit.
     ///
     /// Read back through `trace_domain::raw::read_spec` — the same door the CLI uses — rather than
@@ -1191,7 +1293,7 @@ fn b10x_step() -> LlmStep {
     ///
     /// **Run `b10x-2991520`, 2026-08-29: 30 `tool_search` calls, 28 of them distinct**, hunting for
     /// `run`, `exec`, `shell`, `spawn`, `execute`, `argv` and `program`. The step it was given
-    /// records something in the planning store, whose only route is the `protocol` CLI, and nothing
+    /// records something in the planning store, whose only route is the `aep` CLI, and nothing
     /// in its catalogue could start a process — `harness-tools` withholds `run` outright when no
     /// allowlist was supplied (`programs.is_none()`). The loop was right and the driver had not
     /// told it anything.
@@ -1349,27 +1451,28 @@ fn b10x_step() -> LlmStep {
              {claude:?}"
         );
     }
-/// A confined workspace publishes the tools the arm needs, and an ordinary one says why not.
-    ///
-    /// The native arm could read a repository and change nothing in it, so a comparison against it
-    /// measured an arm that could not attempt the work. Substrate represents a workspace only when
-    /// its directory name starts with `ws_`, and publishes `run` only with a delegated subtree —
-    /// metaharness states the consequence plainly: *a run that may not execute its suite cannot see
-    /// a test fail before writing the code, so it will not write the code.*
+/// The selected directory uses the pinned substrate component rule, without a prefix.
     ///
     /// The two travel together on purpose. An arm given confinement without execution can write and
     /// not test; given execution without confinement it is refused at launch.
     #[test]
-    fn a_confined_workspace_gets_the_flags_that_let_the_arm_write_and_an_ordinary_one_does_not() {
+    fn a_confined_workspace_gets_flags_and_an_invalid_one_is_refused() {
+        let root = tempfile::tempdir().unwrap();
+        let selected = root.path().join("wt-selected");
+        let invalid = root.path().join("bad.name");
+        fs::create_dir(&selected).unwrap();
+        fs::create_dir(&invalid).unwrap();
         let with_subtree = B10xOptions {
             endpoint: Some("http://127.0.0.1:18080".to_owned()),
             model: Some("qwen3.8-27b".to_owned()),
             cgroup_root: Some(PathBuf::from("/sys/fs/cgroup/u")),
             ..B10xOptions::default()
         };
+        assert!(machine_preflights(&b10x_map(), &invalid, &with_subtree)
+            .is_some_and(|reason| reason.contains("confinement was requested")));
         let confined = b10x_argv(
             &with_subtree,
-            Path::new("/home/op/.cache/ws_run"),
+            &selected,
             &[],
             &[],
             "do the thing",
@@ -1389,10 +1492,10 @@ fn b10x_step() -> LlmStep {
             "and may execute, or it cannot see a test fail: {joined}"
         );
 
-        // An ordinary checkout: asking would be a launch refusal, so nothing is asked.
+        // Invalid syntax cannot become confinement authority.
         let ordinary = b10x_argv(
             &with_subtree,
-            Path::new("/home/op/aep"),
+            &invalid,
             &[],
             &[],
             "do the thing",
@@ -1409,7 +1512,7 @@ fn b10x_step() -> LlmStep {
         assert!(
             b10x_read_only_note(
                 &b10x_map(),
-                Path::new("/home/op/aep"),
+                &invalid,
                 &with_subtree
             )
             .is_some_and(|note| note.contains("does not")),
@@ -1424,7 +1527,7 @@ fn b10x_step() -> LlmStep {
         assert!(
             b10x_read_only_note(
                 &b10x_map(),
-                Path::new("/home/op/.cache/ws_run"),
+                &selected,
                 &no_subtree
             )
             .is_some_and(|note| note.contains("no `--b10x-cgroup-root`")),
@@ -1436,7 +1539,7 @@ fn b10x_step() -> LlmStep {
         assert!(
             b10x_read_only_note(
                 &b10x_map(),
-                Path::new("/home/op/.cache/ws_run"),
+                &selected,
                 &with_subtree
             )
             .is_none(),
@@ -2102,7 +2205,7 @@ transitions:
 /// The profile that makes the fixture load-bearing: it grants `repository.read` and **not**
     /// `repository.write`, so a state whose rendered surface offers `Edit` is a state where the two
     /// layers disagree and the engine is the one that refuses.
-    const AUTHORIZE_PROFILE: &str = r"
+    pub(super) const AUTHORIZE_PROFILE: &str = r"
 id: test.reading
 title: Reading only
 protocol: aep/1
@@ -2121,6 +2224,10 @@ profile: test.reading
 ";
 /// An engine over those documents, and an execution of that task in `implement`.
     fn authorizing_execution() -> (Engine, aep_engine::execution::Execution) {
+        authorizing_execution_with_profile(AUTHORIZE_PROFILE)
+    }
+
+    pub(super) fn authorizing_execution_with_profile(profile: &str) -> (Engine, aep_engine::execution::Execution) {
         use aep_engine::ProtocolEngine as _;
         let mut registry = Registry::new();
         registry
@@ -2135,7 +2242,7 @@ profile: test.reading
             .expect("the workflow is unique");
         registry
             .insert_profile(
-                aep_schema::parse::profile(AUTHORIZE_PROFILE, None).expect("the profile parses"),
+                aep_schema::parse::profile(profile, None).expect("the profile parses"),
             )
             .expect("the profile is unique");
         let engine = Engine::new(registry);
@@ -2263,7 +2370,7 @@ profile: test.reading
 /// Policy first, and a call it refuses never reaches the engine.
     ///
     /// The order matters in both directions: the argument-level rules are the only layer that can
-    /// tell `protocol plan artifact list` from `cargo test`, and an engine asked about a call the driver
+    /// tell `aep plan artifact list` from `cargo test`, and an engine asked about a call the driver
     /// already refused would record an action nobody was allowed to attempt.
     #[test]
     fn a_call_the_policy_refuses_is_attributed_to_the_policy_and_never_reaches_the_engine() {
@@ -2351,7 +2458,7 @@ profile: test.reading
         assert_eq!(
             needs(
                 "Bash",
-                serde_json::json!({ "command": "protocol plan artifact list" })
+                serde_json::json!({ "command": "aep plan artifact list" })
             ),
             Some("command.execute".into())
         );
@@ -2374,12 +2481,12 @@ profile: test.reading
 
         let request = action_for(
             "Bash",
-            &serde_json::json!({ "command": "protocol plan artifact list --kind story" }),
+            &serde_json::json!({ "command": "aep plan artifact list --kind story" }),
         )
         .expect("a shell call renders");
         assert_eq!(
             request.action.summary(),
-            "run `protocol plan artifact list --kind story`",
+            "run `aep plan artifact list --kind story`",
             "what the engine records is the call that was made"
         );
         let request = action_for("Read", &serde_json::json!({ "file_path": "/repo/x.rs" }))
@@ -2700,4 +2807,23 @@ profile: test.reading
              order the document writes them, then its one `--context` file, and no frame"
         );
     }
+}
+#[test]
+fn managed_workspace_accepts_explicit_relative_project() {
+    assert!(adoptable(Path::new(".")), "the managed test checkout is a selected valid directory");
+    assert!(!adoptable(Path::new("/not-present/bad.name")));
+}
+
+#[cfg(unix)]
+#[test]
+fn native_failure_is_not_hidden_by_successful_metaharness_transport() {
+ use std::os::unix::process::ExitStatusExt;
+ let directory=tempfile::tempdir().unwrap();
+ let transcript=directory.path().join("events.jsonl");
+ for process in [serde_json::json!({"kind":"exited","code":7}),serde_json::json!({"kind":"signaled","signal":9})] {
+  std::fs::write(&transcript,serde_json::json!({"event":"stream.closed","process":process}).to_string()+"\n").unwrap();
+  assert!(matches!(metaharness_outcome(Ok(std::process::ExitStatus::from_raw(0)),"",&transcript),StepOutcome::NoVerdict{..}));
+ }
+ std::fs::write(&transcript,serde_json::json!({"event":"stream.closed","process":{"kind":"exited","code":0}}).to_string()+"\n").unwrap();
+ assert!(matches!(metaharness_outcome(Ok(std::process::ExitStatus::from_raw(0)),"",&transcript),StepOutcome::Nothing));
 }

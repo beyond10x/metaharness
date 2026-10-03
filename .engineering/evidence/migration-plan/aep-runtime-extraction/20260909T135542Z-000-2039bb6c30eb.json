@@ -1,0 +1,13 @@
+{
+  "at": "2026-09-09T13:55:42Z",
+  "actor": "human:timo",
+  "artifact": "migration-plan:aep-runtime-extraction",
+  "kind": "migration-plan",
+  "revision": 2,
+  "change": {
+    "change": "evidence",
+    "kind": "test_result",
+    "source": "task check passed against published AEP ecf35aaa2130d0f67c0ffdb69905ec05f13f9158 without local patches; includes native, live-eval refusal, legacy-resume and 62 adapter tests; no paid run",
+    "reference": "~/.cache/atlas-reconcile-20260909/metaharness-final-gate.log"
+  }
+}

@@ -30,6 +30,8 @@ use metaharness_protocol::HarnessSeam;
 /// One step of a script.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum ScriptStep {
+    /// One quiet poll with an open stream. Blocking reads continue to the next step.
+    Idle,
     /// The child writes this line.
     Line(String),
     /// The child is blocked here until a decision for this call has been written to it.
@@ -156,6 +158,10 @@ impl ScriptedRunner {
 }
 
 impl ProcessRunner for ScriptedRunner {
+    fn requires_executable(&self) -> bool {
+        false
+    }
+
     fn start(&mut self, plan: &LaunchPlanView) -> std::io::Result<Box<dyn HarnessProcess>> {
         {
             let mut inner = self.log.inner.borrow_mut();
@@ -264,13 +270,27 @@ impl HarnessProcess for ScriptedProcess {
 
     fn next_line(&mut self) -> std::io::Result<Option<String>> {
         loop {
+            match self.poll_line()? {
+                crate::ProcessPoll::Line(line) => return Ok(Some(line)),
+                crate::ProcessPoll::Idle => (),
+                crate::ProcessPoll::Ended => return Ok(None),
+            }
+        }
+    }
+
+    fn poll_line(&mut self) -> std::io::Result<crate::ProcessPoll> {
+        loop {
             match self.steps.front() {
-                None => return Ok(None),
+                None => return Ok(crate::ProcessPoll::Ended),
+                Some(ScriptStep::Idle) => {
+                    self.steps.pop_front();
+                    return Ok(crate::ProcessPoll::Idle);
+                }
                 Some(ScriptStep::Line(_)) => {
                     let Some(ScriptStep::Line(line)) = self.steps.pop_front() else {
                         unreachable!("the front was just matched as a line")
                     };
-                    return Ok(Some(line));
+                    return Ok(crate::ProcessPoll::Line(line));
                 }
                 Some(ScriptStep::AwaitDecision { call_id }) => {
                     if self.answered.contains(call_id) {
@@ -439,6 +459,8 @@ impl HarnessSeam for ScriptedSeam {
                 hermetic: self.attestation.clone(),
             },
             "session.ended" => Event::SessionEnded {
+                final_answer: None,
+                observed_models: None,
                 is_error: value.get("is_error").and_then(Value::as_bool),
                 subtype: text_of(&value, "subtype"),
                 stop_reason: text_of(&value, "stop_reason"),
@@ -469,6 +491,8 @@ impl HarnessSeam for ScriptedSeam {
                 seam: self.seam,
             },
             "tool.result" => Event::ToolResult {
+                exit_code: None,
+                outcome_source: None,
                 call_id: text_of(&value, "call_id").unwrap_or_default(),
                 is_error: value.get("is_error").and_then(Value::as_bool),
                 content: value.get("content").cloned(),

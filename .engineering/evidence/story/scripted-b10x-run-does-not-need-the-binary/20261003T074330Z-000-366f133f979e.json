@@ -1,0 +1,13 @@
+{
+  "at": "2026-10-03T07:43:30Z",
+  "actor": "human:timo",
+  "artifact": "story:scripted-b10x-run-does-not-need-the-binary",
+  "kind": "story",
+  "revision": 10,
+  "change": {
+    "change": "evidence",
+    "kind": "test_result",
+    "source": "task check exit 0: 729 passed, 13 ignored. Correction: prior verification reference contains an accidental space after tilde slash; exact private paths supplied here.",
+    "reference": "~/.cache/metaharness-issue-repair/scripted16/red.log; ~/.cache/metaharness-issue-repair/scripted16/task-check.log"
+  }
+}

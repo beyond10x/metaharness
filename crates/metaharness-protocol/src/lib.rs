@@ -52,9 +52,10 @@ pub use envelope::{
     StagedExecutable, assess_envelope,
 };
 pub use event::{
-    CloseReason, DecidedBy, DecisionCensus, Emission, Event, McpServerRef, PermissionDenial,
-    PluginRef, RateLimitInfo, Seam, StepOutcome, StreamCompleteness, TranscriptRef, Usage,
-    WithheldTool, stream_completeness, warning_code,
+    CloseReason, DecidedBy, DecisionCensus, Emission, Event, FinalAnswer, McpServerRef,
+    ModelObservationScope, ObservedModel, PermissionDenial, PluginRef, ProcessTermination,
+    RateLimitInfo, Seam, StepOutcome, StreamCompleteness, TranscriptRef, Usage, WithheldTool,
+    stream_completeness, warning_code,
 };
 pub use frame::{
     Digest, EntityList, EvidenceLine, FRAME_FORMAT, Frame, FrameDocError, Handoff, Line, NodeRef,

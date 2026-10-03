@@ -55,7 +55,7 @@ never links this workspace.
 
 ## Status
 
-**Pre-v1. Tagged `0.8.0` (2026-09-25).** The design in `docs/design/` is binding: where this code
+**Pre-v1. Tagged `0.9.0` (2026-10-03).** The design in `docs/design/` is binding: where this code
 and that document disagree, the document is amended rather than the disagreement left in the code.
 
 | verb | state |
@@ -76,8 +76,11 @@ per-change record of what was verified and what it cost to learn is in
 
 ## Build, test, run
 
-The gate is **`task check`** — `cargo fmt --check`, `cargo clippy --workspace --all-targets -D
-warnings`, `cargo test --workspace`. Green before any push.
+The gate is **`task check`** — ESS specification validation, `cargo fmt --check`,
+`cargo clippy --workspace --all-targets -D warnings`, `cargo test --workspace`.
+Install ESS 0.51.0 first. The tests execute 36 generated conformance scenarios and check suite
+freshness; [spec/coverage.md](spec/coverage.md) records the coverage and hardening bounds.
+Green before any push.
 
 | command | what it does |
 |---|---|
@@ -93,6 +96,22 @@ cargo run -p metaharness-cli -- conformance claude
 cargo run -p metaharness-cli -- capabilities codex --render
 cargo run -p metaharness-cli -- doctor claude
 ```
+
+## Governed runs in the next release
+
+`metaharness aep drive run` supports Codex steps through the existing ask seam. Use
+`--codex-model` and, when needed, `--codex-endpoint` to select the route. The AEP engine decides
+each supported shell call; unsupported operations are denied. These offline-tested host changes
+do not qualify newer vendor versions. See the
+[compatibility inventory](docs/research/2026-10-03-adapter-compatibility.md).
+
+Model execution still requires `METAHARNESS_LIVE=1`. Finite spending uses
+`--budget-usd <amount> --assume-usd-per-run <amount>`. To explicitly authorize uncapped spending,
+replace both finite options with `--uncapped-budget --spend-authorization <reference>`, where the
+reference identifies the operator's authorization. Omitting a budget never selects uncapped
+spending. Invocation admission is saved before spawning; an absent observed cost stays unknown.
+Resume preserves the spending mode and authorization reference; a finite cap may only narrow.
+Engine, tool, retry and cancellation limits still apply.
 
 ## Layout
 

@@ -234,6 +234,8 @@ impl TranscriptReader {
     /// The terminal record: the source of every resource fact.
     fn session_ended(&self, record: &Record) -> Event {
         Event::SessionEnded {
+            final_answer: None,
+            observed_models: None,
             is_error: record.get("is_error").and_then(Value::as_bool),
             subtype: str_field(record, "subtype"),
             stop_reason: str_field(record, "stop_reason"),
@@ -541,6 +543,8 @@ fn user_block(
         "tool_result" => {
             let content = block.get("content").cloned();
             Event::ToolResult {
+                exit_code: None,
+                outcome_source: None,
                 call_id: block
                     .get("tool_use_id")
                     .and_then(Value::as_str)
@@ -993,7 +997,7 @@ mod tests {
     #[test]
     fn source_lines_are_one_based_and_count_blank_lines_too() {
         let mut reader = new_reader();
-        assert!(reader.push_line("   ").is_empty());
+        assert_eq!(reader.push_line("   "), [] as [Emission; 0]);
         let event = only(reader.push_line(r#"{"type":"nope"}"#));
         let Event::Opaque { source_line, .. } = event else {
             panic!("expected opaque");
@@ -1128,6 +1132,8 @@ mod tests {
         assert_eq!(
             event,
             Event::ToolResult {
+                exit_code: None,
+                outcome_source: None,
                 call_id: "call-1".to_string(),
                 is_error: Some(false),
                 content: Some(Value::String("four".to_string())),
@@ -1342,7 +1348,7 @@ mod tests {
         let mut reader = new_reader();
         reader.push_line(r#"{"type":"system","subtype":"init","tools":[]}"#);
         assert!(!reader.saw_terminal_record());
-        assert!(reader.finish().is_empty());
+        assert_eq!(reader.finish(), [] as [Emission; 0]);
     }
 
     /// The vendor's words, passed through and never paraphrased. Detection is weak by

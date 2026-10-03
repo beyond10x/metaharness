@@ -1,5 +1,5 @@
 ---
-format: aep.planning-md/1
+format: aep.planning-md/3
 id: dependency-blocker:llm-foundation-release
 kind: dependency-blocker
 status: open

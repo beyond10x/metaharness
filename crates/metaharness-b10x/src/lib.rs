@@ -77,11 +77,70 @@ pub const ADAPTER_CLASS: &str = "direct_provider";
 /// Pinned for the reason the other adapters pin: every version-specific claim in here — the field
 /// names of the loop record, the shape of its terminal event — was observed against these, and a
 /// run against another is unverified rather than wrong.
-pub const PINNED_VERSIONS: [&str; 1] = ["0.12.1"];
+pub const PINNED_VERSIONS: [&str; 1] = ["0.13.3"];
 
 /// The immutable harness source revision this adapter is built against.
 ///
 /// The version identifies the released CLI; the revision identifies the Rust crates Cargo
 /// resolves. Both are checked by the AEP eval before it trusts an installed
 /// binary, so a filesystem timestamp is never mistaken for provenance.
-pub const HARNESS_REVISION: &str = "90f10a4314c1c630691c85e812bd8d5d23d73fcc";
+pub const HARNESS_REVISION: &str = "798325f03cf5a18df8fadb346d31b314826136ec";
+
+/// Whether a directory component satisfies the pinned substrate adoption syntax.
+///
+/// This proves no confinement: the driver still checks identity beneath its pinned
+/// root descriptor. Callers must resolve the explicitly selected directory first.
+#[must_use]
+pub fn workspace_component_is_adoptable(name: &str) -> bool {
+    !name.is_empty()
+        && !name.starts_with('-')
+        && name
+            .bytes()
+            .all(|byte| byte.is_ascii_alphanumeric() || byte == b'_' || byte == b'-')
+}
+
+/// Validate exact workspace-relative process write directories before native launch.
+///
+/// Harness 0.13.3 (`798325f0`) canonicalizes the set before Substrate 0.7.8
+/// (`05695970`) validates workspace access. This adapter mirrors those syntax bounds
+/// without importing a different native dependency. Glob spelling is additionally
+/// refused: this declaration never expands a file-tool pattern into a mount.
+/// Existence, symlink safety and actual mount admission remain the host's job.
+///
+/// # Errors
+///
+/// Names an invalid, excessive or overlapping `--process-write-subtree` declaration.
+pub fn validate_process_write_subtrees(paths: &[String]) -> Result<(), String> {
+    let mut directories: Vec<&str> = paths.iter().map(String::as_str).collect();
+    directories.sort_unstable();
+    directories.dedup();
+    if directories.len() > 64 {
+        return Err("--process-write-subtree admits at most 64 distinct directories".to_owned());
+    }
+    for directory in &directories {
+        if directory.is_empty()
+            || directory.starts_with('/')
+            || directory.contains(['\0', '\\', '*', '?', '[', ']', '{', '}'])
+            || directory.split('/').count() > 64
+            || directory
+                .split('/')
+                .any(|part| part.is_empty() || matches!(part, "." | ".."))
+        {
+            return Err(format!(
+                "--process-write-subtree requires an exact workspace-relative directory without root, traversal or glob syntax: {directory:?}"
+            ));
+        }
+    }
+    for (index, directory) in directories.iter().enumerate() {
+        if directories[index + 1..].iter().any(|other| {
+            other
+                .strip_prefix(directory)
+                .is_some_and(|suffix| suffix.starts_with('/'))
+        }) {
+            return Err(format!(
+                "--process-write-subtree directories must not overlap: {directory:?}"
+            ));
+        }
+    }
+    Ok(())
+}

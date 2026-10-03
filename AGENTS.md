@@ -302,6 +302,24 @@ The full gate comes first; component steps alone are not enough.
 that cuts the changelog**, so `git describe --tags --abbrev=0` and that line never disagree — they
 disagreed from `0.5.0` to `0.7.0` because nothing in this checklist said to.
 
+### Release publication identity
+
+The Release workflow only builds and verifies archives. All jobs have read-only
+repository permissions; it retains four platform artifacts and `release-checksums`.
+After that exact tag run succeeds, download its `release-*` artifacts by run ID,
+verify all four expected filenames and SHA256SUMS, and scan the executable archives
+with `b10x-gates scan-artifact` before publication. Use the bot-authenticated
+`b10x-gates api` route for release metadata and `b10x-gates gh -- release upload`
+for binary assets; its Rust wrapper confines the App token to the child environment.
+Never run a personal-account `gh` write or restore `github.token` release writes
+in the workflow. Keep notes in a file and pass `--body-file`/`--notes-file` when
+the selected command accepts it. Inspect the command help before publication.
+
+Verify the published release is owned by b10x-bot[bot], targets the exact annotated
+tag, and holds the four correct archives and checksums. A green package run with
+no published release is queued, not released. Existing release notes must not be
+overwritten incidentally when resuming an interrupted upload.
+
 ## Where work is tracked
 
 | What | Where |

@@ -1,0 +1,13 @@
+{
+  "at": "2026-09-15T11:20:29Z",
+  "actor": "human:timo",
+  "artifact": "story:task-check-passes-on-a-machine-without-the-operators-binaries",
+  "kind": "story",
+  "revision": 2,
+  "change": {
+    "change": "evidence",
+    "kind": "test_result",
+    "source": "Gate run 34962757403 — conclusion success on c011336, 2026-09-15T11:20:29Z; task check reached a verdict on a clean runner, so every target ran rather than stopping at aep_resume.rs:70",
+    "reference": "c011336e63a37d061804afe9dd92e1bf6ca09e81"
+  }
+}

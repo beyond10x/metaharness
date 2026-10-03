@@ -1,0 +1,13 @@
+{
+  "at": "2026-10-02T23:52:38Z",
+  "actor": "human:timo",
+  "artifact": "story:codex-terminal-failure",
+  "kind": "story",
+  "revision": 9,
+  "change": {
+    "change": "evidence",
+    "kind": "test_result",
+    "source": "Synthetic codex_terminal_regression: 12 executed, 4 passed, 8 failed; cargo test exit 101; explicit failure currently closes Completed and exits 0; no production fix applied",
+    "reference": "local-evidence:codex-terminal/red.log"
+  }
+}

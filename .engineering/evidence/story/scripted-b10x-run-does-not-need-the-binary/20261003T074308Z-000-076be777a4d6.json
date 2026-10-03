@@ -1,0 +1,13 @@
+{
+  "at": "2026-10-03T07:43:08Z",
+  "actor": "human:timo",
+  "artifact": "story:scripted-b10x-run-does-not-need-the-binary",
+  "kind": "story",
+  "revision": 10,
+  "change": {
+    "change": "evidence",
+    "kind": "verification",
+    "source": "VERIFIED: semantic regression failed before fix and passes after; empty child PATH refuses real runner, scripted runner needs no executable, strict version refuses absent version evidence",
+    "reference": "~/ .cache/metaharness-issue-repair/scripted16/red.log and task-check.log"
+  }
+}

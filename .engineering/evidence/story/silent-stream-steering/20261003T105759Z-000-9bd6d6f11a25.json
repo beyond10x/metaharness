@@ -1,0 +1,13 @@
+{
+  "at": "2026-10-03T10:57:59Z",
+  "actor": "human:timo",
+  "artifact": "story:silent-stream-steering",
+  "kind": "story",
+  "revision": 2,
+  "change": {
+    "change": "evidence",
+    "kind": "test_result",
+    "source": "Native Codex cancellation fixture: exit101,1 failed,quiet provider prevents prompt halt; private cancel-timing.log",
+    "reference": "crates/metaharness-codex/tests/native_fixture.rs"
+  }
+}
