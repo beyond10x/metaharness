@@ -3,6 +3,17 @@
 What changed. The design document carries *why*; where code and design disagreed, the design
 was amended and the amendment is named here.
 
+## [0.9.1] — 2026-10-03
+
+### Fixed
+
+- Remap release build-source paths and further redact embedded conformance fixture paths.
+  Preserve the capture provenance and validate the rebuilt Linux executables before publication.
+- Regenerate golden expectations with workspace feature resolution so their numeric
+  serialization agrees with the released CLI.
+
+This is the published release of the issue repairs below; 0.9.0 was tagged but not published.
+
 ## [0.9.0] — 2026-10-03
 
 ### Added

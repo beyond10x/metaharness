@@ -2,12 +2,14 @@
 format: aep.planning-md/3
 id: dependency-blocker:release-artifact-validation
 kind: dependency-blocker
-status: open
+status: cleared
 title: Release executables require supported artifact scans and remapped build paths
 relations:
 - blocks: story:bot-release-publication
 - blocks: release-plan:release-0-9-0
-revision: 2
+revision: 4
+transitions:
+- {from: "open", to: "cleared", at: "2026-10-03T13:55:04Z", actor: "human:timo", revision: 4}
 ---
 ## Publication withheld after artifact validation
 
@@ -28,3 +30,11 @@ The integration branch now sets release RUSTFLAGS to remap the runner home and w
 `task check` passed after these changes. Workflow YAML parsed and the extracted package shell step passed `bash -n`. The rebuilt x86_64 Linux release executable reports metaharness 0.9.0 and has SHA256 ff55489feea8dace8e6d15aaba93863e2068d018ce2ccb5ff190467902f92e04. Gates 0.1.12 scan-artifact passed on those exact bytes: input_bytes=30027456, privacy_bytes=21843309, extracted_bytes=16713220, sections=34, scanner_invocations=1. The exact executable's offline conformance passed Claude 27/27, Codex 17/17 and b10x 7/7 vectors.
 
 This is local x86_64 Linux qualification of the prepared repair, not replacement evidence for the existing tag's CI archives. All four release platforms still need rebuilt, verified, scanned archives from an agreed source delivery. Gates Mach-O support remains unavailable, the single integration PR is already merged, and the annotated 0.9.0 tag has not moved. The release blocker stays open; no release publication or issue closure is claimed.
+
+## Operator release decision, 2026-10-03
+
+The operator explicitly instructed "cut a release now" and rejected adding macOS scanning: "no - you dont, we dont need this". Gates development is cancelled; its unused managed worktree was retired without changes. macOS scanning is not a prerequisite for this release. Retain four platform builds, version smoke tests, archive verification and checksums, and scan the Linux executables with existing Gates. Do not claim macOS scan results.
+
+The path correction is committed on the existing integration branch at 08ead65c774dbce87d7764900e76a8acb788cc4c and passed the full gate plus an exact rebuilt x86_64 Linux artifact scan and 51 offline vectors. Deliver this correction under the renewed release instruction, retaining the integration branch and required branch checks. The earlier PR #22 is merged. Preserve the existing annotated 0.9.0 tag; cut 0.9.1 from the corrected gated main commit instead.
+
+Publication work is active again. The dependency is cleared by the implemented Linux path correction and the operator's explicit release boundary. Rebuilding and verifying all four 0.9.1 archives is remaining release work, not evidence already obtained. Close the GitHub issues only after publication is verified.

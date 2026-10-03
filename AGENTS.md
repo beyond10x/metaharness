@@ -307,9 +307,10 @@ disagreed from `0.5.0` to `0.7.0` because nothing in this checklist said to.
 The Release workflow only builds and verifies archives. All jobs have read-only
 repository permissions; it retains four platform artifacts and `release-checksums`.
 After that exact tag run succeeds, download its `release-*` artifacts by run ID,
-verify all four expected filenames and SHA256SUMS, then extract each archive and scan
-its executable with `b10x-gates scan-artifact` before publication. The scanner must
-support each target's actual executable format; an unsupported format blocks publication.
+verify all four expected filenames and SHA256SUMS, then extract the Linux archives and
+scan their executables with `b10x-gates scan-artifact` before publication.
+macOS artifact scanning is not required for this release (operator decision, 2026-10-03);
+retain the macOS build, version smoke test, archive and checksum verification.
 Release builds remap runner-home and workspace source paths before compilation.
 Use the bot-authenticated
 `b10x-gates api` route for release metadata and `b10x-gates gh -- release upload`

@@ -2,13 +2,14 @@
 format: aep.planning-md/3
 id: release-plan:release-0-9-0
 kind: release-plan
-status: active
+status: superseded
 title: Publish Metaharness 0.9.0 after issue repair and native qualification
 relations:
 - delivers: epic:github-issue-repair
-revision: 3
+revision: 4
 transitions:
 - {from: "draft", to: "active", at: "2026-10-03T12:02:42Z", actor: "human:timo", revision: 2}
+- {from: "active", to: "superseded", at: "2026-10-03T13:55:04Z", actor: "human:timo", revision: 4}
 ---
 ## Objective and authorization
 
