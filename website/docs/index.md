@@ -22,7 +22,7 @@ metaharness
 
 ## Two faces, one run
 
-<div className="mh-two-col">
+<div class="mh-two-col">
 
 **As a binary**
 
@@ -50,8 +50,8 @@ The same run, embedded, answering `tool.requested` events as they arrive.
 | | Promise | What it means concretely |
 |---|---|---|
 | 1 | **Unified** | One event stream, one command set. Everything harness-specific lives in that harness's adapter crate and nowhere else. |
-| 2 | **[Hermetic](./hermetic.mdx)** | A run shares credentials with the operator and nothing else — no ambient plugins, no account-level MCP servers, no inherited environment. Hermeticity is asserted from the transcript, not assumed from a directory. |
-| 3 | **[In control at every step](./control-seam.mdx)** | Which tools the harness may call is decided *per call*, by the embedder, through the protocol — not once at launch. |
+| 2 | **[Hermetic](./hermetic.md)** | A run shares credentials with the operator and nothing else — no ambient plugins, no account-level MCP servers, no inherited environment. Hermeticity is asserted from the transcript, not assumed from a directory. |
+| 3 | **[In control at every step](./control-seam.md)** | Which tools the harness may call is decided *per call*, by the embedder, through the protocol — not once at launch. |
 
 ## The claim this exists to make
 
@@ -62,7 +62,7 @@ A frame that admitted no shell was given a prompt that asked for one.
 - **The vendor's own terminal record** listed `Bash` in `permission_denials`.
 
 That is the one claim no free test tier can reach, and it has now been made against **two**
-vendors — Claude Code and Codex. See [Status](./status.mdx).
+vendors — Claude Code and Codex. See [Status](./status.md).
 
 ## A principle worth stating twice
 
@@ -85,6 +85,6 @@ Two working systems, each of which built half of this and proved it.
 
 ## Start here
 
-- [Quickstart](./quickstart.mdx) — a first run, with no credential and no model.
-- [CLI reference](./reference/cli.mdx) — every verb and flag.
-- [Status](./status.mdx) — what is built, what is refused, and what it is waiting for.
+- [Quickstart](./quickstart.md) — a first run, with no credential and no model.
+- [CLI reference](./reference/cli.md) — every verb and flag.
+- [Status](./status.md) — what is built, what is refused, and what it is waiting for.

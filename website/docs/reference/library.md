@@ -41,7 +41,7 @@ while let Some(line) = run.next_event()? {
 |---|---|
 | `.with_hermetic(HermeticMode)` | `off` / `on` / `strict` |
 | `.with_prompt(impl Into<String>)` | the opening prompt |
-| `.with_frame(Frame)` | an in-memory [frame](../frames.mdx) |
+| `.with_frame(Frame)` | an in-memory [frame](../frames.md) |
 | `.with_frame_file(impl Into<PathBuf>)` | a sealed `metaharness.frame/1` document |
 | `.with_decisions(DecisionMode)` | `Frame` or `Ask` |
 | `.with_tool_surface(ToolSurface)` | `Native` or `Owned` (refused) |

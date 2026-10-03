@@ -22,7 +22,7 @@ metaharness doctor claude
 2. Installs a blocking `PreToolUse` hook and answers its calls **per call**.
 3. Streams the session out as protocol events on stdout; takes steering on stdin.
 4. Retains the raw transcript.
-5. Exits on the [hermetic floor's](../hermetic.mdx) verdict.
+5. Exits on the [hermetic floor's](../hermetic.md) verdict.
 
 ## Declared capabilities
 
