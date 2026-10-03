@@ -4,11 +4,12 @@
 //! [`metaharness_protocol::Event`], what it can honour, and what hermetic would mean for it.
 //! Nothing outside this crate may know any of that.
 //!
-//! Pinned to **0.145.0** ([`PINNED_VERSIONS`]). The evidence base is the research record
+//! Pinned to **0.153.4** ([`PINNED_VERSIONS`]). The evidence base is the research record
 //! migrated into `docs/research/2026-08-21-codex-harness-research.md`: every claim there is
 //! labelled **V** (verified locally against the binary and 2,437 rollout files), **D** (official
 //! docs), **I** (inferred) or **?** (unknown), and this crate inherits those labels at the point
-//! of use.
+//! of use. Current native observations are recorded in
+//! `docs/research/2026-10-03-native-codex-fixture.md` (amendment a25).
 //!
 //! # What this milestone is, and is not (CX-M2)
 //!
@@ -24,19 +25,16 @@
 //!   run refused a shell call at that hook and **the vendor's own record shows the command
 //!   blocked with empty output**, so [`capabilities`] declares the call tier `Delivered` and
 //!   `tool.decide` `Honoured`. Design amendment a7.
-//! * **Also driven (R2.4, 2026-08-23):** the `allow` half of the decision wire — a live run held a
-//!   `Bash` call at the hook, answered `allow`, and the rollout's `custom_tool_call_output`
-//!   carried the command's output (observed on the child-`PATH` codex 0.144.0; the pin is
-//!   0.145.0 and the two-install warning fired).
-//! * **What is still not claimed:** the turn tier, the registration tier, and the `apply_patch`
-//!   rendering — the hook's word for a patch call is the vendor's documentation and not a driven
-//!   observation.
-//! * **What this vendor's record does not contain:** three of amendment a9's four payload fields.
-//!   The rollout reports reasoning tokens and so `usage.thinking_tokens` is carried; it reports no
-//!   per-iteration list, no speed tier, no cost anywhere, and no per-tool result record beside a
-//!   tool's output. [`RolloutReader`]'s own documentation carries the table and the vendor keys it
-//!   was read from. Those fields are absent on a driven Codex run, an absence is `unk` and never a
-//!   pass, and nothing here is filled from a neighbouring field to make it look answered.
+//! * **Native 0.153.4 observations (2026-10-03):** an owned loopback provider drove the
+//!   actual binary through allow/deny hooks, command exits0/7, patch completion,
+//!   authoritative final answers, selected models and synthetic usage. Full CLI probes
+//!   exercised halt/interrupt and correlated ask-mode denial without the denied effect.
+//! * **Still unverified:** registration/turn tiers, plugin enumeration, replacement-input
+//!   semantics, hosted authentication and model quality. Patch effects and completion were
+//!   observed; patch hook-name/rendering claims are not widened by that observation.
+//! * **Absent observations stay unknown:** paginated retained completions may supply
+//!   command outcomes; legacy, missing and conflicting records do not. Monetary cost,
+//!   speed tier and per-iteration lists are not inferred from fixture token counts.
 //!
 //! # The three things about this vendor that cost the most to learn
 //!
@@ -85,4 +83,4 @@ pub const ADAPTER_ID: &str = "codex";
 /// One entry, because the rollout format is not a stable public schema: a verdict that changed
 /// because the reader changed must be visible as such rather than as a change in the agent's
 /// behaviour.
-pub const PINNED_VERSIONS: [&str; 1] = ["0.145.0"];
+pub const PINNED_VERSIONS: [&str; 1] = ["0.153.4"];

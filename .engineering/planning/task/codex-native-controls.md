@@ -6,7 +6,7 @@ status: active
 title: Observe native Codex cancellation and controls without credentials
 relations:
 - decomposes: story:current-adapter-compatibility
-revision: 3
+revision: 4
 transitions:
 - {from: "draft", to: "proposed", at: "2026-10-03T10:50:43Z", actor: "human:timo", revision: 2}
 - {from: "proposed", to: "active", at: "2026-10-03T10:50:43Z", actor: "human:timo", revision: 3}
@@ -18,3 +18,7 @@ Extend the explicitly selected native fixture tests to drive the production Meta
 ## Scope
 
 crates/metaharness-codex/tests/native_fixture.rs and docs/research/2026-10-03-native-codex-fixture.md. Production behavior changes require a failing regression and design amendment before implementation.
+
+## Reviewed native result
+
+The extended suite passed6tests/11actualprocesses against the polling candidate inside an owned loopback-only namespace. Independent read-only review found a startup/cancellation race; the fixture now waits for both the provider request and actual versioned session.started. The focused corrected halt/interrupt test passed again (1test,1.57seconds) against the deadline-aware driver. Rust1.99 target clippy passed. ProductionCLI ask denial correlates the real call and prevents the marker side effect. Source integrated from85e81f17. Final combined-driver rerun remains required after integration changes.

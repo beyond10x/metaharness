@@ -98,3 +98,49 @@ pub fn workspace_component_is_adoptable(name: &str) -> bool {
             .bytes()
             .all(|byte| byte.is_ascii_alphanumeric() || byte == b'_' || byte == b'-')
 }
+
+/// Validate exact workspace-relative process write directories before native launch.
+///
+/// Harness 0.13.3 (`798325f0`) canonicalizes the set before Substrate 0.7.8
+/// (`05695970`) validates workspace access. This adapter mirrors those syntax bounds
+/// without importing a different native dependency. Glob spelling is additionally
+/// refused: this declaration never expands a file-tool pattern into a mount.
+/// Existence, symlink safety and actual mount admission remain the host's job.
+///
+/// # Errors
+///
+/// Names an invalid, excessive or overlapping `--process-write-subtree` declaration.
+pub fn validate_process_write_subtrees(paths: &[String]) -> Result<(), String> {
+    let mut directories: Vec<&str> = paths.iter().map(String::as_str).collect();
+    directories.sort_unstable();
+    directories.dedup();
+    if directories.len() > 64 {
+        return Err("--process-write-subtree admits at most 64 distinct directories".to_owned());
+    }
+    for directory in &directories {
+        if directory.is_empty()
+            || directory.starts_with('/')
+            || directory.contains(['\0', '\\', '*', '?', '[', ']', '{', '}'])
+            || directory.split('/').count() > 64
+            || directory
+                .split('/')
+                .any(|part| part.is_empty() || matches!(part, "." | ".."))
+        {
+            return Err(format!(
+                "--process-write-subtree requires an exact workspace-relative directory without root, traversal or glob syntax: {directory:?}"
+            ));
+        }
+    }
+    for (index, directory) in directories.iter().enumerate() {
+        if directories[index + 1..].iter().any(|other| {
+            other
+                .strip_prefix(directory)
+                .is_some_and(|suffix| suffix.starts_with('/'))
+        }) {
+            return Err(format!(
+                "--process-write-subtree directories must not overlap: {directory:?}"
+            ));
+        }
+    }
+    Ok(())
+}

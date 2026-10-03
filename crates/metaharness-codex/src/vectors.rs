@@ -744,12 +744,16 @@ mod tests {
         let outcome = version_pair_outcome(Some("9.9.9"));
         assert!(outcome.is_warning(), "{outcome:?}");
         assert!(outcome.detail.contains("9.9.9"), "{}", outcome.detail);
-        assert!(outcome.detail.contains("0.145.0"), "{}", outcome.detail);
+        assert!(
+            outcome.detail.contains(crate::PINNED_VERSIONS[0]),
+            "{}",
+            outcome.detail
+        );
     }
 
     #[test]
     fn a_recorded_version_on_the_pin_passes_with_nothing_to_say() {
-        let outcome = version_pair_outcome(Some("0.145.0"));
+        let outcome = version_pair_outcome(Some(crate::PINNED_VERSIONS[0]));
         assert!(outcome.passed && outcome.detail.is_empty(), "{outcome:?}");
     }
 

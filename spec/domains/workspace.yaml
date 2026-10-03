@@ -17,6 +17,24 @@ types:
       - {name: canonical_path, type: String}
       - {name: name, type: metaharness.workspace.WorkspaceName}
     # A projection of explicit cwd/project selection, not a new durable owner.
+  - name: metaharness.workspace.ProcessWriteSubtree
+    kind: newtype
+    of: String
+    # Explicit workspace-relative directory, not a file-tool glob. Validation
+    # must agree with the selected native substrate contract; syntax alone
+    # establishes no mount or containment observation.
+  - name: metaharness.workspace.ProcessWriteDeclaration
+    kind: struct
+    fields:
+      - {name: directories, type: "List<metaharness.workspace.ProcessWriteSubtree>"}
+    # Draft typed home for issue21 before its AEP story. Empty means the native
+    # subprocess workspace stays read-only. Never derive entries from write_scope.
+    # The planned conformance operations must exercise production validation and
+    # argv forwarding; actual containment is a separate native regression.
+
+  - name: metaharness.workspace.ProcessWriteProbe
+    kind: enum
+    variants: [empty, explicit, invalid, file-scope-only]
 
 errors:
   - name: metaharness.workspace.InvalidName
@@ -45,3 +63,30 @@ commands:
     # drive.rs:1875-1910,2339-2354 and the pinned workspace_adopt implementation.
     # UNMAPPED: when mutation requires confinement, missing confinement is refused;
     # syntax admission cannot substitute for the actual driver's decision.
+
+  - name: metaharness.workspace.DeclareProcessWrites
+    # A bounded conformance projection through public builder and native argv.
+    # Filesystem mounts are validated by the native host, not by this command.
+    input: [{name: probe, type: metaharness.workspace.ProcessWriteProbe}]
+    outcomes:
+      - name: process-read-only-default
+        when: probe == empty
+        emits: [metaharness.workspace.ProcessWritePlanned]
+        payload: {metaharness.workspace.ProcessWritePlanned: {admitted: true, count: 0}}
+      - name: process-explicit-subtrees
+        when: probe == explicit
+        emits: [metaharness.workspace.ProcessWritePlanned]
+        payload: {metaharness.workspace.ProcessWritePlanned: {admitted: true, count: 2}}
+      - name: process-invalid-directory
+        when: probe == invalid
+        emits: [metaharness.workspace.ProcessWritePlanned]
+        payload: {metaharness.workspace.ProcessWritePlanned: {admitted: false, count: 0}}
+      - name: file-scope-is-not-process-scope
+        emits: [metaharness.workspace.ProcessWritePlanned]
+        payload: {metaharness.workspace.ProcessWritePlanned: {admitted: true, count: 0}}
+
+events:
+  - name: metaharness.workspace.ProcessWritePlanned
+    fields:
+      - {name: admitted, type: Boolean}
+      - {name: count, type: Integer}

@@ -6,7 +6,7 @@ status: active
 title: Observe current native Claude against a credential-free fixture provider
 relations:
 - decomposes: story:current-adapter-compatibility
-revision: 5
+revision: 6
 transitions:
 - {from: "draft", to: "proposed", at: "2026-10-03T10:50:43Z", actor: "human:timo", revision: 2}
 - {from: "proposed", to: "active", at: "2026-10-03T10:50:43Z", actor: "human:timo", revision: 3}
@@ -24,3 +24,7 @@ crates/metaharness-claude/tests/native_fixture.rs, crates/metaharness-claude/Car
 The required pre-push stable refresh upgraded Rust1.98.1 to1.99.0. Its new assert_is_empty lint flags the unchanged tests/adapter.rs:169 nonempty assertion; the task may make that behavior-preserving test assertion change under the parent story's existing metaharness-claude scope. Keep the golden price unchanged: the apparent decimal drift was reproduced identically under both compilers and comes from package-only serde_json feature selection, whereas the full workspace enables float_roundtrip/arbitrary_precision. Record focused-test feature conditions and run the full workspace gate at integration. No runtime monetary policy change is authorized by this test-format finding.
 
 The same Rust1.99 assert_is_empty lint also reaches tests/marketplace_plugin.rs:282–283. Extend the behavior-preserving assertion cleanup to this lint class across the existing Claude tests. Do not alter fixture data, runtime behavior, numerical comparison or other lint classes without reporting their cause. These test files remain within the parent story's metaharness-claude scope.
+
+## Integrated candidate evidence
+
+Integrated botcommits aa72557c,6222c408,bdfa96ed. Four opt-in native tests exercised7processes and passed in4.09seconds against the polling candidate inside a loopback-only namespace. Package132passed/7ignored with workspace-equivalent serde_json float_roundtrip; alltargetclippy/fmt green. Coordinator read-only source review found no blocker; no independent native execution is claimed. Three built-in plugins remain an H1a qualification gap. Final combined driver must be rerun.

@@ -2017,3 +2017,64 @@ alone. The existing structured item mapping can observe the normal persistent ex
 path. Native qualification must establish the actual path; resumed, fallback and
 legacy records without structured status still remain unknown. No claim of native
 coverage or pin advance follows from this source correction.
+
+## Amendment a24 — explicit native subprocess write directories (2026-10-03)
+
+Issue #21 adds repeated `--process-write-subtree DIR` to RunSpec, the public
+builder and the b10x launch. It names exact workspace-relative directories for
+confined native processes. An empty declaration emits no flag and leaves the
+native subprocess workspace read-only. File-tool `--write-scope` globs remain
+independent; no process mount is inferred from them. Claude and Codex refuse the
+new control by name, as does b10x without explicit daemon or embedded confinement.
+
+The source contract is Harness 0.13.3, commit
+798325f03cf5a18df8fadb346d31b314826136ec, `process_workspace_access`, and its pinned
+Substrate 0.7.8 commit 05695970b069f79e6678f2f02cbd78bbe5fa2a56,
+`validate_workspace_access`. Native normalization sorts and deduplicates the set;
+this adapter validates that canonical set and forwards every original explicit
+argument unchanged. Empty paths, absolute/root paths, dot/dotdot or empty
+components, NUL, backslash, depth over 64, more than 64 distinct directories and
+ancestor/descendant overlap are refused. Metaharness additionally refuses glob
+metacharacters (`*?[]{}`): native path syntax could treat them as literal directory
+names, but this public declaration deliberately admits no ambiguous glob spelling.
+There is no glob expansion, trimming, normalization or widening to a parent.
+
+Syntax validation proves neither existence nor containment. Substrate still
+requires existing directories, refuses symlinks in every component, pins the
+admitted objects and enforces the actual mount and execution contract. Metaharness
+must not create missing build directories, mount a whole workspace to satisfy a
+narrow declaration, infer toolchain/dependency mounts or substitute an unconfined
+process when the native catalogue withholds execution. Live containment evidence
+must show declared writes succeed and undeclared siblings/outside paths do not;
+a host withholding process capability leaves that observation unverified.
+
+The adapter compatibility pin (0.12.1) and Cargo source revision are unchanged.
+The pinned Harness source90f10a43 already declares this flag and the same read-only
+default; the declaration was missing from Metaharness, not necessarily from older
+native binaries. Both that source and 0.13.3 were inspected. Neither inspection nor
+a synthetic launch qualifies an unobserved binary; strict-version behavior stays
+intact, and actual binary observations must retain their own version.
+`doctor b10x` derives its flag-surface obligation from the maximal launch and must
+include the new flag. Native CLI refusal before a model request stays a refusal,
+never an ignored declaration or unconfined fallback. No event or frame wire changes.
+
+### Amendment a25 — qualify a vendor pin by observed surfaces (2026-10-03)
+
+Advance the Codex adapter pin from0.145.0 to0.153.4 after bounded native fixture
+observations of the actual binary. The owned loopback provider, fresh homes and
+absent credentials isolate launch, hook and rollout behavior without a paid model
+request. Actual native observations establish success/refusal, authoritative final
+answer and model selection, synthetic usage, command exits0/7, allow/deny effects,
+patch completion and process halt/interrupt. The final integration rerun must use
+the exact release candidate driver. Source provenance and native metadata confirm
+the normal persistent Paginated history path; fallback records without structured
+outcomes remain unknown.
+
+This pin names a tested version, not universal conformance. Keep registration and
+turn tiers, plugin enumeration/H1a, replacement-input behavior, hosted provider
+credentials, model quality and monetary cost explicitly unverified where the
+observations do not reach. Historical captures retain their original version;
+regenerate only derived warning/provider expectations. Fixture tokens and prices
+are synthetic and never actual paid spend. Claude's observed built-in plugins
+leave its H1a floor unqualified; retain its older pin. Native b10x observations
+remain separate from a governed AEP engine run and from its source/version pair.

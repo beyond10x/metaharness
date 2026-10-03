@@ -1,81 +1,48 @@
-# Installed adapter compatibility inventory, 2026-10-03
+# Installed adapter compatibility, 2026-10-03
 
-Issue #15 requires observations of each current installed binary before its pin advances.
-This inventory records the remaining work, not a compatibility certificate.
+Issue #15 is qualified by observations of actual vendor binaries through an owned
+loopback provider and the production Metaharness CLI. Native requests use fresh
+private homes, no operator credentials, bounded processes and a Linux namespace
+with only loopback. Provider replies and usage are synthetic; these tests do not
+establish hosted authentication, model quality or paid spend.
 
-Read-only `--version` commands in the integration checkout reported:
+| Adapter | Actual native version | Pin decision |
+|---|---|---|
+| Codex | 0.153.4 | Advance from0.145.0 after the final integrated-driver rerun. |
+| Claude | 2.1.288 | Retain2.1.259: three built-in plugins leave H1a unqualified. |
+| b10x | 0.13.3 | Retain0.12.1 pending source/role qualification. |
 
-| Adapter | Installed banner | Existing pin | Disposition |
+| Required surface | Codex0.153.4 | Claude2.1.288 | b10x0.13.3 |
 |---|---|---|---|
-| Claude | 2.1.288 (Claude Code) | 2.1.259 | Pin unchanged; current release unqualified. |
-| Codex | codex-cli 0.153.4 | 0.145.0 | Pin unchanged; current release unqualified. |
-| b10x | b10x-harness 0.13.3 | 0.12.1 | Pin unchanged; current release unqualified. |
+| Success | Native final answer, exit0 and successful closure | Native final answer, exit0 and closure | Native terminal success and closure |
+| Terminal failure | Provider refusal, sticky error, native1/CLI3 | is_error true preserved even with subtype success; native1/CLI3 | HTTP400 has no terminal record; unknown terminal, native1/CLI3 |
+| Tools and decisions | Actual command exits0/7, patch effect/completion, hook allow/deny; full CLI ask deny prevents marker | Actual Bash allow writes marker; deny prevents it and emits error outcome | Actual file_read bytes and missing-file error; observe-only, no decision seam |
+| Cancellation | Halt/interrupt terminate with signal9; command acknowledgement correlated | Halt/interrupt meet two-second command bound | Corrected halt/interrupt both meet two-second bound after no-wire fallback |
+| Model and usage | Selected model and synthetic token usage; absent cost unknown | Native model and fixture usage; vendor price is synthetic, not paid spend | Native model and fixture usage; absent monetary cost unknown |
+| Declared controls | Unsupported ceilings refused offline; frame/ask policy offline; native ask deny and stop controls | Native one-turn ceiling stops repeated tools; hermetic H1a gap retained | Native one-turn ceiling; strict-version mismatch refused before spawn; native role/source pair pending |
 
-The declarations are `PINNED_VERSIONS` in each adapter's `src/lib.rs`. A banner proves
-discovery, not behavior. The existing Codex evidence also distinguishes historical parent
-and child PATH versions; every new probe must record the actual child version.
+The reports [Codex](2026-10-03-native-codex-fixture.md),
+[Claude](2026-10-03-native-claude-fixture.md) and
+[b10x](2026-10-03-native-b10x-fixture.md) record the cases, corrections and limits.
+Private native transcripts stay outside Git; only Rust fixtures and sanitized
+claims are committed. Reviewer checks were read-only, not independent native runs.
 
-| Required surface | Claude 2.1.288 | Codex 0.153.4 | b10x 0.13.3 |
-|---|---|---|---|
-| compatibility-success | Unverified | Unverified | Unverified |
-| compatibility-terminal-failure | Unverified | Synthetic regression green; native unsupported-model probe pending | Unverified |
-| compatibility-tool-decision | Unverified | Production mapping and AEP authorization tested offline; native hook pending | Observe-only contract remains; native current-version observation pending |
-| compatibility-cancellation | Unverified | Offline interruption maps to NoVerdict; native cancellation pending | Unverified |
-| compatibility-model-usage | Unverified | Unknown cost remains absent in synthetic records; native usage pending | Unverified |
-| compatibility-declared-controls | Unverified | Unsupported effectful operations denied offline; native controls pending | No-model embedded tools discovery passed in a managed checkout; wider controls unverified |
+The first b10x cancellation fixture sent invalid command names; its timeouts were
+fixture failures and the production-causal attribution was withdrawn. The corrected
+fixture exposed a separate acknowledged-but-ineffective interrupt when no native
+control wire exists. Both stop commands now pass against the repaired candidate.
+Final release evidence must rerun these fixtures against the combined driver.
 
-The b10x observation was `tools --workspace . --substrate-embedded` in a real managed
-checkout: file.write and file.edit were offered, and directory and Git identity remained
-unchanged. This does not prove a model run, every filesystem operation, process confinement,
-or a governed b10x execution. The pinned owned-tools conformance target separately denies an
-outside symlink; it does not qualify the installed binary.
+## Explicit remaining boundaries
 
-Offline evidence is the integration `task check`: 761 passed, 13 existing live tests ignored;
-36 ESS scenarios passed with no skips or refusals. Synthetic tests prove the tested parser,
-launch and authorization paths, not how these installed vendor binaries behave. No live
-transcript was captured in this continuation. Existing historical evidence is not relabelled
-as evidence of the current installed releases.
+Codex registration/turn tiers, replacement-input behavior, plugin/MCP enumeration,
+hook matcher/timeout behavior and hosted/subscription semantics remain unverified.
+Persistent exec metadata confirms Paginated history; missing or legacy completion
+records still produce unknown outcomes. Advancing a pin does not widen these claims.
 
-## Remaining qualification
-
-The operator's live-probe budget choice is pending. No successful-model request is authorized
-by this inventory. Once that choice is explicit, run short probes sequentially in private
-scratch, with a total spending limit, a per-probe timeout, and a harmless task. Record actual
-child version, command, exit, normalized outcome, observed usage/cost (including absence),
-the exercised hook/control and denied side-effect evidence. An unexercised surface stays
-unverified. Unknown pricing is not a zero-cost observation.
-
-For Codex #11, retain a bounded unsupported-model failure, check normalized failure and
-nonzero metaharness exit, and verify preliminary text cannot override it. For #15, include
-success, failure, a supported tool decision, cancellation, usage and declared controls for
-each release. Add only sanitized synthetic regression vectors to source; private transcripts
-stay outside Git. Advance a pin only after the relevant matrix is complete. An empty pin
-change does not satisfy the issue.
-
-## Added observation issues
-
-Source-backed Codex #18–20 mappings and their limits are recorded in
-[Codex observation provenance](2026-10-03-codex-observations.md). Final-answer,
-turn model and tool outcome regressions are green offline. Native acceptance is
-still open. Legacy history omits command completion status. Source inspection now establishes
-that persistent Codex exec 0.153.4 requests Paginated history, which can retain the
-structured completions already supported here. The earlier assumption that the
-enum default described exec was incomplete; native probes must establish the actual
-path, including any fallback, before an additional transport is justified.
-The final 36-scenario suite kills 18 of 18 guard-negation mutants and catches a
-planted production final-answer defect. These counts qualify this bounded model,
-not installed vendor behavior.
-
-## Credential-free native Codex observations
-
-[The native fixture report](2026-10-03-native-codex-fixture.md) records actual
-Codex 0.153.4 success, provider refusal, command exits0/7, hook denial, patch write,
-observed model selection and synthetic-provider usage through the production
-adapter. Retained native metadata confirms paginated history. A denied command
-has no structured completion and stays unknown; its deny response and absence
-of the marker effect are separately verified. These observations refine the
-earlier unverified Codex rows for the explicit fixture-provider scope. Two further
-cases verify success and refusal through the built Metaharness binary, including
-its final closure, native process status and CLI verdict. Cancellation,
-the AEP path, all declared controls, hosted providers and the other
-two current vendor versions remain outside this result. No pin advances yet.
+Claude's three built-in plugins violate the empty-plugin H1a assertion; no floor
+verdict is softened. Its current-version observations remain useful without changing
+the older pin. Native b10x launch/role and process-write containment need their own
+observations; a prompted read-only scoper is not named-agent loading or a governed
+AEP engine run. The ESS suite validates bounded production observations and does not
+itself qualify vendor versions. No paid request has been made for this work.

@@ -23,11 +23,17 @@ scope:
   path: crates/metaharness-claude
 - confidence: cited
   path: crates/metaharness-codex
+- confidence: cited
+  path: crates/metaharness-tools/Cargo.toml
+- confidence: cited
+  path: crates/metaharness/fixtures/golden
+- confidence: cited
+  path: docs/design/metaharness-protocol-v0.1.md
 - confidence: inferred
   path: docs/research
 - confidence: cited
   path: docs/research/2026-10-03-adapter-compatibility.md
-revision: 11
+revision: 15
 transitions:
 - {from: "draft", to: "proposed", at: "2026-10-03T10:10:31Z", actor: "human:timo", revision: 9, decided_on: {"recorded":{"review_outcome":1}}}
 - {from: "proposed", to: "active", at: "2026-10-03T10:10:31Z", actor: "human:timo", revision: 10, decided_on: {"recorded":{"review_outcome":1}}}
@@ -65,3 +71,7 @@ The actual installed Codex0.153.4, with paginated history confirmed by session_m
 Two initial probe assumptions were corrected from observed records, not by changing production behavior: denied commands lack a structured completion and remain unknown; CLI verdict3 differs from native exit1. An independent read-only review found and then verified fixes for fixture child cleanup on panic and an unbounded redundant version subprocess. The native suite passed again. task check exited0 with762 passed/17 ignored, strict ESS validation and the production conformance suite green. The additional ordinary test proves direct-child cleanup after a forced panic; descendant-group cleanup was not independently exercised.
 
 This completes the bounded Codex observations for issues11 and18–20. It does not complete this story: cancellation, remaining declared controls, the wider AEP path, Claude2.1.288, b10x0.13.3 and hosted-provider qualification remain unverified. No pins advance. Budget authorization remains unanswered for any paid probes.
+
+## Pin decision preparation
+
+Native fixture observations now cover actual Claude2.1.288, Codex0.153.4 and b10x0.13.3 through a production CLI, fresh credential-free homes and a loopback-only namespace. The latest source fixes still require the final integrated-driver rerun. Codex native allow/deny, command0/7, patch effects, model/usage, terminal failure and halt/interrupt provide a bounded basis to advance its pin to0.153.4; preserve registration/turn tiers and unmeasured plugin/replace/hosted semantics as unverified. Record amendmenta25 before the pin change and refresh generated warning/provider goldens without rewriting historical captures. Claude's three built-in plugins leave H1a unqualified, so its pin remains2.1.259. Native b10x interrupt failure is now tracked in the steering story; native role/source qualification needs separate disposition. A nonempty justified pin set is required, not an indiscriminate upgrade of every vendor.

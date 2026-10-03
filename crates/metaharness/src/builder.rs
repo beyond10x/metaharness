@@ -274,6 +274,16 @@ impl Metaharness {
         self
     }
 
+    /// Allow confined b10x subprocess writes inside one exact workspace-relative directory.
+    ///
+    /// Repeatable and independent of file-tool scopes. Validated before launch; no declaration
+    /// leaves native subprocess workspace access read-only.
+    #[must_use]
+    pub fn with_process_write_subtree(mut self, directory: impl Into<String>) -> Self {
+        self.spec.process_write_subtree.push(directory.into());
+        self
+    }
+
     /// One more rule about where this run may write. `b10x` only — see [`RunSpec::write_scope`].
     ///
     /// Ordered: first match wins, so the order rules are added in is the order they are read in.
@@ -1542,6 +1552,21 @@ fn resolve_frame(in_memory: Option<Frame>, spec: &RunSpec) -> Result<Option<Fram
 ///
 /// [`Refusal::NoAdapter`] or [`Refusal::ToolSurfaceOwned`].
 pub fn check_spec(spec: &RunSpec) -> Result<(), Refusal> {
+    if !spec.process_write_subtree.is_empty() {
+        if spec.kind != Kind::B10x {
+            return Err(Refusal::Launch {
+                detail: format!(
+                    "--process-write-subtree is supported only by confined b10x processes, not {}",
+                    spec.kind.as_str()
+                ),
+            });
+        }
+        if spec.substrate.is_none() && !spec.substrate_embedded {
+            return Err(Refusal::Launch { detail: "--process-write-subtree requires --substrate or --substrate-embedded; no unconfined fallback is permitted".to_owned() });
+        }
+        metaharness_b10x::validate_process_write_subtrees(&spec.process_write_subtree)
+            .map_err(|detail| Refusal::Launch { detail })?;
+    }
     // Strategy C is built (`metaharness mcp-serve`), so what is left is a question about the
     // *vendor*: can its built-in tools be taken away and ours put in their place? Claude Code can
     // (`--tools ""` plus `--mcp-config`). Codex cannot — `dynamicTools` is an app-server surface
@@ -1770,6 +1795,9 @@ fn b10x_launch(
     }
     for rule in &spec.write_scope {
         launch = launch.with_write_scope(rule);
+    }
+    for directory in &spec.process_write_subtree {
+        launch = launch.with_process_write_subtree(directory);
     }
     if spec.scope_announce == ScopeAnnounce::Silent {
         launch = launch.with_scope_silent();

@@ -561,7 +561,7 @@ impl fmt::Display for LaunchRefusal {
             ),
             LaunchRefusal::UnsupportedOption { option, why } => write!(
                 f,
-                "the run asked for {option} and codex exec 0.145.0 has no way to express it: \
+                "the run asked for {option} and the pinned codex exec has no way to express it: \
                  {why}. It is refused rather than dropped, because an option that was set and \
                  ignored is a run that is not the one that was asked for"
             ),

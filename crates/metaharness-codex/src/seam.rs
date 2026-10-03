@@ -71,14 +71,9 @@ pub fn capabilities() -> Capabilities {
     //      admits no shell, so the command did not run`;
     //   3. the model was told, not walled — its last message was "The command was blocked and did
     //      not run."
-    // What is **not** claimed by this row: `allow` **against the vendor**. The grant half is built
-    // and free-proven — rendered by `render_hook_response`, driven through the real hook program by
-    // `c3/codex-spawn-an-allow-reaches-the-hook-process-and-the-call-proceeds` — and no paid run has
-    // executed an allowed call yet. The 0.145.0 binary carries a literal that would refuse an allow
-    // at `PreToolUse` beside the one that requires it for `updatedInput` (both quoted in
-    // `render_hook_response`), and a string table cannot say which path emits which. A hook response
-    // the vendor discards is a guard that decided nothing, so the row stays as it is until
-    // `tests/live_codex.rs`'s allow vector is spent.
+    // Native 0.153.4 fixture observations also establish allow and deny effects through
+    // this hook. Replacement-input behavior remains unverified; see amendment a25 and
+    // docs/research/2026-10-03-native-codex-fixture.md. No paid request was needed.
     commands.insert("tool.decide".to_string(), CommandSupport::Honoured);
 
     Capabilities {
@@ -103,15 +98,9 @@ pub fn capabilities() -> Capabilities {
             (Tier::Kill, TierStatus::Delivered),
         ]),
         commands,
-        // All three delivered, and each end of the wire has now been driven. `frame` and `ask`
-        // reach this wire through a **deny**, which CX-M2 drove and the vendor's own record
-        // confirmed. `observe` is the **allow** half and nothing else — driven live on
-        // 2026-08-23 (R2.4): the hook received a real `Bash` call, metaharness answered
-        // `permissionDecision: allow`, and the rollout's own `custom_tool_call_output` carried the
-        // command's output. The binary that honoured it was the child-`PATH` codex **0.144.0**
-        // (the pin is 0.145.0; the two-install warning fired, as it must) — so the grant is a
-        // driven fact about 0.144.0 and an inference about 0.145.0 until one machine holds one
-        // install.
+        // Frame/ask/observe share the hook wire. Native 0.153.4 fixture probes observe
+        // allow and deny effects; full CLI ask denial is correlated to the pending call.
+        // A fixture-provider observation does not qualify the wider governed AEP walk.
         decision_modes: BTreeMap::from([
             (
                 DecisionMode::Frame.as_str().to_string(),
@@ -222,11 +211,9 @@ const UNSTATED_DENY_REASON: &str =
 /// denied approval`). What is certain is that the vendor requires `permissionDecision: "allow"`
 /// wherever `updatedInput` is used, which is the same value this renders.
 ///
-/// So the grant half is **built, free-proven and undriven**: the envelope is rendered here, a C3
-/// spawn vector drives it through the real hook program to a process holding a call
-/// (`c3/codex-spawn-an-allow-reaches-the-hook-process-and-the-call-proceeds`), and only a paid run
-/// can say whether 0.145.0 honours it — `tests/live_codex.rs` carries that vector, gated. Nothing
-/// here upgrades a capability on the strength of a string.
+/// Native 0.153.4 fixture probes now observe the grant reaching the actual hook and
+/// the permitted command executing. This resolves the old string-table uncertainty
+/// for that surface. Replacement-input behavior remains unverified (amendment a25).
 #[must_use]
 pub fn render_hook_response(decision: &Decision) -> Value {
     let mut output = Map::new();
