@@ -4,7 +4,7 @@
     "authored_sources": {},
     "counts": {
       "authored": 0,
-      "generated": 27,
+      "generated": 36,
       "outside": 0,
       "refused": 0
     },
@@ -15,9 +15,18 @@
       "metaharness.boundaries.ReadSealedFrame/outcome/refused",
       "metaharness.boundaries.ReadSelectedWorkspaceFile/outcome/read",
       "metaharness.boundaries.ReadSelectedWorkspaceFile/outcome/refused",
+      "metaharness.observations.ReadFinalAnswer/outcome/authoritative",
+      "metaharness.observations.ReadFinalAnswer/outcome/unavailable",
       "metaharness.observations.ReadNativeTermination/outcome/measured-failure",
       "metaharness.observations.ReadNativeTermination/outcome/measured-success",
       "metaharness.observations.ReadNativeTermination/outcome/unobserved",
+      "metaharness.observations.ReadObservedModel/outcome/observed-selection",
+      "metaharness.observations.ReadObservedModel/outcome/unreported",
+      "metaharness.observations.ReadToolOutcome/outcome/command-failure",
+      "metaharness.observations.ReadToolOutcome/outcome/command-success",
+      "metaharness.observations.ReadToolOutcome/outcome/failure-without-code",
+      "metaharness.observations.ReadToolOutcome/outcome/success-without-code",
+      "metaharness.observations.ReadToolOutcome/outcome/unverified",
       "metaharness.session.CloseUnsteeredStream/outcome/failed-or-unknown-terminal",
       "metaharness.session.CloseUnsteeredStream/outcome/observed-budget-stop",
       "metaharness.session.CloseUnsteeredStream/outcome/positive-terminal-record",
@@ -51,8 +60,8 @@
     }
   },
   "provenance": {
-    "contract_digest": "4aa03989a00639f5b19fa14fb83aba83917eb1db712d0d4a55a44b08886e47b3",
-    "spec_digest": "1ef9c87213ccba4d0ba899a8f6f8efdd942cbbbd98c450bb56f46454f14ff5c5",
+    "contract_digest": "1f764dd402e91422910780182d48dd1f235f7b756e6b72bca9a0eb48d4f3d3ad",
+    "spec_digest": "d9ddef341a2de70c15e79ac60d68f70c624fe320fbfff69c6124165c2793d64c",
     "specification_version": "v1",
     "suite_version": "ess-conformance/23",
     "system": "metaharness"
@@ -91,6 +100,14 @@
         {
           "kind": "event",
           "name": "metaharness.observations.NativeStatusClassified"
+        },
+        {
+          "kind": "event",
+          "name": "metaharness.observations.PresenceRead"
+        },
+        {
+          "kind": "event",
+          "name": "metaharness.observations.ToolOutcomeRead"
         },
         {
           "kind": "event",
@@ -161,6 +178,14 @@
           "step": "expect_no_event"
         },
         {
+          "event": "metaharness.observations.PresenceRead",
+          "step": "expect_no_event"
+        },
+        {
+          "event": "metaharness.observations.ToolOutcomeRead",
+          "step": "expect_no_event"
+        },
+        {
           "event": "metaharness.session.ClosureRecorded",
           "step": "expect_no_event"
         },
@@ -215,6 +240,14 @@
         {
           "kind": "event",
           "name": "metaharness.observations.NativeStatusClassified"
+        },
+        {
+          "kind": "event",
+          "name": "metaharness.observations.PresenceRead"
+        },
+        {
+          "kind": "event",
+          "name": "metaharness.observations.ToolOutcomeRead"
         },
         {
           "kind": "event",
@@ -282,6 +315,14 @@
         },
         {
           "event": "metaharness.observations.NativeStatusClassified",
+          "step": "expect_no_event"
+        },
+        {
+          "event": "metaharness.observations.PresenceRead",
+          "step": "expect_no_event"
+        },
+        {
+          "event": "metaharness.observations.ToolOutcomeRead",
           "step": "expect_no_event"
         },
         {
@@ -363,6 +404,14 @@
         },
         {
           "kind": "event",
+          "name": "metaharness.observations.PresenceRead"
+        },
+        {
+          "kind": "event",
+          "name": "metaharness.observations.ToolOutcomeRead"
+        },
+        {
+          "kind": "event",
           "name": "metaharness.session.ClosureRecorded"
         },
         {
@@ -426,6 +475,14 @@
           "step": "expect_no_event"
         },
         {
+          "event": "metaharness.observations.PresenceRead",
+          "step": "expect_no_event"
+        },
+        {
+          "event": "metaharness.observations.ToolOutcomeRead",
+          "step": "expect_no_event"
+        },
+        {
           "event": "metaharness.session.ClosureRecorded",
           "step": "expect_no_event"
         },
@@ -480,6 +537,14 @@
         {
           "kind": "event",
           "name": "metaharness.observations.NativeStatusClassified"
+        },
+        {
+          "kind": "event",
+          "name": "metaharness.observations.PresenceRead"
+        },
+        {
+          "kind": "event",
+          "name": "metaharness.observations.ToolOutcomeRead"
         },
         {
           "kind": "event",
@@ -546,6 +611,14 @@
           "step": "expect_no_event"
         },
         {
+          "event": "metaharness.observations.PresenceRead",
+          "step": "expect_no_event"
+        },
+        {
+          "event": "metaharness.observations.ToolOutcomeRead",
+          "step": "expect_no_event"
+        },
+        {
           "event": "metaharness.session.ClosureRecorded",
           "step": "expect_no_event"
         },
@@ -600,6 +673,14 @@
         {
           "kind": "event",
           "name": "metaharness.observations.NativeStatusClassified"
+        },
+        {
+          "kind": "event",
+          "name": "metaharness.observations.PresenceRead"
+        },
+        {
+          "kind": "event",
+          "name": "metaharness.observations.ToolOutcomeRead"
         },
         {
           "kind": "event",
@@ -666,6 +747,14 @@
           "step": "expect_no_event"
         },
         {
+          "event": "metaharness.observations.PresenceRead",
+          "step": "expect_no_event"
+        },
+        {
+          "event": "metaharness.observations.ToolOutcomeRead",
+          "step": "expect_no_event"
+        },
+        {
           "event": "metaharness.session.ClosureRecorded",
           "step": "expect_no_event"
         },
@@ -720,6 +809,14 @@
         {
           "kind": "event",
           "name": "metaharness.observations.NativeStatusClassified"
+        },
+        {
+          "kind": "event",
+          "name": "metaharness.observations.PresenceRead"
+        },
+        {
+          "kind": "event",
+          "name": "metaharness.observations.ToolOutcomeRead"
         },
         {
           "kind": "event",
@@ -786,6 +883,286 @@
           "step": "expect_no_event"
         },
         {
+          "event": "metaharness.observations.PresenceRead",
+          "step": "expect_no_event"
+        },
+        {
+          "event": "metaharness.observations.ToolOutcomeRead",
+          "step": "expect_no_event"
+        },
+        {
+          "event": "metaharness.session.ClosureRecorded",
+          "step": "expect_no_event"
+        },
+        {
+          "event": "metaharness.session.CompletionClassified",
+          "step": "expect_no_event"
+        },
+        {
+          "event": "metaharness.session.StreamClassified",
+          "step": "expect_no_event"
+        },
+        {
+          "event": "metaharness.spending.AdmissionRecorded",
+          "step": "expect_no_event"
+        },
+        {
+          "event": "metaharness.spending.FiniteLedgerRecorded",
+          "step": "expect_no_event"
+        }
+      ]
+    },
+    "metaharness.observations.ReadFinalAnswer/outcome/authoritative": {
+      "purpose": "`metaharness.observations.ReadFinalAnswer` answers `authoritative` for an input that satisfies that branch's guard",
+      "source": [
+        {
+          "kind": "type",
+          "name": "metaharness.observations.FinalEvidence"
+        },
+        {
+          "kind": "command",
+          "name": "metaharness.observations.ReadFinalAnswer"
+        },
+        {
+          "kind": "outcome",
+          "name": {
+            "command": "metaharness.observations.ReadFinalAnswer",
+            "outcome": "authoritative"
+          }
+        },
+        {
+          "kind": "event",
+          "name": "metaharness.boundaries.CallDecided"
+        },
+        {
+          "kind": "event",
+          "name": "metaharness.boundaries.FileRead"
+        },
+        {
+          "kind": "event",
+          "name": "metaharness.boundaries.FrameRead"
+        },
+        {
+          "kind": "event",
+          "name": "metaharness.observations.NativeStatusClassified"
+        },
+        {
+          "kind": "event",
+          "name": "metaharness.observations.PresenceRead"
+        },
+        {
+          "kind": "event",
+          "name": "metaharness.observations.ToolOutcomeRead"
+        },
+        {
+          "kind": "event",
+          "name": "metaharness.session.ClosureRecorded"
+        },
+        {
+          "kind": "event",
+          "name": "metaharness.session.CompletionClassified"
+        },
+        {
+          "kind": "event",
+          "name": "metaharness.session.StreamClassified"
+        },
+        {
+          "kind": "event",
+          "name": "metaharness.spending.AdmissionRecorded"
+        },
+        {
+          "kind": "event",
+          "name": "metaharness.spending.FiniteLedgerRecorded"
+        }
+      ],
+      "steps": [
+        {
+          "command": "metaharness.observations.ReadFinalAnswer",
+          "input": {
+            "evidence": {
+              "kind": "literal",
+              "value": "final-answer"
+            }
+          },
+          "step": "execute_command"
+        },
+        {
+          "outcome": {
+            "command": "metaharness.observations.ReadFinalAnswer",
+            "outcome": "authoritative"
+          },
+          "step": "expect_outcome"
+        },
+        {
+          "event": "metaharness.observations.PresenceRead",
+          "payload": {
+            "present": true
+          },
+          "shape": {
+            "present": {
+              "holds": "primitive",
+              "kind": "boolean"
+            }
+          },
+          "step": "expect_event"
+        },
+        {
+          "event": "metaharness.boundaries.CallDecided",
+          "step": "expect_no_event"
+        },
+        {
+          "event": "metaharness.boundaries.FileRead",
+          "step": "expect_no_event"
+        },
+        {
+          "event": "metaharness.boundaries.FrameRead",
+          "step": "expect_no_event"
+        },
+        {
+          "event": "metaharness.observations.NativeStatusClassified",
+          "step": "expect_no_event"
+        },
+        {
+          "event": "metaharness.observations.ToolOutcomeRead",
+          "step": "expect_no_event"
+        },
+        {
+          "event": "metaharness.session.ClosureRecorded",
+          "step": "expect_no_event"
+        },
+        {
+          "event": "metaharness.session.CompletionClassified",
+          "step": "expect_no_event"
+        },
+        {
+          "event": "metaharness.session.StreamClassified",
+          "step": "expect_no_event"
+        },
+        {
+          "event": "metaharness.spending.AdmissionRecorded",
+          "step": "expect_no_event"
+        },
+        {
+          "event": "metaharness.spending.FiniteLedgerRecorded",
+          "step": "expect_no_event"
+        }
+      ]
+    },
+    "metaharness.observations.ReadFinalAnswer/outcome/unavailable": {
+      "purpose": "`metaharness.observations.ReadFinalAnswer` answers `unavailable` for an input no other branch's guard claims",
+      "source": [
+        {
+          "kind": "type",
+          "name": "metaharness.observations.FinalEvidence"
+        },
+        {
+          "kind": "command",
+          "name": "metaharness.observations.ReadFinalAnswer"
+        },
+        {
+          "kind": "outcome",
+          "name": {
+            "command": "metaharness.observations.ReadFinalAnswer",
+            "outcome": "unavailable"
+          }
+        },
+        {
+          "kind": "event",
+          "name": "metaharness.boundaries.CallDecided"
+        },
+        {
+          "kind": "event",
+          "name": "metaharness.boundaries.FileRead"
+        },
+        {
+          "kind": "event",
+          "name": "metaharness.boundaries.FrameRead"
+        },
+        {
+          "kind": "event",
+          "name": "metaharness.observations.NativeStatusClassified"
+        },
+        {
+          "kind": "event",
+          "name": "metaharness.observations.PresenceRead"
+        },
+        {
+          "kind": "event",
+          "name": "metaharness.observations.ToolOutcomeRead"
+        },
+        {
+          "kind": "event",
+          "name": "metaharness.session.ClosureRecorded"
+        },
+        {
+          "kind": "event",
+          "name": "metaharness.session.CompletionClassified"
+        },
+        {
+          "kind": "event",
+          "name": "metaharness.session.StreamClassified"
+        },
+        {
+          "kind": "event",
+          "name": "metaharness.spending.AdmissionRecorded"
+        },
+        {
+          "kind": "event",
+          "name": "metaharness.spending.FiniteLedgerRecorded"
+        }
+      ],
+      "steps": [
+        {
+          "command": "metaharness.observations.ReadFinalAnswer",
+          "input": {
+            "evidence": {
+              "kind": "literal",
+              "value": "commentary-only"
+            }
+          },
+          "step": "execute_command"
+        },
+        {
+          "outcome": {
+            "command": "metaharness.observations.ReadFinalAnswer",
+            "outcome": "unavailable"
+          },
+          "step": "expect_outcome"
+        },
+        {
+          "event": "metaharness.observations.PresenceRead",
+          "payload": {
+            "present": false
+          },
+          "shape": {
+            "present": {
+              "holds": "primitive",
+              "kind": "boolean"
+            }
+          },
+          "step": "expect_event"
+        },
+        {
+          "event": "metaharness.boundaries.CallDecided",
+          "step": "expect_no_event"
+        },
+        {
+          "event": "metaharness.boundaries.FileRead",
+          "step": "expect_no_event"
+        },
+        {
+          "event": "metaharness.boundaries.FrameRead",
+          "step": "expect_no_event"
+        },
+        {
+          "event": "metaharness.observations.NativeStatusClassified",
+          "step": "expect_no_event"
+        },
+        {
+          "event": "metaharness.observations.ToolOutcomeRead",
+          "step": "expect_no_event"
+        },
+        {
           "event": "metaharness.session.ClosureRecorded",
           "step": "expect_no_event"
         },
@@ -840,6 +1217,14 @@
         {
           "kind": "event",
           "name": "metaharness.observations.NativeStatusClassified"
+        },
+        {
+          "kind": "event",
+          "name": "metaharness.observations.PresenceRead"
+        },
+        {
+          "kind": "event",
+          "name": "metaharness.observations.ToolOutcomeRead"
         },
         {
           "kind": "event",
@@ -908,6 +1293,14 @@
         },
         {
           "event": "metaharness.boundaries.FrameRead",
+          "step": "expect_no_event"
+        },
+        {
+          "event": "metaharness.observations.PresenceRead",
+          "step": "expect_no_event"
+        },
+        {
+          "event": "metaharness.observations.ToolOutcomeRead",
           "step": "expect_no_event"
         },
         {
@@ -985,6 +1378,14 @@
         },
         {
           "kind": "event",
+          "name": "metaharness.observations.PresenceRead"
+        },
+        {
+          "kind": "event",
+          "name": "metaharness.observations.ToolOutcomeRead"
+        },
+        {
+          "kind": "event",
           "name": "metaharness.session.ClosureRecorded"
         },
         {
@@ -1053,6 +1454,14 @@
           "step": "expect_no_event"
         },
         {
+          "event": "metaharness.observations.PresenceRead",
+          "step": "expect_no_event"
+        },
+        {
+          "event": "metaharness.observations.ToolOutcomeRead",
+          "step": "expect_no_event"
+        },
+        {
           "event": "metaharness.session.ClosureRecorded",
           "step": "expect_no_event"
         },
@@ -1107,6 +1516,14 @@
         {
           "kind": "event",
           "name": "metaharness.observations.NativeStatusClassified"
+        },
+        {
+          "kind": "event",
+          "name": "metaharness.observations.PresenceRead"
+        },
+        {
+          "kind": "event",
+          "name": "metaharness.observations.ToolOutcomeRead"
         },
         {
           "kind": "event",
@@ -1178,6 +1595,1016 @@
           "step": "expect_no_event"
         },
         {
+          "event": "metaharness.observations.PresenceRead",
+          "step": "expect_no_event"
+        },
+        {
+          "event": "metaharness.observations.ToolOutcomeRead",
+          "step": "expect_no_event"
+        },
+        {
+          "event": "metaharness.session.ClosureRecorded",
+          "step": "expect_no_event"
+        },
+        {
+          "event": "metaharness.session.CompletionClassified",
+          "step": "expect_no_event"
+        },
+        {
+          "event": "metaharness.session.StreamClassified",
+          "step": "expect_no_event"
+        },
+        {
+          "event": "metaharness.spending.AdmissionRecorded",
+          "step": "expect_no_event"
+        },
+        {
+          "event": "metaharness.spending.FiniteLedgerRecorded",
+          "step": "expect_no_event"
+        }
+      ]
+    },
+    "metaharness.observations.ReadObservedModel/outcome/observed-selection": {
+      "purpose": "`metaharness.observations.ReadObservedModel` answers `observed-selection` for an input that satisfies that branch's guard",
+      "source": [
+        {
+          "kind": "type",
+          "name": "metaharness.observations.ModelEvidence"
+        },
+        {
+          "kind": "command",
+          "name": "metaharness.observations.ReadObservedModel"
+        },
+        {
+          "kind": "outcome",
+          "name": {
+            "command": "metaharness.observations.ReadObservedModel",
+            "outcome": "observed-selection"
+          }
+        },
+        {
+          "kind": "event",
+          "name": "metaharness.boundaries.CallDecided"
+        },
+        {
+          "kind": "event",
+          "name": "metaharness.boundaries.FileRead"
+        },
+        {
+          "kind": "event",
+          "name": "metaharness.boundaries.FrameRead"
+        },
+        {
+          "kind": "event",
+          "name": "metaharness.observations.NativeStatusClassified"
+        },
+        {
+          "kind": "event",
+          "name": "metaharness.observations.PresenceRead"
+        },
+        {
+          "kind": "event",
+          "name": "metaharness.observations.ToolOutcomeRead"
+        },
+        {
+          "kind": "event",
+          "name": "metaharness.session.ClosureRecorded"
+        },
+        {
+          "kind": "event",
+          "name": "metaharness.session.CompletionClassified"
+        },
+        {
+          "kind": "event",
+          "name": "metaharness.session.StreamClassified"
+        },
+        {
+          "kind": "event",
+          "name": "metaharness.spending.AdmissionRecorded"
+        },
+        {
+          "kind": "event",
+          "name": "metaharness.spending.FiniteLedgerRecorded"
+        }
+      ],
+      "steps": [
+        {
+          "command": "metaharness.observations.ReadObservedModel",
+          "input": {
+            "evidence": {
+              "kind": "literal",
+              "value": "model-known"
+            }
+          },
+          "step": "execute_command"
+        },
+        {
+          "outcome": {
+            "command": "metaharness.observations.ReadObservedModel",
+            "outcome": "observed-selection"
+          },
+          "step": "expect_outcome"
+        },
+        {
+          "event": "metaharness.observations.PresenceRead",
+          "payload": {
+            "present": true
+          },
+          "shape": {
+            "present": {
+              "holds": "primitive",
+              "kind": "boolean"
+            }
+          },
+          "step": "expect_event"
+        },
+        {
+          "event": "metaharness.boundaries.CallDecided",
+          "step": "expect_no_event"
+        },
+        {
+          "event": "metaharness.boundaries.FileRead",
+          "step": "expect_no_event"
+        },
+        {
+          "event": "metaharness.boundaries.FrameRead",
+          "step": "expect_no_event"
+        },
+        {
+          "event": "metaharness.observations.NativeStatusClassified",
+          "step": "expect_no_event"
+        },
+        {
+          "event": "metaharness.observations.ToolOutcomeRead",
+          "step": "expect_no_event"
+        },
+        {
+          "event": "metaharness.session.ClosureRecorded",
+          "step": "expect_no_event"
+        },
+        {
+          "event": "metaharness.session.CompletionClassified",
+          "step": "expect_no_event"
+        },
+        {
+          "event": "metaharness.session.StreamClassified",
+          "step": "expect_no_event"
+        },
+        {
+          "event": "metaharness.spending.AdmissionRecorded",
+          "step": "expect_no_event"
+        },
+        {
+          "event": "metaharness.spending.FiniteLedgerRecorded",
+          "step": "expect_no_event"
+        }
+      ]
+    },
+    "metaharness.observations.ReadObservedModel/outcome/unreported": {
+      "purpose": "`metaharness.observations.ReadObservedModel` answers `unreported` for an input no other branch's guard claims",
+      "source": [
+        {
+          "kind": "type",
+          "name": "metaharness.observations.ModelEvidence"
+        },
+        {
+          "kind": "command",
+          "name": "metaharness.observations.ReadObservedModel"
+        },
+        {
+          "kind": "outcome",
+          "name": {
+            "command": "metaharness.observations.ReadObservedModel",
+            "outcome": "unreported"
+          }
+        },
+        {
+          "kind": "event",
+          "name": "metaharness.boundaries.CallDecided"
+        },
+        {
+          "kind": "event",
+          "name": "metaharness.boundaries.FileRead"
+        },
+        {
+          "kind": "event",
+          "name": "metaharness.boundaries.FrameRead"
+        },
+        {
+          "kind": "event",
+          "name": "metaharness.observations.NativeStatusClassified"
+        },
+        {
+          "kind": "event",
+          "name": "metaharness.observations.PresenceRead"
+        },
+        {
+          "kind": "event",
+          "name": "metaharness.observations.ToolOutcomeRead"
+        },
+        {
+          "kind": "event",
+          "name": "metaharness.session.ClosureRecorded"
+        },
+        {
+          "kind": "event",
+          "name": "metaharness.session.CompletionClassified"
+        },
+        {
+          "kind": "event",
+          "name": "metaharness.session.StreamClassified"
+        },
+        {
+          "kind": "event",
+          "name": "metaharness.spending.AdmissionRecorded"
+        },
+        {
+          "kind": "event",
+          "name": "metaharness.spending.FiniteLedgerRecorded"
+        }
+      ],
+      "steps": [
+        {
+          "command": "metaharness.observations.ReadObservedModel",
+          "input": {
+            "evidence": {
+              "kind": "literal",
+              "value": "model-missing"
+            }
+          },
+          "step": "execute_command"
+        },
+        {
+          "outcome": {
+            "command": "metaharness.observations.ReadObservedModel",
+            "outcome": "unreported"
+          },
+          "step": "expect_outcome"
+        },
+        {
+          "event": "metaharness.observations.PresenceRead",
+          "payload": {
+            "present": false
+          },
+          "shape": {
+            "present": {
+              "holds": "primitive",
+              "kind": "boolean"
+            }
+          },
+          "step": "expect_event"
+        },
+        {
+          "event": "metaharness.boundaries.CallDecided",
+          "step": "expect_no_event"
+        },
+        {
+          "event": "metaharness.boundaries.FileRead",
+          "step": "expect_no_event"
+        },
+        {
+          "event": "metaharness.boundaries.FrameRead",
+          "step": "expect_no_event"
+        },
+        {
+          "event": "metaharness.observations.NativeStatusClassified",
+          "step": "expect_no_event"
+        },
+        {
+          "event": "metaharness.observations.ToolOutcomeRead",
+          "step": "expect_no_event"
+        },
+        {
+          "event": "metaharness.session.ClosureRecorded",
+          "step": "expect_no_event"
+        },
+        {
+          "event": "metaharness.session.CompletionClassified",
+          "step": "expect_no_event"
+        },
+        {
+          "event": "metaharness.session.StreamClassified",
+          "step": "expect_no_event"
+        },
+        {
+          "event": "metaharness.spending.AdmissionRecorded",
+          "step": "expect_no_event"
+        },
+        {
+          "event": "metaharness.spending.FiniteLedgerRecorded",
+          "step": "expect_no_event"
+        }
+      ]
+    },
+    "metaharness.observations.ReadToolOutcome/outcome/command-failure": {
+      "purpose": "`metaharness.observations.ReadToolOutcome` answers `command-failure` for an input that satisfies that branch's guard",
+      "source": [
+        {
+          "kind": "type",
+          "name": "metaharness.observations.ToolEvidence"
+        },
+        {
+          "kind": "command",
+          "name": "metaharness.observations.ReadToolOutcome"
+        },
+        {
+          "kind": "outcome",
+          "name": {
+            "command": "metaharness.observations.ReadToolOutcome",
+            "outcome": "command-failure"
+          }
+        },
+        {
+          "kind": "event",
+          "name": "metaharness.boundaries.CallDecided"
+        },
+        {
+          "kind": "event",
+          "name": "metaharness.boundaries.FileRead"
+        },
+        {
+          "kind": "event",
+          "name": "metaharness.boundaries.FrameRead"
+        },
+        {
+          "kind": "event",
+          "name": "metaharness.observations.NativeStatusClassified"
+        },
+        {
+          "kind": "event",
+          "name": "metaharness.observations.PresenceRead"
+        },
+        {
+          "kind": "event",
+          "name": "metaharness.observations.ToolOutcomeRead"
+        },
+        {
+          "kind": "event",
+          "name": "metaharness.session.ClosureRecorded"
+        },
+        {
+          "kind": "event",
+          "name": "metaharness.session.CompletionClassified"
+        },
+        {
+          "kind": "event",
+          "name": "metaharness.session.StreamClassified"
+        },
+        {
+          "kind": "event",
+          "name": "metaharness.spending.AdmissionRecorded"
+        },
+        {
+          "kind": "event",
+          "name": "metaharness.spending.FiniteLedgerRecorded"
+        }
+      ],
+      "steps": [
+        {
+          "command": "metaharness.observations.ReadToolOutcome",
+          "input": {
+            "evidence": {
+              "kind": "literal",
+              "value": "tool-failure"
+            }
+          },
+          "step": "execute_command"
+        },
+        {
+          "outcome": {
+            "command": "metaharness.observations.ReadToolOutcome",
+            "outcome": "command-failure"
+          },
+          "step": "expect_outcome"
+        },
+        {
+          "event": "metaharness.observations.ToolOutcomeRead",
+          "payload": {
+            "failed": true,
+            "known": true,
+            "numeric_exit": true
+          },
+          "shape": {
+            "failed": {
+              "holds": "primitive",
+              "kind": "boolean"
+            },
+            "known": {
+              "holds": "primitive",
+              "kind": "boolean"
+            },
+            "numeric_exit": {
+              "holds": "primitive",
+              "kind": "boolean"
+            }
+          },
+          "step": "expect_event"
+        },
+        {
+          "event": "metaharness.boundaries.CallDecided",
+          "step": "expect_no_event"
+        },
+        {
+          "event": "metaharness.boundaries.FileRead",
+          "step": "expect_no_event"
+        },
+        {
+          "event": "metaharness.boundaries.FrameRead",
+          "step": "expect_no_event"
+        },
+        {
+          "event": "metaharness.observations.NativeStatusClassified",
+          "step": "expect_no_event"
+        },
+        {
+          "event": "metaharness.observations.PresenceRead",
+          "step": "expect_no_event"
+        },
+        {
+          "event": "metaharness.session.ClosureRecorded",
+          "step": "expect_no_event"
+        },
+        {
+          "event": "metaharness.session.CompletionClassified",
+          "step": "expect_no_event"
+        },
+        {
+          "event": "metaharness.session.StreamClassified",
+          "step": "expect_no_event"
+        },
+        {
+          "event": "metaharness.spending.AdmissionRecorded",
+          "step": "expect_no_event"
+        },
+        {
+          "event": "metaharness.spending.FiniteLedgerRecorded",
+          "step": "expect_no_event"
+        }
+      ]
+    },
+    "metaharness.observations.ReadToolOutcome/outcome/command-success": {
+      "purpose": "`metaharness.observations.ReadToolOutcome` answers `command-success` for an input that satisfies that branch's guard",
+      "source": [
+        {
+          "kind": "type",
+          "name": "metaharness.observations.ToolEvidence"
+        },
+        {
+          "kind": "command",
+          "name": "metaharness.observations.ReadToolOutcome"
+        },
+        {
+          "kind": "outcome",
+          "name": {
+            "command": "metaharness.observations.ReadToolOutcome",
+            "outcome": "command-success"
+          }
+        },
+        {
+          "kind": "event",
+          "name": "metaharness.boundaries.CallDecided"
+        },
+        {
+          "kind": "event",
+          "name": "metaharness.boundaries.FileRead"
+        },
+        {
+          "kind": "event",
+          "name": "metaharness.boundaries.FrameRead"
+        },
+        {
+          "kind": "event",
+          "name": "metaharness.observations.NativeStatusClassified"
+        },
+        {
+          "kind": "event",
+          "name": "metaharness.observations.PresenceRead"
+        },
+        {
+          "kind": "event",
+          "name": "metaharness.observations.ToolOutcomeRead"
+        },
+        {
+          "kind": "event",
+          "name": "metaharness.session.ClosureRecorded"
+        },
+        {
+          "kind": "event",
+          "name": "metaharness.session.CompletionClassified"
+        },
+        {
+          "kind": "event",
+          "name": "metaharness.session.StreamClassified"
+        },
+        {
+          "kind": "event",
+          "name": "metaharness.spending.AdmissionRecorded"
+        },
+        {
+          "kind": "event",
+          "name": "metaharness.spending.FiniteLedgerRecorded"
+        }
+      ],
+      "steps": [
+        {
+          "command": "metaharness.observations.ReadToolOutcome",
+          "input": {
+            "evidence": {
+              "kind": "literal",
+              "value": "tool-success"
+            }
+          },
+          "step": "execute_command"
+        },
+        {
+          "outcome": {
+            "command": "metaharness.observations.ReadToolOutcome",
+            "outcome": "command-success"
+          },
+          "step": "expect_outcome"
+        },
+        {
+          "event": "metaharness.observations.ToolOutcomeRead",
+          "payload": {
+            "failed": false,
+            "known": true,
+            "numeric_exit": true
+          },
+          "shape": {
+            "failed": {
+              "holds": "primitive",
+              "kind": "boolean"
+            },
+            "known": {
+              "holds": "primitive",
+              "kind": "boolean"
+            },
+            "numeric_exit": {
+              "holds": "primitive",
+              "kind": "boolean"
+            }
+          },
+          "step": "expect_event"
+        },
+        {
+          "event": "metaharness.boundaries.CallDecided",
+          "step": "expect_no_event"
+        },
+        {
+          "event": "metaharness.boundaries.FileRead",
+          "step": "expect_no_event"
+        },
+        {
+          "event": "metaharness.boundaries.FrameRead",
+          "step": "expect_no_event"
+        },
+        {
+          "event": "metaharness.observations.NativeStatusClassified",
+          "step": "expect_no_event"
+        },
+        {
+          "event": "metaharness.observations.PresenceRead",
+          "step": "expect_no_event"
+        },
+        {
+          "event": "metaharness.session.ClosureRecorded",
+          "step": "expect_no_event"
+        },
+        {
+          "event": "metaharness.session.CompletionClassified",
+          "step": "expect_no_event"
+        },
+        {
+          "event": "metaharness.session.StreamClassified",
+          "step": "expect_no_event"
+        },
+        {
+          "event": "metaharness.spending.AdmissionRecorded",
+          "step": "expect_no_event"
+        },
+        {
+          "event": "metaharness.spending.FiniteLedgerRecorded",
+          "step": "expect_no_event"
+        }
+      ]
+    },
+    "metaharness.observations.ReadToolOutcome/outcome/failure-without-code": {
+      "purpose": "`metaharness.observations.ReadToolOutcome` answers `failure-without-code` for an input that satisfies that branch's guard",
+      "source": [
+        {
+          "kind": "type",
+          "name": "metaharness.observations.ToolEvidence"
+        },
+        {
+          "kind": "command",
+          "name": "metaharness.observations.ReadToolOutcome"
+        },
+        {
+          "kind": "outcome",
+          "name": {
+            "command": "metaharness.observations.ReadToolOutcome",
+            "outcome": "failure-without-code"
+          }
+        },
+        {
+          "kind": "event",
+          "name": "metaharness.boundaries.CallDecided"
+        },
+        {
+          "kind": "event",
+          "name": "metaharness.boundaries.FileRead"
+        },
+        {
+          "kind": "event",
+          "name": "metaharness.boundaries.FrameRead"
+        },
+        {
+          "kind": "event",
+          "name": "metaharness.observations.NativeStatusClassified"
+        },
+        {
+          "kind": "event",
+          "name": "metaharness.observations.PresenceRead"
+        },
+        {
+          "kind": "event",
+          "name": "metaharness.observations.ToolOutcomeRead"
+        },
+        {
+          "kind": "event",
+          "name": "metaharness.session.ClosureRecorded"
+        },
+        {
+          "kind": "event",
+          "name": "metaharness.session.CompletionClassified"
+        },
+        {
+          "kind": "event",
+          "name": "metaharness.session.StreamClassified"
+        },
+        {
+          "kind": "event",
+          "name": "metaharness.spending.AdmissionRecorded"
+        },
+        {
+          "kind": "event",
+          "name": "metaharness.spending.FiniteLedgerRecorded"
+        }
+      ],
+      "steps": [
+        {
+          "command": "metaharness.observations.ReadToolOutcome",
+          "input": {
+            "evidence": {
+              "kind": "literal",
+              "value": "tool-denied"
+            }
+          },
+          "step": "execute_command"
+        },
+        {
+          "outcome": {
+            "command": "metaharness.observations.ReadToolOutcome",
+            "outcome": "failure-without-code"
+          },
+          "step": "expect_outcome"
+        },
+        {
+          "event": "metaharness.observations.ToolOutcomeRead",
+          "payload": {
+            "failed": true,
+            "known": true,
+            "numeric_exit": false
+          },
+          "shape": {
+            "failed": {
+              "holds": "primitive",
+              "kind": "boolean"
+            },
+            "known": {
+              "holds": "primitive",
+              "kind": "boolean"
+            },
+            "numeric_exit": {
+              "holds": "primitive",
+              "kind": "boolean"
+            }
+          },
+          "step": "expect_event"
+        },
+        {
+          "event": "metaharness.boundaries.CallDecided",
+          "step": "expect_no_event"
+        },
+        {
+          "event": "metaharness.boundaries.FileRead",
+          "step": "expect_no_event"
+        },
+        {
+          "event": "metaharness.boundaries.FrameRead",
+          "step": "expect_no_event"
+        },
+        {
+          "event": "metaharness.observations.NativeStatusClassified",
+          "step": "expect_no_event"
+        },
+        {
+          "event": "metaharness.observations.PresenceRead",
+          "step": "expect_no_event"
+        },
+        {
+          "event": "metaharness.session.ClosureRecorded",
+          "step": "expect_no_event"
+        },
+        {
+          "event": "metaharness.session.CompletionClassified",
+          "step": "expect_no_event"
+        },
+        {
+          "event": "metaharness.session.StreamClassified",
+          "step": "expect_no_event"
+        },
+        {
+          "event": "metaharness.spending.AdmissionRecorded",
+          "step": "expect_no_event"
+        },
+        {
+          "event": "metaharness.spending.FiniteLedgerRecorded",
+          "step": "expect_no_event"
+        }
+      ]
+    },
+    "metaharness.observations.ReadToolOutcome/outcome/success-without-code": {
+      "purpose": "`metaharness.observations.ReadToolOutcome` answers `success-without-code` for an input that satisfies that branch's guard",
+      "source": [
+        {
+          "kind": "type",
+          "name": "metaharness.observations.ToolEvidence"
+        },
+        {
+          "kind": "command",
+          "name": "metaharness.observations.ReadToolOutcome"
+        },
+        {
+          "kind": "outcome",
+          "name": {
+            "command": "metaharness.observations.ReadToolOutcome",
+            "outcome": "success-without-code"
+          }
+        },
+        {
+          "kind": "event",
+          "name": "metaharness.boundaries.CallDecided"
+        },
+        {
+          "kind": "event",
+          "name": "metaharness.boundaries.FileRead"
+        },
+        {
+          "kind": "event",
+          "name": "metaharness.boundaries.FrameRead"
+        },
+        {
+          "kind": "event",
+          "name": "metaharness.observations.NativeStatusClassified"
+        },
+        {
+          "kind": "event",
+          "name": "metaharness.observations.PresenceRead"
+        },
+        {
+          "kind": "event",
+          "name": "metaharness.observations.ToolOutcomeRead"
+        },
+        {
+          "kind": "event",
+          "name": "metaharness.session.ClosureRecorded"
+        },
+        {
+          "kind": "event",
+          "name": "metaharness.session.CompletionClassified"
+        },
+        {
+          "kind": "event",
+          "name": "metaharness.session.StreamClassified"
+        },
+        {
+          "kind": "event",
+          "name": "metaharness.spending.AdmissionRecorded"
+        },
+        {
+          "kind": "event",
+          "name": "metaharness.spending.FiniteLedgerRecorded"
+        }
+      ],
+      "steps": [
+        {
+          "command": "metaharness.observations.ReadToolOutcome",
+          "input": {
+            "evidence": {
+              "kind": "literal",
+              "value": "tool-patch-success"
+            }
+          },
+          "step": "execute_command"
+        },
+        {
+          "outcome": {
+            "command": "metaharness.observations.ReadToolOutcome",
+            "outcome": "success-without-code"
+          },
+          "step": "expect_outcome"
+        },
+        {
+          "event": "metaharness.observations.ToolOutcomeRead",
+          "payload": {
+            "failed": false,
+            "known": true,
+            "numeric_exit": false
+          },
+          "shape": {
+            "failed": {
+              "holds": "primitive",
+              "kind": "boolean"
+            },
+            "known": {
+              "holds": "primitive",
+              "kind": "boolean"
+            },
+            "numeric_exit": {
+              "holds": "primitive",
+              "kind": "boolean"
+            }
+          },
+          "step": "expect_event"
+        },
+        {
+          "event": "metaharness.boundaries.CallDecided",
+          "step": "expect_no_event"
+        },
+        {
+          "event": "metaharness.boundaries.FileRead",
+          "step": "expect_no_event"
+        },
+        {
+          "event": "metaharness.boundaries.FrameRead",
+          "step": "expect_no_event"
+        },
+        {
+          "event": "metaharness.observations.NativeStatusClassified",
+          "step": "expect_no_event"
+        },
+        {
+          "event": "metaharness.observations.PresenceRead",
+          "step": "expect_no_event"
+        },
+        {
+          "event": "metaharness.session.ClosureRecorded",
+          "step": "expect_no_event"
+        },
+        {
+          "event": "metaharness.session.CompletionClassified",
+          "step": "expect_no_event"
+        },
+        {
+          "event": "metaharness.session.StreamClassified",
+          "step": "expect_no_event"
+        },
+        {
+          "event": "metaharness.spending.AdmissionRecorded",
+          "step": "expect_no_event"
+        },
+        {
+          "event": "metaharness.spending.FiniteLedgerRecorded",
+          "step": "expect_no_event"
+        }
+      ]
+    },
+    "metaharness.observations.ReadToolOutcome/outcome/unverified": {
+      "purpose": "`metaharness.observations.ReadToolOutcome` answers `unverified` for an input no other branch's guard claims",
+      "source": [
+        {
+          "kind": "type",
+          "name": "metaharness.observations.ToolEvidence"
+        },
+        {
+          "kind": "command",
+          "name": "metaharness.observations.ReadToolOutcome"
+        },
+        {
+          "kind": "outcome",
+          "name": {
+            "command": "metaharness.observations.ReadToolOutcome",
+            "outcome": "unverified"
+          }
+        },
+        {
+          "kind": "event",
+          "name": "metaharness.boundaries.CallDecided"
+        },
+        {
+          "kind": "event",
+          "name": "metaharness.boundaries.FileRead"
+        },
+        {
+          "kind": "event",
+          "name": "metaharness.boundaries.FrameRead"
+        },
+        {
+          "kind": "event",
+          "name": "metaharness.observations.NativeStatusClassified"
+        },
+        {
+          "kind": "event",
+          "name": "metaharness.observations.PresenceRead"
+        },
+        {
+          "kind": "event",
+          "name": "metaharness.observations.ToolOutcomeRead"
+        },
+        {
+          "kind": "event",
+          "name": "metaharness.session.ClosureRecorded"
+        },
+        {
+          "kind": "event",
+          "name": "metaharness.session.CompletionClassified"
+        },
+        {
+          "kind": "event",
+          "name": "metaharness.session.StreamClassified"
+        },
+        {
+          "kind": "event",
+          "name": "metaharness.spending.AdmissionRecorded"
+        },
+        {
+          "kind": "event",
+          "name": "metaharness.spending.FiniteLedgerRecorded"
+        }
+      ],
+      "steps": [
+        {
+          "command": "metaharness.observations.ReadToolOutcome",
+          "input": {
+            "evidence": {
+              "kind": "literal",
+              "value": "tool-unmatched"
+            }
+          },
+          "step": "execute_command"
+        },
+        {
+          "outcome": {
+            "command": "metaharness.observations.ReadToolOutcome",
+            "outcome": "unverified"
+          },
+          "step": "expect_outcome"
+        },
+        {
+          "event": "metaharness.observations.ToolOutcomeRead",
+          "payload": {
+            "failed": false,
+            "known": false,
+            "numeric_exit": false
+          },
+          "shape": {
+            "failed": {
+              "holds": "primitive",
+              "kind": "boolean"
+            },
+            "known": {
+              "holds": "primitive",
+              "kind": "boolean"
+            },
+            "numeric_exit": {
+              "holds": "primitive",
+              "kind": "boolean"
+            }
+          },
+          "step": "expect_event"
+        },
+        {
+          "event": "metaharness.boundaries.CallDecided",
+          "step": "expect_no_event"
+        },
+        {
+          "event": "metaharness.boundaries.FileRead",
+          "step": "expect_no_event"
+        },
+        {
+          "event": "metaharness.boundaries.FrameRead",
+          "step": "expect_no_event"
+        },
+        {
+          "event": "metaharness.observations.NativeStatusClassified",
+          "step": "expect_no_event"
+        },
+        {
+          "event": "metaharness.observations.PresenceRead",
+          "step": "expect_no_event"
+        },
+        {
           "event": "metaharness.session.ClosureRecorded",
           "step": "expect_no_event"
         },
@@ -1232,6 +2659,14 @@
         {
           "kind": "event",
           "name": "metaharness.observations.NativeStatusClassified"
+        },
+        {
+          "kind": "event",
+          "name": "metaharness.observations.PresenceRead"
+        },
+        {
+          "kind": "event",
+          "name": "metaharness.observations.ToolOutcomeRead"
         },
         {
           "kind": "event",
@@ -1321,6 +2756,14 @@
         },
         {
           "event": "metaharness.observations.NativeStatusClassified",
+          "step": "expect_no_event"
+        },
+        {
+          "event": "metaharness.observations.PresenceRead",
+          "step": "expect_no_event"
+        },
+        {
+          "event": "metaharness.observations.ToolOutcomeRead",
           "step": "expect_no_event"
         },
         {
@@ -1476,6 +2919,14 @@
         },
         {
           "kind": "event",
+          "name": "metaharness.observations.PresenceRead"
+        },
+        {
+          "kind": "event",
+          "name": "metaharness.observations.ToolOutcomeRead"
+        },
+        {
+          "kind": "event",
           "name": "metaharness.session.ClosureRecorded"
         },
         {
@@ -1562,6 +3013,14 @@
         },
         {
           "event": "metaharness.observations.NativeStatusClassified",
+          "step": "expect_no_event"
+        },
+        {
+          "event": "metaharness.observations.PresenceRead",
+          "step": "expect_no_event"
+        },
+        {
+          "event": "metaharness.observations.ToolOutcomeRead",
           "step": "expect_no_event"
         },
         {
@@ -1684,6 +3143,14 @@
         },
         {
           "kind": "event",
+          "name": "metaharness.observations.PresenceRead"
+        },
+        {
+          "kind": "event",
+          "name": "metaharness.observations.ToolOutcomeRead"
+        },
+        {
+          "kind": "event",
           "name": "metaharness.session.ClosureRecorded"
         },
         {
@@ -1773,6 +3240,14 @@
           "step": "expect_no_event"
         },
         {
+          "event": "metaharness.observations.PresenceRead",
+          "step": "expect_no_event"
+        },
+        {
+          "event": "metaharness.observations.ToolOutcomeRead",
+          "step": "expect_no_event"
+        },
+        {
           "event": "metaharness.session.ClosureRecorded",
           "step": "expect_no_event"
         },
@@ -1831,6 +3306,14 @@
         {
           "kind": "event",
           "name": "metaharness.observations.NativeStatusClassified"
+        },
+        {
+          "kind": "event",
+          "name": "metaharness.observations.PresenceRead"
+        },
+        {
+          "kind": "event",
+          "name": "metaharness.observations.ToolOutcomeRead"
         },
         {
           "kind": "event",
@@ -1909,6 +3392,14 @@
           "step": "expect_no_event"
         },
         {
+          "event": "metaharness.observations.PresenceRead",
+          "step": "expect_no_event"
+        },
+        {
+          "event": "metaharness.observations.ToolOutcomeRead",
+          "step": "expect_no_event"
+        },
+        {
           "event": "metaharness.session.ClosureRecorded",
           "step": "expect_no_event"
         },
@@ -1967,6 +3458,14 @@
         {
           "kind": "event",
           "name": "metaharness.observations.NativeStatusClassified"
+        },
+        {
+          "kind": "event",
+          "name": "metaharness.observations.PresenceRead"
+        },
+        {
+          "kind": "event",
+          "name": "metaharness.observations.ToolOutcomeRead"
         },
         {
           "kind": "event",
@@ -2045,6 +3544,14 @@
           "step": "expect_no_event"
         },
         {
+          "event": "metaharness.observations.PresenceRead",
+          "step": "expect_no_event"
+        },
+        {
+          "event": "metaharness.observations.ToolOutcomeRead",
+          "step": "expect_no_event"
+        },
+        {
           "event": "metaharness.session.ClosureRecorded",
           "step": "expect_no_event"
         },
@@ -2103,6 +3610,14 @@
         {
           "kind": "event",
           "name": "metaharness.observations.NativeStatusClassified"
+        },
+        {
+          "kind": "event",
+          "name": "metaharness.observations.PresenceRead"
+        },
+        {
+          "kind": "event",
+          "name": "metaharness.observations.ToolOutcomeRead"
         },
         {
           "kind": "event",
@@ -2181,6 +3696,14 @@
           "step": "expect_no_event"
         },
         {
+          "event": "metaharness.observations.PresenceRead",
+          "step": "expect_no_event"
+        },
+        {
+          "event": "metaharness.observations.ToolOutcomeRead",
+          "step": "expect_no_event"
+        },
+        {
           "event": "metaharness.session.ClosureRecorded",
           "step": "expect_no_event"
         },
@@ -2255,6 +3778,14 @@
         },
         {
           "kind": "event",
+          "name": "metaharness.observations.PresenceRead"
+        },
+        {
+          "kind": "event",
+          "name": "metaharness.observations.ToolOutcomeRead"
+        },
+        {
+          "kind": "event",
           "name": "metaharness.session.ClosureRecorded"
         },
         {
@@ -2314,6 +3845,14 @@
         },
         {
           "event": "metaharness.observations.NativeStatusClassified",
+          "step": "expect_no_event"
+        },
+        {
+          "event": "metaharness.observations.PresenceRead",
+          "step": "expect_no_event"
+        },
+        {
+          "event": "metaharness.observations.ToolOutcomeRead",
           "step": "expect_no_event"
         },
         {
@@ -2439,6 +3978,14 @@
         },
         {
           "kind": "event",
+          "name": "metaharness.observations.PresenceRead"
+        },
+        {
+          "kind": "event",
+          "name": "metaharness.observations.ToolOutcomeRead"
+        },
+        {
+          "kind": "event",
           "name": "metaharness.session.ClosureRecorded"
         },
         {
@@ -2504,6 +4051,14 @@
           "step": "expect_no_event"
         },
         {
+          "event": "metaharness.observations.PresenceRead",
+          "step": "expect_no_event"
+        },
+        {
+          "event": "metaharness.observations.ToolOutcomeRead",
+          "step": "expect_no_event"
+        },
+        {
           "event": "metaharness.session.ClosureRecorded",
           "step": "expect_no_event"
         },
@@ -2558,6 +4113,14 @@
         {
           "kind": "event",
           "name": "metaharness.observations.NativeStatusClassified"
+        },
+        {
+          "kind": "event",
+          "name": "metaharness.observations.PresenceRead"
+        },
+        {
+          "kind": "event",
+          "name": "metaharness.observations.ToolOutcomeRead"
         },
         {
           "kind": "event",
@@ -2660,6 +4223,14 @@
           "step": "expect_no_event"
         },
         {
+          "event": "metaharness.observations.PresenceRead",
+          "step": "expect_no_event"
+        },
+        {
+          "event": "metaharness.observations.ToolOutcomeRead",
+          "step": "expect_no_event"
+        },
+        {
           "event": "metaharness.session.ClosureRecorded",
           "step": "expect_no_event"
         },
@@ -2738,6 +4309,14 @@
         {
           "kind": "event",
           "name": "metaharness.observations.NativeStatusClassified"
+        },
+        {
+          "kind": "event",
+          "name": "metaharness.observations.PresenceRead"
+        },
+        {
+          "kind": "event",
+          "name": "metaharness.observations.ToolOutcomeRead"
         },
         {
           "kind": "event",
@@ -2841,6 +4420,14 @@
           "step": "expect_no_event"
         },
         {
+          "event": "metaharness.observations.PresenceRead",
+          "step": "expect_no_event"
+        },
+        {
+          "event": "metaharness.observations.ToolOutcomeRead",
+          "step": "expect_no_event"
+        },
+        {
           "event": "metaharness.session.ClosureRecorded",
           "step": "expect_no_event"
         },
@@ -2922,6 +4509,14 @@
         },
         {
           "kind": "event",
+          "name": "metaharness.observations.PresenceRead"
+        },
+        {
+          "kind": "event",
+          "name": "metaharness.observations.ToolOutcomeRead"
+        },
+        {
+          "kind": "event",
           "name": "metaharness.session.ClosureRecorded"
         },
         {
@@ -2985,6 +4580,14 @@
         },
         {
           "event": "metaharness.observations.NativeStatusClassified",
+          "step": "expect_no_event"
+        },
+        {
+          "event": "metaharness.observations.PresenceRead",
+          "step": "expect_no_event"
+        },
+        {
+          "event": "metaharness.observations.ToolOutcomeRead",
           "step": "expect_no_event"
         },
         {
@@ -3123,6 +4726,14 @@
         },
         {
           "kind": "event",
+          "name": "metaharness.observations.PresenceRead"
+        },
+        {
+          "kind": "event",
+          "name": "metaharness.observations.ToolOutcomeRead"
+        },
+        {
+          "kind": "event",
           "name": "metaharness.session.ClosureRecorded"
         },
         {
@@ -3182,6 +4793,14 @@
         },
         {
           "event": "metaharness.observations.NativeStatusClassified",
+          "step": "expect_no_event"
+        },
+        {
+          "event": "metaharness.observations.PresenceRead",
+          "step": "expect_no_event"
+        },
+        {
+          "event": "metaharness.observations.ToolOutcomeRead",
           "step": "expect_no_event"
         },
         {
@@ -3250,6 +4869,14 @@
         },
         {
           "kind": "event",
+          "name": "metaharness.observations.PresenceRead"
+        },
+        {
+          "kind": "event",
+          "name": "metaharness.observations.ToolOutcomeRead"
+        },
+        {
+          "kind": "event",
           "name": "metaharness.session.ClosureRecorded"
         },
         {
@@ -3309,6 +4936,14 @@
         },
         {
           "event": "metaharness.observations.NativeStatusClassified",
+          "step": "expect_no_event"
+        },
+        {
+          "event": "metaharness.observations.PresenceRead",
+          "step": "expect_no_event"
+        },
+        {
+          "event": "metaharness.observations.ToolOutcomeRead",
           "step": "expect_no_event"
         },
         {
@@ -3442,6 +5077,14 @@
         },
         {
           "kind": "event",
+          "name": "metaharness.observations.PresenceRead"
+        },
+        {
+          "kind": "event",
+          "name": "metaharness.observations.ToolOutcomeRead"
+        },
+        {
+          "kind": "event",
           "name": "metaharness.session.ClosureRecorded"
         },
         {
@@ -3538,6 +5181,14 @@
           "step": "expect_no_event"
         },
         {
+          "event": "metaharness.observations.PresenceRead",
+          "step": "expect_no_event"
+        },
+        {
+          "event": "metaharness.observations.ToolOutcomeRead",
+          "step": "expect_no_event"
+        },
+        {
           "event": "metaharness.session.ClosureRecorded",
           "step": "expect_no_event"
         },
@@ -3619,6 +5270,14 @@
         },
         {
           "kind": "event",
+          "name": "metaharness.observations.PresenceRead"
+        },
+        {
+          "kind": "event",
+          "name": "metaharness.observations.ToolOutcomeRead"
+        },
+        {
+          "kind": "event",
           "name": "metaharness.session.ClosureRecorded"
         },
         {
@@ -3678,6 +5337,14 @@
         },
         {
           "event": "metaharness.observations.NativeStatusClassified",
+          "step": "expect_no_event"
+        },
+        {
+          "event": "metaharness.observations.PresenceRead",
+          "step": "expect_no_event"
+        },
+        {
+          "event": "metaharness.observations.ToolOutcomeRead",
           "step": "expect_no_event"
         },
         {

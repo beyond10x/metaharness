@@ -39,6 +39,36 @@ pub enum ProcessTermination {
     Unknown,
 }
 
+/// An answer explicitly identified by a successful terminal record, never selected from prose.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct FinalAnswer {
+    /// The terminal answer's exact text.
+    pub text: String,
+    /// The vendor's turn identifier, when recorded.
+    pub turn_id: Option<String>,
+}
+
+/// What an observed model name establishes.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum ModelObservationScope {
+    /// Vendor-recorded selection for a turn; not proof of a provider's eventual serving model.
+    TurnSelection,
+}
+
+/// Model identity read from a vendor record, with its scope preserved.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct ObservedModel {
+    /// The normalized turn number.
+    pub turn: u32,
+    /// The vendor turn identifier, when available.
+    pub turn_id: Option<String>,
+    /// The name actually recorded; absent means the record did not identify a model.
+    pub model: Option<String>,
+    /// The observation's meaning, not an inferred serving identity.
+    pub scope: ModelObservationScope,
+}
+
 /// Short codes for [`Event::Warning`], so an embedder can match on one without matching prose.
 pub mod warning_code {
     /// The vendor binary's version is outside the adapter's pin (design § 8.4 O1).
@@ -405,6 +435,12 @@ pub enum Event {
     /// The terminal record: the source of every resource fact.
     #[serde(rename = "session.ended")]
     SessionEnded {
+        /// Authoritative terminal answer, absent on failure or without explicit evidence.
+        #[serde(default)]
+        final_answer: Option<FinalAnswer>,
+        /// Scoped vendor model selections; requested launch configuration is not evidence.
+        #[serde(default)]
+        observed_models: Option<Vec<ObservedModel>>,
         /// Whether the vendor called it an error.
         is_error: Option<bool>,
         /// The vendor's own result subtype.
@@ -594,6 +630,12 @@ pub enum Event {
     /// What the tool returned.
     #[serde(rename = "tool.result")]
     ToolResult {
+        /// A correlated measured command exit code, never parsed from formatted output.
+        #[serde(default)]
+        exit_code: Option<i32>,
+        /// The normalized evidence source; absent when an outcome remains unverified.
+        #[serde(default)]
+        outcome_source: Option<String>,
         /// The call this answers.
         call_id: String,
         /// Whether the vendor called it an error.

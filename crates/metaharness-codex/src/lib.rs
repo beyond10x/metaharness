@@ -56,6 +56,7 @@
 mod bridge;
 mod hook;
 mod launch;
+mod observations;
 mod rollout;
 mod seam;
 mod vectors;

@@ -1,6 +1,6 @@
 {
   "format": "trace-ir/1",
-  "transcript_digest": "8a9adac7c4e0e434f448e2527ced6dc7f0fb5fbbb30b62ffde459f82d9143a38",
+  "transcript_digest": "8cdf86c77417a5bd7e0640404599152ab7edf1651ac02c5f85e93b88279e64f4",
   "adapter": {
     "name": "metaharness/project",
     "written_against": [
@@ -112,7 +112,9 @@
         "call_id": "toolu_2",
         "content": "[{\"id\":\"epic:passkey-sign-in\",\"status\":\"active\"},{\"id\":\"story:passkey-login\",\"status\":\"active\"}]",
         "event": "tool_result",
+        "exit_code": null,
         "is_error": null,
+        "outcome_source": null,
         "tool_use_result": {
           "interrupted": false,
           "stderr": "",
@@ -147,7 +149,9 @@
         "call_id": "toolu_3",
         "content": "epic:passkey-sign-in\n  <- decomposes story:passkey-login",
         "event": "tool_result",
+        "exit_code": null,
         "is_error": null,
+        "outcome_source": null,
         "tool_use_result": {
           "interrupted": false,
           "stderr": "",
@@ -182,7 +186,9 @@
         "call_id": "toolu_4",
         "content": "# Epic: Passkey sign-in",
         "event": "tool_result",
+        "exit_code": null,
         "is_error": null,
+        "outcome_source": null,
         "tool_use_result": {
           "file": {
             "filePath": "/scratch/project/.engineering/planning/epic/passkey-sign-in.md"
@@ -217,7 +223,9 @@
         "call_id": "toolu_5",
         "content": "9 file(s) in .engineering/planning: 9 artifact(s)\nvalid",
         "event": "tool_result",
+        "exit_code": null,
         "is_error": null,
+        "outcome_source": null,
         "tool_use_result": {
           "interrupted": false,
           "stderr": "",
@@ -235,7 +243,9 @@
         "call_id": "toolu_1",
         "content": "9 artifacts read, 1 finding. Proposed: protocol artifact move epic:passkey-sign-in --to implemented. validate is clean.",
         "event": "tool_result",
+        "exit_code": null,
         "is_error": null,
+        "outcome_source": null,
         "tool_use_result": null
       }
     },
@@ -268,9 +278,11 @@
         "duration_api_ms": 14700,
         "duration_ms": 15600,
         "event": "run_outcome",
+        "final_answer": null,
         "is_error": false,
         "model_usage": null,
         "num_turns": 6,
+        "observed_models": null,
         "permission_denials": [],
         "stop_reason": "end_turn",
         "subagents_spawned": 1,

@@ -443,6 +443,8 @@ impl HarnessSeam for ScriptedSeam {
                 hermetic: self.attestation.clone(),
             },
             "session.ended" => Event::SessionEnded {
+                final_answer: None,
+                observed_models: None,
                 is_error: value.get("is_error").and_then(Value::as_bool),
                 subtype: text_of(&value, "subtype"),
                 stop_reason: text_of(&value, "stop_reason"),
@@ -473,6 +475,8 @@ impl HarnessSeam for ScriptedSeam {
                 seam: self.seam,
             },
             "tool.result" => Event::ToolResult {
+                exit_code: None,
+                outcome_source: None,
                 call_id: text_of(&value, "call_id").unwrap_or_default(),
                 is_error: value.get("is_error").and_then(Value::as_bool),
                 content: value.get("content").cloned(),

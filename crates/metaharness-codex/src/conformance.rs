@@ -49,3 +49,68 @@ pub fn governed_request(shape: &str) -> Result<(&'static str, Value), &'static s
         _ => Err("unsupported governed-call shape"),
     }
 }
+
+/// Feed a synthetic observation class through the actual rollout decoder.
+///
+/// # Errors
+/// Refuses any evidence class outside this bounded corpus.
+pub fn observation(evidence: &str) -> Result<Vec<Event>, &'static str> {
+    let mut records: Vec<(&str, Value)> = Vec::new();
+    let mut complete = json!({"type":"task_complete","error":null});
+    match evidence {
+        "final-answer" => complete["last_agent_message"] = json!("answer"),
+        "commentary-only" => records.push((
+            "event_msg",
+            json!({"type":"agent_message","message":"not a terminal answer"}),
+        )),
+        "failed-after-text" => {
+            complete["last_agent_message"] = json!("partial");
+            complete["error"] = json!({"message":"failed"});
+        }
+        "model-known" | "model-missing" => {
+            let mut context = json!({"turn_id":"fixture-turn"});
+            if evidence == "model-known" {
+                context["model"] = json!("observed-model");
+            }
+            records.push(("turn_context", context));
+        }
+        "tool-success" | "tool-failure" | "tool-denied" | "tool-patch-success"
+        | "tool-unmatched" | "tool-contradictory" | "tool-incomplete" => {
+            if evidence != "tool-unmatched" {
+                records.push(("response_item",json!({"type":"function_call","call_id":"fixture-call","name":if evidence == "tool-patch-success" {"apply_patch"} else {"exec_command"},"arguments":"{}"})));
+            }
+            let command = |status: &str, code: Value| json!({"type":"item_completed","item":{"type":"CommandExecution","id":"fixture-call","status":status,"exit_code":code}});
+            match evidence {
+                "tool-incomplete" => records.push(("response_item",json!({"type":"function_call_output","call_id":"fixture-call","output":"Process exited with code 0"}))),
+                "tool-patch-success" => records.push(("event_msg",json!({"type":"patch_apply_end","call_id":"fixture-call","status":"completed","success":true}))),
+                "tool-failure" => records.push(("event_msg",command("failed",json!(7)))),
+                "tool-denied" => records.push(("event_msg",command("declined",Value::Null))),
+                _ => {
+                    records.push(("event_msg",command("completed",json!(0))));
+                    if evidence == "tool-contradictory" { records.push(("event_msg",command("failed",json!(7)))); }
+                }
+            }
+        }
+        _ => return Err("unsupported observation evidence"),
+    }
+    records.push(("event_msg", complete));
+    let mut reader = crate::RolloutReader::new(
+        TranscriptRef {
+            path: None,
+            digest: None,
+            bytes: None,
+        },
+        HermeticAttestation::none(HermeticMode::Off),
+    );
+    let mut events = Vec::new();
+    for (kind, payload) in records {
+        events.extend(
+            reader
+                .push_line(&json!({"type":kind,"payload":payload}).to_string())
+                .into_iter()
+                .map(|emission| emission.event),
+        );
+    }
+    events.extend(reader.finish().into_iter().map(|emission| emission.event));
+    Ok(events)
+}

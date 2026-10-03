@@ -16,7 +16,7 @@ production target in `crates/metaharness-aep/src/drive/ess_conformance.rs`.
 CI installs ESS 0.51.0 from commit
 `0347ffa222939e3791e574d2dbe42d4b4b02d979`. Use that compiler locally.
 
-The committed count is **27 selected scenarios**: 27 passed, zero failed,
+The committed count is **36 selected scenarios**: 36 passed, zero failed,
 skipped, unsupported or synthesis refusals. Unknown suite versions, steps,
 bindings, shapes and predicates fail closed. The target handles only the
 constructs this suite uses; extending the specification may require extending it.
@@ -25,6 +25,7 @@ constructs this suite uses; extending the specification may require extending it
 |---|---|
 | Terminal and unknown evidence | Adapter-owned synthetic inputs traverse RolloutReader; normalized is_error is read back and absent cost must remain None. |
 | Stream closure | A real Run over ScriptedRunner produces closing reason and event count. No vendor process or model starts. |
+| Final answer, model selection and tool outcome | Adapter-owned synthetic inputs traverse the production Codex reader. Nine generated outcome scenarios read normalized terminal and tool fields; absent or contradictory evidence stays unknown. Source mappings are documented in `docs/research/2026-10-03-codex-observations.md`, with native qualification pending. |
 | Native termination | The real protocol reader distinguishes missing, zero, nonzero and signal evidence. Separate Rust executable fixtures drive both real spawn runners through measured exit0, exit7 and SIGKILL, unavailable wait status, and terminal failure with exit0. |
 | Frame integrity | The AEP driver mints a frame and Frame::parse_document reads it; modified and untagged frames are refused. |
 | Tool decisions | Production Codex mapping and answer_events consult a real AEP engine; malformed, patch and unsupported calls are denied. |
@@ -67,21 +68,28 @@ The 2026-10-03 audit followed the planted-defect rule:
 - Removing production admission persistence failed
   InvocationAdmission/invariant/at/metaharness.spending.RetainedAdmission/admission.
   Restoration passed. A target remembering only its intended count would miss this.
+- Removing production final-answer extraction failed
+  ReadFinalAnswer/outcome/authoritative (35 passed, one failed). Restoration passed.
 - `ess verify conform mutate --class guard-negate --emit ...`, execution of every
-  emitted suite against production, and `--collect ...` killed **10 of 10 mutants**.
-  No survivors, inconclusive, unwitnessed or equivalent mutants. Baseline: 24
+  emitted suite against production, and `--collect ...` killed **18 of 18 mutants**.
+  No survivors, inconclusive, unwitnessed or equivalent mutants. Baseline: 36
   scenarios, zero refusals. Other mutation classes were not claimed.
 
 Local design comparison found the unobservable invariants, indistinguishable
 outcomes and blank-reference discrepancy above. It was coordinator review, not an
 independent agent review: workers exhausted their host quota. It covered this
-projection against amendments a18–a20, not every older design section.
+projection against amendments a18–a22, not every older design section.
+A local adversarial regression caught reused call identifiers invalidating internal
+state while leaving the last public result as success. The implementation now
+emits an unknown result and warning; the regression passes after first failing.
 
 The native-status extension under amendment a21 adds three wire-reading scenarios
-to that 24-case baseline. Its producer is checked by actual credential-free Rust
-subprocesses in `tests/native_termination.rs`; it does not qualify a vendor binary.
-The ten-mutant audit above describes the original boundary model, not additional
-mutants of the new native-status guards.
+and a22 adds nine Codex observation outcomes to the original 24-case baseline.
+Native-status production is checked by actual credential-free Rust subprocesses
+in `tests/native_termination.rs`; it does not qualify a vendor binary. The final
+18-mutant audit includes the additional native-status and Codex observation guards.
+Six mutants add synthesis refusals, but each is killed by executed scenarios;
+none scores unwitnessed or inconclusive. The unchanged baseline has zero refusals.
 
 Random state-machine exploration, caller replay, exhaustive guard analysis,
 determinism certification and metamorphic certification were not run. This model

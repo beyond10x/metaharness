@@ -234,6 +234,8 @@ impl TranscriptReader {
     /// The terminal record: the source of every resource fact.
     fn session_ended(&self, record: &Record) -> Event {
         Event::SessionEnded {
+            final_answer: None,
+            observed_models: None,
             is_error: record.get("is_error").and_then(Value::as_bool),
             subtype: str_field(record, "subtype"),
             stop_reason: str_field(record, "stop_reason"),
@@ -541,6 +543,8 @@ fn user_block(
         "tool_result" => {
             let content = block.get("content").cloned();
             Event::ToolResult {
+                exit_code: None,
+                outcome_source: None,
                 call_id: block
                     .get("tool_use_id")
                     .and_then(Value::as_str)
@@ -1128,6 +1132,8 @@ mod tests {
         assert_eq!(
             event,
             Event::ToolResult {
+                exit_code: None,
+                outcome_source: None,
                 call_id: "call-1".to_string(),
                 is_error: Some(false),
                 content: Some(Value::String("four".to_string())),

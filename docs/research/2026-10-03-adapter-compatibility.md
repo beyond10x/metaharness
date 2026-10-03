@@ -30,8 +30,8 @@ unchanged. This does not prove a model run, every filesystem operation, process 
 or a governed b10x execution. The pinned owned-tools conformance target separately denies an
 outside symlink; it does not qualify the installed binary.
 
-Offline evidence is the integration `task check`: 744 passed, 13 existing live tests ignored;
-24 ESS scenarios passed with no skips or refusals. Synthetic tests prove the tested parser,
+Offline evidence is the integration `task check`: 761 passed, 13 existing live tests ignored;
+36 ESS scenarios passed with no skips or refusals. Synthetic tests prove the tested parser,
 launch and authorization paths, not how these installed vendor binaries behave. No live
 transcript was captured in this continuation. Existing historical evidence is not relabelled
 as evidence of the current installed releases.
@@ -51,3 +51,14 @@ success, failure, a supported tool decision, cancellation, usage and declared co
 each release. Add only sanitized synthetic regression vectors to source; private transcripts
 stay outside Git. Advance a pin only after the relevant matrix is complete. An empty pin
 change does not satisfy the issue.
+
+## Added observation issues
+
+Source-backed Codex #18–20 mappings and their limits are recorded in
+[Codex observation provenance](2026-10-03-codex-observations.md). Final-answer,
+turn model and tool outcome regressions are green offline. Native acceptance is
+still open. Default legacy history omits command completion status, so #20 also
+needs a verified additional observation path; a budget alone cannot fill that gap.
+The final 36-scenario suite kills 18 of 18 guard-negation mutants and catches a
+planted production final-answer defect. These counts qualify this bounded model,
+not installed vendor behavior.

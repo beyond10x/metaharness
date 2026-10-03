@@ -75,6 +75,58 @@ fn frame() -> Frame {
 }
 
 /// The two lifecycle events, whose payloads are the IR's whole field sets (finding F11).
+fn ended_event() -> Event {
+    Event::SessionEnded {
+        final_answer: None,
+        observed_models: None,
+        is_error: Some(false),
+        subtype: Some("success".into()),
+        stop_reason: Some("end_turn".into()),
+        terminal_reason: Some("completed".into()),
+        api_error_status: None,
+        num_turns: Some(4),
+        duration_ms: Some(1000),
+        duration_api_ms: Some(900),
+        ttft_ms: Some(300),
+        time_to_request_ms: Some(30),
+        total_cost_usd: Some(0.12),
+        permission_denials: Some(vec![PermissionDenial {
+            tool_name: Some("Bash".into()),
+            tool_use_id: Some("call-1".into()),
+            tool_input: Some(json!({"command": "true"})),
+        }]),
+        subagents_spawned: Some(0),
+        usage: Some(Usage {
+            input_tokens: Some(10),
+            output_tokens: Some(20),
+            cache_read_input_tokens: Some(0),
+            cache_creation_input_tokens: Some(0),
+            service_tier: Some("standard".into()),
+            thinking_tokens: Some(64),
+            iterations: Some(3),
+            speed: Some("standard".into()),
+            // The aggregate carries no cost: the run's own figure is `total_cost_usd` above
+            // and the priced slice is the per-model record below (amendment a9).
+            cost_usd: None,
+        }),
+        model_usage: Some(BTreeMap::from([(
+            "a-model".to_string(),
+            Usage {
+                cost_usd: Some(0.12),
+                ..Usage::default()
+            },
+        )])),
+        census: DecisionCensus {
+            allowed: 3,
+            denied: 1,
+            replaced: 0,
+            abstained: 2,
+            by_seam: BTreeMap::from([("hook".to_string(), 4)]),
+            by_decider: BTreeMap::from([("frame".to_string(), 4)]),
+        },
+    }
+}
+
 fn session_events() -> Vec<Event> {
     vec![
         Event::SessionStarted {
@@ -133,53 +185,7 @@ fn session_events() -> Vec<Event> {
                 }],
             },
         },
-        Event::SessionEnded {
-            is_error: Some(false),
-            subtype: Some("success".into()),
-            stop_reason: Some("end_turn".into()),
-            terminal_reason: Some("completed".into()),
-            api_error_status: None,
-            num_turns: Some(4),
-            duration_ms: Some(1000),
-            duration_api_ms: Some(900),
-            ttft_ms: Some(300),
-            time_to_request_ms: Some(30),
-            total_cost_usd: Some(0.12),
-            permission_denials: Some(vec![PermissionDenial {
-                tool_name: Some("Bash".into()),
-                tool_use_id: Some("call-1".into()),
-                tool_input: Some(json!({"command": "true"})),
-            }]),
-            subagents_spawned: Some(0),
-            usage: Some(Usage {
-                input_tokens: Some(10),
-                output_tokens: Some(20),
-                cache_read_input_tokens: Some(0),
-                cache_creation_input_tokens: Some(0),
-                service_tier: Some("standard".into()),
-                thinking_tokens: Some(64),
-                iterations: Some(3),
-                speed: Some("standard".into()),
-                // The aggregate carries no cost: the run's own figure is `total_cost_usd` above
-                // and the priced slice is the per-model record below (amendment a9).
-                cost_usd: None,
-            }),
-            model_usage: Some(BTreeMap::from([(
-                "a-model".to_string(),
-                Usage {
-                    cost_usd: Some(0.12),
-                    ..Usage::default()
-                },
-            )])),
-            census: DecisionCensus {
-                allowed: 3,
-                denied: 1,
-                replaced: 0,
-                abstained: 2,
-                by_seam: BTreeMap::from([("hook".to_string(), 4)]),
-                by_decider: BTreeMap::from([("frame".to_string(), 4)]),
-            },
-        },
+        ended_event(),
     ]
 }
 
@@ -250,6 +256,8 @@ fn tool_and_accounting_events() -> Vec<Event> {
             latency_ms: Some(4),
         },
         Event::ToolResult {
+            exit_code: None,
+            outcome_source: None,
             call_id: "call-1".into(),
             is_error: Some(false),
             content: Some(json!("ok")),
@@ -466,6 +474,8 @@ fn a_known_name_with_a_bad_payload_is_malformed() {
 fn an_absent_payload_field_is_null_and_not_missing() {
     let mut stream = EventStream::new(RunId::new("r-1"));
     let line = stream.stamp(Emission::untimed(Event::ToolResult {
+        exit_code: None,
+        outcome_source: None,
         call_id: "call-1".into(),
         is_error: None,
         content: None,
@@ -493,6 +503,8 @@ fn the_four_fields_amendment_a9_added_survive_the_round_trip() {
     let mut stream = EventStream::new(RunId::new("r-1"));
 
     let line = stream.stamp(Emission::untimed(Event::ToolResult {
+        exit_code: None,
+        outcome_source: None,
         call_id: "call-1".into(),
         is_error: Some(false),
         content: Some(json!("Skill ran")),

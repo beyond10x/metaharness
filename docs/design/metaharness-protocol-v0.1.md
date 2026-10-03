@@ -1951,3 +1951,55 @@ refuse its absence. Contract source is prepared on the integration branch before
 consumer is changed; publishing and cross-repository adoption remain outside this
 unpublished wave. Executable Rust fixtures cover actual zero, nonzero and signal status,
 plus absent observations, terminal failure with exit0, and cleanup. No model is needed.
+
+## Amendment a22 — scoped Codex terminal and tool observations (2026-10-03)
+
+Issues #18–20 concern evidence a binary consumer must not reconstruct from vendor text.
+The source baseline is official Codex tag rust-v0.153.4, commit
+042fb41b7c813ac7999105e886b2b7aa715b5081. Source-backed mappings below remain unverified
+against a fresh native run and do not advance the existing adapter pin.
+
+`session.ended` gains optional `final_answer` (text and optional vendor turn_id) and
+`observed_models` (ordered turn-scoped selection observations). Old records deserialize
+both as absent. Only a successful terminal task_complete.last_agent_message supplies
+final_answer. Intermediate text, message phases and duplicate response/event renderings
+never supply it. Blank or missing final text, an unfinished newer turn, and any explicit
+terminal failure leave it absent. This is authoritative terminal-answer evidence, not a
+claim that its content satisfies a consumer's phase schema.
+
+Model observations name the model from an actual turn_context record, its optional
+turn_id and the normalized turn number, with scope `turn_selection`. Missing/blank model
+fields remain absent; repeated identical context observations are deduplicated. They
+are the vendor's recorded selection, not a requested launch option and not proof of the
+provider/model that ultimately served a rerouted request. The vendor's aggregate token
+counts stay unassigned to a model rather than attributing a cumulative total to the last
+turn's selection. No price is inferred. A terminal record retains observations across
+model changes; no observed terminal record means no terminal aggregate to invent.
+
+`tool.result` gains optional normalized `exit_code` and `outcome_source`. Existing
+is_error stays unknown unless a supported structured completion can be correlated to
+an observed call in the current turn. Supported sources are retained item_completed
+CommandExecution/FileChange items and legacy patch_apply_end records. Upstream creates
+item.id from call_id (core/src/tools/events.rs), so match that id and tool family, and
+match turn_id when both sides carry it. Never correlate by order, command text or output.
+An unmatched or contradictory record preserves unknown status and emits a warning;
+contradiction is sticky for that call. Incomplete commands stay unknown. Structured
+failed/declined outcomes are errors; command success requires completed status with
+measured exit0. Missing or inconsistent required metadata cannot become success.
+Patch status can prove success/failure without pretending there is a numeric exit code.
+
+Raw call-output content may arrive before or after structured completion. It remains
+content, never an outcome decoder. A subsequent tool.result for the same call can enrich
+or invalidate the observation; consumers admit only after complete framing and reconcile
+all records, with the last observation and any contradiction taken into account. Already
+known results survive a later content-only representation. Authorization remains only
+in tool.decided and is never derived from success, failure or native auto-approval.
+
+Codex's default legacy rollout does not retain ExecCommandEnd, and its function-call
+output serializer discards the internal success flag. Paginated history retains
+CommandExecution items; legacy history retains patch_apply_end. This implementation
+does not silently switch vendor history mode or parse formatted output. A legacy command
+without structured outcome therefore remains unverified; enabling another transport or
+history mode requires a separately verified correlation and native observation. The
+binary wire additions are optional fields on existing events; no event tags or frame/1
+bytes change. Source contract and synthetic regressions precede consumer adoption.

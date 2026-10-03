@@ -296,8 +296,70 @@ fn query(observed: &Observed, view: &str) -> Result<Value, String> {
     Ok(json!({field:projected}))
 }
 
+fn observed_codex(command: &str, input: &Value) -> Observed {
+    let events =
+        metaharness_codex::conformance::observation(input["evidence"].as_str().unwrap()).unwrap();
+    if command.ends_with("ReadToolOutcome") {
+        let (error, code) = events
+            .iter()
+            .rev()
+            .find_map(|event| match event {
+                Event::ToolResult {
+                    is_error,
+                    exit_code,
+                    ..
+                } => Some((*is_error, *exit_code)),
+                _ => None,
+            })
+            .unwrap();
+        let known = error.is_some();
+        let failed = error == Some(true);
+        let numeric_exit = code.is_some();
+        let outcome = match (known, failed, numeric_exit) {
+            (false, _, _) => "unverified",
+            (true, false, true) => "command-success",
+            (true, true, true) => "command-failure",
+            (true, false, false) => "success-without-code",
+            (true, true, false) => "failure-without-code",
+        };
+        event(
+            outcome,
+            "metaharness.observations.ToolOutcomeRead",
+            json!({"known":known,"failed":failed,"numeric_exit":numeric_exit}),
+        )
+    } else {
+        let Event::SessionEnded {
+            final_answer,
+            observed_models,
+            ..
+        } = events.last().unwrap()
+        else {
+            panic!("missing terminal")
+        };
+        let (present, yes, no) = if command.ends_with("ReadFinalAnswer") {
+            (final_answer.is_some(), "authoritative", "unavailable")
+        } else {
+            (
+                observed_models
+                    .as_ref()
+                    .is_some_and(|models| models.iter().any(|model| model.model.is_some())),
+                "observed-selection",
+                "unreported",
+            )
+        };
+        event(
+            if present { yes } else { no },
+            "metaharness.observations.PresenceRead",
+            json!({"present":present}),
+        )
+    }
+}
+
 fn execute(command: &str, input: &Value) -> Observed {
     match command {
+        "metaharness.observations.ReadFinalAnswer"
+        | "metaharness.observations.ReadObservedModel"
+        | "metaharness.observations.ReadToolOutcome" => observed_codex(command, input),
         "metaharness.observations.ReadNativeTermination" => {
             use metaharness::protocol::ProcessTermination;
             let mut closure = json!({"event":"stream.closed","events":0,"run_id":"ess-native","reason":"completed"});
@@ -544,7 +606,7 @@ fn ess_generated_scenarios_drive_production_targets() {
     if external.is_none() {
         assert_eq!(
             scenarios.len(),
-            27,
+            36,
             "review and update coverage deliberately"
         );
         assert_eq!(
@@ -561,6 +623,9 @@ fn ess_generated_scenarios_drive_production_targets() {
             "GovernCodexCall",
             "ReadSelectedWorkspaceFile",
             "ReadNativeTermination",
+            "ReadFinalAnswer",
+            "ReadObservedModel",
+            "ReadToolOutcome",
         ] {
             assert!(
                 scenarios.keys().any(|id| id.contains(command)),

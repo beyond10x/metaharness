@@ -794,6 +794,8 @@ fn the_census_is_read_from_the_terminal_record_when_there_is_one() {
         ..DecisionCensus::default()
     };
     let ended = Event::SessionEnded {
+        final_answer: None,
+        observed_models: None,
         is_error: Some(false),
         subtype: Some("success".to_string()),
         stop_reason: None,

@@ -19,20 +19,77 @@ types:
     kind: struct
     fields:
       - {name: turn_id, type: Optional<String>, presence: null_when_absent}
-      - {name: text, type: Optional<String>, presence: null_when_absent}
+      - {name: text, type: String}
   - name: metaharness.observations.ModelIdentity
     kind: struct
     fields:
+      - {name: turn, type: Integer}
       - {name: turn_id, type: Optional<String>, presence: null_when_absent}
       - {name: model, type: Optional<String>, presence: null_when_absent}
+      - {name: scope, type: String}
   - name: metaharness.observations.ToolOutcome
     kind: struct
     fields:
       - {name: call_id, type: String}
       - {name: is_error, type: Optional<Boolean>, presence: null_when_absent}
       - {name: exit_code, type: Optional<Integer>, presence: null_when_absent}
+      - {name: outcome_source, type: Optional<String>, presence: null_when_absent}
+  - name: metaharness.observations.FinalEvidence
+    kind: enum
+    variants: [final-answer, commentary-only, failed-after-text]
+  - name: metaharness.observations.ModelEvidence
+    kind: enum
+    variants: [model-known, model-missing]
+  - name: metaharness.observations.ToolEvidence
+    kind: enum
+    variants: [tool-success, tool-failure, tool-denied, tool-patch-success, tool-unmatched, tool-contradictory, tool-incomplete]
 
 commands:
+  - name: metaharness.observations.ReadFinalAnswer
+    input:
+      - {name: evidence, type: metaharness.observations.FinalEvidence}
+    outcomes:
+      - name: authoritative
+        when: evidence == final-answer
+        emits: [metaharness.observations.PresenceRead]
+        payload: {metaharness.observations.PresenceRead: {present: true}}
+      - name: unavailable
+        emits: [metaharness.observations.PresenceRead]
+        payload: {metaharness.observations.PresenceRead: {present: false}}
+  - name: metaharness.observations.ReadObservedModel
+    input:
+      - {name: evidence, type: metaharness.observations.ModelEvidence}
+    outcomes:
+      - name: observed-selection
+        when: evidence == model-known
+        emits: [metaharness.observations.PresenceRead]
+        payload: {metaharness.observations.PresenceRead: {present: true}}
+      - name: unreported
+        emits: [metaharness.observations.PresenceRead]
+        payload: {metaharness.observations.PresenceRead: {present: false}}
+  - name: metaharness.observations.ReadToolOutcome
+    input:
+      - {name: evidence, type: metaharness.observations.ToolEvidence}
+    outcomes:
+      - name: command-success
+        when: evidence == tool-success
+        emits: [metaharness.observations.ToolOutcomeRead]
+        payload: {metaharness.observations.ToolOutcomeRead: {known: true, failed: false, numeric_exit: true}}
+      - name: command-failure
+        when: evidence == tool-failure
+        emits: [metaharness.observations.ToolOutcomeRead]
+        payload: {metaharness.observations.ToolOutcomeRead: {known: true, failed: true, numeric_exit: true}}
+      - name: failure-without-code
+        when: evidence == tool-denied
+        emits: [metaharness.observations.ToolOutcomeRead]
+        payload: {metaharness.observations.ToolOutcomeRead: {known: true, failed: true, numeric_exit: false}}
+      - name: success-without-code
+        when: evidence == tool-patch-success
+        emits: [metaharness.observations.ToolOutcomeRead]
+        payload: {metaharness.observations.ToolOutcomeRead: {known: true, failed: false, numeric_exit: false}}
+      - name: unverified
+        emits: [metaharness.observations.ToolOutcomeRead]
+        payload: {metaharness.observations.ToolOutcomeRead: {known: false, failed: false, numeric_exit: false}}
   - name: metaharness.observations.ReadNativeTermination
     input:
       - {name: evidence, type: metaharness.observations.NativeEvidence}
@@ -53,6 +110,14 @@ commands:
         payload:
           metaharness.observations.NativeStatusClassified: {known: false, native_success: false}
 events:
+  - name: metaharness.observations.PresenceRead
+    fields:
+      - {name: present, type: Boolean}
+  - name: metaharness.observations.ToolOutcomeRead
+    fields:
+      - {name: known, type: Boolean}
+      - {name: failed, type: Boolean}
+      - {name: numeric_exit, type: Boolean}
   - name: metaharness.observations.NativeStatusClassified
     fields:
       - {name: known, type: Boolean}

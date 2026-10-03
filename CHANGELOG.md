@@ -7,20 +7,25 @@ was amended and the amendment is named here.
 
 ### Added
 
+- Codex terminal records expose an authoritative final answer and scoped observed model selections.
+  Structured retained tool completions expose correlated outcomes and numeric exits where observed;
+  missing, conflicting and legacy content-only results stay unknown. These mappings are source-backed
+  at Codex 0.153.4; native qualification remains pending (amendment a22).
+
 - Governed Codex steps use the existing ask seam and current AEP engine for each supported shell
   call. Unsupported operations are denied. Model and endpoint selection survive resume; current
   installed vendor releases remain unqualified (design amendment a19).
 - Governed runs can explicitly select `--uncapped-budget --spend-authorization <reference>`.
   Live opt-in remains required. Invocation admission is persisted before spawning, observed costs
   remain optional, and resume cannot change spending mode or authorization (amendment a19).
-- ESS validates the boundary specification in `task check`, executes 24 generated scenarios
-  against production code, and checks suite freshness. Hardening killed ten guard mutants and
-  detected planted specification and persistence defects. See `spec/coverage.md` for its bounds.
+- ESS validates the boundary specification in `task check`, executes 36 generated scenarios
+  against production code, and checks suite freshness. Hardening killed 18 guard mutants and
+  detected planted specification, persistence and terminal-answer defects. See `spec/coverage.md` for its bounds.
 
 ### Fixed
 
-- Codex explicit terminal errors and unsuccessful process exits now survive normalization,
-  stream closure and CLI exit. Incomplete terminal evidence cannot claim success (amendment a18).
+- Codex explicit terminal errors survive normalization, stream closure and CLI exit.
+  Native process status is retained separately on the final closure. Incomplete terminal evidence cannot claim success (amendment a18).
 - Explicitly selected managed `wt-*` workspaces use the existing confined native launch without
   requiring a `ws_` prefix; canonical directory checks and confinement refusals remain enforced
   (amendment a18).

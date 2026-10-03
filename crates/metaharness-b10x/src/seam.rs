@@ -308,6 +308,8 @@ impl HarnessSeam for B10xSeam {
                 seam: Seam::None,
             })],
             "tool-completed" => vec![Emission::untimed(Event::ToolResult {
+                exit_code: None,
+                outcome_source: None,
                 call_id: string("call_id").unwrap_or_default(),
                 is_error: value.get("failed").and_then(Value::as_bool),
                 // The loop's record names the outcome and not its bytes; a content field invented
@@ -362,6 +364,8 @@ impl HarnessSeam for B10xSeam {
                     .unwrap_or("unknown")
                     .to_owned();
                 vec![Emission::untimed(Event::SessionEnded {
+                    final_answer: None,
+                    observed_models: None,
                     is_error: Some(reason != "completed"),
                     subtype: Some(reason.clone()),
                     stop_reason: None,
