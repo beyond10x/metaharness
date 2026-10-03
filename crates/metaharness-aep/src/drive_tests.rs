@@ -1349,27 +1349,28 @@ fn b10x_step() -> LlmStep {
              {claude:?}"
         );
     }
-/// A confined workspace publishes the tools the arm needs, and an ordinary one says why not.
-    ///
-    /// The native arm could read a repository and change nothing in it, so a comparison against it
-    /// measured an arm that could not attempt the work. Substrate represents a workspace only when
-    /// its directory name starts with `ws_`, and publishes `run` only with a delegated subtree —
-    /// metaharness states the consequence plainly: *a run that may not execute its suite cannot see
-    /// a test fail before writing the code, so it will not write the code.*
+/// The selected directory uses the pinned substrate component rule, without a prefix.
     ///
     /// The two travel together on purpose. An arm given confinement without execution can write and
     /// not test; given execution without confinement it is refused at launch.
     #[test]
-    fn a_confined_workspace_gets_the_flags_that_let_the_arm_write_and_an_ordinary_one_does_not() {
+    fn a_confined_workspace_gets_flags_and_an_invalid_one_is_refused() {
+        let root = tempfile::tempdir().unwrap();
+        let selected = root.path().join("wt-selected");
+        let invalid = root.path().join("bad.name");
+        fs::create_dir(&selected).unwrap();
+        fs::create_dir(&invalid).unwrap();
         let with_subtree = B10xOptions {
             endpoint: Some("http://127.0.0.1:18080".to_owned()),
             model: Some("qwen3.8-27b".to_owned()),
             cgroup_root: Some(PathBuf::from("/sys/fs/cgroup/u")),
             ..B10xOptions::default()
         };
+        assert!(machine_preflights(&b10x_map(), &invalid, &with_subtree)
+            .is_some_and(|reason| reason.contains("confinement was requested")));
         let confined = b10x_argv(
             &with_subtree,
-            Path::new("/home/op/.cache/ws_run"),
+            &selected,
             &[],
             &[],
             "do the thing",
@@ -1389,10 +1390,10 @@ fn b10x_step() -> LlmStep {
             "and may execute, or it cannot see a test fail: {joined}"
         );
 
-        // An ordinary checkout: asking would be a launch refusal, so nothing is asked.
+        // Invalid syntax cannot become confinement authority.
         let ordinary = b10x_argv(
             &with_subtree,
-            Path::new("/home/op/aep"),
+            &invalid,
             &[],
             &[],
             "do the thing",
@@ -1409,7 +1410,7 @@ fn b10x_step() -> LlmStep {
         assert!(
             b10x_read_only_note(
                 &b10x_map(),
-                Path::new("/home/op/aep"),
+                &invalid,
                 &with_subtree
             )
             .is_some_and(|note| note.contains("does not")),
@@ -1424,7 +1425,7 @@ fn b10x_step() -> LlmStep {
         assert!(
             b10x_read_only_note(
                 &b10x_map(),
-                Path::new("/home/op/.cache/ws_run"),
+                &selected,
                 &no_subtree
             )
             .is_some_and(|note| note.contains("no `--b10x-cgroup-root`")),
@@ -1436,7 +1437,7 @@ fn b10x_step() -> LlmStep {
         assert!(
             b10x_read_only_note(
                 &b10x_map(),
-                Path::new("/home/op/.cache/ws_run"),
+                &selected,
                 &with_subtree
             )
             .is_none(),
@@ -2700,4 +2701,9 @@ profile: test.reading
              order the document writes them, then its one `--context` file, and no frame"
         );
     }
+}
+#[test]
+fn managed_workspace_accepts_explicit_relative_project() {
+    assert!(adoptable(Path::new(".")), "the managed test checkout is a selected valid directory");
+    assert!(!adoptable(Path::new("/not-present/bad.name")));
 }

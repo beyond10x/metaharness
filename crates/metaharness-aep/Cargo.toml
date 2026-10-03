@@ -9,6 +9,7 @@ rust-version.workspace = true
 
 [dependencies]
 metaharness = { path = "../metaharness" }
+metaharness-b10x = { path = "../metaharness-b10x" }
 aep-cli = { git = "https://github.com/beyond10x/aep", rev = "6d7a44d3607d2d9a6ffdf0a165993c546c43d0db" }
 aep-domain = { git = "https://github.com/beyond10x/aep", rev = "6d7a44d3607d2d9a6ffdf0a165993c546c43d0db" }
 aep-driver = { git = "https://github.com/beyond10x/aep", rev = "6d7a44d3607d2d9a6ffdf0a165993c546c43d0db" }

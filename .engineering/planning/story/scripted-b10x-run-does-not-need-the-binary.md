@@ -2,7 +2,7 @@
 format: aep.planning-md/3
 id: story:scripted-b10x-run-does-not-need-the-binary
 kind: story
-status: draft
+status: active
 title: A scripted b10x run does not require b10x-harness on the PATH
 summary: Metaharness::start with a ScriptedRunner refuses to start a Kind::B10x run when b10x-harness is absent from the PATH (Launch refusal at crates/metaharness/src/builder.rs:547), although the scripted runner starts no process; the Gate workflow works around it by installing the binary. Observed 2026-09-15 in Gate run 34911935585.
 refs:
@@ -20,8 +20,13 @@ scope:
 - confidence: cited
   path: crates/metaharness/src/process.rs
 - confidence: cited
+  path: crates/metaharness/src/scripted.rs
+- confidence: cited
   path: crates/metaharness/tests/stream_closed.rs
-revision: 7
+revision: 10
+transitions:
+- {from: "draft", to: "proposed", at: "2026-10-03T07:24:43Z", actor: "human:timo", revision: 9}
+- {from: "proposed", to: "active", at: "2026-10-03T07:24:43Z", actor: "human:timo", revision: 10}
 ---
 ## Context
 

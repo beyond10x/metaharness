@@ -1738,6 +1738,14 @@ fn metaharness_preflight(map: &StepMap) -> Option<String> {
 /// The read-only note is printed rather than returned, because it refuses nothing: a b10x step in
 /// a state that only reads is legitimate work.
 fn machine_preflights(map: &StepMap, project: &Path, b10x: &B10xOptions) -> Option<String> {
+    if b10x_step_count(map) > 0 && b10x.cgroup_root.is_some() && !adoptable(project) {
+        return Some(format!(
+            "confinement was requested but {} is not an existing adoptable directory: select a \
+             directory whose canonical component uses ASCII alphanumerics, underscore or hyphen \
+             and does not begin with hyphen",
+            project.display()
+        ));
+    }
     if let Some(refusal) = metaharness_preflight(map) {
         return Some(refusal);
     }
@@ -1861,11 +1869,8 @@ fn b10x_preflight(map: &StepMap, options: &B10xOptions) -> Option<String> {
 /// would be wrong is a `implement` state discovering it, one turn at a time, in a session that was
 /// told it had `file_write`.
 ///
-/// The rule is metaharness's and it is a naming rule: substrate represents a workspace only when
-/// its directory name starts with `ws_`, and a confined launch over a directory it cannot adopt is
-/// refused rather than degraded. A driven run's working directory is the operator's repository, so
-/// no driven b10x session is confined, so the loop publishes only the three reading entries — the
-/// toolset is computed from what the machine can confine, and unconfined that is reading.
+/// Eligibility follows the pinned substrate component rule; actual confinement is
+/// established by the driver's identity and containment checks, never by the name.
 ///
 /// It is a note and not a refusal for a second reason: what a state admits is decided per state by
 /// the engine at run time, and a pre-flight reading a map cannot know whether any state will reach
@@ -1889,9 +1894,8 @@ fn b10x_read_only_note(
         "the workspace is adoptable but no `--b10x-cgroup-root` was given, so substrate publishes \
          no `run` entry and the catalogue stays read-only"
     } else {
-        "substrate represents a workspace only when its directory name starts with `ws_`, and this \
-         one does not — a governed tree is usually the operator's own repository. A worktree \
-         created for the run can be named to be adoptable"
+        "the selected directory does not resolve to an existing directory with an eligible \
+         substrate component (ASCII alphanumerics, underscore or hyphen; no leading hyphen)"
     };
     Some(format!(
         "a driven `{B10X_HARNESS}` session is **read-only** over {}: {why}. So `file_write`, \
@@ -2336,10 +2340,8 @@ fn b10x_argv(
             argv.push(pointer.clone());
         }
     }
-    // **Confinement and execution, or neither.** Substrate represents a workspace only when its
-    // directory name starts with `ws_`, so a run over an ordinary checkout is read-only whatever
-    // is asked for — and asking anyway would turn every driven step into a launch refusal. When the
-    // workspace *is* adoptable and a subtree was named, both travel: `--substrate-embedded` makes
+    // **Confinement and execution, or neither.** The selected canonical directory must satisfy
+    // substrate's component rule. When a subtree was named, both travel: `--substrate-embedded` makes
     // `file_write` and `file_edit` appear in the catalogue, and `--cgroup-root` makes `run` appear.
     // One without the other is an arm that can write and not test, or test and not write.
     if let Some(root) = options
@@ -2415,20 +2417,16 @@ fn b10x_argv(
 
 /// Whether substrate will represent this directory as a workspace.
 ///
-/// Its rule, replicated rather than depended on: a directory name starting with `ws_`
-/// (`SUBSTRATE_WORKSPACE_PREFIX` in metaharness's builder). A governed tree is usually the
-/// operator's own repository and is not named that, which is why a driven `b10x` arm is read-only
-/// by default and says so — and why a worktree created for a run *can* be named to be adoptable,
-/// which is the whole of the arrangement.
-///
-/// A relative path has no useful file name — `.` is not `ws_anything` — so a caller who passes
-/// `--project .` from inside an adoptable directory gets the read-only arm and a note saying so.
-/// That is a real trap and the note is where it is caught.
+/// Resolve the operator's selection before asking the adapter's shared syntax rule.
+/// The result grants no authority outside the driver's pinned root.
 fn adoptable(working_directory: &Path) -> bool {
-    working_directory
-        .file_name()
-        .and_then(|name| name.to_str())
-        .is_some_and(|name| name.starts_with("ws_"))
+    fs::canonicalize(working_directory).is_ok_and(|path| {
+        path.is_dir()
+            && path
+                .file_name()
+                .and_then(|name| name.to_str())
+                .is_some_and(metaharness_b10x::workspace_component_is_adoptable)
+    })
 }
 
 /// A governed run and its concrete execution options.
@@ -2562,7 +2560,9 @@ impl ExecutionHost for Host {
             );
         }
         b10x.aep_binary = Some(binary.clone());
-        if let Some(refusal) = machine_preflights(&inputs.map, &inputs.project, &b10x) {
+        let working_directory = fs::canonicalize(&inputs.project)
+            .context("resolving the explicitly selected project directory")?;
+        if let Some(refusal) = machine_preflights(&inputs.map, &working_directory, &b10x) {
             bail!("{refusal}");
         }
         let mut launch_fields = std::collections::BTreeMap::new();
@@ -2583,7 +2583,7 @@ impl ExecutionHost for Host {
                     .transpose()?;
                 Ok(Box::new(
                     CliExecutors::new(
-                        context.working_directory.clone(),
+                        working_directory.clone(),
                         context.run_directory.clone(),
                         context.plugin_dirs.clone(),
                         context.workflow_id.clone(),

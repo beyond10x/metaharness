@@ -1,0 +1,13 @@
+{
+  "at": "2026-10-03T07:24:43Z",
+  "actor": "human:timo",
+  "artifact": "story:managed-workspace-admission",
+  "kind": "story",
+  "revision": 11,
+  "change": {
+    "change": "evidence",
+    "kind": "test_result",
+    "source": "cargo test --locked -p metaharness -p metaharness-aep -p metaharness-b10x; 327 passed, exit 0",
+    "reference": "local-evidence:workspace12/green.log"
+  }
+}

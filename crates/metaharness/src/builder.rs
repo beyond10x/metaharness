@@ -507,9 +507,9 @@ fn start_b10x(
         return Err(Refusal::Launch {
             detail: format!(
                 "confinement was asked for and the working directory {} cannot be adopted: \
-                 substrate represents a workspace only when its directory name starts with \
-                 `{SUBSTRATE_WORKSPACE_PREFIX}`. Rename it, or drop --cwd and let the run use a \
-                 scratch one",
+                 substrate requires a directory component of ASCII alphanumerics, underscore \
+                 or hyphen, not beginning with hyphen. Select an eligible directory with --cwd \
+                 or use the run's scratch directory",
                 cwd.display()
             ),
         });
@@ -1476,17 +1476,15 @@ fn resolve_cwd(spec: &RunSpec, scratch_root: &std::path::Path) -> Result<PathBuf
 
 /// The same, with the scratch directory's own name.
 ///
-/// Named rather than fixed because substrate will only represent a workspace whose directory starts
-/// with `ws_`, and a b10x run that means to write needs one it can adopt. A scratch directory called
-/// `work` leaves that run **silently read-only** — the tools it publishes are what the machine can
-/// confine, so the write entries simply do not appear and nothing says why.
+/// The explicitly selected directory is canonicalized before its parent and component
+/// are handed to substrate. Naming eligibility does not replace driver containment.
 fn resolve_cwd_named(
     spec: &RunSpec,
     scratch_root: &std::path::Path,
     scratch_name: &str,
 ) -> Result<PathBuf, Refusal> {
     match &spec.cwd {
-        Some(directory) if directory.is_dir() => Ok(directory.clone()),
+        Some(directory) if directory.is_dir() => Ok(std::fs::canonicalize(directory)?),
         Some(directory) => Err(Refusal::Io {
             detail: format!(
                 "the operator-named working directory {} does not exist or is not a directory",
@@ -1500,9 +1498,6 @@ fn resolve_cwd_named(
         }
     }
 }
-
-/// The prefix substrate requires of a workspace directory it will represent.
-const SUBSTRATE_WORKSPACE_PREFIX: &str = "ws_";
 
 /// The scratch working directory a confined b10x run gets.
 const B10X_SCRATCH_WORKSPACE: &str = "ws_run";
@@ -1784,7 +1779,7 @@ fn b10x_launch(
 fn adoptable(cwd: &std::path::Path) -> bool {
     cwd.file_name()
         .and_then(|name| name.to_str())
-        .is_some_and(|name| name.starts_with(SUBSTRATE_WORKSPACE_PREFIX))
+        .is_some_and(metaharness_b10x::workspace_component_is_adoptable)
 }
 
 /// The variable `--credentials api-key` points the b10x loop at.
@@ -2865,6 +2860,25 @@ mod b10x_launch_tests {
     //! was not in that function: it was that nothing called it, and the adapter's own tests went
     //! on passing while every launch died on the loop's argument parsing.
 
+    #[test]
+    fn managed_workspace_admits_valid_components_and_canonicalizes_selection() {
+        for name in ["wt-123abc", "metaharness", "ws_run", "_scratch"] {
+            assert!(super::adoptable(std::path::Path::new(name)), "{name}");
+        }
+        for name in ["-bad", "has space", "../", ".", "bad.name"] {
+            assert!(!super::adoptable(std::path::Path::new(name)), "{name}");
+        }
+        let root = tempfile::tempdir().unwrap();
+        let directory = root.path().join("wt-selected");
+        std::fs::create_dir(&directory).unwrap();
+        let mut selected = spec();
+        selected.cwd = Some(directory.join("."));
+        assert_eq!(
+            super::resolve_cwd_named(&selected, root.path(), "unused").unwrap(),
+            std::fs::canonicalize(directory).unwrap()
+        );
+    }
+
     use metaharness_protocol::{CredentialSource, Kind, RunSpec};
 
     use super::{Refusal, b10x_launch, check_spec, guard_b10x_decision_mode, start_refusals};
@@ -3206,7 +3220,8 @@ mod b10x_launch_tests {
         // entries never appear, and the run reports that it could not change the file it was asked
         // to change. That reads as a model failure and is a directory naming rule.
         assert!(super::adoptable(std::path::Path::new("/scratch/ws_run")));
-        assert!(!super::adoptable(std::path::Path::new("/scratch/work")));
+        assert!(super::adoptable(std::path::Path::new("/scratch/work")));
+        assert!(!super::adoptable(std::path::Path::new("/scratch/bad.name")));
     }
 
     #[test]

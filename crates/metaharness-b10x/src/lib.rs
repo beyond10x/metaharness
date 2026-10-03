@@ -85,3 +85,16 @@ pub const PINNED_VERSIONS: [&str; 1] = ["0.12.1"];
 /// resolves. Both are checked by the AEP eval before it trusts an installed
 /// binary, so a filesystem timestamp is never mistaken for provenance.
 pub const HARNESS_REVISION: &str = "90f10a4314c1c630691c85e812bd8d5d23d73fcc";
+
+/// Whether a directory component satisfies the pinned substrate adoption syntax.
+///
+/// This proves no confinement: the driver still checks identity beneath its pinned
+/// root descriptor. Callers must resolve the explicitly selected directory first.
+#[must_use]
+pub fn workspace_component_is_adoptable(name: &str) -> bool {
+    !name.is_empty()
+        && !name.starts_with('-')
+        && name
+            .bytes()
+            .all(|byte| byte.is_ascii_alphanumeric() || byte == b'_' || byte == b'-')
+}

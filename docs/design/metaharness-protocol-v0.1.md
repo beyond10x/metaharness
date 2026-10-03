@@ -1901,6 +1901,16 @@ does not assert that a vendor supports unlimited turns or that a governed walk
 has no termination conditions. Offline policy, CLI, persistence and resume tests
 must pass before any live run uses the new mode.
 
+## Amendment a20 — synthetic runner launch requirements (2026-10-03)
+
+A scripted runner executes retained synthetic lines and starts no vendor process.
+Its explicit runner contract therefore requires no installed vendor executable or
+version probe. Real runners retain executable resolution and version checks; an
+unknown custom runner defaults to those real-process requirements. A synthetic
+runner does not fabricate a verified vendor version: strict-version requests
+without executable evidence are refused. This distinction belongs to the runner
+seam, never a test-only environment flag or a fallback after real launch failure.
+
 ## Appendix A — every claim's method
 
 | method | rows |
