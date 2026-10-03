@@ -1115,10 +1115,12 @@ version = "0.8.0"
 dependencies = [
  "b10x-harness-loop",
  "b10x-harness-tools",
+ "clap",
  "metaharness-protocol",
  "serde",
  "serde_json",
  "sha2",
+ "tempfile",
 ]
 
 [[package]]

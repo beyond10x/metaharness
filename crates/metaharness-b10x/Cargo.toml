@@ -25,3 +25,7 @@ metaharness-protocol = { path = "../metaharness-protocol" }
 serde = { workspace = true }
 serde_json = { workspace = true }
 sha2 = { workspace = true }
+
+[dev-dependencies]
+clap = { workspace = true }
+tempfile = { workspace = true }
