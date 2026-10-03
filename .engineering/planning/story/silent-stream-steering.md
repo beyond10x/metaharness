@@ -21,10 +21,10 @@ scope:
 - confidence: cited
   path: docs/design/metaharness-protocol-v0.1.md
 - confidence: cited
-  path: spec/domains/session.yaml
+  path: spec/conformance.json
 - confidence: cited
-  path: spec/generated
-revision: 4
+  path: spec/domains/session.yaml
+revision: 6
 transitions:
 - {from: "draft", to: "proposed", at: "2026-10-03T10:57:59Z", actor: "human:timo", revision: 3, decided_on: {"recorded":{"test_result":1}}}
 - {from: "proposed", to: "active", at: "2026-10-03T10:57:59Z", actor: "human:timo", revision: 4, decided_on: {"recorded":{"test_result":1}}}
@@ -44,3 +44,5 @@ Existing Command/Halt/Interrupt and stream termination entities own the behavior
 ## Scope and verification
 
 Core process polling and run loop, CLI drive loop, their regression tests, binding protocol design and corresponding existing ESS session domain/target. Native test extension in crates/metaharness-codex/tests/native_fixture.rs is coordinator-owned and must not be edited by the implementation worker. Other current vendor fixtures run in independent units; no shared checkout. Rust only. Source changes require full task check, independent review and the original native red loop rerun before integration; no pin change or paid request.
+
+Scope correction from the implementation worker: the generated suite is spec/conformance.json; spec/generated does not exist. The machine-readable scope now names the actual suite. Proposed PollSteering is an internal conformance operation over the existing running/control contract, measuring real Run polling and control delivery for quiet-halt, quiet-interrupt, pending-halt and quiet-only. It does not introduce a public wire entity or claim native timing.
