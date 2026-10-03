@@ -541,18 +541,7 @@ fn start_b10x(
         .get("PATH")
         .expect("the b10x base environment always carries PATH")
         .clone();
-    let program = metaharness_b10x::resolve_program(&named, &child_path)
-        .ok_or_else(|| Refusal::Launch {
-            detail: format!(
-                "`{named}` is not on the PATH this run gives its child ({child_path}). The child's \
-                 environment is constructed rather than inherited (H3), so a binary the operator \
-                 can run is not automatically one the run can: install it there, or name it by \
-                 absolute path"
-            ),
-        })?
-        .display()
-        .to_string();
-    let observed_version = b10x_version(&program);
+    let (program, observed_version) = b10x_program(runner, &named, &child_path)?;
     if spec.strict_version
         && !observed_version
             .as_ref()
@@ -699,11 +688,30 @@ fn start_b10x(
     }))
 }
 
-/// The exact executable's own version token, before a model request can be made.
-///
-/// [`None`] is retained for scripted runners whose fake program is deliberately not installed;
-/// a real `--strict-version` run refuses that absence above. The command receives no run
-/// environment or credential and therefore cannot observe either.
+/// Resolve and probe only runners that launch an executable. Synthetic replay carries no
+/// observed vendor version, so `--strict-version` still refuses its absence.
+fn b10x_program(
+    runner: &dyn ProcessRunner,
+    named: &str,
+    child_path: &str,
+) -> Result<(String, Option<String>), Refusal> {
+    if !runner.requires_executable() {
+        return Ok((named.to_owned(), None));
+    }
+    let program = metaharness_b10x::resolve_program(named, child_path)
+        .ok_or_else(|| Refusal::Launch {
+            detail: format!(
+                "`{named}` is not on the PATH this run gives its child ({child_path}). The child's \
+                 environment is constructed rather than inherited (H3); install the executable \
+                 there or name it by absolute path"
+            ),
+        })?
+        .display()
+        .to_string();
+    let version = b10x_version(&program);
+    Ok((program, version))
+}
+
 fn b10x_version(program: &str) -> Option<String> {
     let output = std::process::Command::new(program)
         .arg("--version")
@@ -2882,6 +2890,22 @@ mod b10x_launch_tests {
     use metaharness_protocol::{CredentialSource, Kind, RunSpec};
 
     use super::{Refusal, b10x_launch, check_spec, guard_b10x_decision_mode, start_refusals};
+
+    #[test]
+    fn scripted_binary_resolution_needs_no_executable_but_real_resolution_still_does() {
+        let empty = tempfile::tempdir().unwrap();
+        let path = empty.path().to_str().unwrap();
+        let scripted = crate::ScriptedRunner::new(Vec::new(), crate::ScriptedLog::new());
+        assert_eq!(
+            super::b10x_program(&scripted, "b10x-harness", path).unwrap(),
+            ("b10x-harness".to_owned(), None)
+        );
+        let real = crate::SpawnRunner::default();
+        assert!(matches!(
+            super::b10x_program(&real, "b10x-harness", path),
+            Err(Refusal::Launch { .. })
+        ));
+    }
 
     /// A subscription token reaches the loop as its own flags, under its own header name.
     ///

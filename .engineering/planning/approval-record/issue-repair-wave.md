@@ -8,7 +8,7 @@ relations:
 - decides: epic:github-issue-repair
 - decides: story:codex-terminal-failure
 - decides: story:current-aep-runtime
-revision: 6
+revision: 7
 ---
 ## Authorization and boundary
 
@@ -117,3 +117,9 @@ After verified migration, set the project selector's planning_scope to metaharne
 ## Resource update and review mechanics
 
 Measured later: 18 GiB free; Codex target 623 MiB and AEP target 805 MiB. Permit one short cached Codex adversary package probe at one cargo job beside the AEP build, retaining separate targets and the 3 GiB stop threshold; no concurrent fresh workspace builds. Four plan-critic perspectives were run without sharing findings, in two capacity-bounded batches because this host has only three worker slots. The unavailable sonnet/high critic pin was not silently substituted: session model used and deviation recorded. Test-only adversary is a separate role from plan critique.
+
+## Coordinator continuation
+
+The operator said continue. Both active workers subsequently returned host usage-limit errors; their source and logs were inspected and preserved, and the coordinator completed the remaining package checks locally. No paid model authorization was inferred from that continuation. The bot wrapper supports commit/tag/push/fetch only, so unit integration uses reviewed patches followed by bot-authored commits rather than an unsupported cherry-pick command. Native Git hooks remain enabled.
+
+Issue #16 unit wt-524d986f70fe starts at exact #12 source commit 54efe8c3; coordinator holds its own lease. Amendment a20 precedes its implementation. A typed runner capability defaults to real executable requirements; only explicit synthetic runners opt out, without fabricating version evidence. Full task check must pass before removing CI's binary-install accommodation.

@@ -396,7 +396,7 @@ fn arm_driven_is_not_launched_here_and_the_refusal_names_the_verb_that_does() {
     assert_eq!(code(&refused), 1, "{}", stdout(&refused));
     let reason = stderr(&refused);
     assert!(
-        reason.contains("EVAL-RUN-004") && reason.contains("protocol drive run"),
+        reason.contains("EVAL-RUN-004") && reason.contains("metaharness aep drive run"),
         "the refusal names the verb that does launch one: {reason}"
     );
     assert!(
@@ -498,7 +498,7 @@ fn a_spawn_gives_arm_raw_the_committed_instructions_and_arm_plugin_the_plugin() 
         // unstated assertion that the workflow never changes, which `adp/default/2` then broke
         // without anything being wrong.
         prompt.starts_with("<!-- Rendered from `adp/default/")
-            && prompt.contains("` by `protocol govern workflow instruct`"),
+            && prompt.contains("` by `aep govern workflow instruct`"),
         "arm a's treatment is the committed instruction document, in front of the task: {prompt}"
     );
     assert!(

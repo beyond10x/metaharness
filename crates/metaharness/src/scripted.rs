@@ -156,6 +156,10 @@ impl ScriptedRunner {
 }
 
 impl ProcessRunner for ScriptedRunner {
+    fn requires_executable(&self) -> bool {
+        false
+    }
+
     fn start(&mut self, plan: &LaunchPlanView) -> std::io::Result<Box<dyn HarnessProcess>> {
         {
             let mut inner = self.log.inner.borrow_mut();

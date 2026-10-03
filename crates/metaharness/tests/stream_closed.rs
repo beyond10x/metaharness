@@ -517,3 +517,46 @@ mod codex_terminal_regression {
         }
     }
 }
+#[test]
+fn scripted_b10x_keeps_a_logical_program_without_probing_an_installation() {
+    let log = ScriptedLog::new();
+    let mut runner = ScriptedRunner::new(Vec::new(), log.clone());
+    let mut spec = metaharness::protocol::RunSpec::new(Kind::B10x);
+    spec.decisions = DecisionMode::Observe;
+    spec.credentials = metaharness::protocol::CredentialSource::None;
+    spec.model_endpoint = Some("http://127.0.0.1:1".to_owned());
+    spec.model = Some("synthetic-never-called".to_owned());
+    let mut run = Metaharness::from_spec(spec)
+        .start_with_clock(
+            Input::Prompt("synthetic".into()),
+            &mut runner,
+            &mut metaharness_b10x::B10xSeams::new(None, None, None),
+            Box::new(metaharness::ManualClock::new()),
+        )
+        .expect("a scripted run needs no installed vendor");
+    run.drain().unwrap();
+    assert_eq!(log.launched()[0][0], "b10x-harness");
+}
+
+#[test]
+fn scripted_b10x_does_not_fabricate_strict_version_evidence() {
+    let log = ScriptedLog::new();
+    let mut runner = ScriptedRunner::new(Vec::new(), log.clone());
+    let result = Metaharness::new(Kind::B10x)
+        .with_decisions(DecisionMode::Observe)
+        .with_credentials(CredentialSource::None)
+        .with_model_endpoint("http://127.0.0.1:1")
+        .with_model("synthetic-never-called")
+        .with_strict_version(true)
+        .start_with_clock(
+            Input::Prompt("synthetic".into()),
+            &mut runner,
+            &mut ScriptedSeams,
+            Box::new(ManualClock::new()),
+        );
+    let Err(refusal) = result else {
+        panic!("synthetic execution cannot satisfy strict version evidence");
+    };
+    assert!(refusal.to_string().contains("--strict-version"));
+    assert_eq!(log.spawns(), 0);
+}

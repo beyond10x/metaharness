@@ -19,9 +19,11 @@ scope:
   path: crates/metaharness-aep
 - confidence: cited
   path: crates/metaharness-aep-eval/src/lib.rs
+- confidence: cited
+  path: crates/metaharness-cli/tests/aep_eval_live.rs
 - confidence: inferred
   path: evals
-revision: 9
+revision: 11
 transitions:
 - {from: "draft", to: "proposed", at: "2026-10-03T00:11:20Z", actor: "human:timo", revision: 8}
 - {from: "proposed", to: "active", at: "2026-10-03T00:11:20Z", actor: "human:timo", revision: 9}
@@ -45,3 +47,7 @@ Record the old-pin version-admission refusal and matching-new-pin success with t
 ## Scope investigation
 
 Read-only comparison against released AEP 0.68.0 found the scratch project generator in crates/metaharness-aep-eval/src/lib.rs:713 still writes aep.project/1. Update that fixture to aep.project/5 with store.git as part of the schema requirement. ExecutionHost and PreparedExecution signatures are unchanged. Upstream renamed PROTOCOL_BINARY to AEP_BINARY; local protocol command fixtures at drive_tests.rs:631-700 must use aep. No compilation was performed by the scoper, so source compatibility remains to be tested.
+
+## Integration gate correction
+
+The first full task check exposed two CLI integration failures omitted by the package-only pass: the expected instruction provenance still named protocol, and the foundation's driven-arm refusal points at aep drive run even though this host owns paid execution. Correct the provenance assertion to the actual pinned AEP output and preserve the upstream EVAL-RUN-004 refusal while pointing it at metaharness aep drive run. Changes are carried in the sequential scripted-launch worktree with exact scope attribution here; no assertion is removed or weakened.

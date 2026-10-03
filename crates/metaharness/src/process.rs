@@ -73,6 +73,14 @@ pub struct LaunchPlanView<'a> {
 
 /// Start the planned child.
 pub trait ProcessRunner {
+    /// Whether this runner starts a real executable and needs installation checks.
+    ///
+    /// Defaults to true for every real or custom runner. Synthetic replay explicitly
+    /// opts out; it must not report an observed vendor version without a process.
+    fn requires_executable(&self) -> bool {
+        true
+    }
+
     /// Start the planned child and give back its line stream and its stdin.
     ///
     /// An implementation performs [`LaunchPlanView::credential_copies`] here — at the spawn, not

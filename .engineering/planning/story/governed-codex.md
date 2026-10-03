@@ -2,7 +2,7 @@
 format: aep.planning-md/3
 id: story:governed-codex
 kind: story
-status: draft
+status: active
 title: Run Codex steps through the governed adapter seam
 owner: metaharness
 refs:
@@ -15,6 +15,10 @@ relations:
 - depends_on: story:managed-workspace-admission
 scope:
 - confidence: cited
+  path: Cargo.lock
+- confidence: cited
+  path: crates/metaharness-aep/Cargo.toml
+- confidence: cited
   path: crates/metaharness-aep/src/drive.rs
 - confidence: cited
   path: crates/metaharness-aep/src/drive_tests.rs
@@ -22,7 +26,10 @@ scope:
   path: crates/metaharness-codex
 - confidence: cited
   path: docs/design/metaharness-protocol-v0.1.md
-revision: 4
+revision: 7
+transitions:
+- {from: "draft", to: "proposed", at: "2026-10-03T07:30:53Z", actor: "human:timo", revision: 5}
+- {from: "proposed", to: "active", at: "2026-10-03T07:30:54Z", actor: "human:timo", revision: 6}
 ---
 ## Context
 

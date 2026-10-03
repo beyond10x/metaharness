@@ -295,6 +295,17 @@ fn spawn(
     Ok(stream)
 }
 
+// Keep the foundation's refusal and identify the executable that hosts the driver.
+fn refuse_hosted_arm(args: &RunArgs) -> Result<()> {
+    launched_elsewhere(args).map_err(|error| {
+        anyhow::anyhow!(
+            error
+                .to_string()
+                .replace("`aep drive", "`metaharness aep drive")
+        )
+    })
+}
+
 /// Run a live evaluation or ingest an existing stream.
 ///
 /// # Errors
@@ -330,7 +341,7 @@ pub fn run_arm(args: &RunArgs) -> Result<ExitCode> {
     if !live() {
         return Err(refused_run(&args.out, &[RunRefusal::NotLive]));
     }
-    launched_elsewhere(args)?;
+    refuse_hosted_arm(args)?;
     require_plugin_treatment(args, &plugins)?;
     let Some(budget) = &args.budget_usd else {
         return Err(refused_run(&args.out, &[RunRefusal::NoBudget]));
