@@ -32,6 +32,7 @@ static NATIVE_RUN: Mutex<()> = Mutex::new(());
 enum Mode {
     Text,
     Refusal,
+    Pending,
     Tool { exit: i32, deny: bool },
     Patch,
 }
@@ -56,8 +57,7 @@ impl Provider {
                 match listener.accept() {
                     Ok((stream, _)) => {
                         let ordinal = seen.lock().unwrap().len();
-                        let request = serve(stream, mode, ordinal);
-                        seen.lock().unwrap().push(request);
+                        serve(stream, mode, ordinal, &seen, &stop);
                     }
                     Err(e) if e.kind() == std::io::ErrorKind::WouldBlock => {
                         thread::sleep(Duration::from_millis(10));
@@ -81,7 +81,13 @@ impl Drop for Provider {
     }
 }
 
-fn serve(mut stream: TcpStream, mode: Mode, ordinal: usize) -> Value {
+fn serve(
+    mut stream: TcpStream,
+    mode: Mode,
+    ordinal: usize,
+    seen: &Mutex<Vec<Value>>,
+    stop: &AtomicBool,
+) {
     stream
         .set_read_timeout(Some(Duration::from_secs(3)))
         .unwrap();
@@ -113,6 +119,16 @@ fn serve(mut stream: TcpStream, mode: Mode, ordinal: usize) -> Value {
     reader.read_exact(&mut bytes).unwrap();
     let body: Value = serde_json::from_slice(&bytes).unwrap();
     let request = json!({"request":first.trim(),"authorization_present":authorized,"body":body});
+    seen.lock().unwrap().push(request);
+    if matches!(mode, Mode::Pending) && !authorized {
+        let prefix = "event: response.created\ndata: {\"type\":\"response.created\",\"response\":{\"id\":\"fixture-pending\",\"status\":\"in_progress\",\"output\":[]}}\n\n";
+        write!(stream, "HTTP/1.1 200 OK\r\nContent-Type: text/event-stream\r\nConnection: close\r\n\r\n{prefix}").unwrap();
+        let deadline = Instant::now() + Duration::from_secs(10);
+        while !stop.load(Ordering::SeqCst) && Instant::now() < deadline {
+            thread::sleep(Duration::from_millis(10));
+        }
+        return;
+    }
     let (status, mime, response) = if matches!(mode, Mode::Refusal) || authorized {
         ("400 Bad Request", "application/json", json!({"error":{"message":"fixture model refusal","type":"invalid_request_error","code":"model_not_found"}}).to_string())
     } else {
@@ -147,7 +163,6 @@ fn serve(mut stream: TcpStream, mode: Mode, ordinal: usize) -> Value {
     );
     stream.write_all(header.as_bytes()).unwrap();
     stream.write_all(response.as_bytes()).unwrap();
-    request
 }
 
 fn tool_stream(exit: i32) -> String {
@@ -270,8 +285,21 @@ impl Drop for NativeChild {
 }
 
 fn run_command(mut command: Command, root: &Path, mode: Mode) -> i32 {
+    run_steered(&mut command, root, mode, None)
+}
+
+fn run_steered(
+    command: &mut Command,
+    root: &Path,
+    mode: Mode,
+    control: Option<(&Provider, &str)>,
+) -> i32 {
     let child = command
-        .stdin(Stdio::null())
+        .stdin(if control.is_some() {
+            Stdio::piped()
+        } else {
+            Stdio::null()
+        })
         .stdout(fs::File::create(root.join("stdout.jsonl")).unwrap())
         .stderr(fs::File::create(root.join("stderr.log")).unwrap())
         .process_group(0)
@@ -282,8 +310,22 @@ fn run_command(mut command: Command, root: &Path, mode: Mode) -> i32 {
         reaped: false,
     };
     let deadline = Instant::now() + Duration::from_secs(30);
+    let mut sent = false;
     loop {
         answer_hooks(root, mode);
+        if let Some((provider, name)) = control
+            && !sent
+            && let Some(message) = steering_message(provider, name, root)
+        {
+            writeln!(child.child.stdin.as_mut().unwrap(), "{message}").unwrap();
+            child.child.stdin.as_mut().unwrap().flush().unwrap();
+            fs::write(
+                root.join("steering.json"),
+                serde_json::to_vec_pretty(&message).unwrap(),
+            )
+            .unwrap();
+            sent = true;
+        }
         if let Some(status) = child.child.try_wait().unwrap() {
             child.reaped = true;
             return status.code().unwrap_or(-1);
@@ -293,6 +335,21 @@ fn run_command(mut command: Command, root: &Path, mode: Mode) -> i32 {
             "native fixture exceeded 30 seconds; inspect retained evidence"
         );
         thread::sleep(Duration::from_millis(20));
+    }
+}
+
+fn steering_message(provider: &Provider, name: &str, root: &Path) -> Option<Value> {
+    if name == "tool.decide" {
+        fs::read_to_string(root.join("stdout.jsonl")).unwrap().lines()
+            .filter_map(|line| serde_json::from_str::<Value>(line).ok())
+            .find(|event| event["event"] == "tool.requested" && event["decision_required"] == true)
+            .map(|event| json!({"format":"metaharness.command/1","id":"fixture-stop","command":"tool.decide","call_id":event["call_id"],"decision":{"decision":"deny","reason":"native fixture denied effect"}}))
+    } else if provider.requests.lock().unwrap().is_empty() {
+        None
+    } else {
+        Some(
+            json!({"format":"metaharness.command/1","id":"fixture-stop","command":name,"reason":"native fixture cancellation"}),
+        )
     }
 }
 
@@ -363,61 +420,17 @@ fn answer_hooks(root: &Path, mode: Mode) {
 #[ignore = "also requires absolute METAHARNESS_NATIVE_DRIVER built from this checkout; local fixture provider only"]
 fn actual_binary_preserves_native_success_and_provider_failure_through_final_closure() {
     let _lease = NATIVE_RUN.lock().unwrap();
-    let vendor = PathBuf::from(
-        std::env::var_os("METAHARNESS_NATIVE_CODEX").expect("explicit vendor binary"),
-    );
-    let driver = PathBuf::from(
-        std::env::var_os("METAHARNESS_NATIVE_DRIVER").expect("explicit built metaharness binary"),
-    );
-    let evidence = PathBuf::from(
-        std::env::var_os("METAHARNESS_NATIVE_EVIDENCE").expect("private evidence directory"),
-    );
-    assert!(vendor.is_absolute() && driver.is_absolute() && evidence.is_absolute());
-    fs::create_dir_all(&evidence).unwrap();
     for failed in [false, true] {
-        let root = tempfile::Builder::new()
-            .prefix(if failed {
+        let mode = if failed { Mode::Refusal } else { Mode::Text };
+        let (root, provider, command) = driver_case(
+            mode,
+            if failed {
                 "driver-refusal-"
             } else {
                 "driver-success-"
-            })
-            .tempdir_in(&evidence)
-            .unwrap()
-            .keep();
-        let home = root.join("home");
-        let cwd = root.join("work");
-        fs::create_dir_all(home.join(".local/bin")).unwrap();
-        fs::create_dir_all(&cwd).unwrap();
-        fs::create_dir_all(root.join("tmp")).unwrap();
-        std::os::unix::fs::symlink(&vendor, home.join(".local/bin/codex")).unwrap();
-        let mode = if failed { Mode::Refusal } else { Mode::Text };
-        let provider = Provider::start(mode);
-        let mut command = Command::new(&driver);
-        command
-            .args([
-                "run",
-                "codex",
-                "--credentials",
-                "none",
-                "--decisions",
-                "observe",
-                "--model",
-                MODEL,
-                "--model-endpoint",
-                &provider.endpoint,
-                "--prompt",
-                "Return the fixture terminal answer without tools.",
-                "--cwd",
-            ])
-            .arg(&cwd)
-            .arg("--retain-dir")
-            .arg(root.join("retained"))
-            .current_dir(&cwd)
-            .env_clear()
-            .env("HOME", &home)
-            .env("PATH", "/usr/local/bin:/usr/bin:/bin")
-            .env("LANG", "C.UTF-8")
-            .env("TMPDIR", root.join("tmp"));
+            },
+            "observe",
+        );
         let exit = run_command(command, &root, mode);
         let requests = provider.requests.lock().unwrap().clone();
         fs::write(
@@ -429,6 +442,60 @@ fn actual_binary_preserves_native_success_and_provider_failure_through_final_clo
         assert!(requests.iter().all(|r| r["authorization_present"] == false));
         assert_driver_events(&root, failed, exit);
     }
+}
+
+fn driver_case(mode: Mode, prefix: &str, decisions: &str) -> (PathBuf, Provider, Command) {
+    let vendor = PathBuf::from(
+        std::env::var_os("METAHARNESS_NATIVE_CODEX").expect("explicit vendor binary"),
+    );
+    let driver = PathBuf::from(
+        std::env::var_os("METAHARNESS_NATIVE_DRIVER").expect("explicit built metaharness binary"),
+    );
+    let evidence = PathBuf::from(
+        std::env::var_os("METAHARNESS_NATIVE_EVIDENCE").expect("private evidence directory"),
+    );
+    assert!(vendor.is_absolute() && driver.is_absolute() && evidence.is_absolute());
+    fs::create_dir_all(&evidence).unwrap();
+    let root = tempfile::Builder::new()
+        .prefix(prefix)
+        .tempdir_in(&evidence)
+        .unwrap()
+        .keep();
+    let home = root.join("home");
+    let cwd = root.join("work");
+    fs::create_dir_all(home.join(".local/bin")).unwrap();
+    fs::create_dir_all(&cwd).unwrap();
+    fs::create_dir_all(root.join("tmp")).unwrap();
+    std::os::unix::fs::symlink(&vendor, home.join(".local/bin/codex")).unwrap();
+    let provider = Provider::start(mode);
+    let mut command = Command::new(&driver);
+    command
+        .args([
+            "run",
+            "codex",
+            "--credentials",
+            "none",
+            "--decisions",
+            decisions,
+            "--model",
+            MODEL,
+            "--model-endpoint",
+            &provider.endpoint,
+            "--prompt",
+            "Return the fixture terminal answer without tools.",
+            "--cwd",
+        ])
+        .arg(&cwd)
+        .arg("--retain-dir")
+        .arg(root.join("retained"))
+        .current_dir(&cwd)
+        .env_clear()
+        .env("HOME", &home)
+        .env("PATH", "/usr/local/bin:/usr/bin:/bin")
+        .env("LANG", "C.UTF-8")
+        .env("TMPDIR", root.join("tmp"));
+
+    (root, provider, command)
 }
 
 fn assert_driver_events(root: &Path, failed: bool, exit: i32) {
@@ -472,6 +539,106 @@ fn assert_driver_events(root: &Path, failed: bool, exit: i32) {
         assert_eq!(terminal["final_answer"]["text"], ANSWER);
         assert_eq!(closure["reason"], "completed");
     }
+}
+
+#[test]
+#[ignore = "requires explicit vendor and built driver paths; local fixture provider only"]
+fn actual_binary_delivers_native_halt_and_interrupt() {
+    let _lease = NATIVE_RUN.lock().unwrap();
+    for control in ["halt", "interrupt"] {
+        let (root, provider, mut command) = driver_case(Mode::Pending, "driver-cancel-", "observe");
+        let started = Instant::now();
+        let exit = run_steered(
+            &mut command,
+            &root,
+            Mode::Pending,
+            Some((&provider, control)),
+        );
+        let requests = provider.requests.lock().unwrap().clone();
+        fs::write(
+            root.join("requests.json"),
+            serde_json::to_vec_pretty(&requests).unwrap(),
+        )
+        .unwrap();
+        assert_eq!(requests.len(), 1);
+        assert_eq!(requests[0]["authorization_present"], false);
+        let events: Vec<Value> = fs::read_to_string(root.join("stdout.jsonl"))
+            .unwrap()
+            .lines()
+            .map(|line| serde_json::from_str(line).unwrap())
+            .collect();
+        assert!(
+            events
+                .iter()
+                .any(|e| e["event"] == "session.started" && e["harness_version"] == "0.153.4")
+        );
+        assert!(events.iter().any(|e| e["event"] == "command.result"
+            && e["id"] == "fixture-stop"
+            && e["outcome"]["result"] == "ok"));
+        assert!(
+            !events
+                .iter()
+                .any(|e| e["event"] == "session.ended" && e["is_error"] == false)
+        );
+        let closure = events.last().unwrap();
+        assert_eq!(closure["event"], "stream.closed");
+        assert_eq!(
+            closure["reason"],
+            if control == "halt" {
+                "steer-halt"
+            } else {
+                "error"
+            }
+        );
+        assert_eq!(closure["process"], json!({"kind":"signaled","signal":9}));
+        assert_eq!(closure["events"], events.len() - 1);
+        assert_eq!(exit, 3);
+        assert!(
+            started.elapsed() < Duration::from_secs(5),
+            "steering must not wait for the provider's ten-second stream to close"
+        );
+    }
+}
+
+#[test]
+#[ignore = "requires explicit vendor and built driver paths; local fixture provider only"]
+fn actual_binary_delivers_an_asked_tool_denial_before_its_effect() {
+    let _lease = NATIVE_RUN.lock().unwrap();
+    let mode = Mode::Tool {
+        exit: 0,
+        deny: true,
+    };
+    let (root, provider, mut command) = driver_case(mode, "driver-denial-", "ask");
+    let exit = run_steered(&mut command, &root, mode, Some((&provider, "tool.decide")));
+    let requests = provider.requests.lock().unwrap().clone();
+    fs::write(
+        root.join("requests.json"),
+        serde_json::to_vec_pretty(&requests).unwrap(),
+    )
+    .unwrap();
+    assert_eq!(requests.len(), 2);
+    assert!(requests.iter().all(|r| r["authorization_present"] == false));
+    assert!(!root.join("work/native-fixture-marker").exists());
+    let events: Vec<Value> = fs::read_to_string(root.join("stdout.jsonl"))
+        .unwrap()
+        .lines()
+        .map(|line| serde_json::from_str(line).unwrap())
+        .collect();
+    assert!(events.iter().any(|e| e["event"] == "command.result"
+        && e["id"] == "fixture-stop"
+        && e["outcome"]["result"] == "ok"));
+    assert!(
+        events
+            .iter()
+            .any(|e| e["event"] == "tool.decided" && e["decision"]["decision"] == "deny")
+    );
+    let terminal = events
+        .iter()
+        .find(|e| e["event"] == "session.ended")
+        .unwrap();
+    assert_eq!(terminal["census"]["denied"], 1);
+    assert_eq!(terminal["final_answer"]["text"], ANSWER);
+    assert_driver_events(&root, false, exit);
 }
 
 fn rollouts(path: &Path, found: &mut Vec<PathBuf>) {
