@@ -1,0 +1,13 @@
+{
+  "at": "2026-10-03T08:01:06Z",
+  "actor": "human:timo",
+  "artifact": "story:uncapped-spending-policy",
+  "kind": "story",
+  "revision": 9,
+  "change": {
+    "change": "evidence",
+    "kind": "verification",
+    "source": "VERIFIED offline: missing CLI mode failed before change; 75 AEP unit cases and 3 CLI/resume cases pass; clippy green. Planting omitted admission persistence fails invocation_precedes_spawn_and_unknown_cost_survives_crash_resume (0 retained versus 1 required), restoration passes. Local pass, independent workers unavailable.",
+    "reference": "~/.cache/metaharness-issue-repair/spending14/red.log; mutation-red.log; final-tests.log; clippy.log"
+  }
+}

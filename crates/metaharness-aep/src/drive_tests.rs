@@ -1,6 +1,13 @@
 #[cfg(test)]
 mod tests {
     #[test]
+    fn uncapped_authority_is_an_explicit_host_option() {
+        let help = <HostedRunArgs as clap::Args>::augment_args(clap::Command::new("drive"))
+            .render_long_help().to_string();
+        assert!(help.contains("--uncapped-budget"), "finite caps must not stand in for uncapped authority");
+        assert!(help.contains("--spend-authorization"));
+    }
+    #[test]
     fn governed_codex_is_selected_as_an_adjudicating_harness() {
         let selected = Harness::named("codex").expect("the existing adapter is available to drive");
         assert_eq!(selected.kind(), "codex");
@@ -102,7 +109,7 @@ mod tests {
 use super::*;
 use aep_domain::capability::Environment;
 use aep_domain::ids::StateId;
-fn config(capabilities: &[Capability]) -> ToolConfig {
+pub(super) fn config(capabilities: &[Capability]) -> ToolConfig {
         ToolConfig::new(capabilities.iter().cloned().collect())
     }
 /// The execution every fixture below belongs to: the first run of task `T-1`.
@@ -119,7 +126,7 @@ fn config(capabilities: &[Capability]) -> ToolConfig {
     /// the string a step map author writes, and a test that read it out of the same constant the
     /// selector reads would pass whatever that constant said.
     /// A one-step map whose `llm` step names the native harness.
-    fn b10x_map() -> StepMap {
+    pub(super) fn b10x_map() -> StepMap {
         aep_schema::parse::step_map(
             "format: aep.driver-steps/1\nid: test/b10x\nworkflow: test/linear/1\n\
              states:\n  implement:\n    steps:\n      - kind: llm\n        prompt: do it\n\
@@ -139,7 +146,7 @@ fn b10x_step() -> LlmStep {
         }
     }
 /// A step context with nothing outstanding, for a test that is about the surface.
-    fn step_context<'a>(
+    pub(super) fn step_context<'a>(
         tools: &'a ToolConfig,
         state: &'a StateId,
         task: &'a aep_domain::task::Task,
@@ -162,7 +169,7 @@ fn b10x_step() -> LlmStep {
     ///
     /// `derived_from` is populated because the identity line names the artifacts, and a fixture
     /// without one would let the line pass by saying nothing.
-    fn driven_task() -> aep_domain::task::Task {
+    pub(super) fn driven_task() -> aep_domain::task::Task {
         aep_schema::parse::task(
             "id: T-1\nkind: feature\nobjective: drive something\nprotocol: aep/1\n\
              profile: test.standard\nderived_from: [story:the-one-being-driven]\n",

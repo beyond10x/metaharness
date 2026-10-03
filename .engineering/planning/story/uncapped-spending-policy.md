@@ -14,11 +14,17 @@ relations:
 scope:
 - confidence: cited
   path: crates/metaharness-aep/src/drive.rs
+- confidence: inferred
+  path: crates/metaharness-aep/src/drive/spending.rs
+- confidence: inferred
+  path: crates/metaharness-aep/src/drive/spending_tests.rs
 - confidence: cited
   path: crates/metaharness-aep/src/drive_tests.rs
 - confidence: cited
+  path: crates/metaharness-cli/tests/aep_resume.rs
+- confidence: cited
   path: docs/design/metaharness-protocol-v0.1.md
-revision: 6
+revision: 9
 transitions:
 - {from: "draft", to: "proposed", at: "2026-10-03T07:47:14Z", actor: "human:timo", revision: 5}
 - {from: "proposed", to: "active", at: "2026-10-03T07:47:14Z", actor: "human:timo", revision: 6}
@@ -42,3 +48,7 @@ Explicit uncapped option plus a nonempty operator authorization reference, with 
 ## Verification
 
 Offline Rust CLI/admission/persistence/resume tests precede enabling any live run. Test failed spawn and crash-resume unknown observations, overflow and malformed ledgers. Independent adversary and integrated task check follow; ESS Binary64 generator limitation remains explicit rather than changing runtime money types.
+
+## Implementation ownership
+
+Coordinator implementation proceeds locally after worker quota failure. Isolate new tagged policy and uncapped ledger in drive/spending.rs with spending_tests.rs; drive.rs remains the only spawn authority. Finite aep.drive-spend/1 ledger stays readable. New uncapped ledger records ordered invocation coordinates and optional observed cost independently of admission. No resume mode or authorization change. Unit wt-682171833f78 starts from governed Codex unit 9a5f4646; one build at a time reuses wt-0866b435e898/target to limit disk use.

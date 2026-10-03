@@ -16,6 +16,8 @@ use aep_driver_spec::map::{LlmStep, ScopeRule, Step, StepMap, WriteScope};
 use aep_driver_spec::tool::ToolConfig;
 use anyhow::{Context, Result, bail};
 use clap::{Args, Subcommand};
+mod spending;
+use spending::{AdmissionBudget, SpendOptions};
 // The one glob matcher in the workspace, and the one a step map's `scope:` is decided with. Taken
 // from `trace-domain` rather than written again here for the reason `AGENTS.md` gives about a
 // second copy of a rule: two matchers would disagree about `*` the first time either was touched,
@@ -165,6 +167,7 @@ impl B10xOptions {
 
 /// The immutable cost terms one launch declares and every resume inherits.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
+#[serde(deny_unknown_fields)]
 struct SpendTerms {
     /// Maximum total reservation.
     cap_micro_usd: u64,
@@ -309,7 +312,7 @@ struct CliExecutors {
     /// The one non-human actor whose recorded approval may answer an `operator` step, so the
     /// pause can say who may answer it.
     /// The run-level reservation ledger, present exactly when this map can spawn a model.
-    spend: Option<SpendBudget>,
+    spend: Option<AdmissionBudget>,
 }
 
 impl CliExecutors {
@@ -334,9 +337,22 @@ impl CliExecutors {
     }
 
     /// Attaches the run-level model-session ceiling after its ledger is durable.
-    fn with_spend(mut self, spend: Option<SpendBudget>) -> Self {
+    fn with_spend(mut self, spend: Option<AdmissionBudget>) -> Self {
         self.spend = spend;
         self
+    }
+
+    fn admit_model(&mut self, context: &StepContext<'_>) -> Result<(), StepOutcome> {
+        let spend = self
+            .spend
+            .as_mut()
+            .ok_or_else(|| StepOutcome::BudgetExhausted {
+                reason: "this step has no model-spend authority; no process was spawned".to_owned(),
+            })?;
+        spend.reserve(context).map_err(|error| match error {
+            ReserveError::Exhausted(reason) => StepOutcome::BudgetExhausted { reason },
+            ReserveError::Persist(reason) => StepOutcome::NoVerdict { reason },
+        })
     }
 
     /// The step's sealed frame document, written beside the transcript it governs.
@@ -520,21 +536,8 @@ impl CliExecutors {
         );
         // The last action before the paid effect. Persist first: if this process dies after the
         // child starts, a resume must not regain authority that was already handed to a session.
-        let Some(spend) = self.spend.as_mut() else {
-            return StepOutcome::BudgetExhausted {
-                reason: "this map reached an `llm` step without a model-session cost ceiling; no \
-                         metaharness process was spawned"
-                    .to_owned(),
-            };
-        };
-        match spend.reserve() {
-            Ok(()) => {}
-            Err(ReserveError::Exhausted(reason)) => {
-                return StepOutcome::BudgetExhausted { reason };
-            }
-            Err(ReserveError::Persist(reason)) => {
-                return StepOutcome::NoVerdict { reason };
-            }
+        if let Err(outcome) = self.admit_model(context) {
+            return outcome;
         }
         // No `current_dir`: the working directory travels as `--cwd` and metaharness spawns the
         // vendor there itself, with a constructed environment nothing here needs to reach into.
@@ -599,6 +602,14 @@ impl CliExecutors {
         outln!("{}", adjudication.line(harness, context.state));
         let status = child.wait();
         let stderr_text = stderr_thread.join().unwrap_or_default();
+
+        if let Some(spend) = &mut self.spend
+            && let Err(error) = spend.observe(&transcript)
+        {
+            return StepOutcome::NoVerdict {
+                reason: format!("cannot persist the invocation observation: {error}"),
+            };
+        }
 
         metaharness_outcome(status, &stderr_text, &transcript)
     }
@@ -1639,20 +1650,6 @@ fn b10x_tools(config: &ToolConfig) -> Vec<String> {
     tools
 }
 
-/// Validates the paid-run opt-in and exact cost terms before a run id or lock exists.
-fn spend_terms(
-    map: &StepMap,
-    budget_usd: Option<&str>,
-    assume_usd_per_run: Option<&str>,
-) -> Result<Option<SpendTerms>> {
-    spend_terms_with_live(
-        map,
-        budget_usd,
-        assume_usd_per_run,
-        std::env::var(METAHARNESS_LIVE_ENV).as_deref() == Ok("1"),
-    )
-}
-
 /// The spend pre-flight with its ambient opt-in already read, so its rules are unit-testable.
 fn spend_terms_with_live(
     map: &StepMap,
@@ -1698,20 +1695,6 @@ fn spend_terms_with_live(
         cap_micro_usd,
         assumed_micro_usd_per_run,
     }))
-}
-
-/// The remembered terms for a resume, optionally narrowed by this invocation.
-fn resumed_spend_terms(
-    map: &StepMap,
-    remembered: Option<SpendTerms>,
-    budget_usd: Option<&str>,
-) -> Result<Option<SpendTerms>> {
-    resumed_spend_terms_with_live(
-        map,
-        remembered,
-        budget_usd,
-        std::env::var(METAHARNESS_LIVE_ENV).as_deref() == Ok("1"),
-    )
 }
 
 /// Resume cost terms with the ambient opt-in already read, for deterministic tests.
@@ -2525,6 +2508,9 @@ fn adoptable(working_directory: &Path) -> bool {
 /// A governed run and its concrete execution options.
 #[derive(Debug, Args)]
 pub struct HostedRunArgs {
+    /// Explicit outer USD spending policy.
+    #[command(flatten)]
+    pub spend: SpendOptions,
     /// Neutral driver options.
     #[command(flatten)]
     pub common: aep_cli::drive::RunArgs,
@@ -2535,6 +2521,9 @@ pub struct HostedRunArgs {
 /// Resume an existing governed run without changing its engine contract.
 #[derive(Debug, Args)]
 pub struct HostedResumeArgs {
+    /// Optional restatement of the original outer USD spending policy.
+    #[command(flatten)]
+    pub spend: SpendOptions,
     /// Neutral resume options.
     #[command(flatten)]
     pub common: aep_cli::drive::ResumeArgs,
@@ -2578,6 +2567,7 @@ pub fn run(command: DriveCommand) -> Result<ExitCode> {
             &args.common,
             &Host {
                 b10x: Some(args.b10x),
+                spend: args.spend,
                 aep_binary: None,
             },
         ),
@@ -2585,6 +2575,7 @@ pub fn run(command: DriveCommand) -> Result<ExitCode> {
             &args.common,
             &Host {
                 b10x: None,
+                spend: args.spend,
                 aep_binary: args.aep_binary,
             },
         ),
@@ -2594,6 +2585,7 @@ pub fn run(command: DriveCommand) -> Result<ExitCode> {
     }
 }
 struct Host {
+    spend: SpendOptions,
     b10x: Option<B10xOptions>,
     aep_binary: Option<PathBuf>,
 }
@@ -2623,17 +2615,14 @@ impl ExecutionHost for Host {
         {
             return CommandOnlyHost.prepare(inputs, previous, budget, charge);
         }
-        let remembered = previous
-            .and_then(|record| record.extra.get("spend"))
-            .map(|value| serde_json::from_value::<Option<SpendTerms>>(value.clone()))
-            .transpose()
-            .context("invalid remembered spend terms")?
-            .flatten();
-        let terms = if previous.is_some() {
-            resumed_spend_terms(&inputs.map, remembered, budget)?
-        } else {
-            spend_terms(&inputs.map, budget, charge)?
-        };
+        let terms = spending::policy(
+            &inputs.map,
+            previous,
+            budget,
+            charge,
+            &self.spend,
+            std::env::var(METAHARNESS_LIVE_ENV).as_deref() == Ok("1"),
+        )?;
         let binary = b10x.aep_binary.as_ref().context("pass --aep-binary pointing to the planning executable built from this runner's pinned AEP source")?;
         let binary = fs::canonicalize(binary).context("resolving the selected AEP executable")?;
         let output = Process::new(&binary)
@@ -2660,19 +2649,13 @@ impl ExecutionHost for Host {
         }
         let mut launch_fields = std::collections::BTreeMap::new();
         launch_fields.insert("b10x".to_owned(), serde_json::to_value(&b10x)?);
-        launch_fields.insert("spend".to_owned(), serde_json::to_value(terms)?);
+        launch_fields.insert("spend_policy".to_owned(), serde_json::to_value(&terms)?);
         Ok(PreparedExecution {
             launch_fields,
             protocol_binary: Some(binary),
             executor: Box::new(move |context, resumed| {
                 let spend = terms
-                    .map(|terms| {
-                        if resumed {
-                            SpendBudget::resume(&context.run_directory, terms)
-                        } else {
-                            SpendBudget::start(&context.run_directory, terms)
-                        }
-                    })
+                    .map(|terms| AdmissionBudget::open(&context.run_directory, terms, resumed))
                     .transpose()?;
                 Ok(Box::new(
                     CliExecutors::new(
