@@ -249,6 +249,59 @@ mod tests {
         )
     }
 
+    // Synthetic Codex 0.153.4 terminal shapes reported in #11. These tests
+    // exercise the reader without claiming a new verified compatibility pin.
+    mod codex_terminal_regression {
+        use super::*;
+
+        const FAILURE: &str = r#"{"type":"event_msg","payload":{"type":"task_complete","error":{"message":"synthetic unsupported model"}}}"#;
+        const SUCCESS: &str = r#"{"type":"event_msg","payload":{"type":"task_complete","error":null,"last_agent_message":"done"}}"#;
+        const PARTIAL: &str = r#"{"type":"event_msg","payload":{"type":"agent_message","message":"starting the work"}}"#;
+
+        fn terminal_error(lines: &[&str]) -> Option<bool> {
+            let mut seam = seam();
+            for line in lines {
+                seam.push_line(line);
+            }
+            let emitted = seam.finish();
+            assert_eq!(emitted.len(), 1, "one terminal event is owed");
+            match &emitted[0].event {
+                Event::SessionEnded { is_error, .. } => *is_error,
+                other => panic!("expected session.ended, got {other:?}"),
+            }
+        }
+
+        #[test]
+        fn explicit_error_is_normalized_as_failure() {
+            assert_eq!(terminal_error(&[FAILURE]), Some(true));
+        }
+
+        #[test]
+        fn actual_success_is_normalized_as_success() {
+            assert_eq!(terminal_error(&[SUCCESS]), Some(false));
+        }
+
+        #[test]
+        fn preliminary_text_does_not_hide_a_later_failure() {
+            assert_eq!(terminal_error(&[PARTIAL, FAILURE]), Some(true));
+        }
+
+        #[test]
+        fn missing_terminal_evidence_does_not_invent_success() {
+            let mut seam = seam();
+            seam.push_line(PARTIAL);
+            assert!(seam.finish().is_empty());
+        }
+
+        #[test]
+        fn missing_error_field_remains_unknown() {
+            assert_eq!(
+                terminal_error(&[r#"{"type":"event_msg","payload":{"type":"task_complete"}}"#]),
+                None
+            );
+        }
+    }
+
     /// The line a blocked hook process becomes: a call the seam is holding, stamped with the seam
     /// that will carry the answer.
     #[test]

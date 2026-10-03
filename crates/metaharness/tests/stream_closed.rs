@@ -276,3 +276,93 @@ fn a_marker_whose_count_disagrees_with_the_stream_decides_nothing() {
     );
     assert!(seen.render().contains("INCONSISTENT"), "{}", seen.render());
 }
+
+/// Real adapter → core stream closure → the exit value used by the CLI with no
+/// audit. The scripted child starts no process and reads no credentials.
+mod codex_terminal_regression {
+    use super::*;
+
+    const FAILURE: &str = r#"{"type":"event_msg","payload":{"type":"task_complete","error":{"message":"synthetic unsupported model"}}}"#;
+    const SUCCESS: &str = r#"{"type":"event_msg","payload":{"type":"task_complete","error":null,"last_agent_message":"done"}}"#;
+    const PARTIAL: &str =
+        r#"{"type":"event_msg","payload":{"type":"agent_message","message":"starting the work"}}"#;
+
+    fn replay(lines: &[&str]) -> Run {
+        let mut runner = ScriptedRunner::of_lines(lines.iter().copied(), ScriptedLog::new());
+        let mut seams = metaharness::CodexSeams;
+        let mut run = Metaharness::new(Kind::Codex)
+            .with_decisions(DecisionMode::Observe)
+            .with_credentials(CredentialSource::None)
+            .start_with_clock(
+                Input::Prompt("synthetic terminal regression".to_string()),
+                &mut runner,
+                &mut seams,
+                Box::new(ManualClock::new()),
+            )
+            .expect("the synthetic run starts");
+        run.drain().expect("the synthetic run drains");
+        run
+    }
+
+    #[test]
+    fn explicit_failure_closes_error() {
+        let run = replay(&[FAILURE]);
+        assert_eq!(
+            closing(&run).map(|(_, reason)| reason),
+            Ok(CloseReason::Error)
+        );
+    }
+
+    #[test]
+    fn explicit_failure_yields_nonzero_cli_exit_value() {
+        let run = replay(&[FAILURE]);
+        assert_ne!(run.exit(None).code(), 0);
+    }
+
+    #[test]
+    fn actual_success_closes_completed_and_exits_zero() {
+        let run = replay(&[SUCCESS]);
+        assert_eq!(
+            closing(&run).map(|(_, reason)| reason),
+            Ok(CloseReason::Completed)
+        );
+        assert_eq!(run.exit(None).code(), 0);
+    }
+
+    #[test]
+    fn preliminary_text_does_not_hide_failure_from_stream_or_exit() {
+        let run = replay(&[PARTIAL, FAILURE]);
+        assert!(run.events().iter().any(|event| matches!(event,
+            Event::Text { text, .. } if text == "starting the work")));
+        assert_eq!(
+            closing(&run).map(|(_, reason)| reason),
+            Ok(CloseReason::Error)
+        );
+        assert_ne!(run.exit(None).code(), 0);
+    }
+
+    #[test]
+    fn missing_terminal_record_cannot_claim_success() {
+        let run = replay(&[PARTIAL]);
+        assert_eq!(
+            closing(&run).map(|(_, reason)| reason),
+            Ok(CloseReason::Error)
+        );
+        assert_ne!(run.exit(None).code(), 0);
+    }
+
+    #[test]
+    fn incomplete_terminal_evidence_cannot_claim_completed() {
+        let run = replay(&[r#"{"type":"event_msg","payload":{"type":"task_complete"}}"#]);
+        assert_ne!(
+            closing(&run).map(|(_, reason)| reason),
+            Ok(CloseReason::Completed)
+        );
+    }
+
+    #[test]
+    fn incomplete_terminal_evidence_cannot_exit_zero() {
+        let run = replay(&[r#"{"type":"event_msg","payload":{"type":"task_complete"}}"#]);
+        assert_ne!(run.exit(None).code(), 0);
+    }
+}

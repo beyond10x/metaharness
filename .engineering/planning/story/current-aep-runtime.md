@@ -2,7 +2,7 @@
 format: aep.planning-md/3
 id: story:current-aep-runtime
 kind: story
-status: draft
+status: active
 title: Link the current AEP release and admit its matching eval executable
 owner: metaharness
 refs:
@@ -21,7 +21,10 @@ scope:
   path: crates/metaharness-aep-eval/src/lib.rs
 - confidence: inferred
   path: evals
-revision: 7
+revision: 9
+transitions:
+- {from: "draft", to: "proposed", at: "2026-10-03T00:11:20Z", actor: "human:timo", revision: 8}
+- {from: "proposed", to: "active", at: "2026-10-03T00:11:20Z", actor: "human:timo", revision: 9}
 ---
 ## Context
 

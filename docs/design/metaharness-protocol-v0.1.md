@@ -1822,6 +1822,35 @@ identifier, ADR reference or credentials posture appears in § 2.6 or anywhere e
 
 ---
 
+## Amendment a10 — terminal outcomes and selected workspaces (2026-10-03)
+
+GitHub #11 supplies a terminal failure shape observed on Codex 0.153.4, outside the
+existing verified pin. A non-null `task_complete.error` is explicit failure and must
+survive normalization, stream closure and both audited and unaudited CLI exit.
+Preliminary assistant text cannot negate a later failure. An incomplete terminal
+record is unknown, never successful merely because the stream ended. A legacy
+successful completion may omit `error` but supplies `last_agent_message`; preserve
+that positive evidence rather than requiring a field older records never wrote.
+Keep unknown monetary cost absent. No protocol envelope or sealed frame bytes change.
+Synthetic regressions establish the mapping; live compatibility claims remain
+limited to the vendor versions and cases actually observed.
+
+GitHub #12 concerns an obsolete naming check. The pinned Harness revision
+`90f10a4314c1c630691c85e812bd8d5d23d73fcc` already admits existing directory names
+consisting of ASCII alphanumerics, underscore and hyphen, not beginning with a
+hyphen, through `EmbeddedSubstrate::workspace_adopt`. Its pinned-root identity and
+`openat2` checks provide containment; the former `ws_` prefix does not. Metaharness
+must resolve an explicitly selected project or cwd to its canonical directory and
+apply the same component eligibility before requesting confined launch. An eligible
+name alone is not proof of confinement. The actual driver must still admit the
+workspace, and missing confinement remains a refusal when mutation requires it.
+Selection never renames, copies or retires a managed worktree and never changes its
+lease owner. The existing explicit cwd/project and confinement flags express the
+operator's selection; no ambient directory is silently adopted.
+
+Independent review corrections and executed evidence for this amendment are recorded
+in the issue-repair AEP work, before any claim that the issues are complete.
+
 ## Appendix A — every claim's method
 
 | method | rows |
