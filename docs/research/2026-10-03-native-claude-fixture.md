@@ -47,14 +47,22 @@ H1a qualification gap. No production behavior changed for these observations.
 
 ## Cancellation and execution bounds
 
-Interrupt/halt tests wait until the native process reaches a deliberately quiet
-provider, send the existing CLI steering command, and require process closure
-within two seconds. The first such probe failed after that bound: the CLI did
+Interrupt/halt tests wait until both the native opening record and a request to
+the deliberately quiet provider are observed, send the existing CLI steering
+command, and require process closure within two seconds. The first such probe failed after that bound: the CLI did
 not service interrupt while the provider was quiet. The private
 `native-cancel-red.log` captures the failure; the guard terminated the owned
-processes. Cancellation qualification depends on the separate CLI steering
-liveness repair and a green rerun. The non-cancellation lane passed three tests
-exercising five processes.
+processes. After the separate CLI steering liveness repair, all four native
+tests passed in 4.09 seconds, exercising seven actual vendor processes including
+both interrupt and halt. This run used the candidate driver with SHA-256
+`0c03a7c4ed7002cc89dfee53111862c8d2f37048e255d8b0628ba62c7f3a2c63`.
+The final integrated driver still needs its own rerun.
+
+The first candidate retry sent halt before the opening event was emitted and
+therefore failed the fixture's unconditional version assertion even though
+termination succeeded. Waiting for both readiness facts removes that fixture
+race while preserving the two-second post-command deadline. The fixture mutex
+recovers from a previous failed test so a failure does not hide subsequent cases.
 Every native fixture invocation has an outer 45-second deadline and an RAII
 guard that kills the owned process group and reaps the direct child during
 unwind. HTTP headers and bodies have a shared three-second read deadline;

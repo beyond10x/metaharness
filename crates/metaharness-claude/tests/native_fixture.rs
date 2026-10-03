@@ -394,8 +394,10 @@ fn run(mode: Mode) -> (PathBuf, Vec<Value>, i32) {
     let mut decisions = BTreeSet::new();
     let mut cancelled = false;
     let mut cancel_deadline = None;
+    let mut started = false;
     let status = loop {
         for event in event_lines(&root) {
+            started |= event["event"] == "session.started";
             if event["event"] == "tool.requested" && event["decision_required"] == true {
                 let call = event["call_id"].as_str().unwrap();
                 if decisions.insert(call.to_owned()) {
@@ -410,6 +412,7 @@ fn run(mode: Mode) -> (PathBuf, Vec<Value>, i32) {
         }
         if let Mode::Hang { command } = mode
             && !cancelled
+            && started
             && provider.requests.lock().unwrap().iter().any(|r| {
                 r["request"]
                     .as_str()
@@ -539,7 +542,9 @@ fn retain_provider(root: &Path, provider: &Provider) {
 #[test]
 #[ignore = "actual Claude and production driver; explicit binaries/evidence and isolated loopback network namespace required"]
 fn native_success_failure_model_usage_and_extension_inventory() {
-    let _lease = NATIVE_RUN.lock().unwrap();
+    let _lease = NATIVE_RUN
+        .lock()
+        .unwrap_or_else(std::sync::PoisonError::into_inner);
     for failed in [false, true] {
         let (_, events, exit) = run(if failed { Mode::Refusal } else { Mode::Text });
         let started = events
@@ -604,7 +609,9 @@ fn native_success_failure_model_usage_and_extension_inventory() {
 #[test]
 #[ignore = "actual Claude and production driver; explicit binaries/evidence and isolated loopback network namespace required"]
 fn native_hook_allows_and_denies_the_real_marker_effect() {
-    let _lease = NATIVE_RUN.lock().unwrap();
+    let _lease = NATIVE_RUN
+        .lock()
+        .unwrap_or_else(std::sync::PoisonError::into_inner);
     for deny in [false, true] {
         let (root, events, exit) = run(Mode::Tool { deny });
         assert_eq!(exit, 0);
@@ -622,7 +629,9 @@ fn native_hook_allows_and_denies_the_real_marker_effect() {
 #[test]
 #[ignore = "actual Claude and production driver; explicit binaries/evidence and isolated loopback network namespace required"]
 fn native_interrupt_and_halt_close_a_waiting_provider_run() {
-    let _lease = NATIVE_RUN.lock().unwrap();
+    let _lease = NATIVE_RUN
+        .lock()
+        .unwrap_or_else(std::sync::PoisonError::into_inner);
     for command in ["interrupt", "halt"] {
         let (_, events, exit) = run(Mode::Hang { command });
         assert_ne!(exit, 0);
@@ -636,7 +645,9 @@ fn native_interrupt_and_halt_close_a_waiting_provider_run() {
 #[test]
 #[ignore = "actual Claude and production driver; explicit binaries/evidence and isolated loopback network namespace required"]
 fn native_max_turns_stops_a_fixture_that_keeps_requesting_tools() {
-    let _lease = NATIVE_RUN.lock().unwrap();
+    let _lease = NATIVE_RUN
+        .lock()
+        .unwrap_or_else(std::sync::PoisonError::into_inner);
     let (_, events, exit) = run(Mode::RepeatTool);
     assert_ne!(exit, 0);
     let terminal = events
