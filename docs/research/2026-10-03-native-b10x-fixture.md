@@ -74,11 +74,12 @@ normalized record preserves this absence: `NO_TERMINAL_RECORD`, no
 The corrected test asserts those facts instead of synthesizing a terminal event.
 The one-turn ceiling produces `max-turns`, native exit 2 and CLI exit 3.
 
-The quiet-request cancellation test originally reached its 30-second deadline
-against the pre-fix production CLI. The subprocess guard terminated the owned
-process group and retained the request record. This is the same core steering
-defect tracked separately; the native probe remains an obligation for the fixed
-production binary, not an asserted pass of the old version.
+Independent review found that the original quiet-request test sent unsupported
+`run.cancel` and `session.interrupt` commands. Its timeouts establish a fixture
+defect, not a production steering defect. Those private logs remain preserved;
+the earlier causal attribution is withdrawn. The corrected test sends `halt`
+and `interrupt`, waits for both an actual provider request and `session.started`,
+and requires the correlated successful `command.result` and native termination.
 
 ## Recorded result
 
@@ -90,12 +91,15 @@ run (CLI exit 3); it names both versions and emits no event or provider request.
 The initial probe expected exit 3 and was corrected to the planning-refusal
 contract after observing the named refusal.
 
-The current cancellation verifier requires closure within two seconds after the
-command and a thirty-second overall startup ceiling. Its `run.cancel` case
-reproduced the old driver's defect in 2.05 seconds (`0 passed; 1 failed`); the
-following `session.interrupt` case did not execute on that red run. Both remain
-in the test for qualification against the separately fixed core. There is no
-claim of native cancellation success in this evidence.
+The corrected cancellation verifier requires closure within two seconds after
+the command and a thirty-second overall startup ceiling. Against the quiet-stream
+candidate, `halt` passed with native signal 9, CLI exit 3 and `steer-halt` closure.
+`interrupt` received a correlated successful acknowledgement but did not stop
+the native process within two seconds. The full lane reported `4 passed; 1 failed`
+in 2.38 seconds. This valid-command observation exposed a separate no-control-wire
+interrupt defect: the adapter advertises honoured interrupt, but supplies no
+control line and the core did not stop the process. That repair and the final
+integrated-driver rerun remain pending; cancellation is not yet qualified.
 
 On Rust 1.99, the ordinary package lane retained its 31 passing unit tests and
 two existing ignored fixture-regeneration tests, added five ignored native tests,

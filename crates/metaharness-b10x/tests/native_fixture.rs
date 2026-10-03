@@ -369,6 +369,9 @@ fn run(mode: Mode, extra: &[&str]) -> (PathBuf, Vec<Value>, Vec<Value>, i32) {
         if let Mode::Hang { command } = mode
             && !cancelled
             && !provider.requests.lock().unwrap().is_empty()
+            && event_lines(&root)
+                .iter()
+                .any(|event| event["event"] == "session.started")
         {
             writeln!(input, "{}", json!({"format":"metaharness.command/1","id":"fixture-cancel","command":command,"reason":"owned fixture cancellation"})).unwrap();
             cancelled = true;
@@ -555,15 +558,27 @@ fn actual_b10x_cancellation_closes_a_quiet_native_request() {
     let _serial = NATIVE_RUN
         .lock()
         .unwrap_or_else(std::sync::PoisonError::into_inner);
-    for command in ["run.cancel", "session.interrupt"] {
-        let (_, events, requests, _) = run(Mode::Hang { command }, &[]);
+    for command in ["halt", "interrupt"] {
+        let (_, events, requests, code) = run(Mode::Hang { command }, &[]);
         assert_eq!(requests.len(), 1);
+        assert_eq!(code, 3);
+        let result = one(&events, "command.result");
+        assert_eq!(result["id"], "fixture-cancel");
+        assert_eq!(result["outcome"]["result"], "ok");
+        let closed = one(&events, "stream.closed");
+        assert_eq!(events.last(), Some(closed));
+        assert_eq!(closed["process"], json!({"kind":"signaled","signal":9}));
+        assert!(
+            !events
+                .iter()
+                .any(|event| event["event"] == "session.ended" && event["is_error"] == false)
+        );
         assert_eq!(
-            one(&events, "stream.closed")["reason"],
-            if command == "run.cancel" {
-                "cancelled"
+            closed["reason"],
+            if command == "halt" {
+                "steer-halt"
             } else {
-                "interrupted"
+                "error"
             }
         );
     }
