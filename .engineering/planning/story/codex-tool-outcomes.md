@@ -2,7 +2,7 @@
 format: aep.planning-md/3
 id: story:codex-tool-outcomes
 kind: story
-status: active
+status: implemented
 title: Normalize observed Codex tool outcomes
 refs:
 - provider: github
@@ -38,10 +38,11 @@ scope:
   path: evals/aep/runs
 - confidence: cited
   path: spec
-revision: 8
+revision: 10
 transitions:
 - {from: "draft", to: "proposed", at: "2026-10-03T09:13:46Z", actor: "human:timo", revision: 3, executor: "agent:codex-metaharness", correlation: "issue-repair-wave"}
 - {from: "proposed", to: "active", at: "2026-10-03T09:13:46Z", actor: "human:timo", revision: 4, executor: "agent:codex-metaharness", correlation: "issue-repair-wave"}
+- {from: "active", to: "implemented", at: "2026-10-03T10:49:21Z", actor: "human:timo", revision: 10, decided_on: {"recorded":{"test_result":3,"review_outcome":5,"ess_conformance_coverage_v1":1}}, executor: "agent:codex-metaharness", correlation: "issue-repair-wave"}
 ---
 ## Context
 
@@ -68,3 +69,9 @@ Default legacy Codex history does not persist command completion status and disc
 ## Source correction: persistent Codex exec history
 
 Read-only inspection of official Codex rust-v0.153.4 exec/src/lib.rs at 042fb41b7c813ac7999105e886b2b7aa715b5081 changes the earlier inference: thread_start_params_from_config requests Paginated history when not ephemeral. Metaharness refuses --ephemeral. start_thread falls back to unspecified/default legacy only on the explicit server error that paginated threads require listing support. The enum default is therefore not proof that this selected exec path normally uses legacy history. Existing support for retained CommandExecution items can cover the normal persistent path; native qualification must observe which path was taken. Legacy/resumed/fallback records that omit status remain unknown. No additional history flag or alternate vendor parser is currently justified.
+
+## Native acceptance result
+
+Credential-free native Codex0.153.4 observations now satisfy this story's bounded native acceptance alongside the existing synthetic and ESS regressions. Four explicitly selected Rust tests exercise eight native processes against an owned loopback provider, with the actual version and paginated history asserted from the retained native record. Production normalization preserves authoritative final text, turn-scoped model selection, synthetic-provider usage without invented money, command success/failure and patch outcomes; a denied command has no marker effect and remains outcome-unknown when no completion exists. The full Metaharness binary preserves terminal failure and native process exit1 while returning its own failure verdict3; success returns0. Broader adapter qualification belongs to issue15 and remains open.
+
+Source and reproducible invocation: docs/research/2026-10-03-native-codex-fixture.md and crates/metaharness-codex/tests/native_fixture.rs. Private logs are retained under the coordinator's metaharness-issue-repair/native-fixture cache: native-reviewed.log (four passed), cleanup-test.log, and task-check-approved.log (exit0;762 passed/17 ignored). Independent read-only fixture review found two subprocess-boundary gaps, then verified their fixes; it did not independently execute native runs. No paid model, private transcript commit or pin change is claimed.

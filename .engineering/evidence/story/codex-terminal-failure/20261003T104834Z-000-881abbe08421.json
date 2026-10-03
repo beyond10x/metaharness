@@ -1,0 +1,13 @@
+{
+  "at": "2026-10-03T10:48:34Z",
+  "actor": "human:timo",
+  "artifact": "story:codex-terminal-failure",
+  "kind": "story",
+  "revision": 15,
+  "change": {
+    "change": "evidence",
+    "kind": "test_result",
+    "source": "Native Codex0.153.4 fixture: 4 opt-in tests, 8 processes; task check:762 passed,17 ignored",
+    "reference": "docs/research/2026-10-03-native-codex-fixture.md"
+  }
+}

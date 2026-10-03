@@ -6,12 +6,8 @@ status: open
 title: Current vendor qualification awaits a bounded live-probe budget
 relations:
 - blocks: story:current-adapter-compatibility
-- blocks: story:codex-terminal-failure
-- blocks: story:codex-final-answer
-- blocks: story:codex-observed-model
-- blocks: story:codex-tool-outcomes
 withholds: test_result
-revision: 3
+revision: 4
 ---
 ## Pending decision
 
@@ -30,3 +26,9 @@ Issues #18–20 also require native final-answer authority, observed model selec
 ## Source correction: persistent Codex exec history
 
 Read-only inspection of official Codex rust-v0.153.4 exec/src/lib.rs at 042fb41b7c813ac7999105e886b2b7aa715b5081 changes the earlier inference: thread_start_params_from_config requests Paginated history when not ephemeral. Metaharness refuses --ephemeral. start_thread falls back to unspecified/default legacy only on the explicit server error that paginated threads require listing support. The enum default is therefore not proof that this selected exec path normally uses legacy history. Existing support for retained CommandExecution items can cover the normal persistent path; native qualification must observe which path was taken. Legacy/resumed/fallback records that omit status remain unknown. No additional history flag or alternate vendor parser is currently justified.
+
+## Current disposition
+
+The credential-free native fixture now supplies the bounded evidence for issues11 and18–20; their blocking edges were removed through the CLI. Actual Codex0.153.4 session metadata confirms paginated history, correlated command outcomes are observed, and denial without a completion remains unknown. The native and full-binary results are recorded in docs/research/2026-10-03-native-codex-fixture.md. No paid request was required for those observations.
+
+Only story:current-adapter-compatibility remains blocked here. Its wider qualification matrix still requires completion; the pending budget answer applies to any hosted requests. Prior paragraphs describe the earlier state and are superseded by this result for issues11 and18–20.

@@ -2,7 +2,7 @@
 format: aep.planning-md/3
 id: story:codex-terminal-failure
 kind: story
-status: active
+status: implemented
 title: Codex native terminal failures survive normalization and CLI exit
 owner: metaharness
 refs:
@@ -25,10 +25,11 @@ scope:
   path: crates/metaharness/tests/stream_closed.rs
 - confidence: cited
   path: docs/design/metaharness-protocol-v0.1.md
-revision: 14
+revision: 16
 transitions:
 - {from: "draft", to: "proposed", at: "2026-10-02T23:46:32Z", actor: "human:timo", revision: 7}
 - {from: "proposed", to: "active", at: "2026-10-02T23:46:32Z", actor: "human:timo", revision: 8}
+- {from: "active", to: "implemented", at: "2026-10-03T10:49:21Z", actor: "human:timo", revision: 16, decided_on: {"recorded":{"test_result":3}}, executor: "agent:codex-metaharness", correlation: "issue-repair-wave"}
 ---
 ## Context
 
@@ -57,3 +58,9 @@ Source-scope correction: crates/metaharness/src/audit.rs also needs review becau
 ## Integration result and remaining acceptance
 
 The adapter/core/CLI fix and adversarial synthetic boundaries are integrated and green in the final 744-test gate. ESS terminal cases also pass and unknown price remains absent. The required native unsupported-model probe is still pending under dependency-blocker:adapter-probe-budget; no live evidence or current vendor qualification is inferred from synthetic tests. Keep this story active until that acceptance is satisfied.
+
+## Native acceptance result
+
+Credential-free native Codex0.153.4 observations now satisfy this story's bounded native acceptance alongside the existing synthetic and ESS regressions. Four explicitly selected Rust tests exercise eight native processes against an owned loopback provider, with the actual version and paginated history asserted from the retained native record. Production normalization preserves authoritative final text, turn-scoped model selection, synthetic-provider usage without invented money, command success/failure and patch outcomes; a denied command has no marker effect and remains outcome-unknown when no completion exists. The full Metaharness binary preserves terminal failure and native process exit1 while returning its own failure verdict3; success returns0. Broader adapter qualification belongs to issue15 and remains open.
+
+Source and reproducible invocation: docs/research/2026-10-03-native-codex-fixture.md and crates/metaharness-codex/tests/native_fixture.rs. Private logs are retained under the coordinator's metaharness-issue-repair/native-fixture cache: native-reviewed.log (four passed), cleanup-test.log, and task-check-approved.log (exit0;762 passed/17 ignored). Independent read-only fixture review found two subprocess-boundary gaps, then verified their fixes; it did not independently execute native runs. No paid model, private transcript commit or pin change is claimed.
