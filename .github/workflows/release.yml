@@ -46,6 +46,8 @@ jobs:
           TARGET: ${{ matrix.target }}
         run: |
           set -euo pipefail
+          # Keep runner and dependency source paths out of published executables.
+          export RUSTFLAGS="--remap-path-prefix=$HOME=/build --remap-path-prefix=$GITHUB_WORKSPACE=/src"
           cargo build --locked --release --bin metaharness --target "$TARGET"
           bin="target/$TARGET/release/metaharness"
           printed=$("$bin" --version | head -1 | awk '{print $2}')

@@ -7,6 +7,7 @@ title: Publish release artifacts only through the organization bot
 relations:
 - decomposes: epic:github-issue-repair
 - delivers: release-plan:release-0-9-0
+- delivers: release-plan:release-0-9-1
 scope:
 - confidence: cited
   path: .github/workflows/release.yml
