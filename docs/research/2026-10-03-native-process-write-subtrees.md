@@ -98,3 +98,15 @@ branch is **not** a containment-success claim; the staged probe's write assertio
 remain unexecuted until a capable host publishes `run`. `containment-result.json`
 is retained privately per run to distinguish the two outcomes. The combined CLI
 must run this fixture before this new source is treated as native launch evidence.
+
+The combined immutable CLI candidate (SHA256
+`484ea4fedfa25d2974982899991e84c9186a0b194ac00cc7d9f736cf6888227b`) subsequently ran
+both production-CLI fixture cases. The tightened test reported one passed, zero
+failed: both empty/default and explicit target/generated declarations recorded
+`withheld-unverified`, specifically naming `run` with a nonblank reason, and no
+tool request or marker effect. In that isolated user/network namespace the native
+probe withheld `exec.argv-only`; the host `tools` probe outside that namespace had
+withheld `exec.resource-usage`. These are distinct observations, not one inferred
+cause. The Rust write checker did not execute on either withheld branch, so this
+record proves preservation of refusal and no fallback, not successful process
+containment. A capable host is still required for the positive mount assertions.

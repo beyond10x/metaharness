@@ -27,3 +27,10 @@ native run, so no unexecuted scenario is claimed green here.
 The adjacent containment fixture's refusal branch requires a withholding item
 specifically naming `run` with a nonblank reason. An unrelated withheld tool is
 insufficient evidence for process withholding.
+
+The source was then executed against the coordinator's immutable combined CLI
+candidate (SHA256 `484ea4fedfa25d2974982899991e84c9186a0b194ac00cc7d9f736cf6888227b`).
+The exact native scoper test reported one passed, zero failed, with strict version
+admission and the actual 0.13.3 session record. Both fixture requests were local
+and credential-free. This is the bounded prompted-role evidence described above,
+not a governed AEP or named-agent execution claim.
