@@ -29,15 +29,22 @@ impl TokenSink for FactsSink {
         match token {
             Token::DoctypeToken(doctype) => facts.doctype = doctype.name.as_deref() == Some("html"),
             Token::TagToken(tag) if tag.kind == TagKind::StartTag => {
-                if ["script", "iframe", "object", "embed", "base"].contains(&tag.name.as_ref()) {
+                if ["script", "iframe", "object", "embed", "base", "style"]
+                    .contains(&tag.name.as_ref())
+                {
                     facts.error =
                         Some(format!("active or routing HTML is forbidden: {}", tag.name));
                 }
                 for attr in tag.attrs {
                     let name = attr.name.local.as_ref();
                     let value = attr.value.as_ref();
-                    if name.starts_with("on") || name == "srcdoc" || name == "http-equiv" {
-                        facts.error = Some(format!("active HTML attribute is forbidden: {name}"));
+                    if name.starts_with("on")
+                        || ["srcdoc", "http-equiv", "srcset", "imagesrcset", "style"]
+                            .contains(&name)
+                    {
+                        facts.error = Some(format!(
+                            "active or unsupported HTML attribute is forbidden: {name}"
+                        ));
                     }
                     match name {
                         "id" => facts.ids.push(value.to_owned()),
@@ -134,6 +141,13 @@ fn documents(files: &Files) -> Result<BTreeMap<&str, HtmlFacts>, String> {
 }
 
 pub fn site(files: &Files) -> Result<(), String> {
+    for (path, bytes) in files.iter().filter(|(path, _)| {
+        std::path::Path::new(path)
+            .extension()
+            .is_some_and(|ext| ext == "css")
+    }) {
+        crate::css::check(bytes).map_err(|error| format!("{path}: {error}"))?;
+    }
     let pages = documents(files)?;
     let mut anchors = BTreeMap::new();
     for (path, page) in &pages {
@@ -207,6 +221,34 @@ mod tests {
             "<script>alert(1)</script>",
         ] {
             assert!(site(&document(body)).is_err(), "missed {body}");
+        }
+    }
+
+    #[test]
+    fn unsupported_html_asset_surfaces_are_refused() {
+        for body in [
+            "<img srcset='/metaharness/missing.png 2x' alt='Missing image'>",
+            "<link imagesrcset='/metaharness/missing.png 2x'>",
+            "<div style=\"background:url('/metaharness/missing.png')\"></div>",
+            "<style>body {background:url('/metaharness/missing.png')}</style>",
+        ] {
+            assert!(site(&document(body)).is_err(), "missed {body}");
+        }
+    }
+
+    #[test]
+    fn css_asset_imports_and_escaped_urls_are_refused() {
+        for css in [
+            "body {background-image:url('/metaharness/missing.png')}",
+            "@import '/metaharness/missing.css';",
+            r"@\69mport '/metaharness/missing.css';",
+            r"body {background:u\72l('/metaharness/missing.png')}",
+            "@media screen {div {background: URL(/metaharness/missing.png)}}",
+            "body {background:image-set('/metaharness/missing.png' 2x)}",
+        ] {
+            let mut files = document("<link rel='stylesheet' href='/metaharness/styles.css'>");
+            files.insert("styles.css".into(), css.as_bytes().to_vec());
+            assert!(site(&files).is_err(), "missed {css}");
         }
     }
 }

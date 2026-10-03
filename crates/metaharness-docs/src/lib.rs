@@ -1,5 +1,6 @@
 //! Credential-free Markdown documentation with local link checks and source provenance.
 mod content;
+mod css;
 mod output;
 mod render;
 mod validate;
