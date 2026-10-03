@@ -1,0 +1,13 @@
+{
+  "at": "2026-10-03T07:15:50Z",
+  "actor": "human:timo",
+  "artifact": "story:codex-terminal-failure",
+  "kind": "story",
+  "revision": 13,
+  "change": {
+    "change": "evidence",
+    "kind": "test_result",
+    "source": "cargo test --locked -p metaharness-codex -p metaharness; 313 passed, exit 0",
+    "reference": "local-evidence:codex-adversary/full.log"
+  }
+}
