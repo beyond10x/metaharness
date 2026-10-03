@@ -80,3 +80,17 @@ fn admission_matches_native_directory_bounds_without_interpreting_file_globs() {
     );
     assert!(validate_process_write_subtrees(&[vec!["x"; 64].join("/")]).is_ok());
 }
+
+#[test]
+fn a_literal_directory_beginning_with_hyphen_cannot_become_a_native_option() {
+    let paths = vec!["-out".to_owned()];
+    assert!(validate_process_write_subtrees(&paths).is_ok());
+    let launch = B10xLaunch::new("http://fixture.invalid", "fixture", "/work", "fixture")
+        .with_process_write_subtree("-out");
+    let argv = argv(&launch);
+    assert!(
+        argv.iter()
+            .any(|argument| argument == "--process-write-subtree=-out")
+    );
+    assert!(!argv.iter().any(|argument| argument == "-out"));
+}

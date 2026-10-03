@@ -51,3 +51,10 @@ Cargo write failure. A staged Rust probe will distinguish declared writes from
 undeclared sibling/outside writes where the host admits execution; withholding
 must remain explicit, with no unconfined fallback. Toolchain/dependency closure
 is separate from this write declaration. No hosted or paid model call is needed.
+
+Independent source review identified one CLI representation edge: the native
+path grammar permits a directory beginning with `-`, but a separate argv value
+could be mistaken for an option. Such a value is now forwarded as
+`--process-write-subtree=-out`; it remains the same literal directory. Other
+values retain the ordinary repeated flag/value representation. A regression
+pins that distinction, without narrowing the native directory syntax.
