@@ -1,0 +1,57 @@
+<main id="main" tabindex="-1" class="home-main">
+<section class="hero" aria-labelledby="title">
+  <div class="hero-copy">
+    <p class="eyebrow"><span class="dot"></span> Observe · steer · compare</p>
+    <h1>Many harnesses.<br><em>One interface.</em></h1>
+    <p class="lede">Keep the agent’s loop. Give your workflow a consistent way to drive it. Metaharness turns harness runs into a common stream of events, with explicit control and evidence of what happened.</p>
+    <div class="actions"><a class="button" href="/metaharness/docs/quickstart/">Get started <span aria-hidden="true">→</span></a><a class="text-button" href="#how-it-works">Explore the interface ↓</a></div>
+    <p class="quiet">Rust · JSON Lines · CLI first, library second</p>
+  </div>
+  <div class="terminal" aria-label="A first run without a model or credentials">
+    <div class="terminal-bar"><span aria-hidden="true">● ● ●</span><span>terminal / metaharness</span></div>
+    <pre tabindex="0" aria-label="Free conformance commands"><code><span class="comment"># Inspect the adapter’s declared contract.</span>
+<span class="prompt">$</span> metaharness capabilities claude
+
+<span class="comment"># Exercise the seam, without a model.</span>
+<span class="prompt">$</span> metaharness conformance claude
+
+<span class="comment"># Same interface. A different harness.</span>
+<span class="prompt">$</span> metaharness conformance codex</code></pre>
+    <div class="terminal-foot"><span class="dot"></span> No model call. No credential. A first check.</div>
+  </div>
+</section>
+<section id="how-it-works" class="section">
+  <div class="section-heading"><p class="eyebrow">01 / The shape of a run</p><h2>Your workflow stays outside.<br>The record crosses the boundary.</h2><p>Each harness keeps its own loop and tools. Its adapter translates the documented surface into one protocol your process can read and steer.</p></div>
+  <figure class="interface-map" aria-labelledby="interface-title">
+    <figcaption id="interface-title">One protocol, different adapter capabilities</figcaption>
+    <div class="flow">
+      <div class="flow-node"><span class="flow-label">Your process</span><h3>Workflow or embedder</h3><p>Read events.<br>Send steering commands.</p></div>
+      <div class="flow-path"><span>events out ←</span><code>JSONL</code><span>→ commands in</span></div>
+      <div class="flow-node emphasis"><span class="flow-label">The interface</span><h3>Metaharness</h3><p>Normalize the record.<br>Report the control boundary.</p></div>
+      <div class="flow-path"><span>adapter</span><span aria-hidden="true">↔</span><span>vendor surface</span></div>
+      <div class="flow-node"><span class="flow-label">The agent loop</span><h3>Claude · Codex · b10x</h3><p>Keep the harness’s loop.<br>Declare what each arm supports.</p></div>
+    </div>
+  </figure>
+  <p class="diagram-note">Claude Code and Codex expose control seams. The b10x adapter observes its loop; it does not claim an approval seam. <a href="/metaharness/docs/control-seam/">Understand the differences →</a></p>
+</section>
+<section id="contract" class="section">
+  <div class="section-heading"><p class="eyebrow">02 / Three commitments</p><h2>A shared shape.<br>Explicit boundaries.</h2></div>
+  <div class="cards">
+    <article><span class="card-number">01 / Unified</span><h3>One record vocabulary</h3><p>Session lifecycle, tool calls, results, usage and warnings share a common event envelope. Vendor details stay in the adapter.</p><a href="/metaharness/docs/protocol/events/">Read the event protocol →</a></article>
+    <article><span class="card-number">02 / Hermetic</span><h3>Evidence over assumptions</h3><p>A constructed environment limits ambient inputs. The run’s own record determines which hermetic claims are proven, missing or unknown.</p><a href="/metaharness/docs/hermetic/">Read the hermetic contract →</a></article>
+    <article><span class="card-number">03 / Controlled</span><h3>Decisions at the boundary</h3><p>On a supported seam, decide each call from a sealed frame or ask the embedder. Unsupported controls are refused by name.</p><a href="/metaharness/docs/control-seam/">Explore the control seam →</a></article>
+  </div>
+</section>
+<section id="harnesses" class="section">
+  <div class="section-heading"><p class="eyebrow">03 / Choose an adapter</p><h2>Compare the run.<br>Keep the differences visible.</h2><p>A common protocol does not make every harness equally controllable. Each adapter documents its version pins, observations and remaining limits.</p></div>
+  <div class="adapter-list">
+    <a href="/metaharness/docs/harnesses/claude/"><span class="adapter-name">Claude Code</span><span>Hook-driven tool decisions and a normalized session record</span><span aria-hidden="true">↗</span></a>
+    <a href="/metaharness/docs/harnesses/codex/"><span class="adapter-name">Codex</span><span>Exec, rollout observation and the vendor’s control surface</span><span aria-hidden="true">↗</span></a>
+    <a href="/metaharness/docs/harnesses/b10x/"><span class="adapter-name">b10x</span><span>The loop we own, measured through an observe-only adapter</span><span aria-hidden="true">↗</span></a>
+  </div>
+</section>
+<section id="start" class="section start-section">
+  <div><p class="eyebrow">04 / Start with the contract</p><h2>Make your next run<br>an observable one.</h2><p class="lede">Begin with the free conformance vectors. Then connect your workflow through events, commands and a sealed frame.</p><a class="button" href="/metaharness/docs/quickstart/">Open the quickstart <span aria-hidden="true">→</span></a></div>
+  <div class="reading-list"><a href="/metaharness/docs/reference/cli/"><span>CLI reference</span><span aria-hidden="true">↗</span></a><a href="/metaharness/docs/frames/"><span>The workflow frame</span><span aria-hidden="true">↗</span></a><a href="/metaharness/docs/protocol/commands/"><span>Steering commands</span><span aria-hidden="true">↗</span></a><a href="/metaharness/docs/status/"><span>Status and evidence limits</span><span aria-hidden="true">↗</span></a></div>
+</section>
+</main>

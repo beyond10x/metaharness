@@ -86,7 +86,7 @@ Green before any push.
 |---|---|
 | `task check` | the full gate |
 | `task fmt` | format the workspace |
-| `task docs` | the documentation site in dev mode, hot reload |
+| `task docs` | validate and build the independent documentation site |
 | `task docs:build` | build the site; a broken link fails the build |
 
 Rust 1.98, edition 2024. To exercise the binary without a credential:
@@ -131,7 +131,7 @@ Engine, tool, retry and cancellation limits still apply.
 | `docs/design/` | the binding design documents and their amendments |
 | `docs/research/` | vendor behaviour established by reading or probing, not by design |
 | `evals/` | paid and recorded evaluations, by subject — not part of `task check` |
-| `website/` | the public documentation site (Docusaurus) |
+| `website/` | the independent documentation, rendered by the Rust `metaharness-docs` builder |
 
 ## Read more
 
@@ -147,8 +147,6 @@ Engine, tool, retry and cancellation limits still apply.
 - [`AGENTS.md`](AGENTS.md) — working agreements for anyone, human or agent, changing this repo.
 - Published docs: <https://beyond10x.github.io/metaharness/>
 
-<!-- b10x-docs:start -->
 ## Documentation
 
-[Metaharness documentation](https://beyond10x.github.io/docs/metaharness/) · [Start](https://beyond10x.github.io/) · [Ecosystem](https://beyond10x.github.io/ecosystem/) · [Impact](https://beyond10x.github.io/changes/) · [Releases](https://beyond10x.github.io/releases/)
-<!-- b10x-docs:end -->
+[Metaharness documentation](https://beyond10x.github.io/metaharness/) · [Quickstart](https://beyond10x.github.io/metaharness/docs/quickstart/) · [CLI reference](https://beyond10x.github.io/metaharness/docs/reference/cli/) · [Releases](https://github.com/beyond10x/metaharness/releases)

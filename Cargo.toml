@@ -11,6 +11,7 @@ members = [
     "crates/metaharness-opencode",
     "crates/metaharness-tools",
     "crates/metaharness-cli",
+    "crates/metaharness-docs",
     "crates/metaharness-aep-eval",
 ]
 
