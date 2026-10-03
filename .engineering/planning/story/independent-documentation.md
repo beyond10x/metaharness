@@ -23,7 +23,7 @@ scope:
   path: crates/metaharness-docs
 - confidence: cited
   path: website
-revision: 6
+revision: 7
 transitions:
 - {from: "draft", to: "proposed", at: "2026-10-03T19:49:37Z", actor: "human:timo", revision: 4}
 - {from: "proposed", to: "active", at: "2026-10-03T19:49:37Z", actor: "human:timo", revision: 5}
@@ -51,3 +51,6 @@ The source registry validates relationships before rendering. Its only retained 
 
 ## Implementation evidence
 Site unit 50c97895f864b84d7a573d8db03d89185050d8cd preserves all 13 pages (13,057 words) and 125 legacy heading IDs. Seven unit and three publication tests pass; repeated complete builds are byte-identical. Browser checks passed all 14 pages at 1440, 768 and 390 pixels with JavaScript disabled, plus keyboard skip navigation. Atlas unit 24043e81489b52c433020f0114829c9c6ac69406 passes 220 unit and 63 integration tests. Website adversary review found three verifier parity gaps (quarantine namespaces, bootstrap-mode inference, ambient source-set conflict handling); all three are corrected before publication. Delivery and live verification remain pending.
+
+## Adversarial closure
+The site builder now stages replacements and accepts only a complete owned output inventory, preserving unrelated files and symlinks on refusal. Asset validation checks poster/background URLs and refuses unsupported srcset, inline CSS and stylesheet asset references through Rust tokenization. Final package verification: 11 unit and 6 publication tests pass; the independent adversary reran 9 boundary tests, all green. Trusted runtime probes do not execute candidate scripts and reject altered lock/bootstrap data. Agentic Principles PR 16 merged as b016a34be831af0695f4cc159e0d537b98d38312 with the exact source pin preserved. Stale Gates hooks were refreshed through the supported installer; policy baselines were not changed.
