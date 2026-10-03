@@ -9,13 +9,13 @@ rust-version.workspace = true
 
 [dependencies]
 metaharness = { path = "../metaharness" }
-aep-cli = { git = "https://github.com/beyond10x/aep", rev = "28abe09bb6e5b0a6b4db839f6bf5693957d39324" }
-aep-domain = { git = "https://github.com/beyond10x/aep", rev = "28abe09bb6e5b0a6b4db839f6bf5693957d39324" }
-aep-driver = { git = "https://github.com/beyond10x/aep", rev = "28abe09bb6e5b0a6b4db839f6bf5693957d39324" }
-aep-driver-spec = { git = "https://github.com/beyond10x/aep", rev = "28abe09bb6e5b0a6b4db839f6bf5693957d39324" }
-aep-engine = { git = "https://github.com/beyond10x/aep", rev = "28abe09bb6e5b0a6b4db839f6bf5693957d39324" }
-aep-project = { git = "https://github.com/beyond10x/aep", rev = "28abe09bb6e5b0a6b4db839f6bf5693957d39324" }
-trace-domain = { git = "https://github.com/beyond10x/aep", rev = "28abe09bb6e5b0a6b4db839f6bf5693957d39324" }
+aep-cli = { git = "https://github.com/beyond10x/aep", rev = "6d7a44d3607d2d9a6ffdf0a165993c546c43d0db" }
+aep-domain = { git = "https://github.com/beyond10x/aep", rev = "6d7a44d3607d2d9a6ffdf0a165993c546c43d0db" }
+aep-driver = { git = "https://github.com/beyond10x/aep", rev = "6d7a44d3607d2d9a6ffdf0a165993c546c43d0db" }
+aep-driver-spec = { git = "https://github.com/beyond10x/aep", rev = "6d7a44d3607d2d9a6ffdf0a165993c546c43d0db" }
+aep-engine = { git = "https://github.com/beyond10x/aep", rev = "6d7a44d3607d2d9a6ffdf0a165993c546c43d0db" }
+aep-project = { git = "https://github.com/beyond10x/aep", rev = "6d7a44d3607d2d9a6ffdf0a165993c546c43d0db" }
+trace-domain = { git = "https://github.com/beyond10x/aep", rev = "6d7a44d3607d2d9a6ffdf0a165993c546c43d0db" }
 clap.workspace = true
 serde.workspace = true
 serde_json.workspace = true
@@ -24,7 +24,8 @@ serde_yaml = "0.9"
 anyhow = "1"
 
 [dev-dependencies]
-aep-schema = { git = "https://github.com/beyond10x/aep", rev = "28abe09bb6e5b0a6b4db839f6bf5693957d39324" }
+tempfile.workspace = true
+aep-schema = { git = "https://github.com/beyond10x/aep", rev = "6d7a44d3607d2d9a6ffdf0a165993c546c43d0db" }
 
 [lints]
 workspace = true

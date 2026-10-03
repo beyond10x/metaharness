@@ -333,7 +333,7 @@ impl CliExecutors {
     /// **This is the native arm's half of the content rule.** The vendor arm's calls come back
     /// through the metaharness seam and reach `store_integrity` in this process; the native loop
     /// decides in-process and consults programs, so the same rule is declared here as a program to
-    /// spawn — `protocol drive hook`, this binary by the path `driven_programs` already names,
+    /// spawn — `aep drive hook`, this binary by the path `driven_programs` already names,
     /// calling the same `store_integrity_at`.
     ///
     /// Scoped to `file_edit` alone, because the fence rule is about the text an edit quotes.
@@ -377,7 +377,7 @@ impl CliExecutors {
         fs::write(&path, document)
             .map_err(|error| format!("cannot write {}: {error}", path.display()))?;
 
-        // Beside the frame, when this state refused anything. `protocol observe trace check` reads it as
+        // Beside the frame, when this state refused anything. `aep observe trace check` reads it as
         // it reads any specification.
         if let Some(refusals) = refusal_specification(context.state, context.index, context.tools) {
             let refusals_path = transcripts.join(format!(
@@ -700,7 +700,7 @@ fn surface_lines(harness: Harness, tools: &ToolConfig, driver: &str) -> String {
     if tools.shell_offered() && !harness.adjudicates() {
         // **The path, not the name.** The CLI is not on this sandbox's `PATH` and is not at the
         // path it occupies on the host: it is mounted read-only at one place, and a step told to
-        // reach the store "through `protocol`" and given no spelling that resolves will hand-write
+        // reach the store "through `aep`" and given no spelling that resolves will hand-write
         // the store instead — which is exactly what EVAL-1/1 did, twice, for two different reasons.
         let _ = write!(
             lines,
@@ -710,7 +710,7 @@ fn surface_lines(harness: Harness, tools: &ToolConfig, driver: &str) -> String {
              artifact …` and `{driver} observe trace …` — the older `artifact …` and \
              `trace …` spellings, without the area word, reach the same commands. That is the \
              whole path and it is not on `PATH`; the \
-             bare name `protocol` does not resolve here. Building and testing are `command` steps \
+             bare name `aep` does not resolve here. Building and testing are `command` steps \
              the driver runs itself, so that their records carry a verifier's provenance instead \
              of yours.\n",
         );
@@ -719,11 +719,11 @@ fn surface_lines(harness: Harness, tools: &ToolConfig, driver: &str) -> String {
             "\n`Bash` runs **one simple invocation per call**. No `&&`, no `|`, no `;`, no `$(…)`, \
              no redirect — a composed command is refused whole, so two things you want are two \
              calls.\n\
-             It runs `protocol plan artifact …` and `protocol observe trace …` \
+             It runs `aep plan artifact …` and `aep observe trace …` \
              and the readers `grep`, `rg`, \
              `ls`, `cat`, `head`, `tail` and `wc` — those only because nothing here can redirect \
              their output into a file. Not `git`, not `cargo`, not `sed`, not `awk`, not `find`, \
-             not `xargs`, not `protocol --help`. \
+             not `xargs`, not `aep --help`. \
              Building and testing are `command` steps the driver runs itself, so that their records \
              carry a verifier's provenance instead of yours — running them here would produce \
              nothing the engine can admit.\n",
@@ -974,8 +974,8 @@ fn action_for(tool: &str, input: &serde_json::Value) -> Option<ActionRequest> {
 /// # Two layers, in this order, and the reason it is this one
 ///
 /// 1. **[`decide_tool`]** — the ported hooks and the per-state allowlist. It runs first because it
-///    is the only layer that sees a call's *arguments*: `protocol plan artifact list | tee out` and
-///    `protocol plan artifact list` need the same capability and are not the same act, and no
+///    is the only layer that sees a call's *arguments*: `aep plan artifact list | tee out` and
+///    `aep plan artifact list` need the same capability and are not the same act, and no
 ///    `ActionRequest` can express the difference.
 /// 2. **the engine** — [`action_for`] renders the call as an `ActionRequest` and `authorize`
 ///    decides. Asked only about calls layer 1 admitted, so a refusal is attributed to the layer
@@ -1175,7 +1175,7 @@ const METAHARNESS_EVENT_FORMAT: &str = "metaharness.event/1";
 /// metaharness seam before the call runs. Three checks, first refusal wins, every reason written
 /// for the model to act on rather than as a wall:
 ///
-/// 1. **the driven surface** (`Bash`): one `protocol plan artifact` or `protocol observe trace` invocation — no
+/// 1. **the driven surface** (`Bash`): one `aep plan artifact` or `aep observe trace` invocation — no
 ///    pipes, no redirection, no substitution — and no shell at all in a state that does not
 ///    admit `command.execute`;
 /// 2. **the per-state allowlist**: the tool must render from a capability this state admits,
@@ -1307,7 +1307,7 @@ struct TransitionConsultation {
     failed: bool,
 }
 
-/// `protocol drive transition`
+/// `aep drive transition`
 ///
 /// Exit `0` proceeds; exit `2` refuses with `{"reason": …}` on stdout; anything else is a verb that
 /// could not answer, which the loop reads **fail closed** — a governor that could not answer did
@@ -1496,7 +1496,7 @@ fn driven_programs(config: &ToolConfig) -> Vec<String> {
     // Measured twice. On EVAL-1/1 at 8783e3c the bare name took `127` three times and the session
     // hand-wrote the store's frontmatter with `file_write`, omitting `id`, leaving the store
     // unparseable. On EVAL-1/1 at 3d8ac3b the absolute path was allow-listed, admitted, and still
-    // found nothing: the session said so in its own words — *"the `protocol` binary ... does not
+    // found nothing: the session said so in its own words — *"the `aep` binary ... does not
     // exist in the accessible filesystem"* — and the run ended with zero artifacts.
     //
     // An allow-list decides what a `run` may **name**; only a mount decides what the sandbox
@@ -1603,7 +1603,7 @@ fn spend_terms_with_live(
     if !live {
         bail!(
             "this map has {} `llm` step(s), and `{METAHARNESS_LIVE_ENV}=1` is not in this \
-             environment. A model session can cost money; opt in explicitly before `protocol \
+             environment. A model session can cost money; opt in explicitly before `aep \
              drive run` may allocate a run or spawn metaharness",
             llm_step_count(map)
         );
@@ -1722,7 +1722,7 @@ fn metaharness_preflight(map: &StepMap) -> Option<String> {
 ///
 /// Four checks, and the order is the one a person can act on: the seam's binary, then the CLI a
 /// driven session reaches the store through, then everything a `harness: b10x` step needs, then
-/// the binary a `command` step saying `protocol` would spawn. Each is decidable before a run id, a
+/// the binary a `command` step saying `aep` would spawn. Each is decidable before a run id, a
 /// lock, a snapshot or a model bill exists, which is the whole argument for them being here rather
 /// than at the first `llm` step.
 ///
@@ -1824,7 +1824,7 @@ fn b10x_preflight(map: &StepMap, options: &B10xOptions) -> Option<String> {
              \n\
              That `PATH` is `{path}` — **constructed by metaharness, not inherited** (H3) — so a \
              loop the operator can run is not automatically one the run can. It is the same \
-             constructed `PATH` the `protocol` CLI has to be installed onto, and for the same \
+             constructed `PATH` the `aep` CLI has to be installed onto, and for the same \
              reason.\n\
              \n\
              Install it where the run will find it:\n\
@@ -1908,7 +1908,7 @@ fn b10x_read_only_note(
 /// allowlist, plus a `PATH` computed as `$HOME/.local/bin:/usr/local/bin:/usr/bin:/bin`
 /// (`metaharness-claude`'s `child_path`, which that crate makes public precisely so a pre-flight
 /// can resolve a binary *the way the spawn will*). So a `target/debug` on the operator's `PATH`
-/// reaches this process and never the session, and exporting one before `protocol drive` changes
+/// reaches this process and never the session, and exporting one before `aep drive` changes
 /// nothing about what the model can run.
 ///
 /// Replicated here rather than depended on: this repository takes `entity-runtime` and nothing
@@ -1924,12 +1924,12 @@ fn session_path() -> String {
     }
 }
 
-/// Refuses a run whose `llm` steps are told to use `protocol` when the session will not have it.
+/// Refuses a run whose `llm` steps are told to use `aep` when the session will not have it.
 ///
 /// **Run `W4-3/1`, 2026-08-28, is why, and it cost $1.03 to find out.** The map's steps say *record
-/// it in the planning store*, and the store's only route is the `protocol` CLI — the state's shell
+/// it in the planning store*, and the store's only route is the `aep` CLI — the state's shell
 /// recorded-under-this-name: historical W4-3/1 transcript.
-/// exists for that and admits nothing else. The session ran `protocol artifact --help` and got
+/// exists for that and admits nothing else. The session ran `aep artifact --help` and got
 /// `exit 127, command not found`, four times across two states, because the constructed `PATH`
 /// holds no `target/debug`. Every guard held and the run was simply unable to do its work.
 ///
@@ -1938,19 +1938,19 @@ fn session_path() -> String {
 fn protocol_on_the_session_path() -> Option<String> {
     let path = session_path();
     let found = path.split(':').any(|directory| {
-        let candidate = Path::new(directory).join("protocol");
+        let candidate = Path::new(directory).join("aep");
         candidate.is_file()
     });
     if found {
         return None;
     }
     Some(format!(
-        "a driven `llm` step reaches the planning store through the `protocol` CLI, and the \n\
+        "a driven `llm` step reaches the planning store through the `aep` CLI, and the \n\
          session's `PATH` does not hold it.\n\
          \n\
          That `PATH` is `{path}` — **constructed by metaharness, not inherited**, so exporting \n\
          `target/debug` before this command changes what *this* process can run and nothing about \n\
-         what the model can. A run started anyway walks its states, is refused `protocol` by the \n\
+         what the model can. A run started anyway walks its states, is refused `aep` by the \n\
          shell with `exit 127`, and submits nothing: run `W4-3/1` did exactly that on 2026-08-28 \n\
          for $1.03.\n\
          \n\
@@ -2356,7 +2356,7 @@ fn b10x_argv(
     // `harness-tools`' local operations — which is the same rule as everywhere else on that arm: a
     // tool outside the surface does not exist rather than being refused. Run `b10x-2991520` spent
     // 30 `tool_search` calls, 28 of them distinct, hunting for `run`, `exec`, `shell`, `spawn` and
-    // `execute` because the step it was given needs the `protocol` CLI and nothing could start one.
+    // `execute` because the step it was given needs the `aep` CLI and nothing could start one.
     //
     // The list is the same decision `driven_surface` enforces on the vendor arm, rendered rather
     // than re-decided: the CLI, and the readers a state that admits `repository.read` may use.

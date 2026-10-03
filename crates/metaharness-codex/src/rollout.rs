@@ -55,6 +55,9 @@ pub struct RolloutReader {
     /// The last `task_complete` payload, which is the closest thing a rollout has to a terminal
     /// record; [`RolloutReader::finish`] builds `session.ended` from it.
     last_complete: Option<(Option<String>, Value)>,
+    /// An explicit failure belongs to the whole driven session. Later text or an
+    /// ambiguous completion cannot turn it into a successful run.
+    terminal_failure: bool,
     /// The last `token_count` usage, folded into `session.ended` because the rollout never
     /// carries cost and carries usage per turn rather than per session.
     last_usage: Option<Usage>,
@@ -75,6 +78,7 @@ impl RolloutReader {
             saw_task_complete: false,
             turn: 0,
             last_complete: None,
+            terminal_failure: false,
             last_usage: None,
             census: metaharness_protocol::DecisionCensus::default(),
         }
@@ -130,14 +134,14 @@ impl RolloutReader {
     ///
     /// A rollout is append-only and has no closing record; `task_complete` is per turn. So the
     /// terminal `session.ended` is built here, from the last `task_complete` and the last
-    /// `token_count` — with `is_error` left absent rather than guessed, because a rollout that
-    /// simply stops does not say why.
+    /// `token_count`. Explicit errors take precedence; a legacy final message is
+    /// positive success evidence. A bare completion remains unknown.
     pub fn finish(&mut self) -> Vec<Emission> {
         let Some((at, complete)) = self.last_complete.take() else {
             return Vec::new();
         };
         let event = Event::SessionEnded {
-            is_error: None,
+            is_error: completion_error(&complete),
             subtype: None,
             stop_reason: None,
             terminal_reason: None,
@@ -288,6 +292,11 @@ impl RolloutReader {
         match message_type {
             "task_started" => {
                 self.turn += 1;
+                // A new unfinished turn invalidates an earlier success, but never
+                // erases a failure already observed in this session.
+                if !self.terminal_failure {
+                    self.last_complete = None;
+                }
                 vec![Event::TurnStarted {
                     turn: self.turn,
                     frame_digest: None,
@@ -295,7 +304,10 @@ impl RolloutReader {
             }
             "task_complete" => {
                 self.saw_task_complete = true;
-                self.last_complete = Some((None, payload.clone()));
+                if !self.terminal_failure {
+                    self.terminal_failure = completion_error(payload) == Some(true);
+                    self.last_complete = Some((None, payload.clone()));
+                }
                 vec![Event::TurnEnded {
                     turn: self.turn.max(1),
                     stop_reason: None,
@@ -376,6 +388,20 @@ impl RolloutReader {
             digest: Digest::of(line.as_bytes()),
             source_line: Some(self.line_number),
         }
+    }
+}
+
+/// The distinction between an absent field and explicit null matters: older
+/// records report success through their final message instead. Non-null errors
+/// fail closed even if their payload shape is unfamiliar.
+fn completion_error(complete: &Value) -> Option<bool> {
+    match complete.get("error") {
+        Some(Value::Null) => Some(false),
+        Some(_) => Some(true),
+        None => complete["last_agent_message"]
+            .as_str()
+            .filter(|message| !message.trim().is_empty())
+            .map(|_| false),
     }
 }
 

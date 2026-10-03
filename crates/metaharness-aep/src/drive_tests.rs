@@ -392,7 +392,7 @@ fn b10x_step() -> LlmStep {
             "the composed-command rule is stated: {prompt}"
         );
         assert!(
-            prompt.contains("protocol plan artifact") && prompt.contains("protocol observe trace"),
+            prompt.contains("aep plan artifact") && prompt.contains("aep observe trace"),
             "and the two verb families the surface admits: {prompt}"
         );
 
@@ -411,12 +411,12 @@ fn b10x_step() -> LlmStep {
         // where that change had to be argued: what is forbidden is what *writes* or what runs a
         // program the surface never admitted, not what reads.
         for forbidden in [
-            "protocol plan artifact list && protocol plan artifact graph",
-            "protocol plan artifact list | head",
+            "aep plan artifact list && aep plan artifact graph",
+            "aep plan artifact list | head",
             "git status",
             "cargo test --workspace",
             "sed -i s/a/b/ Cargo.toml",
-            "protocol --help",
+            "aep --help",
         ] {
             assert!(
                 refused(forbidden),
@@ -429,7 +429,7 @@ fn b10x_step() -> LlmStep {
                 &context,
                 no_scope(),
                 "Bash",
-                &serde_json::json!({ "command": "protocol plan artifact list" })
+                &serde_json::json!({ "command": "aep plan artifact list" })
             )
             .is_ok(),
             "the prompt's own example is refused by the policy"
@@ -612,7 +612,7 @@ fn b10x_step() -> LlmStep {
     }
 /// The retired `driven-surface.sh`, case for case: the grant is held to one simple
     // recorded-under-this-name: retained flat-alias compatibility assertion.
-    /// `protocol artifact|trace` invocation, and a state with no shell says so by name.
+    /// `aep artifact|trace` invocation, and a state with no shell says so by name.
     #[test]
     fn the_shell_surface_is_one_simple_protocol_invocation() {
         let state: StateId = "implement".parse().expect("a state id");
@@ -628,28 +628,28 @@ fn b10x_step() -> LlmStep {
         };
 
         // recorded-under-this-name: retained flat-alias compatibility assertion.
-        assert!(bash("protocol artifact list").is_ok());
+        assert!(bash("aep artifact list").is_ok());
         // recorded-under-this-name: retained flat-alias compatibility assertion.
-        assert!(bash("protocol trace check t.jsonl").is_ok());
+        assert!(bash("aep trace check t.jsonl").is_ok());
         // recorded-under-this-name: retained flat-alias compatibility assertion.
-        assert!(bash("/usr/local/bin/protocol artifact list").is_ok());
+        assert!(bash("/usr/local/bin/aep artifact list").is_ok());
 
         assert!(
             // recorded-under-this-name: retained flat-alias compatibility assertion.
-            bash("protocol artifact list | tee out").is_err(),
+            bash("aep artifact list | tee out").is_err(),
             "composition"
         );
         assert!(
             // recorded-under-this-name: retained flat-alias compatibility assertion.
-            bash("protocol artifact list; rm -rf /").is_err(),
+            bash("aep artifact list; rm -rf /").is_err(),
             "chaining"
         );
         // recorded-under-this-name: retained flat-alias compatibility assertion.
-        assert!(bash("protocol artifact list > out").is_err(), "redirection");
+        assert!(bash("aep artifact list > out").is_err(), "redirection");
         // recorded-under-this-name: retained flat-alias compatibility assertion.
-        assert!(bash("protocol artifact $(cat x)").is_err(), "substitution");
+        assert!(bash("aep artifact $(cat x)").is_err(), "substitution");
         assert!(bash("cargo test").is_err(), "another program");
-        assert!(bash("protocol drive run").is_err(), "another verb");
+        assert!(bash("aep drive run").is_err(), "another verb");
         assert!(bash("").is_err(), "an empty command");
 
         let no_shell = config(&[Capability::RepositoryRead]);
@@ -659,7 +659,7 @@ fn b10x_step() -> LlmStep {
             no_scope(),
             "Bash",
             // recorded-under-this-name: retained flat-alias compatibility assertion.
-            &serde_json::json!({ "command": "protocol artifact list" }),
+            &serde_json::json!({ "command": "aep artifact list" }),
         )
         .expect_err("no shell in this state");
         assert!(
@@ -689,21 +689,21 @@ fn b10x_step() -> LlmStep {
             )
         };
 
-        assert!(bash("protocol plan artifact list").is_ok());
-        assert!(bash("protocol plan artifact new story x --title t").is_ok());
-        assert!(bash("protocol observe trace check t.jsonl").is_ok());
-        assert!(bash("/usr/local/bin/protocol plan artifact list").is_ok());
+        assert!(bash("aep plan artifact list").is_ok());
+        assert!(bash("aep plan artifact new story x --title t").is_ok());
+        assert!(bash("aep observe trace check t.jsonl").is_ok());
+        assert!(bash("/usr/local/bin/aep plan artifact list").is_ok());
 
         // The area word is skipped, not blessed: what follows it still has to be one of the two.
-        let refusal = bash("protocol plan serve").expect_err("`serve` is outside the surface");
+        let refusal = bash("aep plan serve").expect_err("`serve` is outside the surface");
         // recorded-under-this-name: retained flat-alias compatibility assertion.
-        assert!(refusal.contains("`protocol serve`"), "{refusal}");
+        assert!(refusal.contains("`aep serve`"), "{refusal}");
         assert!(
-            bash("protocol govern validate --root .").is_err(),
+            bash("aep govern validate --root .").is_err(),
             "an area word does not admit the verbs under it"
         );
         assert!(
-            bash("protocol drive run").is_err(),
+            bash("aep drive run").is_err(),
             "`drive` is an area name as well as the verb it always was, and neither admits `run`"
         );
     }
@@ -853,7 +853,7 @@ fn b10x_step() -> LlmStep {
             "naming the rule that matched, so the map is where a reader goes: {whole}"
         );
         assert!(
-            whole.contains("protocol plan artifact"),
+            whole.contains("aep plan artifact"),
             "and what to use instead, spelled as the step maps now spell it: {whole}"
         );
 
@@ -973,7 +973,7 @@ fn b10x_step() -> LlmStep {
             "a subagent's tool set is derived by nothing in these decisions"
         );
     }
-/// Gap register `:40`. The document the driver writes has to be one `protocol observe trace check`
+/// Gap register `:40`. The document the driver writes has to be one `aep observe trace check`
     /// can actually read, or it is a file nobody consumes that looks like an audit.
     ///
     /// Read back through `trace_domain::raw::read_spec` — the same door the CLI uses — rather than
@@ -1191,7 +1191,7 @@ fn b10x_step() -> LlmStep {
     ///
     /// **Run `b10x-2991520`, 2026-08-29: 30 `tool_search` calls, 28 of them distinct**, hunting for
     /// `run`, `exec`, `shell`, `spawn`, `execute`, `argv` and `program`. The step it was given
-    /// records something in the planning store, whose only route is the `protocol` CLI, and nothing
+    /// records something in the planning store, whose only route is the `aep` CLI, and nothing
     /// in its catalogue could start a process — `harness-tools` withholds `run` outright when no
     /// allowlist was supplied (`programs.is_none()`). The loop was right and the driver had not
     /// told it anything.
@@ -2263,7 +2263,7 @@ profile: test.reading
 /// Policy first, and a call it refuses never reaches the engine.
     ///
     /// The order matters in both directions: the argument-level rules are the only layer that can
-    /// tell `protocol plan artifact list` from `cargo test`, and an engine asked about a call the driver
+    /// tell `aep plan artifact list` from `cargo test`, and an engine asked about a call the driver
     /// already refused would record an action nobody was allowed to attempt.
     #[test]
     fn a_call_the_policy_refuses_is_attributed_to_the_policy_and_never_reaches_the_engine() {
@@ -2351,7 +2351,7 @@ profile: test.reading
         assert_eq!(
             needs(
                 "Bash",
-                serde_json::json!({ "command": "protocol plan artifact list" })
+                serde_json::json!({ "command": "aep plan artifact list" })
             ),
             Some("command.execute".into())
         );
@@ -2374,12 +2374,12 @@ profile: test.reading
 
         let request = action_for(
             "Bash",
-            &serde_json::json!({ "command": "protocol plan artifact list --kind story" }),
+            &serde_json::json!({ "command": "aep plan artifact list --kind story" }),
         )
         .expect("a shell call renders");
         assert_eq!(
             request.action.summary(),
-            "run `protocol plan artifact list --kind story`",
+            "run `aep plan artifact list --kind story`",
             "what the engine records is the call that was made"
         );
         let request = action_for("Read", &serde_json::json!({ "file_path": "/repo/x.rs" }))

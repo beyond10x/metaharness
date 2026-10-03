@@ -300,6 +300,73 @@ mod tests {
                 None
             );
         }
+
+        #[test]
+        fn legacy_final_message_is_positive_success_evidence() {
+            assert_eq!(
+                terminal_error(&[
+                    r#"{"type":"event_msg","payload":{"type":"task_complete","last_agent_message":"done"}}"#
+                ]),
+                Some(false)
+            );
+        }
+
+        #[test]
+        fn malformed_or_empty_final_message_is_not_success() {
+            for message in [
+                serde_json::json!(false),
+                serde_json::json!([]),
+                serde_json::json!(""),
+                serde_json::json!(null),
+            ] {
+                let line = serde_json::json!({"type":"event_msg","payload":{"type":"task_complete","last_agent_message":message}}).to_string();
+                assert_eq!(terminal_error(&[&line]), None);
+            }
+        }
+
+        #[test]
+        fn every_non_null_error_overrides_a_final_message() {
+            for error in [
+                serde_json::json!({"message":"failed"}),
+                serde_json::json!("failed"),
+                serde_json::json!(false),
+                serde_json::json!([]),
+            ] {
+                let line = serde_json::json!({"type":"event_msg","payload":{"type":"task_complete","error":error,"last_agent_message":"done"}}).to_string();
+                assert_eq!(terminal_error(&[&line]), Some(true));
+            }
+        }
+
+        #[test]
+        fn failure_survives_a_later_ambiguous_or_successful_completion() {
+            for later in [
+                r#"{"type":"event_msg","payload":{"type":"task_complete"}}"#,
+                SUCCESS,
+            ] {
+                assert_eq!(terminal_error(&[FAILURE, later]), Some(true));
+            }
+        }
+
+        #[test]
+        fn dangling_new_turn_invalidates_prior_success() {
+            let mut seam = seam();
+            seam.push_line(SUCCESS);
+            seam.push_line(
+                r#"{"type":"event_msg","payload":{"type":"task_started","turn_id":"new"}}"#,
+            );
+            assert!(seam.finish().is_empty(), "the new turn never completed");
+        }
+
+        #[test]
+        fn failure_survives_a_dangling_new_turn() {
+            assert_eq!(
+                terminal_error(&[
+                    FAILURE,
+                    r#"{"type":"event_msg","payload":{"type":"task_started","turn_id":"new"}}"#
+                ]),
+                Some(true)
+            );
+        }
     }
 
     /// The line a blocked hook process becomes: a call the seam is holding, stamped with the seam

@@ -712,7 +712,7 @@ fn prepare(resolved: &Resolved, prefix: &str, task_id: &str) -> Result<Fixture, 
 
 fn project_document(shape: &str) -> String {
     format!(
-        "version: aep.project/1\nprotocol: adp/1\nprofile: development.driven\nprotocols: protocols\nsummary: >-\n  The {shape} eval's scratch project: an empty planning store and an immutable copy of the\n  subject document tree inside the confined workspace.\n"
+        "version: aep.project/5\nplanning_scope: metaharness-eval\nstore:\n  git: {{}}\nprotocol: adp/1\nprofile: development.driven\nprotocols: protocols\nsummary: >-\n  The {shape} eval's scratch project: an empty planning store and an immutable copy of the\n  subject document tree inside the confined workspace.\n"
     )
 }
 
@@ -2148,6 +2148,19 @@ mod tests {
         let project = project_document("native");
         assert!(project.contains("protocols: protocols\n"));
         assert!(!project.contains("../../tree"));
+    }
+
+    #[test]
+    fn current_aep_runtime_fixture_uses_current_git_store_schema() {
+        for shape in ["native", "driven"] {
+            let project = project_document(shape);
+            assert!(project.contains("version: aep.project/5\n"), "{project}");
+            assert!(project.contains("store:\n  git: {}\n"), "{project}");
+            assert!(
+                project.contains("planning_scope: metaharness-eval\n"),
+                "{project}"
+            );
+        }
     }
 
     #[test]

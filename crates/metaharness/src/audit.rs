@@ -21,9 +21,9 @@
 use std::fmt::Write as _;
 
 use metaharness_protocol::{
-    Assertion, CredentialSource, DecidedBy, Decision, DecisionCensus, Event, HermeticAttestation,
-    HermeticRow, InstalledPlugin, RowVerdict, RunSpec, Severity, StreamCompleteness, Verdict,
-    WithheldTool, stream_completeness,
+    Assertion, CloseReason, CredentialSource, DecidedBy, Decision, DecisionCensus, Event,
+    HermeticAttestation, HermeticRow, InstalledPlugin, RowVerdict, RunSpec, Severity,
+    StreamCompleteness, Verdict, WithheldTool, stream_completeness,
 };
 
 use crate::auditor::AuditorVerdict;
@@ -77,8 +77,8 @@ impl RunExit {
 /// **Never `1`.** Without an audit there is no verdict to contradict, and two exit-code tables
 /// for one verb is how a caller comes to treat `0` as "it was fine" (design § 9.4).
 #[must_use]
-pub fn exit_without_audit(saw_terminal_record: bool) -> RunExit {
-    if saw_terminal_record {
+pub fn exit_without_audit(completed_successfully: bool) -> RunExit {
+    if completed_successfully {
         RunExit::Ok
     } else {
         RunExit::NoVerdict
@@ -158,7 +158,17 @@ impl AuditReport {
         if self.gating_gaps() > 0 || auditor_code == Some(1) {
             return RunExit::Gap;
         }
-        if !self.saw_terminal_record || self.gating_unknowns() > 0 || auditor_code == Some(3) {
+        if !self.saw_terminal_record
+            || !matches!(
+                self.stream,
+                StreamCompleteness::Complete {
+                    reason: CloseReason::Completed,
+                    ..
+                }
+            )
+            || self.gating_unknowns() > 0
+            || auditor_code == Some(3)
+        {
             return RunExit::NoVerdict;
         }
         RunExit::Ok
@@ -796,7 +806,16 @@ impl crate::run::Run {
     pub fn exit(&self, report: Option<&AuditReport>) -> RunExit {
         match report {
             Some(report) => report.exit(),
-            None => exit_without_audit(self.saw_terminal_record()),
+            None => exit_without_audit(
+                self.saw_terminal_record()
+                    && matches!(
+                        stream_completeness(self.events()),
+                        StreamCompleteness::Complete {
+                            reason: CloseReason::Completed,
+                            ..
+                        }
+                    ),
+            ),
         }
     }
 }

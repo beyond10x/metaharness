@@ -229,12 +229,12 @@ pub struct Run {
     outbox: VecDeque<Emission>,
     next_command_id: u64,
     finished: bool,
-    /// The reason a **steering command** ended this run, where one did.
+    /// A steering command or failed child exit overriding the terminal record.
     ///
     /// [`None`] is not *the run is still going*: it is *nothing overrode the record*, and the
     /// closing marker then reads its reason out of the terminal record itself
-    /// ([`Run::reason_from_record`]). Only `halt` fills it, because only `halt` ends a run for a
-    /// reason the record cannot state.
+    /// ([`Run::reason_from_record`]). Child exit status can contradict a successful
+    /// terminal record, and an explicit steering stop retains its own reason.
     closing: Option<CloseReason>,
     saw_terminal_record: bool,
     events: Vec<Event>,
@@ -1159,8 +1159,10 @@ impl Run {
             CloseReason::Budget
         } else if *is_error == Some(true) {
             CloseReason::Error
-        } else {
+        } else if *is_error == Some(false) || subtype.as_deref() == Some("success") {
             CloseReason::Completed
+        } else {
+            CloseReason::Error
         }
     }
 
@@ -1171,6 +1173,12 @@ impl Run {
     }
 
     fn wind_up(&mut self) {
+        // EOF alone says nothing about success. The Codex tail ends only after
+        // the child has exited; the other runners also expose their status here.
+        // Never replace the reason for an explicit steering stop with its signal.
+        if !matches!(self.process.wait(), Ok(Some(0))) && self.closing.is_none() {
+            self.closing = Some(CloseReason::Error);
+        }
         self.abandon_pending("the stream ended", warning::PENDING_CALL_ABANDONED);
         self.report_silent_child();
         self.retain_wire();

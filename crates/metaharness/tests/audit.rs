@@ -510,9 +510,12 @@ fn the_two_advisory_rows_are_evaluated_and_do_not_move_the_exit_code() {
         installed_plugins: Vec::new(),
         auditor: None,
         saw_terminal_record: true,
-        // These reports are built from a row list rather than from a run, so there is no stream to
-        // read: `Truncated` is the honest answer and never a softer one (invariant 3).
-        stream: metaharness::protocol::StreamCompleteness::Truncated,
+        // Supply successful synthetic termination independently of the rows under
+        // test: missing termination must now fail even when every row passes.
+        stream: metaharness::protocol::StreamCompleteness::Complete {
+            events: 1,
+            reason: metaharness::protocol::CloseReason::Completed,
+        },
     };
     assert_eq!(
         report.exit(),
@@ -538,15 +541,45 @@ fn report_withholding(
         installed_plugins: Vec::new(),
         auditor: None,
         saw_terminal_record: true,
-        // These reports are built from a row list rather than from a run, so there is no stream to
-        // read: `Truncated` is the honest answer and never a softer one (invariant 3).
-        stream: metaharness::protocol::StreamCompleteness::Truncated,
+        // These row tests hold the independent terminal outcome at success.
+        stream: metaharness::protocol::StreamCompleteness::Complete {
+            events: 1,
+            reason: metaharness::protocol::CloseReason::Completed,
+        },
     }
 }
 
 fn floor_for(record: Event) -> Vec<metaharness::protocol::RowVerdict> {
     let spec = RunSpec::new(Kind::Claude);
     hermetic_floor(&[record], &inputs(&spec, &pins(), &[]))
+}
+
+#[test]
+fn codex_terminal_regression_audit_needs_complete_success_evidence() {
+    use metaharness::protocol::{CloseReason, StreamCompleteness};
+    for stream in [
+        StreamCompleteness::Truncated,
+        StreamCompleteness::Inconsistent {
+            detail: "synthetic count mismatch".into(),
+            reason: CloseReason::Completed,
+        },
+        StreamCompleteness::Complete {
+            events: 1,
+            reason: CloseReason::Error,
+        },
+        StreamCompleteness::Complete {
+            events: 1,
+            reason: CloseReason::Budget,
+        },
+        StreamCompleteness::Complete {
+            events: 1,
+            reason: CloseReason::SteerHalt,
+        },
+    ] {
+        let mut report = report_with(Vec::new());
+        report.stream = stream;
+        assert_eq!(report.exit(), RunExit::NoVerdict);
+    }
 }
 
 #[test]

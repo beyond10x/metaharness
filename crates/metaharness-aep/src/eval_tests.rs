@@ -289,6 +289,42 @@ fn plan_of(arm: Arm, harness: Harness) -> Plan {
             model_requested: None,
         }
     }
+
+    /// An actual executable on the supplied child PATH, without touching the operator's install.
+    /// The fixture only emits a banner; it does not implement an AEP command or parse arguments.
+    fn version_fixture(version: &str) -> tempfile::TempDir {
+        let directory = tempfile::tempdir().expect("isolated executable directory");
+        let source = directory.path().join("banner.rs");
+        std::fs::write(&source, format!("fn main() {{ println!(\"aep {version}\"); }}\n"))
+            .expect("write Rust fixture");
+        let output = std::process::Command::new("rustc")
+            .arg("--crate-name")
+            .arg("aep_banner_fixture")
+            .arg(&source)
+            .arg("-o")
+            .arg(directory.path().join("aep"))
+            .output()
+            .expect("compile Rust fixture");
+        assert!(output.status.success(), "{}", String::from_utf8_lossy(&output.stderr));
+        directory
+    }
+
+    #[test]
+    fn current_aep_runtime_admits_matching_child_executable() {
+        let directory = version_fixture("0.68.0");
+        let case = plan_of(Arm::Raw, Harness::Claude).case;
+        let refusals = child_path_refusals(&[case], directory.path().to_str().unwrap());
+        assert!(refusals.is_empty(), "matching current AEP must be admitted: {refusals:?}");
+    }
+
+    #[test]
+    fn current_aep_runtime_refuses_different_child_executable() {
+        let directory = version_fixture("0.54.0");
+        let case = plan_of(Arm::Raw, Harness::Claude).case;
+        let refusals = child_path_refusals(&[case], directory.path().to_str().unwrap());
+        assert!(matches!(refusals.as_slice(), [RunRefusal::ChildAepMismatch { found, own, .. }]
+            if found == "0.54.0" && own == aep_cli::VERSION), "{refusals:?}");
+    }
 #[test]
     fn a_pinned_plugin_reaches_the_argv_with_the_bytes_the_operator_wrote() {
         // *Verbatim* is a claim about bytes, so it is asserted on bytes. The parse splits on the
