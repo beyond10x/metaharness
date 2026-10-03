@@ -1,0 +1,13 @@
+{
+  "at": "2026-10-03T12:53:40Z",
+  "actor": "human:timo",
+  "artifact": "task:release-source-path-remapping",
+  "kind": "task",
+  "revision": 5,
+  "change": {
+    "change": "evidence",
+    "kind": "test_result",
+    "source": "task check; exact rebuilt Linux executable conformance 27+17+7 vectors and Gates 0.1.12 scan-artifact passed",
+    "reference": "sha256:ff55489feea8dace8e6d15aaba93863e2068d018ce2ccb5ff190467902f92e04"
+  }
+}
