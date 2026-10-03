@@ -25,7 +25,7 @@ scope:
   path: crates/metaharness/tests/stream_closed.rs
 - confidence: cited
   path: docs/design/metaharness-protocol-v0.1.md
-revision: 13
+revision: 14
 transitions:
 - {from: "draft", to: "proposed", at: "2026-10-02T23:46:32Z", actor: "human:timo", revision: 7}
 - {from: "proposed", to: "active", at: "2026-10-02T23:46:32Z", actor: "human:timo", revision: 8}
@@ -53,3 +53,7 @@ Test-only worker wt-13a8621a208a at base 13a8378697fec1462b1014b04e5eb556bcba77c
 Evidence is retained outside Git in the coordinator's metaharness-issue-repair/codex-terminal scratch directory: report.md, red.log, baseline.log, first-red.log and regression.patch. No private vendor transcript was used. The worker lease is released. Root remains owner of integration and pending implementation.
 
 Source-scope correction: crates/metaharness/src/audit.rs also needs review because AuditReport::exit ignores terminal failure. Legacy successful golden records omit error but include last_agent_message; positive success evidence must be distinguished from a bare task_complete. Decide that in the binding design before the fix.
+
+## Integration result and remaining acceptance
+
+The adapter/core/CLI fix and adversarial synthetic boundaries are integrated and green in the final 744-test gate. ESS terminal cases also pass and unknown price remains absent. The required native unsupported-model probe is still pending under dependency-blocker:adapter-probe-budget; no live evidence or current vendor qualification is inferred from synthetic tests. Keep this story active until that acceptance is satisfied.

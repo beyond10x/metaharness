@@ -23,7 +23,9 @@ scope:
   path: crates/metaharness-codex
 - confidence: inferred
   path: docs/research
-revision: 4
+- confidence: cited
+  path: docs/research/2026-10-03-adapter-compatibility.md
+revision: 6
 ---
 ## Context
 
@@ -40,3 +42,7 @@ Adapter crates metaharness-claude, metaharness-codex and metaharness-b10x own cl
 ## Verification and resources
 
 Offline suites first. Short live probes run sequentially in private scratch with a shared explicit operator spending limit, no private repository task, and no unbounded model loop. Budget requested while offline work proceeds; a missing answer does not authorize spending. Record each command, version, time bound, cost if observed and exact unsupported scope. If a required surface cannot be exercised, retain its older pin/unverified label and record the unresolved issue honestly.
+
+## Offline inventory result
+
+Read-only banners still report Claude 2.1.288, Codex 0.153.4 and b10x-harness 0.13.3. docs/research/2026-10-03-adapter-compatibility.md records all six required surfaces for each version, distinguishes offline observations from native evidence, and leaves every incomplete claim unverified. No pins changed. dependency-blocker:adapter-probe-budget names the missing authorization; this story is not implemented.

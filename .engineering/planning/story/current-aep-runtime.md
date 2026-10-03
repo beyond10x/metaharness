@@ -2,7 +2,7 @@
 format: aep.planning-md/3
 id: story:current-aep-runtime
 kind: story
-status: active
+status: implemented
 title: Link the current AEP release and admit its matching eval executable
 owner: metaharness
 refs:
@@ -23,10 +23,11 @@ scope:
   path: crates/metaharness-cli/tests/aep_eval_live.rs
 - confidence: inferred
   path: evals
-revision: 11
+revision: 12
 transitions:
 - {from: "draft", to: "proposed", at: "2026-10-03T00:11:20Z", actor: "human:timo", revision: 8}
 - {from: "proposed", to: "active", at: "2026-10-03T00:11:20Z", actor: "human:timo", revision: 9}
+- {from: "active", to: "implemented", at: "2026-10-03T08:45:33Z", actor: "human:timo", revision: 12, decided_on: {"recorded":{"test_result":3}}, executor: "agent:codex-metaharness", correlation: "issue-repair-wave"}
 ---
 ## Context
 

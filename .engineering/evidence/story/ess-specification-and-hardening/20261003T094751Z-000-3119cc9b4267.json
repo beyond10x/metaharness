@@ -1,0 +1,13 @@
+{
+  "at": "2026-10-03T09:47:51Z",
+  "actor": "human:timo",
+  "artifact": "story:ess-specification-and-hardening",
+  "kind": "story",
+  "revision": 18,
+  "change": {
+    "change": "evidence",
+    "kind": "test_result",
+    "source": "ESS final 36-scenario baseline passed; all 18 guard-negate mutants killed; planted production final-answer omission failed ReadFinalAnswer/outcome/authoritative and restored production passed.",
+    "reference": "~/.cache/metaharness-issue-repair/observations1820/mutation-report.json"
+  }
+}

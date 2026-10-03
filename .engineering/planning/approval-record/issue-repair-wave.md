@@ -8,7 +8,7 @@ relations:
 - decides: epic:github-issue-repair
 - decides: story:codex-terminal-failure
 - decides: story:current-aep-runtime
-revision: 7
+revision: 10
 ---
 ## Authorization and boundary
 
@@ -123,3 +123,15 @@ Measured later: 18 GiB free; Codex target 623 MiB and AEP target 805 MiB. Permit
 The operator said continue. Both active workers subsequently returned host usage-limit errors; their source and logs were inspected and preserved, and the coordinator completed the remaining package checks locally. No paid model authorization was inferred from that continuation. The bot wrapper supports commit/tag/push/fetch only, so unit integration uses reviewed patches followed by bot-authored commits rather than an unsupported cherry-pick command. Native Git hooks remain enabled.
 
 Issue #16 unit wt-524d986f70fe starts at exact #12 source commit 54efe8c3; coordinator holds its own lease. Amendment a20 precedes its implementation. A typed runner capability defaults to real executable requirements; only explicit synthetic runners opt out, without fabricating version evidence. Full task check must pass before removing CI's binary-install accommodation.
+
+## Observation issue continuation
+
+The all-open-issues request includes newly discovered #17–20. Their validated ESS typed homes and four stories precede implementation; local critic passes are explicitly non-independent after worker quota exhaustion. Serialize one managed unit at a time on the existing integration branch. Start #17 at f3180f93 in wt-47e4aa5539fd. No fresh paid/model authority, push or PR is inferred. Current schema remains project/5. Three sequential conformance executions after the final adapter fixture split report the same 24 passing scenarios; the integrated full gate remains 744 passed, 13 live ignores. Native vendor mapping work remains unverified until the bounded budget is answered.
+
+## Combined adapter evidence unit
+
+Issues #18–20 share terminal payloads, the rollout reader, fixture regeneration and specification. They execute sequentially in one managed unit wt-f58495dc6b9f at exact native-status unit 8adb8052 (same source as integration e8d47d8a). This prevents overlapping protocol constructors and cross-unit decoder ownership. Coordinator implements offline mappings from the exact official 0.153.4 tag; no broad pin claim. Budget blockers stay open through offline implementation. The earlier native-status unit passed 751 tests and 27 ESS scenarios before source integration; planning evidence remains uncommitted pending the requested narrow path correction.
+
+## Executed observation extension
+
+The combined #18–20 unit is 44366ead96374793d1233199421015d714c95b74, integrated as 3385656e50f3a8694d31896e4a2e80ad3247f7c0. Both author and committer are b10x-bot[bot]. Final integration task check passed 761 tests with 13 ignored; ESS passed 36/36 and hardening killed 18/18 guard mutants. This records execution of the existing authorization, not new approval. Native qualification, the unresolved spending choice, and the one later PR boundary remain unchanged.

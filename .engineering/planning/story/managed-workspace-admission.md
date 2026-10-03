@@ -2,7 +2,7 @@
 format: aep.planning-md/3
 id: story:managed-workspace-admission
 kind: story
-status: active
+status: implemented
 title: Admit explicitly selected managed workspaces under existing confinement
 owner: metaharness
 refs:
@@ -26,10 +26,11 @@ scope:
   path: crates/metaharness/src/builder.rs
 - confidence: cited
   path: docs/design/metaharness-protocol-v0.1.md
-revision: 12
+revision: 13
 transitions:
 - {from: "draft", to: "proposed", at: "2026-10-03T07:16:20Z", actor: "human:timo", revision: 8}
 - {from: "proposed", to: "active", at: "2026-10-03T07:16:20Z", actor: "human:timo", revision: 9}
+- {from: "active", to: "implemented", at: "2026-10-03T08:45:34Z", actor: "human:timo", revision: 13, decided_on: {"recorded":{"test_result":2}}, executor: "agent:codex-metaharness", correlation: "issue-repair-wave"}
 ---
 ## Context
 

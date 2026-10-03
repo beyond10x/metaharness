@@ -1,0 +1,13 @@
+{
+  "at": "2026-10-03T08:44:26Z",
+  "actor": "human:timo",
+  "artifact": "story:scripted-b10x-run-does-not-need-the-binary",
+  "kind": "story",
+  "revision": 10,
+  "change": {
+    "change": "evidence",
+    "kind": "test_result",
+    "source": "task check: exit 0; 744 passed, 13 existing live tests ignored; local integration",
+    "reference": "~/.cache/metaharness-issue-repair/final-integration-task-check.log"
+  }
+}

@@ -3,7 +3,7 @@ format: aep.planning-md/3
 id: epic:github-issue-repair
 kind: epic
 status: draft
-title: Resolve Metaharness GitHub issues 10 through 16
+title: Repair Metaharness GitHub issues 10 through 20 and harden its ESS contract
 owner: metaharness
 refs:
 - provider: github
@@ -22,7 +22,7 @@ refs:
   reference: beyond10x/metaharness#16
 relations:
 - informed_by: epic:runs-side-by-side
-revision: 6
+revision: 9
 ---
 ## Requested outcome
 
@@ -66,3 +66,15 @@ The operator has been asked for a narrow exception to redact only the personal h
 ## Approved decomposition, current
 
 The operator approved the wave on 2026-10-03. Planning evidence redaction is resolved and the schema-5 migration is committed; the earlier pause text is historical. Issues #10-16 now all map to stories: current-aep-runtime, codex-terminal-failure, managed-workspace-admission, governed-codex, uncapped-spending-policy, current-adapter-compatibility and scripted-b10x-run-does-not-need-the-binary. ESS adoption/hardening is the requested additional ticket. Current partial-order delivery: #10/#11, then #12, then #13 and #16 on disjoint surfaces after checking scopes, then #14/#15 as their shared edits allow, then final real-target ESS reconciliation and integration gate. All source outcomes remain local to one integration branch for one later PR.
+
+## Open-issue inventory extension
+
+A final read-only GitHub refresh on 2026-10-03 found new issues #17–20. The original #10–16 inventory was complete when taken; the user's all-issues scope now includes native process termination, authoritative final answer, observed model identity and tool outcome evidence. These four are recorded as stories and serialize after integration f3180f93 on the same branch. No second PR is created. The installed Codex 0.153.4 official source tag rust-v0.153.4 resolves to 042fb41b7c813ac7999105e886b2b7aa715b5081; source inspection is not a native execution claim. New native observations remain subject to the unanswered live budget.
+
+## Integration checkpoint and handoff
+
+All source changes are on integration/metaharness-issue-repair, source commit 3385656e50f3a8694d31896e4a2e80ad3247f7c0, managed tree wt-8e8abedfd902. No push, PR, main merge, release or paid probe has occurred. Seven stories are implemented: #10, #12, #13, #14, #16, #17 and ESS adoption/hardening. #11 and #18–20 remain active; #15 remains draft because current native qualification is unobserved. No issue closure is inferred from those statuses.
+
+The final offline gate passed 761 tests, 13 ignored, and all 36 ESS scenarios. Hardening killed 18/18 guard mutants and caught the planted final-answer omission. Coordinator review is explicit; independent workers exhausted quota. The native budget decision remains open, and #20 additionally needs a verified observation path for legacy commands. docs/research/2026-10-03-codex-observations.md records that source gap.
+
+Next owner: the coordinator continuing this approved wave after the operator resolves native probe spending. Use worktree inspect for wt-8e8abedfd902, acquire a new session lease, inspect exact Git/AEP status, and retain the one-PR integration boundary. Private evidence and worktree recovery inventory live under ~/.cache/metaharness-issue-repair. A single older evidence import remains uncommitted because report_input contains a local absolute path; it has not been edited or deleted.

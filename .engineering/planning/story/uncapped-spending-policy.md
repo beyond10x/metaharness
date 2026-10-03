@@ -2,7 +2,7 @@
 format: aep.planning-md/3
 id: story:uncapped-spending-policy
 kind: story
-status: active
+status: implemented
 title: Represent explicit uncapped USD authority in governed runs
 owner: metaharness
 refs:
@@ -12,6 +12,10 @@ relations:
 - decomposes: epic:github-issue-repair
 - depends_on: story:governed-codex
 scope:
+- confidence: cited
+  path: CHANGELOG.md
+- confidence: cited
+  path: README.md
 - confidence: cited
   path: crates/metaharness-aep/src/drive.rs
 - confidence: inferred
@@ -24,10 +28,11 @@ scope:
   path: crates/metaharness-cli/tests/aep_resume.rs
 - confidence: cited
   path: docs/design/metaharness-protocol-v0.1.md
-revision: 9
+revision: 12
 transitions:
 - {from: "draft", to: "proposed", at: "2026-10-03T07:47:14Z", actor: "human:timo", revision: 5}
 - {from: "proposed", to: "active", at: "2026-10-03T07:47:14Z", actor: "human:timo", revision: 6}
+- {from: "active", to: "implemented", at: "2026-10-03T08:45:34Z", actor: "human:timo", revision: 12, decided_on: {"recorded":{"test_result":1,"verification":1}}, executor: "agent:codex-metaharness", correlation: "issue-repair-wave"}
 ---
 ## Context
 
@@ -52,3 +57,9 @@ Offline Rust CLI/admission/persistence/resume tests precede enabling any live ru
 ## Implementation ownership
 
 Coordinator implementation proceeds locally after worker quota failure. Isolate new tagged policy and uncapped ledger in drive/spending.rs with spending_tests.rs; drive.rs remains the only spawn authority. Finite aep.drive-spend/1 ledger stays readable. New uncapped ledger records ordered invocation coordinates and optional observed cost independently of admission. No resume mode or authorization change. Unit wt-682171833f78 starts from governed Codex unit 9a5f4646; one build at a time reuses wt-0866b435e898/target to limit disk use.
+
+## Conformance mapping and result
+
+Production targets in drive/spending_tests.rs map uncapped-explicit-authority and uncapped-missing-authority-refused to uncapped_admission_requires_explicit_reference_and_live_opt_in; uncapped-admission-before-spawn and unknown-cost-stays-unknown to invocation_precedes_spawn_and_unknown_cost_survives_crash_resume; uncapped-persistence-failure to failed_persistence_grants_no_authority_and_corrupt_order_cannot_resume; uncapped-resume-authority and finite-resume-cannot-uncap to resume_preserves_mode_and_reference_and_reads_legacy_finite_terms. CLI resume tests exercise persisted launch options and conflict/missing-authority refusals. Existing finite admission, exhaustion and narrowing tests remain green.
+
+A planted reserve-without-persist defect failed the file-reading test, then restoration passed. ESS RetainedAdmission also killed that production defect; it reads disk, not intended admission state. Final integration gate: 744 passed, 13 existing live ignores, exit0. Local review and limits are recorded in review-result:issue-repair-local-boundaries. No model request was made, finite ledgers remain readable, and no invented monetary precision or authorization is used.
