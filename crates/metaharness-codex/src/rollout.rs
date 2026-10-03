@@ -130,14 +130,17 @@ impl RolloutReader {
     ///
     /// A rollout is append-only and has no closing record; `task_complete` is per turn. So the
     /// terminal `session.ended` is built here, from the last `task_complete` and the last
-    /// `token_count` — with `is_error` left absent rather than guessed, because a rollout that
-    /// simply stops does not say why.
+    /// `token_count`. An explicit non-null `error` sets `is_error`; without that evidence it
+    /// stays absent rather than guessing whether the task succeeded.
     pub fn finish(&mut self) -> Vec<Emission> {
         let Some((at, complete)) = self.last_complete.take() else {
             return Vec::new();
         };
         let event = Event::SessionEnded {
-            is_error: None,
+            is_error: complete
+                .get("error")
+                .filter(|error| !error.is_null())
+                .map(|_| true),
             subtype: None,
             stop_reason: None,
             terminal_reason: None,

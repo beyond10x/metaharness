@@ -165,6 +165,46 @@ fn a_run_with_no_terminal_record_closes_error_rather_than_completed() {
     assert_eq!(closing(&run), Ok((1, CloseReason::Error)));
 }
 
+/// An explicit normalized failure is authoritative even after partial text. The unaudited
+/// exit code still describes transport completion, not whether the vendor succeeded.
+#[test]
+fn terminal_failure_closes_error_even_after_partial_text_and_preserves_transport_exit() {
+    for partial in [false, true] {
+        let mut script = vec![ScriptStep::line(INIT)];
+        if partial {
+            script.push(ScriptStep::line(
+                r#"{"emit":"text","text":"partial answer"}"#,
+            ));
+        }
+        script.push(ScriptStep::line(
+            r#"{"emit":"session.ended","is_error":true}"#,
+        ));
+        let mut run = started_as(Kind::Codex, script, DecisionMode::Frame);
+        let lines = run.drain().expect("the run drains");
+        let expected = if partial {
+            vec!["session.started", "text", "session.ended", "stream.closed"]
+        } else {
+            vec!["session.started", "session.ended", "stream.closed"]
+        };
+        assert_eq!(
+            run.events().iter().map(Event::name).collect::<Vec<_>>(),
+            expected
+        );
+        assert_eq!(
+            closing(&run),
+            Ok((if partial { 3 } else { 2 }, CloseReason::Error))
+        );
+        assert_eq!(lines.last().expect("the marker").seq, lines.len() as u64);
+        assert!(stream_completeness(run.events()).is_complete());
+        assert!(run.saw_terminal_record());
+        assert_eq!(
+            run.exit(None).code(),
+            0,
+            "unaudited exit is transport completion"
+        );
+    }
+}
+
 /// **For every harness kind**, because the marker is the *loop's* and not an adapter's: one `Run`
 /// drives every kind, and a stream that closed on one vendor and not on another would mean a
 /// checker could decide a negative row about a Claude run and not about a Codex one.

@@ -674,6 +674,21 @@ when it ended, so it says so in a line of its own.
    carry — *and then the file stopped, on purpose*. Turning that into a verdict about
    `nothing-was-moved` belongs to the consumer that owns the checker.
 
+**Codex terminal failure mapping (2026-10-03, upstream issue #11).** A non-null `error` in
+the last rollout `task_complete` is explicit failure evidence: the adapter emits
+`session.ended.is_error: true`, which the existing core closes with `stream.closed.reason: error`.
+Earlier partial assistant text does not override that failure. A missing or null `error` leaves
+`is_error` unknown; it does not invent a positive success assertion. Without a `task_complete`,
+the reader emits no `session.ended`, and the core closes the incomplete run as `error`.
+Costs and usage remain absent when the vendor did not report them.
+
+The motivating native failure was observed on Codex CLI **0.153.4**, outside this adapter's
+**0.145.0** pin; this mapping is not a claim of reproduction against the older pin. The existing
+`version_outside_pin` warning remains. Credential-free synthetic regressions cover the mapping
+without importing a real transcript or changing exported conformance vectors. The unaudited
+exit-code contract in § 9.4 is unchanged: a terminal failure still exits `0` for transport
+completion; consumers read the normalized outcome and closing reason to distinguish failure.
+
 **Additive on D3's rule, and the vocabulary moves from nineteen to twenty.** A reader of an older
 stream finds no marker and is told `truncated`, which is the correct answer about a file whose
 producer never promised to close it — and is why the absence is *named* rather than defaulted to

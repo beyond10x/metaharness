@@ -5,6 +5,13 @@ was amended and the amendment is named here.
 
 ## [Unreleased]
 
+### Fixed
+
+- Preserve explicit Codex `task_complete.error` as `session.ended.is_error: true`, so the stream
+  closes with reason `error`, including after partial output. Missing outcome and cost stay
+  unknown; the vendor pin warning and unaudited transport-completion exit code are unchanged.
+  See the protocol's terminal failure mapping and upstream issue #11.
+
 ## [0.8.0] — 2026-09-25
 
 ### Added
