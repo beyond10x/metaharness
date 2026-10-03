@@ -65,3 +65,17 @@ path, including any fallback, before an additional transport is justified.
 The final 36-scenario suite kills 18 of 18 guard-negation mutants and catches a
 planted production final-answer defect. These counts qualify this bounded model,
 not installed vendor behavior.
+
+## Credential-free native Codex observations
+
+[The native fixture report](2026-10-03-native-codex-fixture.md) records actual
+Codex 0.153.4 success, provider refusal, command exits0/7, hook denial, patch write,
+observed model selection and synthetic-provider usage through the production
+adapter. Retained native metadata confirms paginated history. A denied command
+has no structured completion and stays unknown; its deny response and absence
+of the marker effect are separately verified. These observations refine the
+earlier unverified Codex rows for the explicit fixture-provider scope. Two further
+cases verify success and refusal through the built Metaharness binary, including
+its final closure, native process status and CLI verdict. Cancellation,
+the AEP path, all declared controls, hosted providers and the other
+two current vendor versions remain outside this result. No pin advances yet.

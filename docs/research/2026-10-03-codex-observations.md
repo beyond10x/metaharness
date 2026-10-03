@@ -2,7 +2,9 @@
 
 Issues #18–20 are implemented against official Codex **rust-v0.153.4**, commit
 `042fb41b7c813ac7999105e886b2b7aa715b5081`. These are source-backed mappings with
-synthetic parser regressions, not a native qualification or a pin advance.
+synthetic parser regressions. Subsequent [native fixture observations](2026-10-03-native-codex-fixture.md)
+cover the selected mappings on 0.153.4; they do not complete the wider compatibility
+matrix or advance the pin.
 Protocol amendment a22 is the binding decision.
 
 | Observation | Source and normalized meaning |
@@ -66,6 +68,8 @@ This was coordinator review; worker quota prevented independent review.
 The ESS suite adds nine generated outcome scenarios through the real Codex
 reader. Synthetic raw inputs remain inside the adapter. AEP's conformance target
 reads only normalized protocol fields. Actual final text, current native model
-selection, command/patch outcomes and usage still require bounded native probes.
-The spending decision remains pending. No live transcript is committed, no paid
-request was made for these tests, and no vendor pin advances on this evidence.
+selection, command/patch outcomes and fixture usage now have bounded native
+observations against an owned credential-free provider; see the linked report.
+Hook denial preserves an unknown tool outcome because its native record omits a
+command completion. The broader qualification and hosted spending decision remain
+open. No native transcript is committed and no vendor pin advances yet.
