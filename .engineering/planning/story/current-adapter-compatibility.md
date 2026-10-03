@@ -2,7 +2,7 @@
 format: aep.planning-md/3
 id: story:current-adapter-compatibility
 kind: story
-status: draft
+status: active
 title: Verify installed adapter releases before advancing pins
 owner: metaharness
 refs:
@@ -15,17 +15,22 @@ relations:
 scope:
 - confidence: inferred
   path: CHANGELOG.md
+- confidence: cited
+  path: Cargo.lock
 - confidence: inferred
   path: crates/metaharness-b10x
 - confidence: inferred
   path: crates/metaharness-claude
-- confidence: inferred
+- confidence: cited
   path: crates/metaharness-codex
 - confidence: inferred
   path: docs/research
 - confidence: cited
   path: docs/research/2026-10-03-adapter-compatibility.md
-revision: 6
+revision: 10
+transitions:
+- {from: "draft", to: "proposed", at: "2026-10-03T10:10:31Z", actor: "human:timo", revision: 9, decided_on: {"recorded":{"review_outcome":1}}}
+- {from: "proposed", to: "active", at: "2026-10-03T10:10:31Z", actor: "human:timo", revision: 10, decided_on: {"recorded":{"review_outcome":1}}}
 ---
 ## Context
 
@@ -46,3 +51,9 @@ Offline suites first. Short live probes run sequentially in private scratch with
 ## Offline inventory result
 
 Read-only banners still report Claude 2.1.288, Codex 0.153.4 and b10x-harness 0.13.3. docs/research/2026-10-03-adapter-compatibility.md records all six required surfaces for each version, distinguishes offline observations from native evidence, and leaves every incomplete claim unverified. No pins changed. dependency-blocker:adapter-probe-budget names the missing authorization; this story is not implemented.
+
+## Credential-free native fixture work
+
+The release goal authorizes continuing this story. Native vendor binaries can be exercised against an owned loopback fixture provider without operator credentials or a paid API request. Start with actual Codex 0.153.4, a fresh HOME/CODEX_HOME, CredentialSource::None, explicit loopback model_endpoint and the production launch/rollout reader. Assert no credential copies, no authorization header and no hosted endpoint before treating the result as a credential-free observation. Bound the child, server and retained files. These tests are explicitly opt-in and never launch a vendor binary in task check.
+
+The fixture can establish native record format, final-answer/model mapping and failure behavior. Its synthetic responses and usage do not establish hosted model quality, provider/subscription authentication, observed money or general compatibility. Those limits must remain explicit; the paid-probe budget question remains pending for hosted qualification. Rust only for committed executable fixtures. This unit is serialized after #18–20 and release-preparation source.
