@@ -2,14 +2,15 @@
 format: aep.planning-md/3
 id: task:bot-release-publication
 kind: task
-status: active
+status: implemented
 title: Separate read-only release packaging from bot-owned publication
 relations:
 - decomposes: story:bot-release-publication
-revision: 3
+revision: 4
 transitions:
 - {from: "draft", to: "proposed", at: "2026-10-03T10:01:52Z", actor: "human:timo", revision: 2}
 - {from: "proposed", to: "active", at: "2026-10-03T10:01:52Z", actor: "human:timo", revision: 3}
+- {from: "active", to: "implemented", at: "2026-10-03T14:22:47Z", actor: "human:timo", revision: 4, decided_on: {"recorded":{"test_result":2}}}
 ---
 ## Purpose and authorized scope
 
