@@ -11,6 +11,8 @@ scope:
 - confidence: cited
   path: crates/metaharness-aep/src/drive/ess_conformance.rs
 - confidence: cited
+  path: crates/metaharness-aep/src/drive_tests.rs
+- confidence: cited
   path: crates/metaharness-cli/src/lib.rs
 - confidence: cited
   path: crates/metaharness-cli/tests
@@ -24,7 +26,7 @@ scope:
   path: spec/conformance.json
 - confidence: cited
   path: spec/domains/session.yaml
-revision: 6
+revision: 8
 transitions:
 - {from: "draft", to: "proposed", at: "2026-10-03T10:57:59Z", actor: "human:timo", revision: 3, decided_on: {"recorded":{"test_result":1}}}
 - {from: "proposed", to: "active", at: "2026-10-03T10:57:59Z", actor: "human:timo", revision: 4, decided_on: {"recorded":{"test_result":1}}}
@@ -46,3 +48,5 @@ Existing Command/Halt/Interrupt and stream termination entities own the behavior
 Core process polling and run loop, CLI drive loop, their regression tests, binding protocol design and corresponding existing ESS session domain/target. Native test extension in crates/metaharness-codex/tests/native_fixture.rs is coordinator-owned and must not be edited by the implementation worker. Other current vendor fixtures run in independent units; no shared checkout. Rust only. Source changes require full task check, independent review and the original native red loop rerun before integration; no pin change or paid request.
 
 Scope correction from the implementation worker: the generated suite is spec/conformance.json; spec/generated does not exist. The machine-readable scope now names the actual suite. Proposed PollSteering is an internal conformance operation over the existing running/control contract, measuring real Run polling and control delivery for quiet-halt, quiet-interrupt, pending-halt and quiet-only. It does not introduce a public wire entity or claim native timing.
+
+The stable1.99 affected-package lint pass found the equivalent assert_is_empty test lint at crates/metaharness-aep/src/drive_tests.rs:68. Add that test-only file to the unit's scope for the behavior-preserving assertion adjustment; this is not a runtime or monetary change. The worker is also checking a deadline edge introduced by polling: a queued tool answer must not be admitted after its armed deadline merely because command delivery falls between polls. A deterministic ManualClock regression must establish the behavior before changing command admission.
