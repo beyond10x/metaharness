@@ -18,6 +18,7 @@ use std::time::{Duration, Instant};
 
 const MODEL: &str = "b10x-native-fixture";
 const ANSWER: &str = "native-b10x-fixture-final";
+const SCOPER_ROLE: &str = "You are the AEP read-only scoper. Read fixture.txt, identify its scope evidence, and return a concise scope report. Do not modify files or execute processes.";
 static NATIVE_RUN: Mutex<()> = Mutex::new(());
 
 #[derive(Clone, Copy)]
@@ -26,6 +27,7 @@ enum Mode {
     Refusal,
     Tool { missing: bool },
     RepeatTool,
+    Scoper,
     ProcessWrites { declared: bool },
     Hang { command: &'static str },
 }
@@ -233,8 +235,8 @@ fn serve(
         };
         return reply(&mut stream, "200 OK", "text/event-stream", &response);
     }
-    let tool =
-        matches!(mode, Mode::RepeatTool) || (matches!(mode, Mode::Tool { .. }) && *turn == 0);
+    let tool = matches!(mode, Mode::RepeatTool)
+        || (matches!(mode, Mode::Tool { .. } | Mode::Scoper) && *turn == 0);
     if tool
         && !observed["body"]["tools"]
             .as_array()
@@ -380,7 +382,11 @@ fn run(mode: Mode, extra: &[&str]) -> (PathBuf, Vec<Value>, Vec<Value>, i32) {
             "--model-wire",
             "openai-responses",
             "--prompt",
-            "Perform only the fixture's file read, then return its answer.",
+            if matches!(mode, Mode::Scoper) {
+                SCOPER_ROLE
+            } else {
+                "Perform only the fixture's file read, then return its answer."
+            },
             "--max-turns",
             if matches!(mode, Mode::RepeatTool) {
                 "1"
@@ -699,7 +705,10 @@ fn actual_b10x_process_writes_are_contained_or_explicitly_withheld() {
             assert!(
                 start["withheld"]
                     .as_array()
-                    .is_some_and(|items| !items.is_empty()),
+                    .is_some_and(|items| items.iter().any(|item| item["tool"] == "run"
+                        && item["reason"]
+                            .as_str()
+                            .is_some_and(|reason| !reason.trim().is_empty()))),
                 "native withholding evidence is required: {start}"
             );
             for directory in ["target", "generated"] {
@@ -716,4 +725,57 @@ fn actual_b10x_process_writes_are_contained_or_explicitly_withheld() {
         fs::write(root.join("containment-result.json"), serde_json::to_vec_pretty(&json!({"outcome":outcome,"declared":declared,"native_version":start["harness_version"],"withheld":start["withheld"]})).unwrap()).unwrap();
         eprintln!("process containment declaration={declared}: {outcome}");
     }
+}
+
+#[test]
+#[ignore = "actual strict-pinned b10x and production CLI; explicit paths and loopback-only namespace"]
+fn actual_b10x_prompted_read_only_scoper_preserves_role_and_file_evidence() {
+    let _serial = NATIVE_RUN
+        .lock()
+        .unwrap_or_else(std::sync::PoisonError::into_inner);
+    let (_, events, requests, code) = run(Mode::Scoper, &["--strict-version"]);
+    assert_eq!(code, 0);
+    assert_closed(&events, 0);
+    assert_eq!(requests.len(), 2);
+    assert!(
+        requests[0]["body"]["input"]
+            .to_string()
+            .contains(SCOPER_ROLE),
+        "the intended role must reach the actual native provider request"
+    );
+    for request in &requests {
+        let mut tools: Vec<&str> = request["body"]["tools"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .map(|tool| tool["name"].as_str().unwrap())
+            .collect();
+        tools.sort_unstable();
+        assert_eq!(tools, ["dir_list", "file_read", "find", "search"]);
+    }
+    let requested = one(&events, "tool.requested");
+    assert_eq!(requested["name"], "file_read");
+    assert_eq!(requested["decision_required"], false);
+    assert_eq!(requested["seam"], "none");
+    let result = one(&events, "tool.result");
+    assert_eq!(result["call_id"], requested["call_id"]);
+    assert_eq!(result["is_error"], false);
+    let replayed = requests[1]["body"]["input"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .find(|item| item["type"] == "function_call_output")
+        .unwrap();
+    assert_eq!(replayed["call_id"], requested["call_id"]);
+    assert!(
+        replayed["output"]
+            .to_string()
+            .contains("owned-native-fixture-content")
+    );
+    assert_eq!(one(&events, "session.ended")["is_error"], false);
+    assert!(
+        events
+            .iter()
+            .any(|event| event["event"] == "text" && event["text"] == ANSWER)
+    );
 }
