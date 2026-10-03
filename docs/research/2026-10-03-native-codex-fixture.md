@@ -16,6 +16,8 @@ The opt-in Rust tests are `crates/metaharness-codex/tests/native_fixture.rs`.
 | Command exit7 | The real command writes the marker and produces a correlated structured completion with exit7 and is_error=true. The fixture then supplies a successful terminal answer; tool and session outcomes remain distinct. |
 | Hook denial | The actual PreToolUse hook is answered deny. The otherwise identical command writes no marker. No CommandExecution completion is retained, so normalized tool status remains unknown; authorization stays separate. |
 | Patch | The native apply_patch call creates the fixture file with the expected contents. A correlated patch completion reports success without inventing a numeric exit. |
+| Full binary ask/deny | A real tool.requested is answered through CLI stdin, command.result reports acceptance, the denied census is1 and the marker is absent. The fixture then supplies a successful terminal answer. |
+| Quiet-provider halt/interrupt | Both commands close the candidate CLI within5seconds while the provider deliberately keeps its response incomplete for10seconds. Native signal9 is retained; halt closes steer-halt and interrupt without a terminal closes error. CLI verdict3 preserves the lack of a successful run. |
 
 The first tool probe incorrectly expected a failed outcome from the hook denial.
 It failed: the observed normalized value was unknown. Inspection of the retained
@@ -65,7 +67,7 @@ monetary expenditure.
 
 This is narrower than hosted-provider or subscription qualification. It does not
 prove real model quality, hosted routing, AEP
-governance, cancellation, all hermetic controls, or either other vendor's current
+governance, all hermetic controls, or either other vendor's current
 release. The existing pin remains unchanged while issue #15's matrix is incomplete.
 
 All four opt-in tests passed, exercising eight native processes. The full binary
@@ -74,3 +76,22 @@ the adapter and native hook directly. Native executions are coordinator
 verification. A separate read-only reviewer found an unbounded redundant version
 probe and missing child cleanup on panic; the probe was removed and cleanup
 added. That review did not independently execute the native suite.
+
+## Quiet-stream regression and extended candidate
+
+The native cancellation extension exposed a real production defect: the CLI did
+not service its queued command while the provider stream was quiet. The original
+timing test failed its five-second bound, even though the eventual closure
+correctly recorded the command and native signal. The initial test's wire-field
+spellings were first corrected against the protocol; the subsequent timing
+failure is the actual defect, tracked by story:silent-stream-steering.
+
+The polling repair candidate (binary SHA256
+`0c03a7c4ed7002cc89dfee53111862c8d2f37048e255d8b0628ba62c7f3a2c63`)
+passed all six native tests, including the original failing loop. This extended
+run exercised eleven processes in96.23seconds. It ran inside an owned Linux
+user/network namespace with only loopback enabled, using the same provider and
+production launch paths. The namespace was a test condition, not a product
+isolation claim. Private evidence is native-steering-candidate.log alongside the
+original cancel-timing.log. The candidate still requires final integration and
+review; this observation alone is not a release or pin qualification.
