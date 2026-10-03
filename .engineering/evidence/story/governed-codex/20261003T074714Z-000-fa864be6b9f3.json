@@ -1,0 +1,13 @@
+{
+  "at": "2026-10-03T07:47:14Z",
+  "actor": "human:timo",
+  "artifact": "story:governed-codex",
+  "kind": "story",
+  "revision": 7,
+  "change": {
+    "change": "evidence",
+    "kind": "verification",
+    "source": "VERIFIED offline: baseline rejects codex selection; treatment selects ask seam, real engine allows and denies supported calls, unsupported/malformed/patch/Skill calls deny. 153 package tests passed, 2 existing ignored; clippy/fmt green. Local adversarial pass, no independent reviewer available after worker quota. Current-version live claims remain unverified under story:current-adapter-compatibility.",
+    "reference": "~/.cache/metaharness-issue-repair/governed13/red.log; full.log; clippy.log"
+  }
+}

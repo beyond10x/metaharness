@@ -67,7 +67,10 @@ pub use launch::{
     LaunchRefusal, LoopbackParams, child_path, config_path, hook_program_path, plan_launch,
 };
 pub use rollout::RolloutReader;
-pub use seam::{HookInput, capabilities, parse_hook_input, render_hook_response, render_operation};
+pub use seam::{
+    HookInput, capabilities, governed_shell_command, parse_hook_input, render_hook_response,
+    render_operation,
+};
 pub use vectors::{CONTRACT_OBLIGATIONS, conformance_vectors};
 
 /// This adapter's id, as it appears in `session.started` and on the command line.

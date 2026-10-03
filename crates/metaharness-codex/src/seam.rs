@@ -21,6 +21,36 @@ use serde_json::{Map, Value, json};
 
 use crate::{ADAPTER_ID, PINNED_VERSIONS};
 
+/// Decode the driven shell hook into a command for an external governor.
+///
+/// Only the observed shell shape is supported. Patch calls need a complete write set and
+/// content guard; extra execution options need their own policy mapping. Neither is silently
+/// treated as an ordinary command.
+///
+/// # Errors
+/// Returns a named refusal for an unsupported tool or payload.
+pub fn governed_shell_command<'a>(name: &str, input: &'a Value) -> Result<&'a str, String> {
+    if name != "Bash" {
+        return Err(format!(
+            "Codex tool `{name}` has no governed action mapping; patch writes require a complete write set and content guard"
+        ));
+    }
+    let fields = input
+        .as_object()
+        .ok_or("Codex shell input must be an object")?;
+    if fields
+        .keys()
+        .any(|key| key != "command" && key != "description")
+    {
+        return Err("Codex shell execution options have no governed mapping".to_owned());
+    }
+    let command = input["command"]
+        .as_str()
+        .filter(|text| !text.trim().is_empty())
+        .ok_or("Codex shell input requires a nonempty string command")?;
+    Ok(command)
+}
+
 /// The codex adapter's declared capabilities.
 #[must_use]
 pub fn capabilities() -> Capabilities {

@@ -1,5 +1,100 @@
 #[cfg(test)]
 mod tests {
+    #[test]
+    fn governed_codex_is_selected_as_an_adjudicating_harness() {
+        let selected = Harness::named("codex").expect("the existing adapter is available to drive");
+        assert_eq!(selected.kind(), "codex");
+        assert!(selected.adjudicates());
+    }
+
+    #[test]
+    fn codex_decisions_reach_the_engine_and_unsupported_calls_never_gain_an_exemption() {
+        use aep_engine::ProtocolEngine as _;
+        let state: StateId = "implement".parse().unwrap();
+        let tools = config(&[Capability::RepositoryRead, Capability::CommandExecution]);
+        let task = driven_task();
+        let context = step_context(&tools, &state, &task);
+        for allowed in [false, true] {
+            let profile = if allowed {
+                AUTHORIZE_PROFILE.replace("allow: [repository.read]", "allow: [repository.read, command.execute]")
+            } else { AUTHORIZE_PROFILE.to_owned() };
+            let (engine, mut execution) = authorizing_execution_with_profile(&profile);
+            let mut consulted = 0;
+            let mut authorize = |request: &ActionRequest| {
+                consulted += 1;
+                engine.authorize(&mut execution, request)
+            };
+            let events = requested("Bash", &serde_json::json!({"command":"cat README.md"}))
+                + &requested("apply_patch", &serde_json::json!({"patch":"*** Delete File: .engineering/project.yaml"}))
+                + &requested("Skill", &serde_json::json!({"skill":"anything"}))
+                + &requested("Bash", &serde_json::json!({"command":["git", "status"]}))
+                + &requested("Bash", &serde_json::json!({"command":"cat README.md", "cwd":"/elsewhere"}))
+                + &requested("Bash", &serde_json::json!({"command":"cat README.md; touch escaped"}));
+            let mut commands = Vec::new();
+            let mut transcript = Vec::new();
+            let tally = answer_events(Harness::Codex, &context, no_scope(), events.as_bytes(),
+                &mut commands, &mut transcript, &mut authorize);
+            assert_eq!(consulted, 1, "only the supported simple invocation reaches authorization");
+            assert_eq!(tally.asked, 6);
+            assert_eq!(tally.denied, if allowed {5} else {6});
+            assert_eq!(transcript, events.as_bytes());
+            let decisions: Vec<serde_json::Value> = String::from_utf8(commands).unwrap().lines()
+                .map(|line| serde_json::from_str(line).unwrap()).collect();
+            assert_eq!(decisions[0]["decision"]["decision"], if allowed {"allow"} else {"deny"});
+            assert!(event_names(&execution).iter().any(|name| name.contains("action")), "authorization is recorded by the real engine");
+        }
+    }
+
+    #[test]
+    fn codex_resume_options_launch_the_same_ask_seam_and_do_not_load_claude_plugins() {
+        let original = B10xOptions { codex_model: Some("test-model".to_owned()),
+            codex_endpoint: Some("http://127.0.0.1:1234/v1".to_owned()), ..B10xOptions::default() };
+        let persisted = serde_json::to_vec(&original).unwrap();
+        let resumed: B10xOptions = serde_json::from_slice(&persisted).unwrap();
+        let argv = codex_argv(Path::new("frame.json"), Path::new("/work"), "the task", &resumed, Some("aep:session-1"));
+        assert_eq!(argv[2], "codex");
+        for (flag, value) in [("--frame","frame.json"),("--cwd","/work"),("--decisions","ask"),
+            ("--actor","aep:session-1"),("--credentials","none"),("--model","test-model")] {
+            assert!(argv.windows(2).any(|pair| pair == [flag, value]), "{flag}: {argv:?}");
+        }
+        assert!(!argv.iter().any(|arg| arg == "--plugin-dir" || arg == "--max-turns"));
+        assert!(codex_tools(&config(&[Capability::RepositoryWrite])).is_empty());
+        assert_eq!(codex_tools(&config(&[Capability::CommandExecution])), ["Bash"]);
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn governed_codex_terminal_exit_failure_and_interruption_never_complete_a_step() {
+        use std::os::unix::process::ExitStatusExt as _;
+        let transcript = Path::new("retained-codex-events.jsonl");
+        assert!(matches!(metaharness_outcome(Ok(std::process::ExitStatus::from_raw(0)), "", transcript), StepOutcome::Nothing));
+        for raw in [3 << 8, 9] {
+            let outcome = metaharness_outcome(Ok(std::process::ExitStatus::from_raw(raw)), "provider failed", transcript);
+            assert!(matches!(outcome, StepOutcome::NoVerdict { reason } if reason.contains("retained-codex-events.jsonl") && reason.contains("provider failed")));
+        }
+    }
+
+    #[test]
+    fn governed_codex_uses_the_current_frame_coordinates_and_no_skill_exemption() {
+        let tools = config(&[Capability::CommandExecution]);
+        let state: StateId = "implement".parse().unwrap();
+        let task = driven_task();
+        let mut context = step_context(&tools, &state, &task);
+        context.index = 4;
+        context.attempt = 2;
+        let mut step = b10x_step();
+        step.harness = "codex".to_owned();
+        step.skills = vec!["aep:planning".to_owned()];
+        let prompt = prompt_for(&step, &context, "aep");
+        assert!(prompt.contains("task `T-1`") && prompt.contains("workflow state `implement`"));
+        assert!(!prompt.contains("`Skill` tool"));
+        let frame = metaharness_frame(&context, &step.scope, "test/linear", "1");
+        assert_eq!(frame["node"]["id"], "implement");
+        assert_eq!(frame["step"]["index"], 4);
+        assert_eq!(frame["step"]["attempt"], 2);
+        frame_document(&frame).expect("same sealed frame wire used on resume");
+    }
+
     use aep_cli::drive::on_path;
     use aep_domain::ids::ExecutionId;
     use aep_engine::{Engine, Registry};
@@ -2122,6 +2217,10 @@ profile: test.reading
 ";
 /// An engine over those documents, and an execution of that task in `implement`.
     fn authorizing_execution() -> (Engine, aep_engine::execution::Execution) {
+        authorizing_execution_with_profile(AUTHORIZE_PROFILE)
+    }
+
+    fn authorizing_execution_with_profile(profile: &str) -> (Engine, aep_engine::execution::Execution) {
         use aep_engine::ProtocolEngine as _;
         let mut registry = Registry::new();
         registry
@@ -2136,7 +2235,7 @@ profile: test.reading
             .expect("the workflow is unique");
         registry
             .insert_profile(
-                aep_schema::parse::profile(AUTHORIZE_PROFILE, None).expect("the profile parses"),
+                aep_schema::parse::profile(profile, None).expect("the profile parses"),
             )
             .expect("the profile is unique");
         let engine = Engine::new(registry);

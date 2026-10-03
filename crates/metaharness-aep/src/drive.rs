@@ -49,6 +49,18 @@ const METAHARNESS_LIVE_ENV: &str = "METAHARNESS_LIVE";
 /// everything else, so a `resume` re-reads them instead of being told again.
 #[derive(Debug, Clone, Default, Args, serde::Serialize, serde::Deserialize)]
 pub struct B10xOptions {
+    /// Model override for governed Codex steps; persisted for resume.
+    #[arg(long = "codex-model", value_name = "MODEL")]
+    #[serde(default)]
+    codex_model: Option<String>,
+    /// Foreign endpoint for Codex; always launches without operator credentials.
+    #[arg(
+        long = "codex-endpoint",
+        value_name = "BASE_URL",
+        requires = "codex_model"
+    )]
+    #[serde(default)]
+    codex_endpoint: Option<String>,
     /// The endpoint a `harness: b10x` step's loop is pointed at, as the gateway's root URL.
     #[arg(long = "b10x-endpoint", value_name = "BASE_URL")]
     #[serde(default)]
@@ -426,6 +438,15 @@ impl CliExecutors {
                     .map(|actor| actor.to_string())
                     .as_deref(),
             ),
+            Harness::Codex => codex_argv(
+                frame_file,
+                &self.working_directory,
+                prompt,
+                &self.b10x,
+                aep_driver::attest::session_actor(context.execution)
+                    .map(|actor| actor.to_string())
+                    .as_deref(),
+            ),
             Harness::B10x => b10x_argv(
                 &self.b10x,
                 &self.working_directory,
@@ -487,7 +508,7 @@ impl CliExecutors {
                 Ok(path) => Some(path),
                 Err(reason) => return StepOutcome::NoVerdict { reason },
             },
-            Harness::ClaudeCode => None,
+            Harness::ClaudeCode | Harness::Codex => None,
         };
         let argv = self.argv_for(
             harness,
@@ -800,12 +821,14 @@ fn prompt_for(step: &LlmStep, context: &StepContext<'_>, driver: &str) -> String
         // Named without a tool on a harness that has no skill mechanism: the b10x catalogue has no
         // entry for `skill.load`, so instructing it to use one would be instructing it to reach
         // for something the loop cannot publish.
-        prompt.push_str(match (step.skills.len() == 1, harness.adjudicates()) {
-            (true, true) => " skill before you act, with the `Skill` tool.\n",
-            (false, true) => " skills before you act, with the `Skill` tool.\n",
-            (true, false) => " skill before you act.\n",
-            (false, false) => " skills before you act.\n",
-        });
+        prompt.push_str(
+            match (step.skills.len() == 1, harness == Harness::ClaudeCode) {
+                (true, true) => " skill before you act, with the `Skill` tool.\n",
+                (false, true) => " skills before you act, with the `Skill` tool.\n",
+                (true, false) => " skill before you act.\n",
+                (false, false) => " skills before you act.\n",
+            },
+        );
     }
     prompt.push_str("\n\nYou are in workflow state `");
     prompt.push_str(context.state.as_str());
@@ -966,6 +989,21 @@ fn action_for(tool: &str, input: &serde_json::Value) -> Option<ActionRequest> {
     Some(ActionRequest::new(action))
 }
 
+/// Map only the adapter's supported invocation through the shared shell policy.
+fn codex_action(
+    context: &StepContext<'_>,
+    name: &str,
+    input: &serde_json::Value,
+) -> Result<ActionRequest, String> {
+    let command = metaharness_codex::governed_shell_command(name, input)?;
+    driven_surface(context, &serde_json::json!({ "command": command }))?;
+    let mut words = command.split_whitespace();
+    Ok(ActionRequest::new(Action::CommandExecute(CommandExecute {
+        program: words.next().unwrap_or_default().to_owned(),
+        args: words.map(ToOwned::to_owned).collect(),
+    })))
+}
+
 /// The session loop: every event line into the transcript, every decision back down stdin.
 ///
 /// A free function of its streams so the executor stays under its own roof: nothing here knows a
@@ -1073,15 +1111,10 @@ fn answer_events(
             let call_id = event["call_id"].as_str().unwrap_or_default();
             let name = event["name"].as_str().unwrap_or_default();
             let deny = |reason: String| serde_json::json!({ "decision": "deny", "reason": reason });
-            let decision = match decide_tool(context, surface, name, &event["input"]) {
-                Err(reason) => deny(format!("the driver's per-call policy refuses: {reason}")),
-                // Nothing renders this call as an action — `Skill` and `WebSearch` are the two, and
-                // [`action_for`] says why — so the engine is not consulted and the policy's allow
-                // stands. Inventing a request would put an act nobody performed in the engine's
-                // record, which is invariant 7's failure one layer up.
-                Ok(()) => match action_for(name, &event["input"]) {
-                    None => serde_json::json!({ "decision": "allow" }),
-                    Some(request) => {
+            let decision = if harness == Harness::Codex {
+                match codex_action(context, name, &event["input"]) {
+                    Err(reason) => deny(format!("the driver's per-call policy refuses: {reason}")),
+                    Ok(request) => {
                         let verdict = authorize(&request);
                         if verdict.is_allowed() {
                             serde_json::json!({ "decision": "allow" })
@@ -1089,7 +1122,26 @@ fn answer_events(
                             deny(engine_refusal(&verdict))
                         }
                     }
-                },
+                }
+            } else {
+                match decide_tool(context, surface, name, &event["input"]) {
+                    Err(reason) => deny(format!("the driver's per-call policy refuses: {reason}")),
+                    // Nothing renders this call as an action — `Skill` and `WebSearch` are the two, and
+                    // [`action_for`] says why — so the engine is not consulted and the policy's allow
+                    // stands. Inventing a request would put an act nobody performed in the engine's
+                    // record, which is invariant 7's failure one layer up.
+                    Ok(()) => match action_for(name, &event["input"]) {
+                        None => serde_json::json!({ "decision": "allow" }),
+                        Some(request) => {
+                            let verdict = authorize(&request);
+                            if verdict.is_allowed() {
+                                serde_json::json!({ "decision": "allow" })
+                            } else {
+                                deny(engine_refusal(&verdict))
+                            }
+                        }
+                    },
+                }
             };
             if decision["decision"] == "deny" {
                 tally.denied += 1;
@@ -1406,6 +1458,8 @@ const B10X_BINARY: &str = "b10x-harness";
 /// 2 exists to prevent.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 enum Harness {
+    /// Codex uses its adapter's blocking call seam and the engine's action authorizer.
+    Codex,
     /// Claude Code, driven through `metaharness run claude` in ask mode: every call is put to this
     /// process and answered before it runs.
     ClaudeCode,
@@ -1426,17 +1480,24 @@ impl Harness {
             // landed under; both reach the same invocation.
             LlmStep::DEFAULT_HARNESS | METAHARNESS_HARNESS => Some(Self::ClaudeCode),
             B10X_HARNESS => Some(Self::B10x),
+            "codex" => Some(Self::Codex),
             _ => None,
         }
     }
 
     /// Every name this build invokes, for a refusal that lists them rather than hinting.
-    const NAMES: [&'static str; 3] = [LlmStep::DEFAULT_HARNESS, METAHARNESS_HARNESS, B10X_HARNESS];
+    const NAMES: [&'static str; 4] = [
+        LlmStep::DEFAULT_HARNESS,
+        METAHARNESS_HARNESS,
+        B10X_HARNESS,
+        "codex",
+    ];
 
     /// The `metaharness run` kind.
     fn kind(self) -> &'static str {
         match self {
             Self::ClaudeCode => "claude",
+            Self::Codex => "codex",
             Self::B10x => B10X_HARNESS,
         }
     }
@@ -1448,6 +1509,7 @@ impl Harness {
     fn tools(self, config: &ToolConfig) -> Vec<String> {
         match self {
             Self::ClaudeCode => allowed_tools(config),
+            Self::Codex => codex_tools(config),
             Self::B10x => b10x_tools(config),
         }
     }
@@ -1463,6 +1525,7 @@ impl Harness {
     fn operations_or_tools(self, config: &ToolConfig) -> Vec<String> {
         match self {
             Self::ClaudeCode => allowed_tools(config),
+            Self::Codex => codex_tools(config),
             Self::B10x => b10x_operations(config),
         }
     }
@@ -1473,7 +1536,7 @@ impl Harness {
     /// denial count of zero: *nobody asked me* and *nothing was refused* are different findings
     /// and only one of them is about the run.
     fn adjudicates(self) -> bool {
-        matches!(self, Self::ClaudeCode)
+        matches!(self, Self::ClaudeCode | Self::Codex)
     }
 }
 
@@ -1754,7 +1817,7 @@ fn machine_preflights(map: &StepMap, project: &Path, b10x: &B10xOptions) -> Opti
         .states
         .values()
         .flat_map(|state| &state.steps)
-        .any(|step| matches!(step, Step::Llm(step) if step.harness == "claude-code"))
+        .any(|step| matches!(step, Step::Llm(step) if Harness::named(&step.harness).is_some_and(Harness::adjudicates)))
         && let Some(refusal) = protocol_on_the_session_path()
     {
         return Some(refusal);
@@ -2188,13 +2251,43 @@ fn frame_document(frame: &serde_json::Value) -> Result<String, String> {
     Ok(format!("{text}\n"))
 }
 
-/// The `metaharness run claude` invocation for one step.
-///
-/// `--cwd` is the metaharness a6 declaration: the session works in the governed tree, and
-/// metaharness attests the two hermetic rows that costs instead of claiming them. `--decisions
-/// frame` makes metaharness the per-call decider from the frame's admitted set. The plugins
-/// still travel for their skills; their hooks read a step context this launch does not carry and
-/// no-op, which is the intended shape — one policy, one enforcer.
+/// Advertise only calls with a complete governor mapping.
+fn codex_tools(config: &ToolConfig) -> Vec<String> {
+    if config.shell_offered() {
+        metaharness_codex::render_operation(&metaharness::protocol::Operation::Shell)
+            .map(|tool| vec![tool.to_owned()])
+            .unwrap_or_default()
+    } else {
+        Vec::new()
+    }
+}
+
+fn codex_argv(
+    frame: &Path,
+    directory: &Path,
+    prompt: &str,
+    options: &B10xOptions,
+    actor: Option<&str>,
+) -> Vec<String> {
+    let mut argv = metaharness_argv(frame, directory, &[], prompt, None, actor);
+    Harness::Codex.kind().clone_into(&mut argv[2]);
+    if let Some(model) = &options.codex_model {
+        argv.extend(["--model".to_owned(), model.clone()]);
+    }
+    if let Some(endpoint) = &options.codex_endpoint {
+        argv.extend([
+            "--model-endpoint".to_owned(),
+            endpoint.clone(),
+            "--credentials".to_owned(),
+            "none".to_owned(),
+        ]);
+    }
+    argv
+}
+
+/// The vendor invocation carries the selected directory and sealed frame. Ask mode routes
+/// every decision to this driver's policy and engine. Claude plugins supply instructions;
+/// Codex uses the same launch envelope without those vendor-specific plugins.
 fn metaharness_argv(
     frame: &Path,
     working_directory: &Path,
@@ -2459,7 +2552,7 @@ pub enum DriveCommand {
         command: aep_cli::eval::EvalCommand,
     },
     /// Start a governed run.
-    Run(HostedRunArgs),
+    Run(Box<HostedRunArgs>),
     /// Continue a compatible paused run.
     Resume(HostedResumeArgs),
     /// Inspect a retained run.

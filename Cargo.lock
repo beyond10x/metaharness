@@ -1087,6 +1087,7 @@ dependencies = [
  "clap",
  "metaharness",
  "metaharness-b10x",
+ "metaharness-codex",
  "serde",
  "serde_json",
  "serde_yaml",

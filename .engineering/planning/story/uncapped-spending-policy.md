@@ -2,7 +2,7 @@
 format: aep.planning-md/3
 id: story:uncapped-spending-policy
 kind: story
-status: draft
+status: active
 title: Represent explicit uncapped USD authority in governed runs
 owner: metaharness
 refs:
@@ -18,7 +18,10 @@ scope:
   path: crates/metaharness-aep/src/drive_tests.rs
 - confidence: cited
   path: docs/design/metaharness-protocol-v0.1.md
-revision: 4
+revision: 6
+transitions:
+- {from: "draft", to: "proposed", at: "2026-10-03T07:47:14Z", actor: "human:timo", revision: 5}
+- {from: "proposed", to: "active", at: "2026-10-03T07:47:14Z", actor: "human:timo", revision: 6}
 ---
 ## Context
 
