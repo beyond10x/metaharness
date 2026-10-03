@@ -234,8 +234,8 @@ fn launch(root: &Path, endpoint: &str, mode: Mode) -> LaunchPlan {
         loopback: None,
     };
     let plan = plan_launch(&spec, &context).unwrap();
-    assert!(plan.credential_copies.is_empty());
-    assert!(plan.plugin_installs.is_empty());
+    assert_eq!(plan.credential_copies, []);
+    assert_eq!(plan.plugin_installs, []);
     assert!(!plan.config.contains("env_key"));
     for path in [
         &plan.config_home,
@@ -344,7 +344,15 @@ fn steering_message(provider: &Provider, name: &str, root: &Path) -> Option<Valu
             .filter_map(|line| serde_json::from_str::<Value>(line).ok())
             .find(|event| event["event"] == "tool.requested" && event["decision_required"] == true)
             .map(|event| json!({"format":"metaharness.command/1","id":"fixture-stop","command":"tool.decide","call_id":event["call_id"],"decision":{"decision":"deny","reason":"native fixture denied effect"}}))
-    } else if provider.requests.lock().unwrap().is_empty() {
+    } else if provider.requests.lock().unwrap().is_empty()
+        || !fs::read_to_string(root.join("stdout.jsonl"))
+            .unwrap()
+            .lines()
+            .filter_map(|line| serde_json::from_str::<Value>(line).ok())
+            .any(|event| {
+                event["event"] == "session.started" && event["harness_version"] == "0.153.4"
+            })
+    {
         None
     } else {
         Some(
