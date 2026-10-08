@@ -854,10 +854,20 @@ fn ess_generated_scenarios_drive_production_targets() {
         .unwrap_or_else(|| root.join("spec/conformance.json"));
     let suite: Value = serde_json::from_slice(&fs::read(&source).unwrap()).unwrap();
     assert!(
-        ["ess-conformance/22", "ess-conformance/23"]
-            .iter()
-            .any(|version| suite["provenance"]["suite_version"] == *version),
+        [
+            "ess-conformance/22",
+            "ess-conformance/23",
+            "ess-conformance/35"
+        ]
+        .iter()
+        .any(|version| suite["provenance"]["suite_version"] == *version),
         "unsupported suite version"
+    );
+    // Every scenario starts from `Observed::default()`, so only an empty initial state is honoured.
+    let initial = &suite["provenance"]["scenario_initial_state"];
+    assert!(
+        initial.is_null() || initial == "empty",
+        "unsupported scenario initial state: {initial}"
     );
     let scenarios = suite["scenarios"].as_object().unwrap();
     if external.is_none() {
@@ -970,7 +980,7 @@ fn ess_suite_matches_the_current_specification() {
         .args(["--suite-format", "5", "--strict-requires", "--out"])
         .arg(&output)
         .output()
-        .expect("ESS 0.51.0 is a gate prerequisite");
+        .expect("ESS 0.56.0 is a gate prerequisite");
     assert!(
         status.status.success(),
         "{}",
@@ -980,7 +990,7 @@ fn ess_suite_matches_the_current_specification() {
     assert_eq!(
         fresh,
         suite(),
-        "regenerate spec/conformance.json with ESS 0.51.0"
+        "regenerate spec/conformance.json with ESS 0.56.0"
     );
 }
 

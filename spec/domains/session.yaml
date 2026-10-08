@@ -18,7 +18,7 @@ types:
       - {name: stop_reason, type: Optional<String>, presence: null_when_absent}
       - {name: terminal_reason, type: Optional<String>, presence: null_when_absent}
     # UNMAPPED: the source's total_cost_usd: Option<f64> remains exact in the
-    # separately validated monetary contract. ESS 0.51.0 refuses Binary64 in
+    # separately validated monetary contract. ESS 0.56.0 refuses Binary64 in
     # conformance codecs and Rust synthesis; this projection excludes its value.
   - name: metaharness.session.CodexCompletion
     kind: struct

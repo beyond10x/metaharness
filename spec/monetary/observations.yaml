@@ -2,7 +2,7 @@ domain: metaharness.monetary
 summary: Exact monetary observation types excluded from the executable core projection.
 # This is another projection of the same Metaharness system, not a separate
 # service. The separate manifest makes the compiler coverage boundary explicit.
-# ESS 0.51.0 validates Binary64 but refuses it in conformance and Rust generation.
+# ESS 0.56.0 validates Binary64 but refuses it in conformance and Rust generation.
 # No decimal/string surrogate or zero default is substituted to get a green suite.
 types:
   - name: metaharness.monetary.TerminalCost

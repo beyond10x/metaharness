@@ -55,7 +55,7 @@ never links this workspace.
 
 ## Status
 
-**Pre-v1. Tagged `0.9.2` (2026-10-08).** The design in `docs/design/` is binding: where this code
+**Pre-v1. Tagged `0.9.3` (2026-10-08).** The design in `docs/design/` is binding: where this code
 and that document disagree, the document is amended rather than the disagreement left in the code.
 
 | verb | state |
@@ -78,7 +78,7 @@ per-change record of what was verified and what it cost to learn is in
 
 The gate is **`task check`** — ESS specification validation, `cargo fmt --check`,
 `cargo clippy --workspace --all-targets -D warnings`, `cargo test --workspace`.
-Install ESS 0.51.0 first. The tests execute 36 generated conformance scenarios and check suite
+Install ESS 0.56.0 first. The tests execute 45 generated conformance scenarios and check suite
 freshness; [spec/coverage.md](spec/coverage.md) records the coverage and hardening bounds.
 Green before any push.
 
