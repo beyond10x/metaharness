@@ -42,7 +42,7 @@ types:
       - {name: authorization_ref, type: String}
     # UNMAPPED: observed monetary values are declared exactly in the separately
     # validated monetary contract; the core projection excludes the value while
-    # ESS 0.51.0 refuses Binary64 conformance codecs and Rust synthesis.
+    # ESS 0.56.0 refuses Binary64 conformance codecs and Rust synthesis.
     invariants: [launches > 0]
     # Read-only projection of the durable ledger: count is invocations.len(), and
     # authorization_ref is read from policy. Durable admission precedes spawn.

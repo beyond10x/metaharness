@@ -4,8 +4,8 @@ This is a bounded retrofit of Metaharness's observable boundaries. It preserves
 frame/1 and adapter ownership. It does not claim to specify every event,
 credential rule, process-isolation mechanism or vendor version.
 
-ESS 0.51.0 validates both manifests. The core model uses ess/15;
-conformance.json is a declared-coverage ess-conformance/23 suite. Regenerate it:
+ESS 0.56.0 validates both manifests. The core model uses ess/15;
+conformance.json is a declared-coverage ess-conformance/35 suite. Regenerate it:
 
 ```console
 ess verify conform synthesize --path spec --suite-format 5 --strict-requires --out spec/conformance.json
@@ -13,8 +13,8 @@ ess verify conform synthesize --path spec --suite-format 5 --strict-requires --o
 
 `task check` validates both manifests, checks suite drift, and executes the
 production target in `crates/metaharness-aep/src/drive/ess_conformance.rs`.
-CI installs ESS 0.51.0 from commit
-`0347ffa222939e3791e574d2dbe42d4b4b02d979`. Use that compiler locally.
+CI installs ESS 0.56.0 from commit
+`84ee8d38eb69e3a4507de801fdcb248232ed6e6e`. Use that compiler locally.
 
 The committed count is **45 selected scenarios**: 45 passed, zero failed,
 skipped, unsupported or synthesis refusals. Unknown suite versions, steps,
@@ -100,7 +100,7 @@ freshness check is not a breaking-change classifier.
 ## Exact types and remaining boundaries
 
 The separate monetary manifest preserves Optional<Binary64> for the source's
-Option<f64>. ESS 0.51.0 declines its conformance codecs and Rust synthesis; no
+Option<f64>. ESS 0.56.0 declines its conformance codecs and Rust synthesis; no
 surrogate type or zero default is substituted. Production Rust tests cover unknown
 and observed costs, failed persistence, crash/resume, corrupt ledgers, finite
 narrowing and preservation of mode and authorization.

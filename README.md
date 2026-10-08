@@ -78,7 +78,7 @@ per-change record of what was verified and what it cost to learn is in
 
 The gate is **`task check`** — ESS specification validation, `cargo fmt --check`,
 `cargo clippy --workspace --all-targets -D warnings`, `cargo test --workspace`.
-Install ESS 0.51.0 first. The tests execute 36 generated conformance scenarios and check suite
+Install ESS 0.56.0 first. The tests execute 45 generated conformance scenarios and check suite
 freshness; [spec/coverage.md](spec/coverage.md) records the coverage and hardening bounds.
 Green before any push.
 
