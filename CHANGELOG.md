@@ -3,6 +3,22 @@
 What changed. The design document carries *why*; where code and design disagreed, the design
 was amended and the amendment is named here.
 
+## [0.9.2] — 2026-10-08
+
+No change to the `metaharness` binary, its library crates or the `metaharness.event/1` and
+`metaharness.frame/1` contracts since 0.9.1.
+
+### Changed
+
+- The public documentation site is built by the Rust `metaharness-docs` crate instead of
+  Docusaurus. `task check` runs `metaharness-docs check`, which refuses broken routes, anchors and
+  unsupported asset references; `task docs:build` writes the static site with
+  `.well-known/b10x-site.json` bound to the source commit (`docs/design/independent-documentation.md`).
+- Metaharness publishes its own site at `/metaharness/`. A bot-only caller hands the exact
+  successful `pages.yml` build to the Website project-site publisher, pinned at
+  `7d3d414d6f0680507cf48cfb79522f0886922702`; that revision polls for the build run instead of
+  failing when GitHub has not listed it yet, and retries deployment.
+
 ## [0.9.1] — 2026-10-03
 
 ### Fixed
