@@ -3,6 +3,18 @@
 What changed. The design document carries *why*; where code and design disagreed, the design
 was amended and the amendment is named here.
 
+## [0.9.3] — 2026-10-08
+
+### Changed
+
+- The ESS specification requires ess 0.56.0, and the gate installs ess-cli from its tag
+  (`84ee8d38eb69e3a4507de801fdcb248232ed6e6e`). `spec/conformance.json` is regenerated as
+  `ess-conformance/35`: the same 45 scenarios, each declared to start from an empty state.
+- The Rust conformance target accepts `ess-conformance/35` and refuses a declared initial state
+  other than `empty`. All 45 scenarios pass.
+- ess 0.56.0 still refuses finite Binary64 in conformance codecs and Rust synthesis, so the
+  monetary manifest remains validated only (`spec/coverage.md`).
+
 ## [0.9.2] — 2026-10-08
 
 No change to the `metaharness` binary, its library crates or the `metaharness.event/1` and
