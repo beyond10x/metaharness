@@ -13,9 +13,9 @@ Builds run without publication credentials. A successful push build on `main`
 uploads `b10x-project-site`, including `.well-known/b10x-site.json` with the
 `b10x-project-site/v1` schema, repository, exact source commit and `/metaharness/`
 base URL. A separate bot-only caller uses the immutable Website project-site
-publisher at `fb4024ef7846729e5456591b9070db3d48c87e64`, the publisher used by
-Mantle. It validates the source identity and exact successful build, and emits
-delivery provenance. Source code never executes in the publication job.
+publisher at `7d3d414d6f0680507cf48cfb79522f0886922702`, which polls for the
+build run, names each artifact attempt and retries deployment. It validates the
+source identity and exact successful build, and emits delivery provenance. Source code never executes in the publication job.
 
 Atlas relinquishes unified documentation ownership for Metaharness. The shared
 source manifest, bundle producer, source check and redirect facade are retired.
