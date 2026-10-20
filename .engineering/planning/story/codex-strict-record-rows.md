@@ -2,22 +2,71 @@
 format: aep.planning-md/3
 id: story:codex-strict-record-rows
 kind: story
-status: draft
+status: active
 title: '--hermetic strict can pass on Codex: H1a, H1b, H4 and H5 become decidable'
 refs:
 - provider: atlas
   reference: adr-0098
 relations:
 - decomposes: epic:loom-agent-work-through-metaharness
-revision: 1
+scope:
+- confidence: inferred
+  path: CHANGELOG.md
+- confidence: inferred
+  path: crates/metaharness-codex/fixtures/c1
+- confidence: inferred
+  path: crates/metaharness-codex/fixtures/golden/rollout.expected.jsonl
+- confidence: cited
+  path: crates/metaharness-codex/src/launch.rs
+- confidence: cited
+  path: crates/metaharness-codex/src/rollout.rs
+- confidence: inferred
+  path: crates/metaharness-codex/src/vectors.rs
+- confidence: cited
+  path: crates/metaharness-codex/tests/native_fixture.rs
+- confidence: inferred
+  path: crates/metaharness-protocol/src/hermetic.rs
+- confidence: inferred
+  path: crates/metaharness/fixtures/golden/contract-result-codex.json
+- confidence: cited
+  path: crates/metaharness/src/audit.rs
+- confidence: cited
+  path: crates/metaharness/src/builder.rs
+- confidence: inferred
+  path: crates/metaharness/src/custody.rs
+- confidence: inferred
+  path: crates/metaharness/src/process.rs
+- confidence: inferred
+  path: crates/metaharness/src/run.rs
+- confidence: inferred
+  path: crates/metaharness/src/spawn_codex.rs
+- confidence: inferred
+  path: crates/metaharness/src/spawn_codex_vectors.rs
+- confidence: inferred
+  path: crates/metaharness/tests/adversary_b10x_h7_resolver_pass2.rs
+- confidence: inferred
+  path: crates/metaharness/tests/audit.rs
+- confidence: cited
+  path: docs/design/metaharness-protocol-v0.1.md
+- confidence: inferred
+  path: docs/research
+- confidence: cited
+  path: website/docs/harnesses/codex.md
+- confidence: cited
+  path: website/docs/status.md
+revision: 26
+transitions:
+- {from: "draft", to: "proposed", at: "2026-10-20T20:30:18Z", actor: "human:timo", revision: 25}
+- {from: "proposed", to: "active", at: "2026-10-20T20:30:18Z", actor: "human:timo", revision: 26}
 ---
 # Story: `--hermetic strict` can pass on Codex: H1a, H1b, H4 and H5 become decidable
 
 ## Scheduling
 
-Draft, filed 2026-10-20 on a request from `b10x-chef-orchestrator`: takt's evals move to Codex (Timo,
-about 18:10, relayed) and run under `--hermetic on` until strict passes. Not in wave 3; proposed after
-it, beside `story:claude-code-2-1-304-declared`.
+Unit 3 of wave 4 (approved 2026-10-20 by `b10x-chef-orchestrator`), after `story:claude-code-2-1-304-declared`
+(shared `audit.rs`, `FloorInputs`). Decision D1 of wave 4: B — no change to invariant 3 or amendment a13;
+strict stays exit 3 on Codex and takt's Codex trials keep `--hermetic on`. Option A (decide H1a, H4, H5
+from the launch's own observation) is recorded as open for Timo.
 
 ## Outcome
 
@@ -47,14 +96,18 @@ what the launch imposed, labelled as metaharness's own claim, never as the vendo
 
 ## Acceptance
 
-On codex-cli 0.153.4 (the pin), a clean `metaharness run codex --hermetic strict` run exits 0 with H1a,
-H1b, H4 and H5 each reading a state that names its source: the rollout's own field where the rollout
-carries one (read and cited per row), otherwise metaharness's imposition with the wording "metaharness
-imposed it" and the attestation that backs it; a run whose scratch home is tampered with (a plugin, an
-output style, an API key in the environment, an MCP server added after the launch wrote the home) still
-fails strict on that row; a vector per row and per shape; the credential-free native Codex fixture
-passes; a design amendment states which record rows may be decided from an imposition on which kind and
-why that keeps invariant 3.
+On codex-cli 0.153.4 (the pin): H1b is decided from the record: the launch writes `personality` into the
+scratch `config.toml`, the adapter reads the rollout's `turn_context.personality` (it arrives after the
+opening record, so the floor reads the later event or the opening record is completed from it; the
+implementor names which), and H1b reads `ok` when it equals what the launch wrote and `gap` otherwise; a
+vector per shape and the regenerated `rollout.expected.jsonl` line show it. H1a, H4 and H5 stay `unk` on
+Codex, and the floor's wording for each names why (the rollout carries no plugin list, credential source
+or MCP server list at 0.153.4; deciding them from the launch is open under invariant 3). The H2 attestation
+names only the sources the launch writes (`launch.rs:1229` names `hooks.json`, which `materialise_codex`
+does not write, `builder.rs:1205-1208`). `metaharness run codex --hermetic strict` still exits 3, now with
+H1b `ok`, named in the changelog. The 0.153.4 surface (default `personality`, the `apps` and
+`remote_plugin` features, the config layers the binary names) is recorded in a research page, observed
+where a credential-free run can observe it and labelled unverified otherwise. No paid run.
 
 ## Out of scope
 
@@ -63,11 +116,10 @@ why that keeps invariant 3.
 
 ## Ambiguities
 
-- `requires-stakeholder-input` — whether a gating *record* row may read `ok` from metaharness's own
-  imposition when the vendor's record cannot carry the field. Default: yes for Codex on these four rows,
-  labelled as metaharness's claim, only when the launch both wrote the only source and observed it
-  unchanged at spawn (a digest of the scratch home taken immediately before spawn, as H6 copies
-  `auth.json`); otherwise the row stays `unk`. Decides: the design amendment's reviewer.
+- Resolved by D1 = B (`b10x-chef-orchestrator`, 2026-10-20): no record row is decided from the launch on
+  Codex. The former default (an imposition with a scratch-home digest) is withdrawn; the scoper found its
+  precondition false under a ChatGPT login (account plugins and `codex_apps` are not in the scratch home)
+  and invariant 3 and a13 forbid it.
 
 ## Scope
 
