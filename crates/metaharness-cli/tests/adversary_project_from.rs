@@ -72,11 +72,13 @@ fn a_record_with_a_foreign_first_line_is_refused_at_line_one_not_projected_behin
 }
 
 /// a28 point 2: the b10x factory is given no version, model or cwd, "because the verb knows none",
-/// so the opening record reads `harness_version: null` and `cwd: null` and the model comes from the
-/// record. Invariant 4 in one node: a replay that named a version nobody measured would be an
-/// adapter claim about a vendor binary that was never pinned or verified for this file.
+/// so the opening record reads `harness_version: null` and the model comes from the record.
+/// Invariant 4 in one node: a replay that named a version nobody measured would be an adapter
+/// claim about a vendor binary that was never pinned or verified for this file. Since a31 the
+/// `cwd` comes from the record too, like the model: the golden's `started` line names
+/// `/scratch/run/work` (harness 0.15.1 writes it), and the verb, told none, adds nothing.
 #[test]
-fn a_harness_replay_claims_no_version_or_cwd_the_verb_was_not_told() {
+fn a_harness_replay_claims_no_version_the_verb_was_not_told_and_the_records_own_cwd() {
     let scratch = tempfile::tempdir().expect("a scratch directory");
     let out = scratch.path().join("loop.json");
     let outcome = project_from(
@@ -93,9 +95,9 @@ fn a_harness_replay_claims_no_version_or_cwd_the_verb_was_not_told() {
         opening["harness_version"].is_null(),
         "the verb was told no version: {opening}"
     );
-    assert!(
-        opening["cwd"].is_null(),
-        "the verb was told no cwd: {opening}"
+    assert_eq!(
+        opening["cwd"], "/scratch/run/work",
+        "the verb was told no cwd, so the node states the record's own: {opening}"
     );
     assert_eq!(
         opening["model"], "b10x-emulated",

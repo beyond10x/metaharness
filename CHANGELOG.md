@@ -71,9 +71,56 @@ was amended and the amendment is named here.
   `B10xSeams::new` drops its third (`cwd`) parameter. The b10x golden `loop.expected.jsonl`
   line 1 changes in that one field (`"cwd":"/scratch/run/work"` → `"cwd":null`). The
   `golden-loop-record` vector now fails a recording whose `started` line names a `cwd`, and
-  `checked` stays 7.
+  `checked` stays 7. *The next two entries move this again.*
+- `metaharness-b10x` pins harness **0.15.1** (design amendment a31,
+  `story:b10x-h7-from-the-loops-cwd`): `PINNED_VERSIONS` `0.15.0` → `0.15.1` and
+  `HARNESS_REVISION` `dd5c2a66218a5f2555c4a9fdab6fdfac8515cc6d` →
+  `f0870131e58df3e1119860d0a255f46589026d62`, the commit the annotated tag `0.15.1` (tag object
+  `a0a2dfdaf5b2702db5c77412c28f98b95f0c8794`) points at, reachable from harness `main`. Both
+  manifests and the lock move together: `b10x-harness-catalogue`, `-loop` and `-wire` at 0.15.1,
+  the tools crates unchanged at tag 0.2.0 (`60d4d0e3`), and no `b10x-llm-*` crate in the lock
+  (harness 0.15.1 moves llm to 0.8.1 in its model port, which this workspace does not link). What
+  `metaharness mcp-serve` answers does not move: `crates/harness-catalogue`, `crates/harness-wire`
+  and `crates/harness-substrate` are byte-identical from `dd5c2a66` to `f0870131`. The b10x golden
+  is re-recorded from `b10x-harness 0.15.1` with harness's `fake_responses.py` `flat-tool`, on
+  loopback only and with no credential, inside a private root that puts the workspace at
+  `/scratch/run/work`, so the `cwd` the `started` line now carries names no machine path.
+  `loop.expected.jsonl` line 1 moves in two fields (`harness_version` `0.15.0` → `0.15.1`, `cwd`
+  `null` → `"/scratch/run/work"`); `contract-result-b10x.json` reads `provider: "b10x 0.15.1"`
+  and `checked` stays 7; the native fixture expects `0.15.1`.
+- **Behaviour change, undoing most of the previous one:** the b10x opening record's `cwd` is the
+  working directory the loop reported — harness 0.15.1 writes it on `started`, the canonical root
+  its file tools act in — and `null` only when the record names none (design amendment a31,
+  `story:b10x-h7-from-the-loops-cwd`, Atlas ADR 0098 point 2). The floor's H7 row compares it with
+  the directory metaharness planned: `ok`, *which metaharness created*, for the directory
+  metaharness made; `ok`, *which was declared, not created*, for the copy `--cwd --scratch-cwd`
+  declared; `gap` for an a6 `--cwd` tree and for any other directory; `unk` when the record names
+  none. Directories are compared, not spellings: two names are one directory when they are equal
+  or when both are absolute and resolve (links followed) to the same path, so a `TMPDIR` reached
+  through a link does not turn the created directory into a `gap`. Nothing is resolved against
+  metaharness's own process: a relative name, and a name whose resolution reaches `/proc` or
+  `/dev/fd` at any step (`/proc/self/cwd`, `/proc/<pid>/cwd`, `/dev/fd/<n>`, a link into them), is
+  compared as spelled. `hermetic_floor` now reads the filesystem when it is called, so evaluated
+  after the directory is gone a record naming it under another spelling reads `gap`. So `metaharness run b10x --hermetic strict
+  --cwd <copy> --scratch-cwd`, a strict b10x run without `--cwd` and every b10x run with `--audit`
+  (`--hermetic --audit`, plain `--audit`), with or without a declared copy, exit **0** again when
+  the loop reports the created or declared directory, which the pinned loop does unless it runs
+  under `--substrate <socket>` or in a directory whose name is not UTF-8. They still exit **3**
+  when the record names no directory (`--substrate <socket>`, a root whose name is not UTF-8, a
+  binary older than 0.15.1) and exit **1** when it names another. A strict a6 `--cwd` run without the
+  declaration still exits 1; its H7 is `gap` again (*metaharness could not impose it*), beside
+  H11's `gap`. `metaharness project --from harness-json` now states the record's `cwd` on the
+  opening node. The directory comparison applies on every kind; no vendor-kind vector or fixture
+  moves. The `golden-loop-record` vector now fails a replay whose opening record does not state the
+  recorded `cwd`, where it failed a recording that named one.
 
 ### Added
+
+- `docs/research/2026-10-20-b10x-harness-0.15.1-adapter-surface.md`: every adapter claim about
+  the binary, verified or labelled unverified against 0.15.1 — the `started` record's `cwd`
+  observed in the golden recording and through the native fixture (including a run whose `TMPDIR`
+  passes through a link, where the loop records the canonical directory), the served surface read
+  as unchanged at source, and the 0.15.1 changes the adapter does not read.
 
 - `docs/research/2026-10-20-b10x-harness-0.15.0-adapter-surface.md`: every adapter claim about
   the binary, verified or labelled unverified against 0.15.0, from the golden recording, the

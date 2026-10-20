@@ -5,8 +5,10 @@
 //! `spec.hermetic` beyond stamping it), and the floor reads no mode, so an audited run judges the
 //! same rows whatever `--hermetic` says. Before a30, H7 read `ok` here; after it, H7 is the only
 //! gating row that is not `ok`, so the exit moved from 0 to 3. The CHANGELOG entry names the
-//! `--hermetic --audit` form of that move. Production builder, b10x seam and floor over the bytes
-//! `b10x-harness 0.15.0` wrote; no vendor process, no credential, no network.
+//! `--hermetic --audit` form of that move. Production builder, b10x seam and floor over a loop
+//! record whose `started` line names no working directory — the state a30 measured; since a31 it
+//! is derived from the bytes `b10x-harness 0.15.1` wrote by removing their `cwd` key. No vendor
+//! process, no credential, no network.
 
 use std::path::Path;
 
@@ -19,8 +21,31 @@ use metaharness::{
 
 const B10X_RECORDED_LOOP: &str = include_str!("../../metaharness-b10x/fixtures/golden/loop.jsonl");
 
+/// The recorded loop with its `started` line's `cwd` removed (checked present first).
+fn recorded_loop_naming_no_directory() -> Vec<String> {
+    B10X_RECORDED_LOOP
+        .lines()
+        .map(
+            |line| match serde_json::from_str::<serde_json::Value>(line) {
+                Ok(mut value) if value["kind"] == "started" => {
+                    assert!(
+                        value
+                            .as_object_mut()
+                            .and_then(|object| object.remove("cwd"))
+                            .is_some(),
+                        "the recorded started line names a working directory"
+                    );
+                    value.to_string()
+                }
+                _ => line.to_owned(),
+            },
+        )
+        .collect()
+}
+
 fn audited_b10x_run(mode: HermeticMode, copy: Option<&Path>) -> (Run, AuditReport) {
-    let mut runner = ScriptedRunner::of_lines(B10X_RECORDED_LOOP.lines(), ScriptedLog::new());
+    let mut runner =
+        ScriptedRunner::of_lines(recorded_loop_naming_no_directory(), ScriptedLog::new());
     let mut seams = metaharness_b10x::B10xSeams::new(
         Some(metaharness_b10x::PINNED_VERSIONS[0].to_owned()),
         None,

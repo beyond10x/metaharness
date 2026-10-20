@@ -19,6 +19,7 @@
 //! failed a strict run then every strict run would have failed forever (finding F3).
 
 use std::fmt::Write as _;
+use std::path::{Component, Path, PathBuf};
 
 use metaharness_protocol::{
     Assertion, CloseReason, CredentialSource, DecidedBy, Decision, DecisionCensus, Event,
@@ -36,7 +37,8 @@ pub struct FloorInputs<'a> {
     pub spec: &'a RunSpec,
     /// The versions the adapter was written against (design § 8.4 O1).
     pub pinned_versions: &'a [String],
-    /// The directory metaharness planned to run in, for H7's comparison.
+    /// The directory metaharness planned to run in, for H7's comparison, which resolves it on the
+    /// filesystem when the floor is evaluated ([`hermetic_floor`]).
     pub planned_cwd: Option<&'a str>,
     /// The plugin directories the run declared, for H1a's comparison.
     pub declared_plugins: &'a [String],
@@ -383,6 +385,16 @@ pub fn installed_plugins(events: &[Event]) -> Vec<InstalledPlugin> {
 /// The record-asserted rows read `session.started`'s own fields; the launch-asserted ones read
 /// the attestation block the adapter put in that same event. No row is filled from
 /// configuration: absence of evidence is not hermeticity.
+///
+/// **H7 also reads the filesystem, when this is called.** It compares the record's `cwd` with
+/// [`FloorInputs::planned_cwd`] as directories, not spellings: two names that differ are one
+/// directory only if both still resolve, links followed, to the same path now (amendment a31). So
+/// the verdict depends on the moment of the call: evaluated after the directory is gone — a
+/// [`crate::Run`] deletes the scratch directory it created when it is dropped, and an embedder may
+/// delete its declared copy — a record that names the directory under another spelling than the
+/// plan (the canonical one, where the plan passed through a linked `TMPDIR`) reads `gap` where it
+/// read `ok` while the directory existed. Byte-equal names are unaffected. [`crate::Run::hermetic_floor`]
+/// and `metaharness run` evaluate it while the run still holds its scratch directory.
 #[must_use]
 #[allow(clippy::too_many_lines)]
 pub fn hermetic_floor(events: &[Event], inputs: &FloorInputs<'_>) -> Vec<RowVerdict> {
@@ -606,9 +618,10 @@ pub fn hermetic_floor(events: &[Event], inputs: &FloorInputs<'_>) -> Vec<RowVerd
 
     // H7 — the working directory is ours.
     rows.push(match (cwd.as_deref(), inputs.planned_cwd) {
-        // The direct-provider loop's `started` record names no working directory at the pinned
-        // release, so its record carries none, and the row says whose silence it is (a30). Read
-        // before the attestation, so neither a declaration nor an a6 `unavailable` decides it.
+        // A direct-provider record with no working directory — the pinned loop writes none under
+        // `--substrate <socket>` or for a root whose name is not UTF-8, and a build older than
+        // harness 0.15.1 never does — says whose silence it is (a30, kept by a31). Read before
+        // the attestation, so neither a declaration nor an a6 `unavailable` decides it.
         (None, _) if adapter_class == "direct_provider" => row(
             HermeticRow::H7,
             Verdict::Unk,
@@ -629,8 +642,9 @@ pub fn hermetic_floor(events: &[Event], inputs: &FloorInputs<'_>) -> Vec<RowVerd
         // declared copy is `ok` in the embedder's words, an a6 directory metaharness could not
         // impose is a gap in metaharness's own words, and only a directory nobody named is the one
         // metaharness created. Before a27 this arm read no attestation and printed "which
-        // metaharness created" over an operator's tree.
-        (Some(observed), Some(planned)) if observed == planned => {
+        // metaharness created" over an operator's tree. The two are compared as directories, not
+        // as spellings (a31, `same_directory`).
+        (Some(observed), Some(planned)) if same_directory(observed, planned) => {
             if let Some(declared) = hermetic.declaration(HermeticRow::H7) {
                 row(
                     HermeticRow::H7,
@@ -721,6 +735,109 @@ pub fn hermetic_floor(events: &[Event], inputs: &FloorInputs<'_>) -> Vec<RowVerd
 
     rows.sort_by_key(|verdict| verdict.row);
     rows
+}
+
+/// Whether the directory the record names is the directory metaharness planned (H7, a31).
+///
+/// **Two names are one directory when they are byte-equal, or when both are absolute and resolve
+/// (every link followed, `.` and `..` removed, as `std::fs::canonicalize` does) to the same path
+/// without passing through a name that means the resolving process.** A loop may record the
+/// canonical root its tools act in — harness 0.15.1 does — while the directory metaharness creates
+/// is spelled under `TMPDIR`, which may pass through a link (a `TMPDIR` under a linked home is the
+/// ordinary case), so comparing spellings would read the same directory as a `gap`.
+///
+/// Nothing is resolved against metaharness's own process, because that says nothing about where
+/// the loop worked: a relative name is never resolved (it would be resolved against metaharness's
+/// working directory), and neither is a name whose resolution reaches `/proc` or `/dev/fd` at any
+/// step — `/proc/self/cwd`, `/proc/thread-self/…`, `/proc/<pid>/…`, `/dev/fd/<n>`, any `.`, `..` or
+/// doubled-slash spelling of them, and any link whose target leads there — because resolved inside
+/// metaharness each names metaharness's own working directory, root or file descriptor. Such a
+/// name, and one that does not resolve (gone, or never on this machine), is compared as spelled, so
+/// nothing here turns two different names into one directory without the filesystem saying so.
+///
+/// Resolved when the floor is evaluated (see [`hermetic_floor`]), while the run still holds the
+/// directory it created; a named `--cwd` is canonical from the launch on.
+fn same_directory(observed: &str, planned: &str) -> bool {
+    if observed == planned {
+        return true;
+    }
+    match (
+        resolve_without_the_reader(Path::new(observed)),
+        resolve_without_the_reader(Path::new(planned)),
+    ) {
+        (Some(observed), Some(planned)) => observed == planned,
+        _ => false,
+    }
+}
+
+/// An absolute name resolved component by component, links followed as `realpath` follows them,
+/// or `None` when it is relative, does not resolve, loops, or reaches at any step a directory whose
+/// entries mean the resolving process (`/proc`, `/dev/fd`). The check is made on every resolved
+/// prefix, not on the spelling, so `/proc/./self`, `/tmp/../proc`, `/dev/stdin` and a link into
+/// `/proc` are refused like `/proc/self` itself. A name that goes on past something that is not a
+/// directory — `<file>/..`, `<file>/.`, `<file>/`, a link whose target ends in `/` and lands on a
+/// file — is `None` too, as `realpath` and the kernel refuse it with `ENOTDIR`.
+fn resolve_without_the_reader(name: &Path) -> Option<PathBuf> {
+    /// As many links as Linux follows before `ELOOP`.
+    const MAX_LINKS: usize = 40;
+    fn push_front(pending: &mut Vec<PathBuf>, path: &Path) {
+        // `components()` drops a trailing `/` or `/.`, which asks for a directory; it is kept as a
+        // `.` that the loop checks once everything before it is resolved.
+        let bytes = path.as_os_str().as_encoded_bytes();
+        if bytes.ends_with(b"/") || bytes.ends_with(b"/.") {
+            pending.push(PathBuf::from("."));
+        }
+        pending.extend(
+            path.components()
+                .rev()
+                .map(|component| PathBuf::from(component.as_os_str())),
+        );
+    }
+    if !name.is_absolute() {
+        return None;
+    }
+    let mut resolved = PathBuf::new();
+    let mut pending = Vec::new();
+    push_front(&mut pending, name);
+    let mut links = 0;
+    while let Some(part) = pending.pop() {
+        match part.components().next() {
+            Some(Component::RootDir | Component::Prefix(_)) => resolved.push(&part),
+            Some(Component::ParentDir) => {
+                resolved.pop();
+            }
+            Some(Component::Normal(_)) => {
+                let candidate = resolved.join(&part);
+                if ["/proc", "/dev/fd"]
+                    .iter()
+                    .any(|reader| candidate.starts_with(reader))
+                {
+                    return None;
+                }
+                let metadata = std::fs::symlink_metadata(&candidate).ok()?;
+                if metadata.file_type().is_symlink() {
+                    links += 1;
+                    if links > MAX_LINKS {
+                        return None;
+                    }
+                    push_front(&mut pending, &std::fs::read_link(&candidate).ok()?);
+                } else if pending.is_empty() || metadata.is_dir() {
+                    resolved = candidate;
+                } else {
+                    // More follows, and only a directory has anything after it (`ENOTDIR`).
+                    return None;
+                }
+            }
+            // `.` names the directory resolved so far, and only a directory has one.
+            Some(Component::CurDir)
+                if !std::fs::metadata(&resolved).is_ok_and(|metadata| metadata.is_dir()) =>
+            {
+                return None;
+            }
+            Some(Component::CurDir) | None => {}
+        }
+    }
+    Some(resolved)
 }
 
 /// A launch-asserted row, read out of metaharness's own attestation.

@@ -448,9 +448,10 @@ fn a_working_directory_that_is_not_the_planned_one_is_a_gap() {
     );
 }
 
-/// Design a30: the direct-provider loop's `started` record names no working directory at the pinned
-/// release, so its opening record carries none and H7 says whose silence it is — beside H1a and
-/// H1b, the floor's other `direct_provider` arms.
+/// Design a30, kept by a31: a direct-provider opening record that carries no working directory —
+/// the pinned loop names none under `--substrate <socket>` or for a root whose name is not UTF-8 —
+/// reads H7 `unk` and says whose silence it is, beside H1a and H1b, the floor's other
+/// `direct_provider` arms.
 #[test]
 fn a_direct_provider_record_with_no_working_directory_is_unk_in_the_loops_words() {
     let spec = RunSpec::new(Kind::B10x);
@@ -493,6 +494,257 @@ fn a_vendor_record_with_no_working_directory_is_unk_in_the_records_words() {
         .expect("H7");
     assert_eq!(h7.verdict, Verdict::Unk, "{}", h7.detail);
     assert_eq!(h7.detail, "the opening record carries no working directory");
+}
+
+/// One directory under two spellings: `<root>/real/work`, canonical, and `<root>/link/work`
+/// through a link to `real`. The guard keeps both alive while the floor resolves them.
+#[cfg(unix)]
+fn one_directory_two_spellings() -> (tempfile::TempDir, String, String) {
+    let root = tempfile::tempdir().expect("a scratch root");
+    let real = root.path().join("real");
+    std::fs::create_dir_all(real.join("work")).expect("the directory");
+    let link = root.path().join("link");
+    std::os::unix::fs::symlink(&real, &link).expect("the link");
+    let canonical = std::fs::canonicalize(real.join("work"))
+        .expect("the directory resolves")
+        .display()
+        .to_string();
+    let linked = link.join("work").display().to_string();
+    assert_ne!(canonical, linked, "two spellings");
+    (root, canonical, linked)
+}
+
+/// The floor's H7 verdict and words for this record class, planned and recorded directory.
+#[cfg(unix)]
+fn h7_for(class: (&str, &str), planned: &str, recorded: &str) -> (Verdict, String) {
+    let spec = RunSpec::new(if class.0 == "b10x" {
+        Kind::B10x
+    } else {
+        Kind::Claude
+    });
+    let record = with_record(good_record(), |record| {
+        if let Event::SessionStarted {
+            adapter,
+            adapter_class,
+            cwd,
+            ..
+        } = record
+        {
+            class.0.clone_into(adapter);
+            class.1.clone_into(adapter_class);
+            *cwd = Some(recorded.to_owned());
+        }
+    });
+    let rows = hermetic_floor(
+        &[record],
+        &FloorInputs {
+            planned_cwd: Some(planned),
+            ..inputs(&spec, &pins(), &[])
+        },
+    );
+    let h7 = rows
+        .iter()
+        .find(|row| row.row == HermeticRow::H7)
+        .expect("H7");
+    (h7.verdict, h7.detail.clone())
+}
+
+/// Design a31: H7 compares **directories, not spellings**. The pinned b10x loop records the
+/// canonical root its file tools act in (harness 0.15.1, `LoopEvent::Started::cwd`), while the
+/// directory metaharness creates is spelled under `TMPDIR`, which may pass through a link — a
+/// `TMPDIR` under a linked home is the ordinary case. Two names are one directory when they are
+/// byte-equal, or when both are absolute and resolve (links followed) to the same path.
+/// Both spellings,
+/// in both places, on the b10x class and on a vendor class: the rule is a fact about directories,
+/// not about a kind.
+#[cfg(unix)]
+#[test]
+fn a_recorded_directory_is_the_planned_one_under_either_spelling() {
+    let (_root, canonical, linked) = one_directory_two_spellings();
+    for class in [("b10x", "direct_provider"), ("claude", "harness")] {
+        for (planned, recorded) in [
+            (&linked, &canonical),
+            (&canonical, &linked),
+            (&canonical, &canonical),
+            (&linked, &linked),
+        ] {
+            let (verdict, detail) = h7_for(class, planned, recorded);
+            assert_eq!(
+                verdict,
+                Verdict::Ok,
+                "{class:?}: planned {planned}, recorded {recorded}: {detail}"
+            );
+            assert!(detail.contains("which metaharness created"), "{detail}");
+        }
+    }
+}
+
+/// The other half of the rule: a recorded directory that resolves somewhere else is a `gap`
+/// whichever spelling names it, and so is one that does not exist on this machine at all.
+#[cfg(unix)]
+#[test]
+fn a_recorded_directory_that_resolves_elsewhere_is_a_gap_under_either_spelling() {
+    let (root, canonical, linked) = one_directory_two_spellings();
+    let other = root.path().join("other");
+    std::fs::create_dir(&other).expect("another directory");
+    let other_link = root.path().join("other-link");
+    std::os::unix::fs::symlink(&other, &other_link).expect("a link to it");
+    for planned in [&canonical, &linked] {
+        for recorded in [
+            other.display().to_string(),
+            other_link.display().to_string(),
+            "/nonexistent/metaharness/work".to_owned(),
+        ] {
+            let (verdict, detail) = h7_for(("b10x", "direct_provider"), planned, &recorded);
+            assert_eq!(
+                verdict,
+                Verdict::Gap,
+                "planned {planned}, recorded {recorded}: {detail}"
+            );
+            assert!(
+                detail.contains(&format!(
+                    "metaharness planned {planned} and the session ran in {recorded}"
+                )),
+                "{detail}"
+            );
+        }
+    }
+}
+
+/// A relative name is never resolved: resolving it would resolve it against
+/// metaharness's own working directory, which says nothing about where the loop worked. So a
+/// record that says `.` is not the planned directory even when metaharness itself runs there.
+#[cfg(unix)]
+#[test]
+fn a_relative_recorded_directory_is_not_resolved_against_metaharnesss_own() {
+    let here = std::fs::canonicalize(".")
+        .expect("the test runs somewhere")
+        .display()
+        .to_string();
+    for recorded in [".", "./"] {
+        let (verdict, detail) = h7_for(("b10x", "direct_provider"), &here, recorded);
+        assert_eq!(
+            verdict,
+            Verdict::Gap,
+            "planned {here}, recorded {recorded}: {detail}"
+        );
+    }
+}
+
+/// The same rule for an absolute name whose meaning is *the process that resolves it*: a magic
+/// link under `/proc` (`/proc/self/`, `/proc/thread-self/`, `/proc/<pid>/`) or under `/dev/fd/`.
+/// Resolved inside metaharness, each names metaharness's own working directory or file descriptor,
+/// which says nothing about where the loop worked (a31 point 3), so each is compared as spelled and
+/// reads `gap` even where metaharness itself runs in the planned directory. Every spelling below
+/// resolves to the test process's working directory, which is the planned one here, and so read
+/// `ok` before the rule: the plain prefixes, `.`/`..`/doubled-slash spellings of them, `/dev/stdin`'s
+/// kind of link into them (`/dev/fd` is itself a link to `/proc/self/fd`), and an ordinary link
+/// whose target is one of them, because the check is made at every step of the resolution and not on
+/// the spelling.
+#[cfg(target_os = "linux")]
+#[test]
+fn a_recorded_directory_that_names_the_resolving_process_is_compared_as_spelled() {
+    use std::os::fd::AsRawFd as _;
+    let here = std::fs::canonicalize(".")
+        .expect("the test runs somewhere")
+        .display()
+        .to_string();
+    let open = std::fs::File::open(&here).expect("the planned directory opens");
+    let fd = open.as_raw_fd();
+    let links = tempfile::tempdir().expect("a scratch root");
+    let to_cwd = links.path().join("to-proc-self-cwd");
+    std::os::unix::fs::symlink("/proc/self/cwd", &to_cwd).expect("a link into /proc");
+    let to_fd = links.path().join("to-dev-fd");
+    std::os::unix::fs::symlink(format!("/dev/fd/{fd}"), &to_fd).expect("a link into /dev/fd");
+    let pid = std::process::id();
+    let mut resolved_inside_metaharness = Vec::new();
+    for recorded in [
+        "/proc/self/cwd".to_owned(),
+        "/proc/thread-self/cwd".to_owned(),
+        format!("/proc/{pid}/cwd"),
+        format!("/proc/self/task/{pid}/cwd"),
+        format!("/proc/self/root{here}"),
+        format!("/proc/self/fd/{fd}"),
+        format!("/dev/fd/{fd}"),
+        "/proc/./self/cwd".to_owned(),
+        "//proc//self/cwd".to_owned(),
+        "/tmp/../proc/self/cwd".to_owned(),
+        to_cwd.display().to_string(),
+        to_fd.display().to_string(),
+    ] {
+        assert_eq!(
+            std::fs::canonicalize(&recorded)
+                .ok()
+                .map(|p| p.display().to_string()),
+            Some(here.clone()),
+            "{recorded} resolves to the test process's working directory, so it tests the rule"
+        );
+        let (verdict, detail) = h7_for(("b10x", "direct_provider"), &here, &recorded);
+        if (verdict, detail.as_str())
+            != (
+                Verdict::Gap,
+                format!("metaharness planned {here} and the session ran in {recorded}").as_str(),
+            )
+        {
+            resolved_inside_metaharness.push(format!("{recorded}: {verdict:?} — {detail}"));
+        }
+    }
+    drop(open);
+    assert!(
+        resolved_inside_metaharness.is_empty(),
+        "planned {here}; these were resolved against metaharness's own process:\n{}",
+        resolved_inside_metaharness.join("\n")
+    );
+}
+
+/// A name that passes through something that is not a directory does not resolve, as `realpath`
+/// and the kernel refuse it (`ENOTDIR`): a file has no `..`, no `.`, and no trailing `/`. Each name
+/// below would arrive lexically at the planned name, and so read `ok` if a file were treated as a
+/// directory; each is compared as spelled and reads `gap`. Through a file directly, through a link
+/// to a file, and through a link whose own target ends in `/`.
+#[cfg(unix)]
+#[test]
+fn a_recorded_directory_that_passes_through_a_file_does_not_resolve() {
+    let root = tempfile::tempdir().expect("a scratch root");
+    let work = std::fs::canonicalize(root.path())
+        .expect("the root resolves")
+        .join("work");
+    std::fs::create_dir(&work).expect("the planned directory");
+    std::fs::write(work.join("README.md"), "a file\n").expect("a file in it");
+    std::os::unix::fs::symlink("README.md", work.join("to-file")).expect("a link to the file");
+    std::os::unix::fs::symlink("README.md/", work.join("to-file-slash"))
+        .expect("a link to the file spelled as a directory");
+    let dir = work.display().to_string();
+    let file = work.join("README.md").display().to_string();
+    let mut read_as_resolved = Vec::new();
+    for (planned, recorded) in [
+        (&dir, format!("{file}/..")),
+        (&dir, format!("{file}/./..")),
+        (&dir, format!("{file}/../.")),
+        (&dir, format!("{dir}/to-file/..")),
+        (&file, format!("{file}/")),
+        (&file, format!("{file}/.")),
+        (&file, format!("{file}//")),
+        (&file, format!("{dir}/to-file/")),
+        (&file, format!("{dir}/to-file-slash")),
+    ] {
+        let refused = std::fs::canonicalize(&recorded).expect_err("realpath refuses it");
+        assert_eq!(refused.raw_os_error(), Some(20), "ENOTDIR for {recorded}");
+        let (verdict, detail) = h7_for(("b10x", "direct_provider"), planned, &recorded);
+        if (verdict, detail.as_str())
+            != (
+                Verdict::Gap,
+                format!("metaharness planned {planned} and the session ran in {recorded}").as_str(),
+            )
+        {
+            read_as_resolved.push(format!("{recorded}: {verdict:?} — {detail}"));
+        }
+    }
+    assert!(
+        read_as_resolved.is_empty(),
+        "names realpath refuses with ENOTDIR were resolved:\n{}",
+        read_as_resolved.join("\n")
+    );
 }
 
 #[test]

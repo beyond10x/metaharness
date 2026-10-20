@@ -1,6 +1,8 @@
 //! Adversary pass 1 against amendment a30: the exits a30 and the CHANGELOG state, measured through
 //! the production CLI and the actual `b10x-harness` binary, for the flag combinations the unit's
 //! own native case does not run (it runs `--hermetic strict --cwd <copy> --scratch-cwd` only).
+//! Amendment a31 moved three of them back (harness 0.15.1 reports the directory): each case says
+//! what a30 had and what it reads now.
 //!
 //! Opt-in and ignored, like `native_fixture.rs`: the whole test process runs in a network
 //! namespace containing only loopback, against an owned Responses fixture that answers one text
@@ -323,7 +325,29 @@ fn gating_not_ok(stderr: &str) -> Vec<(String, String)> {
         .collect()
 }
 
-fn opening(events: &[Value]) -> &Value {
+/// `path` canonicalized as far as it still exists, the rest appended as spelled: the directory a
+/// run created is gone once the run has ended, its ancestors are not.
+fn canonical_now(path: &Path) -> PathBuf {
+    let mut existing = path;
+    let mut rest = Vec::new();
+    loop {
+        if let Ok(canonical) = fs::canonicalize(existing) {
+            return rest
+                .iter()
+                .rev()
+                .fold(canonical, |out, part| out.join(part));
+        }
+        rest.push(existing.file_name().expect("a named component"));
+        existing = existing.parent().expect("an ancestor exists");
+    }
+}
+
+/// The opening record, and the directory it states, pinned (a31): since harness 0.15.1 the loop
+/// reports the canonical root its tools act in, which is the directory this case expects — the
+/// named `<root>/work` (the declared copy, or the a6 tree), or, without `--cwd`, the directory
+/// metaharness created, `<scratch>/work`, where `<scratch>` holds the transcript the opening record
+/// names (`start_b10x`) and lies under this run's `TMPDIR`.
+fn opening<'a>(events: &'a [Value], root: &Path, named_cwd: bool) -> &'a Value {
     let found: Vec<&Value> = events
         .iter()
         .filter(|event| event["event"] == "session.started")
@@ -331,41 +355,58 @@ fn opening(events: &[Value]) -> &Value {
     assert_eq!(found.len(), 1, "{events:?}");
     let start = found[0];
     assert_eq!(start["adapter_class"], "direct_provider");
-    assert_eq!(start["harness_version"], "0.15.0");
-    assert!(start.get("cwd").is_some_and(Value::is_null), "{start}");
+    assert_eq!(start["harness_version"], "0.15.1");
+    let expected = if named_cwd {
+        fs::canonicalize(root.join("work")).unwrap()
+    } else {
+        let scratch = Path::new(
+            start["transcript"]["path"]
+                .as_str()
+                .expect("the opening record names its transcript"),
+        )
+        .parent()
+        .expect("the transcript lies in the run's scratch");
+        assert!(scratch.starts_with(root.join("tmp")), "{start}");
+        canonical_now(&scratch.join("work"))
+    };
+    assert_eq!(
+        start["cwd"].as_str().map(Path::new),
+        Some(expected.as_path()),
+        "named={named_cwd}: {start}"
+    );
     start
 }
 
-/// CHANGELOG: "A strict b10x run without `--cwd` moves the same way" (0 → 3), H7 alone.
+/// CHANGELOG: "A strict b10x run without `--cwd` moves the same way" (0 → 3 under a30), H7 alone.
+/// Under a31 the loop reports the directory metaharness created, so the move is undone: 0, and no
+/// gating row is left.
 #[test]
 #[ignore = "actual b10x and production CLI; explicit paths and isolated loopback network namespace"]
-fn actual_b10x_strict_without_cwd_exits_3_on_h7_alone() {
+fn actual_b10x_strict_without_cwd_exits_0_with_h7_ok() {
     let _serial = NATIVE_RUN
         .lock()
         .unwrap_or_else(std::sync::PoisonError::into_inner);
-    let (_root, events, stderr, code) = run(false, &["--hermetic", "strict"]);
-    opening(&events);
-    assert_eq!(
-        gating_not_ok(&stderr),
-        [("H7".to_owned(), "unk".to_owned())],
-        "{stderr}"
-    );
-    assert_eq!(code, 3, "{stderr}");
+    let (root, events, stderr, code) = run(false, &["--hermetic", "strict"]);
+    opening(&events, &root, false);
+    assert_eq!(gating_not_ok(&stderr), Vec::new(), "{stderr}");
+    assert_eq!(code, 0, "{stderr}");
 }
 
 /// CHANGELOG and a30: "A strict a6 `--cwd` run without the declaration still exits 1, on H11".
+/// Under a31 H7 beside it is `gap` (the loop reports the operator's tree, which metaharness could
+/// not impose), where a30 had it `unk`.
 #[test]
 #[ignore = "actual b10x and production CLI; explicit paths and isolated loopback network namespace"]
 fn actual_b10x_strict_a6_cwd_still_exits_1_on_h11() {
     let _serial = NATIVE_RUN
         .lock()
         .unwrap_or_else(std::sync::PoisonError::into_inner);
-    let (_root, events, stderr, code) = run(true, &["--hermetic", "strict"]);
-    opening(&events);
+    let (root, events, stderr, code) = run(true, &["--hermetic", "strict"]);
+    opening(&events, &root, true);
     let rows = gating_not_ok(&stderr);
     assert!(
         rows.contains(&("H11".to_owned(), "gap".to_owned()))
-            && rows.contains(&("H7".to_owned(), "unk".to_owned())),
+            && rows.contains(&("H7".to_owned(), "gap".to_owned())),
         "{stderr}"
     );
     assert_eq!(code, 1, "{stderr}");
@@ -383,17 +424,18 @@ fn actual_b10x_hermetic_on_without_audit_still_exits_0() {
         if named {
             extra.push("--scratch-cwd");
         }
-        let (_root, events, stderr, code) = run(named, &extra);
-        opening(&events);
+        let (root, events, stderr, code) = run(named, &extra);
+        opening(&events, &root, named);
         assert_eq!(code, 0, "{stderr}");
     }
 }
 
-/// Bare `--hermetic --audit` judges the same floor; on b10x it now exits 3, H7 alone — an exit
-/// move the CHANGELOG and a30 decision 3 do not name.
+/// Bare `--hermetic --audit` judges the same floor; on b10x a30 moved it to 3, H7 alone — an exit
+/// move the CHANGELOG and a30 decision 3 did not name at first. Under a31 the loop reports the
+/// created or declared directory, so it is back at 0 with no gating row left.
 #[test]
 #[ignore = "actual b10x and production CLI; explicit paths and isolated loopback network namespace"]
-fn actual_b10x_hermetic_on_with_audit_exits_3_on_h7_alone() {
+fn actual_b10x_hermetic_on_with_audit_exits_0_with_h7_ok() {
     let _serial = NATIVE_RUN
         .lock()
         .unwrap_or_else(std::sync::PoisonError::into_inner);
@@ -402,13 +444,13 @@ fn actual_b10x_hermetic_on_with_audit_exits_3_on_h7_alone() {
         if named {
             extra.push("--scratch-cwd");
         }
-        let (_root, events, stderr, code) = run(named, &extra);
-        opening(&events);
+        let (root, events, stderr, code) = run(named, &extra);
+        opening(&events, &root, named);
         assert_eq!(
             gating_not_ok(&stderr),
-            [("H7".to_owned(), "unk".to_owned())],
+            Vec::new(),
             "named={named}: {stderr}"
         );
-        assert_eq!(code, 3, "named={named}: {stderr}");
+        assert_eq!(code, 0, "named={named}: {stderr}");
     }
 }

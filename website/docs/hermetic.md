@@ -68,12 +68,22 @@ whether the documents moved"*, which made `--hermetic strict` unpassable.
 The attestation knows a third state beside imposed and unavailable, for one row only: under
 [`--cwd <DIR> --scratch-cwd`](reference/cli.md#--scratch-cwd-the-embedders-disposable-copy) H7 is
 **`declared`** — the embedder declared the directory as its disposable scratch copy — and the floor
-reads it `ok` only when the record's cwd is the one planned. H11 stays measured. On the b10x kind
-the loop's opening record names no working directory (`b10x-harness` 0.15.0), so the record's cwd
-is `null` and H7 is `unk`, *"the loop did not report its working directory"*, whoever made the
-directory. A strict or `--audit` b10x run whose other gating rows hold therefore exits 3, a
-declared copy included; a strict `--cwd` run without the declaration still exits 1, on H11, and
-bare `--hermetic` without `--audit` owes no verdict and exits 0.
+reads it `ok` only when the record's cwd is the one planned. H11 stays measured.
+
+H7 compares **directories, not spellings**: the record's cwd and the planned one are the same
+directory when they are equal or when both are absolute paths that resolve, links followed, to the
+same path. A loop that records its canonical root therefore matches a directory metaharness created
+under a `TMPDIR` reached through a link. Nothing is resolved against metaharness's own process: a
+relative name, or one that reaches `/proc` or `/dev/fd` (such as `/proc/self/cwd`), is compared as
+spelled.
+
+On the b10x kind the record's cwd is the directory the loop itself reported in its opening record
+(`b10x-harness` 0.15.1), never metaharness's plan. A strict or `--audit` b10x run whose other
+gating rows hold exits 0 when that is the directory metaharness created or the declared copy, and
+1 when it is another directory. When the loop names none — under `--substrate <socket>`, or for a
+directory whose name is not UTF-8 — the record's cwd is `null` and H7 is `unk`, *"the loop did not
+report its working directory"*, so the run exits 3. A strict `--cwd` run without the declaration
+exits 1, on H7 and H11; bare `--hermetic` without `--audit` owes no verdict and exits 0.
 
 ## The three modes
 
