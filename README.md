@@ -39,7 +39,7 @@ metaharness
 | direction | repo | relationship |
 |---|---|---|
 | drives | Claude Code, Codex | vendor binaries, spawned into a scratch config home |
-| drives | [harness](https://github.com/beyond10x/harness) | the b10x agent loop, via the `b10x` adapter — observed rather than driven, because its published toolset already is its policy |
+| runs and observes | [harness](https://github.com/beyond10x/harness) | the b10x agent loop, through the `b10x` adapter; metaharness does not decide its tool calls, because its published toolset already is its policy |
 | scored by | [AEP](https://github.com/beyond10x/aep) | supplies the workflows and trace expectations the evals under `evals/` judge a run against |
 | mapped in | [atlas](https://github.com/beyond10x/atlas) | how this repo fits the rest of `beyond10x` |
 
@@ -78,7 +78,9 @@ per-change record of what was verified and what it cost to learn is in
 
 The gate is **`task check`** — ESS specification validation, `cargo fmt --check`,
 `cargo clippy --workspace --all-targets -D warnings`, `cargo test --workspace`.
-Install ESS 0.56.0 first. The tests execute 87 generated conformance scenarios and check suite
+Install ESS 0.56.0 first: `spec/ess-inputs.yaml` declares `requires: ess 0.56.0`, the gate validates with
+`--strict-requires`, and CI installs `ess-cli` from that release's commit (`.github/workflows/gate.yml`).
+The tests execute 87 generated conformance scenarios and check suite
 freshness; [spec/coverage.md](spec/coverage.md) records the coverage and hardening bounds.
 Green before any push.
 

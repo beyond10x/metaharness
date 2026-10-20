@@ -135,7 +135,8 @@ boundary; changing any of it is its own change with its own review.
 | Terminating LLM requests, model routing, backends | `llmgw` |
 | The methodology specification, workflows, evidence semantics | `AEP` |
 
-metaharness drives a loop; it does not have one. The `metaharness-b10x` adapter *observes* the b10x
+metaharness runs and observes agent loops (Atlas ADR 0096, L2); it does not have one.
+The `metaharness-b10x` adapter *observes* the b10x
 harness and does not implement it.
 
 ## The gate
