@@ -31,6 +31,19 @@ workspace**. The builder API is the shape the binary is built from and the surfa
 inside this workspace uses; it is not a published consumer surface, and a change that is
 convenient for the binary and awkward for the library is not thereby wrong.
 
+**Until the per-call governance gaps Atlas ADR 0098 lists close, the unit of governance for agent
+work run through this binary is the session and its proposed change.** A caller can allow, deny,
+rewrite or abstain on a tool call (`crates/metaharness-protocol/src/command.rs`, `Decision`); it
+cannot perform the effect and hand the harness the result, supply or change the catalogue within a
+session, continue a session across executor calls, put a seam between the in-house harness and its
+tools, or confine a vendor kind. Those six are the draft stories under
+`epic:loom-agent-work-through-metaharness` in `.engineering/planning/`
+(`caller-supplied-catalogue-on-every-kind`, `decision-returns-caller-produced-result`,
+`catalogue-changes-within-a-session`, `continuity-across-executor-calls`, `call-seam-for-harness`,
+`confinement-of-vendor-kinds`). Loom's session executor therefore governs a metaharness session as a
+whole and rechecks its proposed change before applying it (ADR 0098 point 2 and Consequences);
+nothing here is per-call governance on every kind until those stories close.
+
 ## Invariants
 
 Each is a claim that can be checked. Breaking one is a design change, not a refactor.
