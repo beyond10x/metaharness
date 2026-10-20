@@ -38,6 +38,12 @@
 
 ## 1. `metaharness project` — the event → IR mapping
 
+> **Owning specification (protocol amendment a26, 2026-10-20).** The mapping this section decides
+> is declared as the ESS domain `metaharness.trace` in `spec/domains/trace.yaml` (Atlas ADR 0096
+> point 7) and executed by the gate against the production projection and the three production
+> readers. Where this page and the domain disagree, the protocol document's amendment record is the
+> pointer, and the domain records what production does.
+
 ### 1.1 P1 — the document form
 
 `metaharness project <events.jsonl>` reads a `metaharness.event/1` stream and writes one JSON

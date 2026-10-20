@@ -7,3 +7,4 @@ domains:
   - metaharness.spending
   - metaharness.boundaries
   - metaharness.observations
+  - metaharness.trace

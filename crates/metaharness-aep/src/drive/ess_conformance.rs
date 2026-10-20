@@ -1,6 +1,9 @@
 //! Bounded ESS suite executed against production seams; unsupported steps fail closed.
 use super::*;
-use metaharness::protocol::Event;
+use metaharness::protocol::{
+    CLOSED_FAMILY, CloseReason, Emission, Event, EventLine, EventStream, RunId, TraceIrDocument,
+    UNK_FAMILY, parse_event_line, project_document,
+};
 use serde_json::{Value, json};
 
 fn suite() -> Value {
@@ -490,6 +493,7 @@ fn query(observed: &Observed, view: &str) -> Result<Value, String> {
         "metaharness.session.RetainedClosure",
         "metaharness.spending.RetainedAdmission",
         "metaharness.spending.RetainedFiniteLedger",
+        "metaharness.trace.RetainedProjection",
     ]
     .contains(&view)
     {
@@ -500,6 +504,9 @@ fn query(observed: &Observed, view: &str) -> Result<Value, String> {
     };
     if view != expected {
         return Ok(json!([]));
+    }
+    if field == "projection" {
+        return retained_projection(directory.path());
     }
     let record: Value = serde_json::from_slice(
         &fs::read(directory.path().join(SPEND_FILE)).map_err(|e| e.to_string())?,
@@ -572,8 +579,678 @@ fn observed_codex(command: &str, input: &Value) -> Observed {
     }
 }
 
+// --- metaharness.trace: the `trace-ir/1` document, observed through production (ADR 0096 point 7).
+// Every arm reads the family, the reason, the digest and the completeness verdict off the
+// document `project_document` wrote; none restates the mapping (`spec/domains/trace.yaml`).
+
+/// The file a retained projection is written to, beside the retained ledgers' `SPEND_FILE`.
+const TRACE_FILE: &str = "trace-ir.json";
+
+/// The twelve node families the domain declares: the ten `IrFamily` names plus `unk` and
+/// `stream_closed`, in the order `metaharness.trace.FamilyCensus` lists them.
+const FAMILIES: [&str; 12] = [
+    "session_start",
+    "run_outcome",
+    "assistant_text",
+    "assistant_thinking",
+    "thinking_estimate",
+    "synthetic_injection",
+    "tool_call",
+    "tool_result",
+    "rate_limit",
+    "opaque",
+    UNK_FAMILY,
+    CLOSED_FAMILY,
+];
+
+/// The repository root, for the committed inputs the trace commands read by path.
+fn repository_root() -> PathBuf {
+    Path::new(env!("CARGO_MANIFEST_DIR")).join("../..")
+}
+
+/// The committed `metaharness.event/1` stream of one recorded run. `evals/aep/runs/README.md`:
+/// hand-written inputs through this driver's own reader, so reading them is not a paid run
+/// (invariant 5; precedent `crates/metaharness-claude/tests/recorded_runs.rs`).
+fn recorded_stream(run: &str) -> Vec<u8> {
+    fs::read(repository_root().join(format!("evals/aep/runs/{run}.events.jsonl"))).unwrap()
+}
+
+/// Every non-blank line of a stream through the production parser.
+fn parse_stream(bytes: &[u8]) -> Vec<EventLine> {
+    std::str::from_utf8(bytes)
+        .unwrap()
+        .lines()
+        .filter(|line| !line.trim().is_empty())
+        .map(|line| parse_event_line(line).unwrap())
+        .collect()
+}
+
+/// The bytes a stream of framed lines is, one JSON object per line: what `transcript_digest` names.
+fn stream_bytes(lines: &[EventLine]) -> Vec<u8> {
+    let mut bytes = Vec::new();
+    for line in lines {
+        bytes.extend(serde_json::to_vec(line).unwrap());
+        bytes.push(b'\n');
+    }
+    bytes
+}
+
+/// Frame emissions the way every producer in this workspace does, through `EventStream`, the one
+/// place a sequence number and the closing marker are written (amendment a17).
+fn framed(
+    run: &str,
+    emissions: Vec<Emission>,
+    close: Option<CloseReason>,
+) -> (Vec<EventLine>, Vec<u8>) {
+    let mut stream = EventStream::new(RunId::new(run));
+    let mut lines: Vec<EventLine> = emissions
+        .into_iter()
+        .map(|emission| stream.stamp(emission))
+        .collect();
+    if let Some(reason) = close {
+        lines.extend(stream.close(reason));
+    }
+    let bytes = stream_bytes(&lines);
+    (lines, bytes)
+}
+
+/// One event of each wire kind, carrying the fields its variant requires and nothing else: the
+/// family is what is observed, so the sample claims nothing about anything else.
+#[allow(clippy::too_many_lines)]
+fn sample_event(wire: &str) -> Event {
+    use metaharness::protocol::{
+        CommandOutcome, DecidedBy, Decision, DecisionCensus, Digest, HermeticAttestation,
+        HermeticMode, ProcessTermination, RateLimitInfo, Seam, StepOutcome, StepRef, TranscriptRef,
+        Usage,
+    };
+    let step = || StepRef {
+        workflow: "ess".to_owned(),
+        state: "implement".to_owned(),
+        index: 1,
+        attempt: 1,
+    };
+    match wire {
+        "session.started" => Event::SessionStarted {
+            adapter: "ess".to_owned(),
+            adapter_class: "harness".to_owned(),
+            harness_version: None,
+            session_id: None,
+            model: None,
+            permission_mode: None,
+            credential_source: None,
+            output_style: None,
+            cwd: None,
+            offered_tools: None,
+            available_operations: None,
+            withheld: None,
+            slash_commands: None,
+            skills: None,
+            agents: None,
+            plugins: None,
+            mcp_servers: None,
+            inputs_digest: None,
+            transcript: TranscriptRef {
+                path: None,
+                digest: None,
+                bytes: None,
+            },
+            hermetic: HermeticAttestation::none(HermeticMode::Off),
+        },
+        "session.ended" => Event::SessionEnded {
+            final_answer: None,
+            observed_models: None,
+            is_error: None,
+            subtype: None,
+            stop_reason: None,
+            terminal_reason: None,
+            api_error_status: None,
+            num_turns: None,
+            duration_ms: None,
+            duration_api_ms: None,
+            ttft_ms: None,
+            time_to_request_ms: None,
+            total_cost_usd: None,
+            permission_denials: None,
+            subagents_spawned: None,
+            usage: None,
+            model_usage: None,
+            census: DecisionCensus::default(),
+        },
+        "step.entered" => Event::StepEntered {
+            step: step(),
+            frame_digest: None,
+        },
+        "step.left" => Event::StepLeft {
+            step: step(),
+            outcome: StepOutcome::Completed,
+        },
+        "turn.started" => Event::TurnStarted {
+            turn: 1,
+            frame_digest: None,
+        },
+        "turn.ended" => Event::TurnEnded {
+            turn: 1,
+            stop_reason: None,
+        },
+        "text" => Event::Text {
+            text: "hello".to_owned(),
+            request_id: None,
+        },
+        "thinking" => Event::Thinking {
+            text: "reasoning".to_owned(),
+            request_id: None,
+        },
+        "thinking.estimate" => Event::ThinkingEstimate {
+            estimate: 1,
+            delta: None,
+        },
+        "injection" => Event::Injection {
+            text: "frame".to_owned(),
+            origin: None,
+        },
+        "tool.requested" => Event::ToolRequested {
+            call_id: "t1".to_owned(),
+            name: "Read".to_owned(),
+            input: json!({}),
+            operations: Vec::new(),
+            subjects: Vec::new(),
+            decision_required: false,
+            deadline_ms: None,
+            seam: Seam::None,
+        },
+        "tool.decided" => Event::ToolDecided {
+            call_id: "t1".to_owned(),
+            decision: Decision::Allow,
+            decided_by: DecidedBy::Embedder,
+            seam: Seam::None,
+            latency_ms: None,
+        },
+        "tool.result" => Event::ToolResult {
+            exit_code: None,
+            outcome_source: None,
+            call_id: "t1".to_owned(),
+            is_error: None,
+            content: None,
+            bytes: None,
+            tool_use_result: None,
+        },
+        "usage" => Event::Usage {
+            request_id: None,
+            model: None,
+            usage: Usage::default(),
+        },
+        "rate_limit" => Event::RateLimit {
+            info: RateLimitInfo {
+                status: None,
+                window: None,
+                resets_at: None,
+                utilization: None,
+                using_overage: None,
+            },
+        },
+        "command.result" => Event::CommandResult {
+            id: "c1".to_owned(),
+            outcome: CommandOutcome::Ok { applies_at: None },
+        },
+        "warning" => Event::Warning {
+            code: "ESS".to_owned(),
+            message: "fixture".to_owned(),
+        },
+        "opaque" => Event::Opaque {
+            vendor_type: None,
+            vendor_subtype: None,
+            digest: Digest::of(b"opaque"),
+            source_line: None,
+        },
+        "auth.expired" => Event::AuthExpired {
+            credential_source: None,
+            detail: None,
+            source_line: None,
+        },
+        "stream.closed" => Event::StreamClosed {
+            process: ProcessTermination::Unknown,
+            events: 0,
+            reason: CloseReason::Completed,
+            run_id: "ess".to_owned(),
+        },
+        other => panic!("{other} is not on the wire"),
+    }
+}
+
+/// `metaharness.trace.ClassifyEventKind`: one event of the asked-for kind through
+/// `project_document`; the family and the reason are read off the node the production writer
+/// emitted, and the outcome is named from that family.
+fn classify(input: &Value) -> Observed {
+    // The domain spells `-` where the wire spells `.`, because a guard reads `.` as field access.
+    let wire = input["kind"].as_str().unwrap().replace('-', ".");
+    let sample = sample_event(&wire);
+    assert_eq!(sample.name(), wire, "the sample is of the kind asked for");
+    let (lines, bytes) = framed("ess-classify", vec![Emission::untimed(sample)], None);
+    let document = project_document(&lines, &bytes);
+    assert_eq!(document.events.len(), 1, "every event is a node");
+    let node = &document.events[0].kind;
+    let family = node["event"].as_str().unwrap().to_owned();
+    assert_eq!(document.metaharness.families.get(&family), Some(&1));
+    if family == UNK_FAMILY {
+        // The outcome is named from the kind the node itself states, not from the input.
+        let kind = node["event_kind"].as_str().unwrap();
+        assert_eq!(kind, wire, "an unk node names its kind");
+        assert_eq!(document.metaharness.unk_kinds.get(kind), Some(&1));
+        return event(
+            &format!("unk-{}", kind.replace('.', "-")),
+            "metaharness.trace.UnkClassified",
+            json!({"family": family, "reason": node["reason"]}),
+        );
+    }
+    assert!(
+        document.metaharness.unk_kinds.is_empty(),
+        "a mapped kind is not a vocabulary gap"
+    );
+    event(
+        &family.replace('_', "-"),
+        "metaharness.trace.FamilyClassified",
+        json!({"family": family}),
+    )
+}
+
+/// `metaharness.trace.VerifyStreamCompleteness`: a short stream built through the production
+/// `EventStream` and read back through `project_document`. `complete` is the verified flag of
+/// amendment a17. Every shape `stream_completeness` decides between is built: no marker; the
+/// marker production writes; that marker followed by a line (the appended-to file); that marker
+/// with its count overwritten; and that marker twice. The outcome is named from what the document
+/// shows (how many markers, whether the last node is one, the verified flag), never from the input.
+fn completeness(input: &Value) -> Observed {
+    let text = || {
+        Emission::untimed(Event::Text {
+            text: "done".to_owned(),
+            request_id: None,
+        })
+    };
+    let mut stream = EventStream::new(RunId::new("ess-completeness"));
+    let mut lines = vec![stream.stamp(text())];
+    match input["marker"].as_str().unwrap() {
+        "absent" => (),
+        "last-and-counting" => lines.extend(stream.close(CloseReason::Completed)),
+        "misplaced" => {
+            lines.extend(stream.close(CloseReason::Completed));
+            lines.push(stream.stamp(text()));
+        }
+        "miscounting" => {
+            let mut marker = stream
+                .close(CloseReason::Completed)
+                .expect("a fresh stream closes once");
+            let Event::StreamClosed { events, .. } = &mut marker.event else {
+                unreachable!("close writes the marker")
+            };
+            assert_eq!(
+                *events, 1,
+                "the production marker counts the node before it"
+            );
+            *events = 7;
+            lines.push(marker);
+        }
+        "duplicated" => {
+            let first = stream
+                .close(CloseReason::Completed)
+                .expect("a fresh stream closes once");
+            assert!(
+                stream.close(CloseReason::Completed).is_none(),
+                "production writes one marker"
+            );
+            let mut second = first.clone();
+            second.seq = first.seq + 1;
+            if let Event::StreamClosed { events, .. } = &mut second.event {
+                *events = 2;
+            }
+            lines.push(first);
+            lines.push(second);
+        }
+        other => panic!("unsupported marker evidence {other}"),
+    }
+    let bytes = stream_bytes(&lines);
+    let document = project_document(&lines, &bytes);
+    let markers = document
+        .metaharness
+        .families
+        .get(CLOSED_FAMILY)
+        .copied()
+        .unwrap_or(0);
+    let marker_last = document
+        .events
+        .last()
+        .is_some_and(|node| node.kind["event"] == CLOSED_FAMILY);
+    let complete = document.metaharness.stream_complete;
+    // A tuple the domain does not name (a marker-less or duplicated stream read as complete) is an
+    // outcome no scenario declares, so the scenario fails by name on `expect_outcome` with the
+    // observed tuple in the message rather than taking the whole run down.
+    let outcome = match (markers, marker_last, complete) {
+        (0, false, false) => "truncated".to_owned(),
+        (1, true, true) => "complete".to_owned(),
+        (1, false, false) => "inconsistent-misplaced".to_owned(),
+        (1, true, false) => "inconsistent-miscounting".to_owned(),
+        (2.., true, false) => "inconsistent-duplicated".to_owned(),
+        other => format!("unnamed-completeness-shape:{other:?}"),
+    };
+    event(
+        &outcome,
+        "metaharness.trace.CompletenessVerified",
+        json!({"markers": markers, "marker_last": marker_last, "complete": complete}),
+    )
+}
+
+/// `metaharness.trace.NameDigest`: `transcript_digest` names the event stream's own bytes, and the
+/// vendor's reference travels beside it under its own name (P3, amendment a15 point 2).
+fn digest(input: &Value) -> Observed {
+    use metaharness::protocol::{Digest, TranscriptRef};
+    const VENDOR_BYTES: &[u8] = b"the vendor's own transcript";
+    let vendor = match input["vendor_reference"].as_str().unwrap() {
+        "digest-named" => TranscriptRef {
+            path: Some("vendor/transcript.jsonl".to_owned()),
+            digest: Some(Digest::of(VENDOR_BYTES)),
+            bytes: Some(u64::try_from(VENDOR_BYTES.len()).unwrap()),
+        },
+        "digest-absent" => TranscriptRef {
+            path: None,
+            digest: None,
+            bytes: None,
+        },
+        other => panic!("unsupported vendor reference {other}"),
+    };
+    let mut opening = sample_event("session.started");
+    let Event::SessionStarted { transcript, .. } = &mut opening else {
+        unreachable!()
+    };
+    transcript.clone_from(&vendor);
+    let (lines, bytes) = framed("ess-digest", vec![Emission::untimed(opening)], None);
+    let document = project_document(&lines, &bytes);
+    let over_stream_bytes = document.transcript_digest == Digest::of(&bytes).as_str();
+    let vendor_digest = document
+        .metaharness
+        .vendor_transcript
+        .as_ref()
+        .and_then(|reference| reference.digest.clone());
+    assert_eq!(
+        vendor_digest, vendor.digest,
+        "the vendor's reference travels as recorded"
+    );
+    if let Some(named) = &vendor_digest {
+        assert_ne!(
+            named.as_str(),
+            document.transcript_digest,
+            "two digests, two files"
+        );
+    }
+    let vendor_digest_named = vendor_digest.is_some();
+    let outcome = if vendor_digest_named {
+        "stream-digest-beside-vendor-digest"
+    } else {
+        "stream-digest-alone"
+    };
+    event(
+        outcome,
+        "metaharness.trace.DigestNamed",
+        json!({
+            "over_stream_bytes": over_stream_bytes,
+            "source": document.metaharness.source,
+            "vendor_digest_named": vendor_digest_named,
+        }),
+    )
+}
+
+/// One committed recorded run, projected and rendered: the document, the stream's line count and
+/// the rendered bytes.
+fn project_recorded(run: &str) -> (TraceIrDocument, usize, String) {
+    let bytes = recorded_stream(run);
+    let lines = parse_stream(&bytes);
+    let document = project_document(&lines, &bytes);
+    let rendered = document.render().unwrap();
+    (document, lines.len(), rendered)
+}
+
+/// `metaharness.trace.ProjectRecordedRun`: project one recorded run, render it twice, and retain
+/// the rendered document as an immutable record. The outcome is named from the run id the
+/// stream's own lines carry, read off the document rather than off the input.
+fn project_recorded_run(input: &Value) -> Observed {
+    let run = input["run"].as_str().unwrap();
+    let (document, lines, first) = project_recorded(run);
+    let (_, _, second) = project_recorded(run);
+    assert_eq!(document.events.len(), lines, "every event is a node");
+    let directory = tempfile::tempdir().unwrap();
+    fs::write(directory.path().join(TRACE_FILE), &first).unwrap();
+    let recorded = document
+        .metaharness
+        .run
+        .as_deref()
+        .expect("every line of a stream carries its run");
+    let unk: u32 = document.metaharness.unk_kinds.values().sum();
+    let mut observation = event(
+        &format!("{recorded}-recorded"),
+        "metaharness.trace.ProjectionRecorded",
+        json!({
+            "record_id": directory.path().display().to_string(),
+            "nodes": document.events.len(),
+            "unk": unk,
+            "stream_complete": document.metaharness.stream_complete,
+            "byte_stable": first == second,
+            // The vendor's recorded opening timestamp as milliseconds, read off the node; `null`
+            // when the writer derived none, which no declared payload matches.
+            "opening_timestamp_ms": document.events[0].timestamp_ms,
+        }),
+    );
+    observation.retained = Some((
+        directory,
+        "metaharness.trace.RetainedProjection".to_owned(),
+        "projection".to_owned(),
+    ));
+    observation
+}
+
+/// The retained document read back, with what `metaharness.trace.RetainedDocument` declares of
+/// it: the header, the census, the family counts, the node and line counts, the opening node, and
+/// whether a fresh projection of the committed stream the record names renders to the retained
+/// bytes (P1). Values come from the file and from that stream, never from target bookkeeping.
+fn retained_projection(directory: &Path) -> Result<Value, String> {
+    let retained = fs::read_to_string(directory.join(TRACE_FILE)).map_err(|e| e.to_string())?;
+    let document: Value = serde_json::from_str(&retained).map_err(|e| e.to_string())?;
+    let block = &document["metaharness"];
+    let run = block["run"]
+        .as_str()
+        .ok_or("the retained document names no run")?;
+    let (_, lines, fresh) = project_recorded(run);
+    let nodes = document["events"]
+        .as_array()
+        .ok_or("the retained document has no events")?
+        .len();
+    let census = block["families"]
+        .as_object()
+        .ok_or("the retained document has no family census")?;
+    let families: serde_json::Map<String, Value> = FAMILIES
+        .iter()
+        .map(|family| {
+            let count = census.get(*family).and_then(Value::as_u64).unwrap_or(0);
+            ((*family).to_owned(), json!(count))
+        })
+        .collect();
+    let unk: u64 = block["unk_kinds"]
+        .as_object()
+        .ok_or("the retained document has no unk census")?
+        .values()
+        .filter_map(Value::as_u64)
+        .sum();
+    let opening = &document["events"][0];
+    // P1 across builds: the committed golden `crates/metaharness-cli/tests/project.rs` holds is
+    // the fixed point a fresh render of the same stream must land on, byte for byte.
+    let golden =
+        fs::read_to_string(repository_root().join(format!("evals/aep/runs/{run}.trace-ir.json")))
+            .map_err(|e| e.to_string())?;
+    Ok(json!({"projection": {
+        "header": {
+            "format": document["format"],
+            "transcript_digest": document["transcript_digest"],
+            "adapter": document["adapter"]["name"],
+            "source": block["source"],
+        },
+        "census": {
+            "events_total": block["events_total"],
+            "unk": unk,
+            "stream_complete": block["stream_complete"],
+        },
+        "families": families,
+        "counts": {"nodes": nodes, "lines": lines},
+        "opening_node": {
+            "index": opening["index"],
+            "source_line": opening["source_line"],
+            "timestamp": opening["timestamp"],
+            "timestamp_ms": opening["timestamp_ms"],
+            "family": opening["kind"]["event"],
+        },
+        "opening_timestamp_present": opening["timestamp"].is_string(),
+        "byte_stable": fresh == retained,
+        "golden_stable": fresh == golden,
+    }}))
+}
+
+/// The emissions a reader owes for a record: every line through `push`, then `finish`.
+fn read_record<R>(
+    reader: &mut R,
+    text: &str,
+    push: impl Fn(&mut R, &str) -> Vec<Emission>,
+    finish: impl Fn(&mut R) -> Vec<Emission>,
+) -> Vec<Emission> {
+    let mut emissions = Vec::new();
+    for line in text.lines() {
+        emissions.extend(push(reader, line));
+    }
+    emissions.extend(finish(reader));
+    emissions
+}
+
+/// A vendor record through the production reader that owns its source kind: Claude through
+/// `metaharness::ClaudeSeams` (which is `TranscriptReader::new(..).with_seam(..)`,
+/// `crates/metaharness-claude/src/bridge.rs`), Codex through `RolloutReader`, the loop through
+/// `B10xSeams`. A replay is not a launch: the attestation claims nothing and the seam is `None`,
+/// the way `crates/metaharness-claude/tests/recorded_runs.rs` drives the reader (invariant 3).
+fn vendor_emissions(source: &str, relative: &str, record: &[u8], text: &str) -> Vec<Emission> {
+    use metaharness::protocol::{
+        Digest, HermeticAttestation, HermeticMode, Seam, SeamFactory as _, TranscriptRef,
+    };
+    let transcript = TranscriptRef {
+        path: Some(relative.to_owned()),
+        digest: Some(Digest::of(record)),
+        bytes: Some(u64::try_from(record.len()).unwrap()),
+    };
+    let attestation = HermeticAttestation::none(HermeticMode::Off);
+    match source {
+        "claude-code-stream-json" => {
+            let mut seam = metaharness::ClaudeSeams.build(transcript, attestation, Seam::None);
+            read_record(
+                &mut seam,
+                text,
+                |seam, line| seam.push_line(line),
+                |seam| seam.finish(),
+            )
+        }
+        "codex-rollout" => {
+            let mut reader = metaharness_codex::RolloutReader::new(transcript, attestation);
+            read_record(
+                &mut reader,
+                text,
+                metaharness_codex::RolloutReader::push_line,
+                metaharness_codex::RolloutReader::finish,
+            )
+        }
+        "harness-json" => {
+            let mut seam = metaharness_b10x::B10xSeams::new(None, None, None).build(
+                transcript,
+                attestation,
+                Seam::None,
+            );
+            read_record(
+                &mut seam,
+                text,
+                |seam, line| seam.push_line(line),
+                |seam| seam.finish(),
+            )
+        }
+        other => panic!("{other} has no production reader here"),
+    }
+}
+
+/// `metaharness.trace.NormalizeRecord`: a committed golden vendor record through its production
+/// reader, framed by the production `EventStream`, then `project_document`. The recorded
+/// `metaharness.event/1` stream needs no reader, and that is observed from its first line rather
+/// than assumed from the input; the adapter is the opening node's own.
+fn normalize(input: &Value) -> Observed {
+    let source = input["source"].as_str().unwrap();
+    let relative = match source {
+        "claude-code-stream-json" => "crates/metaharness-claude/fixtures/golden/transcript.jsonl",
+        "codex-rollout" => "crates/metaharness-codex/fixtures/golden/rollout.jsonl",
+        "harness-json" => "crates/metaharness-b10x/fixtures/golden/loop.jsonl",
+        "metaharness-event-stream" => "evals/aep/runs/decomposer-clean.events.jsonl",
+        other => panic!("unsupported source kind {other}"),
+    };
+    let record = fs::read(repository_root().join(relative)).unwrap();
+    let text = std::str::from_utf8(&record).unwrap();
+    let already_wire = text
+        .lines()
+        .find(|line| !line.trim().is_empty())
+        .is_some_and(|line| parse_event_line(line).is_ok());
+    let (lines, bytes) = if already_wire {
+        (parse_stream(&record), record.clone())
+    } else {
+        let emissions = vendor_emissions(source, relative, &record, text);
+        // The same reader's committed expectation, as a sequence of event names: a disagreement
+        // here is a finding about the reader path, not a property of the projection.
+        let expected = fs::read_to_string(
+            repository_root().join(relative.replace(".jsonl", ".expected.jsonl")),
+        )
+        .unwrap();
+        let expected_names: Vec<&str> = expected
+            .lines()
+            .map(|line| parse_event_line(line).unwrap().event.name())
+            .collect();
+        let observed_names: Vec<&str> = emissions
+            .iter()
+            .map(|emission| emission.event.name())
+            .collect();
+        if observed_names != expected_names {
+            return Observed {
+                outcome: format!("reader-sequence-differs-from-committed-expectation:{relative}"),
+                ..Observed::default()
+            };
+        }
+        framed("ess-normalize", emissions, None)
+    };
+    let document = project_document(&lines, &bytes);
+    assert_eq!(document.events.len(), lines.len(), "every event is a node");
+    let opening = &document.events[0].kind;
+    let opening_family = opening["event"].as_str().unwrap().to_owned();
+    let adapter = opening["adapter"].as_str().unwrap_or_default().to_owned();
+    let outcome = match (adapter.as_str(), already_wire) {
+        (_, true) => "event-stream-projected",
+        ("claude", false) => "claude-transcript-normalized",
+        ("codex", false) => "codex-rollout-normalized",
+        ("b10x", false) => "harness-record-normalized",
+        (other, false) => panic!("the opening node names an undeclared adapter {other}"),
+    };
+    event(
+        outcome,
+        "metaharness.trace.RecordNormalized",
+        json!({
+            "adapter": adapter,
+            "reader_applied": !already_wire,
+            "opening_family": opening_family,
+        }),
+    )
+}
+
 fn execute(command: &str, input: &Value) -> Observed {
     match command {
+        "metaharness.trace.ClassifyEventKind" => classify(input),
+        "metaharness.trace.VerifyStreamCompleteness" => completeness(input),
+        "metaharness.trace.NameDigest" => digest(input),
+        "metaharness.trace.ProjectRecordedRun" => project_recorded_run(input),
+        "metaharness.trace.NormalizeRecord" => normalize(input),
         "metaharness.session.PollSteering" => polling(input),
         "metaharness.observations.ReadFinalAnswer"
         | "metaharness.observations.ReadObservedModel"
@@ -673,12 +1350,18 @@ fn event_matches(actual: Option<&Value>, step: &Value) -> Result<bool, String> {
     let Some(actual) = actual else {
         return Ok(false);
     };
+    let shapes = step["shape"]
+        .as_object()
+        .ok_or("event has no declared shape")?;
     if let Some(payload) = step.get("payload") {
         let mut expected = payload.clone();
         // ESS integer literals may serialize as 2.0. Parse exact decimal spelling,
         // never f64: rounding could make different large integers falsely match.
-        for (field, shape) in step["shape"].as_object().ok_or("event has no shape")? {
-            if shape["holds"] == "primitive" && shape["kind"] == "integer" {
+        for (field, shape) in shapes {
+            if shape["holds"] == "primitive"
+                && shape["kind"] == "integer"
+                && expected.get(field).is_some()
+            {
                 let spelling = expected[field]
                     .as_number()
                     .ok_or("integer payload absent")?
@@ -697,14 +1380,24 @@ fn event_matches(actual: Option<&Value>, step: &Value) -> Result<bool, String> {
                 expected[field] = json!(integer);
             }
         }
-        if actual != &expected {
-            return Ok(false);
+        // A field the specification generates (`record_id: {generated: true}`) is absent from the
+        // literal payload and checked by shape below; every literal field must match exactly.
+        for (field, value) in expected.as_object().ok_or("payload is not an object")? {
+            if actual[field] != *value {
+                return Ok(false);
+            }
         }
     }
-    for (field, shape) in step["shape"]
+    // Every field the event carries is one the specification declares; an undeclared one fails.
+    if actual
         .as_object()
-        .ok_or("event has no declared shape")?
+        .ok_or("event payload is not an object")?
+        .keys()
+        .any(|field| !shapes.contains_key(field))
     {
+        return Ok(false);
+    }
+    for (field, shape) in shapes {
         let matches = match shape["holds"].as_str() {
             Some("enum") => shape["variants"]
                 .as_array()
@@ -756,17 +1449,43 @@ fn view_matches(actual: &Value, expectation: &Value) -> Result<bool, String> {
             if words.len() != 3 {
                 return Err("unsupported predicate grammar".to_owned());
             }
-            let mut value = actual;
-            for field in words[0].split('.') {
-                value = &value[field];
+            let field = |path: &str| {
+                let mut value = actual;
+                for part in path.split('.') {
+                    value = &value[part];
+                }
+                value
+            };
+            let left = field(words[0]);
+            // ESS's own rule: a right-hand side with a dot is another field of the same view;
+            // without one it is a literal. Only integer and boolean literals are admitted.
+            let right = if words[2].contains('.') {
+                field(words[2]).clone()
+            } else if let Ok(integer) = words[2].parse::<i64>() {
+                json!(integer)
+            } else if let Ok(truth) = words[2].parse::<bool>() {
+                json!(truth)
+            } else {
+                return Err(format!("unsupported invariant literal {}", words[2]));
+            };
+            if left.is_null() || right.is_null() {
+                return Err("invariant field is absent".to_owned());
             }
-            let left = value
-                .as_i64()
-                .ok_or("invariant field is absent or not a representable integer")?;
-            let right = words[2].parse::<i64>().map_err(|e| e.to_string())?;
             match words[1] {
-                ">=" => Ok(left >= right),
-                ">" => Ok(left > right),
+                "==" => Ok(*left == right),
+                ">=" | ">" => {
+                    let left = left
+                        .as_i64()
+                        .ok_or("invariant field is not a representable integer")?;
+                    let right = right
+                        .as_i64()
+                        .ok_or("invariant bound is not a representable integer")?;
+                    Ok(if words[1] == ">=" {
+                        left >= right
+                    } else {
+                        left > right
+                    })
+                }
                 other => Err(format!("unsupported invariant operator {other}")),
             }
         }
@@ -857,6 +1576,7 @@ fn ess_generated_scenarios_drive_production_targets() {
         [
             "ess-conformance/22",
             "ess-conformance/23",
+            "ess-conformance/34",
             "ess-conformance/35"
         ]
         .iter()
@@ -873,7 +1593,7 @@ fn ess_generated_scenarios_drive_production_targets() {
     if external.is_none() {
         assert_eq!(
             scenarios.len(),
-            45,
+            79,
             "review and update coverage deliberately"
         );
         assert_eq!(
@@ -895,6 +1615,11 @@ fn ess_generated_scenarios_drive_production_targets() {
             "ReadFinalAnswer",
             "ReadObservedModel",
             "ReadToolOutcome",
+            "ClassifyEventKind",
+            "VerifyStreamCompleteness",
+            "NameDigest",
+            "ProjectRecordedRun",
+            "NormalizeRecord",
         ] {
             assert!(
                 scenarios.keys().any(|id| id.contains(command)),
