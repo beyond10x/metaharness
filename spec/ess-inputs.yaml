@@ -7,4 +7,5 @@ specification:
   - domains/spending.yaml
   - domains/boundaries.yaml
   - domains/observations.yaml
+  - domains/trace.yaml
 scenarios: []

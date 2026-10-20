@@ -3,6 +3,38 @@
 What changed. The design document carries *why*; where code and design disagreed, the design
 was amended and the amendment is named here.
 
+## [Unreleased]
+
+### Added
+
+- The session format `trace-ir/1` (Atlas ADR 0096 point 7) is the ESS domain `metaharness.trace`
+  in `spec/domains/trace.yaml`, declared in `spec/system.yaml` and `spec/ess-inputs.yaml`. ESS
+  0.56.0 generates 34 scenarios for it — nineteen classify (eleven family outcomes and one outcome
+  per `unk` kind, seven guarded and `auth.expired` the default only it can reach, so all twenty
+  wire kinds are driven), five completeness shapes (absent,
+  complete, misplaced, miscounting, duplicated), two digest, two retained projections (each
+  pinning its node count and opening timestamp by literal), two view-invariant scenarios carrying
+  twelve predicates (among them that a fresh render is the committed
+  `evals/aep/runs/<run>.trace-ir.json` byte for byte), four normalize — and the conformance target
+  executes every one against `metaharness_protocol::trace_ir::project_document` and the three
+  production readers (Claude through `metaharness::ClaudeSeams`, `metaharness_codex::RolloutReader`,
+  `metaharness_b10x::B10xSeams`) over committed inputs only. `spec/conformance.json` is
+  regenerated: 79 scenarios, zero skipped, unsupported or refused. Protocol design amendment a26
+  names the domain the document form's owning specification, and
+  `docs/design/runs-side-by-side-v0.1.md` § 1 points at it.
+- `crates/metaharness-aep/tests/adversary_trace_ir_domain.rs` is a regression guard beside the
+  suite: it reads the committed suite and fails while any wire kind the domain states is never
+  driven, and it drives the miscounting and duplicated marker shapes and the recorded runs' file
+  digests against production directly.
+
+### Changed
+
+- The conformance target checks a `generated` payload field by shape and every literal field by
+  value, admits a view invariant whose right-hand side is another field, an integer or a boolean
+  (`census.events_total == counts.nodes`, `opening_node.index == 0`, `byte_stable == true`), and
+  accepts the ordinary `ess-conformance/34` suites `ess verify conform mutate` emits. The count
+  gate moves from 45 to 79.
+
 ## [0.9.3] — 2026-10-08
 
 ### Changed

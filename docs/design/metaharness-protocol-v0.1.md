@@ -2133,3 +2133,43 @@ scoper whose actual request and file-read result are observed. This does not cla
 named-agent/delegate loading, confined process success on a host withholding run,
 or governed AEP behavior. Both dependency manifests, lockfile and runtime provenance
 constants move together; retain every narrower unsupported/unverified boundary.
+
+### Amendment a26 — the session format's owning specification (2026-10-20)
+
+Atlas ADR 0096 point 7 makes the `trace-ir/1` document this repository's session format. Its
+owning specification is `spec/domains/trace.yaml`, the ESS domain `metaharness.trace`, declared
+in `spec/system.yaml` and `spec/ess-inputs.yaml` and executed by the gate: `ess verify conform
+synthesize` generates one scenario per declared outcome and one per invariant-bearing type at a
+view, each carrying that type's predicates, and
+`crates/metaharness-aep/src/drive/ess_conformance.rs` runs each against
+`metaharness_protocol::trace_ir::project_document` and the three production readers. The domain
+is declared before any further change to the document form, on invariant 8.
+
+What the domain states is what a15, a17 and `docs/design/runs-side-by-side-v0.1.md` § 1 decided,
+and nothing more: the twenty wire kinds and the twelve node families (the ten IR families, `unk`
+and `stream_closed`), every kind reached by an outcome of its own (eighteen guarded, and
+`auth.expired` the one default only it can reach) so that all twenty are driven;
+the eight `unk` kinds, each node carrying `reason: "no trace-ir/1 family"`; `stream.closed` as a
+terminal node of its own; completeness verified over every shape `stream_completeness` decides —
+no marker, the marker production writes, a marker followed by a line, a last marker whose count is
+wrong, two markers — and never copied; `transcript_digest` over the event stream's own bytes with
+the vendor's reference beside it under its own name; the two recorded runs projected into an
+immutable retained record whose view exposes node count equal to line count, the census held to
+the node and family counts (one `session_start`, one `stream_closed`), the opening node at index 0
+on line 1 carrying the vendor's recorded timestamp (its millisecond value pinned per run), byte
+stability across two renders, and byte equality with the committed
+`evals/aep/runs/<run>.trace-ir.json` golden (P1 across builds); and each golden vendor record
+normalized through its own production
+reader before projection, every one opening with a `session_start` node. The commands are conformance
+observations over production code, never public CLI verbs and never a second implementation of
+the mapping: the family, the reason, the digest and the completeness verdict are read off the
+document the writer emitted.
+
+Where production and this design disagree, a scenario records what production does and the
+disagreement is a finding, never a fix inside the specification. One boundary is marked
+`UNMAPPED:` in the domain: `metaharness.source` is observed as the constant
+`metaharness.event/1`, and whether it ever carries a vendor format name is
+`story:project-reads-vendor-transcripts`'s open question. The family set stays owned upstream.
+The b10x golden record is read as it stands (captured from `b10x-harness 0.9.1`,
+`crates/metaharness-b10x/fixtures/golden/version.txt`) and no count of its nodes is declared, so
+a later re-recording moves no scenario. No event or frame wire changes.

@@ -1,0 +1,411 @@
+domain: metaharness.trace
+summary: The trace-ir/1 session format this repository owns, observed through the production projection and the three production readers.
+# Owner: Atlas ADR 0096 point 7. Protocol design amendment a26
+# (docs/design/metaharness-protocol-v0.1.md) names this file the owning
+# specification of the document form; docs/design/runs-side-by-side-v0.1.md § 1
+# (P1-P3, the twenty-row table of § 1.2, amendment a17's row 20) is the detail.
+# Document shape: crates/metaharness-protocol/src/trace_ir.rs (TraceIrDocument,
+# TraceIrEvent, MetaharnessBlock, IR_FORMAT, IR_ADAPTER, UNK_FAMILY, UNK_REASON,
+# CLOSED_FAMILY, project_document, render). Families and the control-plane list:
+# crates/metaharness-protocol/src/projection.rs (IrFamily, CONTROL_PLANE_EVENTS,
+# ir_family). Wire names: crates/metaharness-protocol/src/framing.rs EVENT_NAMES.
+# Completeness: crates/metaharness-protocol/src/event.rs stream_completeness.
+# Every command below is a conformance observation over that production code,
+# executed by crates/metaharness-aep/src/drive/ess_conformance.rs. None is a
+# public CLI verb, and none re-implements the mapping: the family, the reason,
+# the digest and the completeness verdict are read off the document the
+# production writer emitted.
+types:
+  - name: metaharness.trace.WireEventKind
+    kind: enum
+    # The twenty names of framing.rs EVENT_NAMES. Spelled with "-" where the wire
+    # spells "." because a guard reads "." as field access; rate_limit is the
+    # wire's own spelling. The target maps "-" back to "." and nothing else.
+    variants: [session-started, session-ended, step-entered, step-left, turn-started, turn-ended, text, thinking, thinking-estimate, injection, tool-requested, tool-decided, tool-result, usage, rate_limit, command-result, warning, opaque, auth-expired, stream-closed]
+  - name: metaharness.trace.NodeFamily
+    kind: enum
+    # The ten IrFamily names (projection.rs) plus the two metaharness extensions
+    # the writer adds over trace-ir/1: unk (UNK_FAMILY) and stream_closed
+    # (CLOSED_FAMILY, amendment a17). unk is not opaque: opaque is the vendor
+    # saying something the adapter could not read.
+    variants: [session_start, run_outcome, assistant_text, assistant_thinking, thinking_estimate, synthetic_injection, tool_call, tool_result, rate_limit, opaque, unk, stream_closed]
+  - name: metaharness.trace.SourceKind
+    kind: enum
+    # Input of the normalize command only: which committed record is read and
+    # through which production reader. Not a field of the document.
+    variants: [claude-code-stream-json, codex-rollout, harness-json, metaharness-event-stream]
+  - name: metaharness.trace.Adapter
+    kind: enum
+    # The adapter id the opening node carries (session.started.adapter), as the
+    # three readers write it: metaharness-claude, metaharness-codex and
+    # metaharness-b10x ADAPTER_ID.
+    variants: [claude, codex, b10x]
+  - name: metaharness.trace.Node
+    kind: struct
+    fields:
+      - {name: index, type: Integer}
+      - {name: source_line, type: Integer}
+      - {name: timestamp, type: Optional<String>, presence: null_when_absent}
+      - {name: timestamp_ms, type: Optional<Integer>, presence: null_when_absent}
+      - {name: family, type: metaharness.trace.NodeFamily}
+    # TraceIrEvent. index is the document position a verdict cites; source_line
+    # is the 1-based event-stream line and is total because one wire line is one
+    # event. timestamp is the vendor's, verbatim; timestamp_ms is derived from it
+    # and from nothing else (no clock is read). Both counters are unsigned in
+    # production, so a lower bound here could never fail; what a view can decide
+    # is stated on RetainedDocument against the opening node's values.
+    # UNMAPPED: the node's kind payload, the event's own fields under the family
+    # tag, has the IR's per-family field set (projection.rs required_ir_fields)
+    # and is not re-declared here.
+  - name: metaharness.trace.DocumentHeader
+    kind: struct
+    fields:
+      - {name: format, type: String}
+      - {name: transcript_digest, type: String}
+      - {name: adapter, type: String}
+      - {name: source, type: String}
+    # format is the constant trace-ir/1 (IR_FORMAT); adapter is the constant
+    # metaharness/project (IR_ADAPTER, distinct from the consumer's reader name);
+    # transcript_digest is the SHA-256 of the event stream's own bytes (P3, a15
+    # point 2), never of a vendor file. source is MetaharnessBlock::source,
+    # observed as the constant metaharness.event/1 in every production write.
+    # UNMAPPED: whether source ever carries a vendor format name is
+    # story:project-reads-vendor-transcripts's open question; nothing here
+    # declares it.
+  - name: metaharness.trace.Census
+    kind: struct
+    fields:
+      - {name: events_total, type: Integer}
+      - {name: unk, type: Integer}
+      - {name: stream_complete, type: Boolean}
+    # MetaharnessBlock. events_total equals the node count by construction; unk
+    # is the sum over unk_kinds; stream_complete is verified against the lines
+    # read, never copied from the marker (a17). Both counts are unsigned, so
+    # they are held to the document's own node and family counts on
+    # RetainedDocument rather than to a bound that cannot fail.
+  - name: metaharness.trace.FamilyCensus
+    kind: struct
+    fields:
+      - {name: session_start, type: Integer}
+      - {name: run_outcome, type: Integer}
+      - {name: assistant_text, type: Integer}
+      - {name: assistant_thinking, type: Integer}
+      - {name: thinking_estimate, type: Integer}
+      - {name: synthetic_injection, type: Integer}
+      - {name: tool_call, type: Integer}
+      - {name: tool_result, type: Integer}
+      - {name: rate_limit, type: Integer}
+      - {name: opaque, type: Integer}
+      - {name: unk, type: Integer}
+      - {name: stream_closed, type: Integer}
+    # MetaharnessBlock::families, one count per family, zero where absent.
+  - name: metaharness.trace.NodeCount
+    kind: struct
+    fields:
+      - {name: nodes, type: Integer}
+      - {name: lines, type: Integer}
+    invariants: [nodes >= 1, lines >= 1]
+    # nodes is the retained document's node count; lines the committed
+    # stream's line count. Both at least one: a run has an opening record.
+  - name: metaharness.trace.RetainedDocument
+    kind: struct
+    fields:
+      - {name: header, type: metaharness.trace.DocumentHeader}
+      - {name: census, type: metaharness.trace.Census}
+      - {name: families, type: metaharness.trace.FamilyCensus}
+      - {name: counts, type: metaharness.trace.NodeCount}
+      - {name: opening_node, type: metaharness.trace.Node}
+      - {name: opening_timestamp_present, type: Boolean}
+      - {name: byte_stable, type: Boolean}
+      - {name: golden_stable, type: Boolean}
+    invariants:
+      - counts.nodes == counts.lines
+      - byte_stable == true
+      - golden_stable == true
+      - opening_node.index == 0
+      - opening_node.source_line == 1
+      - opening_timestamp_present == true
+      - census.events_total == counts.nodes
+      - census.unk == families.unk
+      - families.session_start == 1
+      - families.stream_closed == 1
+    # Read back from the retained document and from the committed stream it
+    # names (MetaharnessBlock::run): nodes is the document's node count, lines
+    # the stream's line count (P2, every event is a node), opening_node the
+    # document's first node (index 0 on line 1, carrying the vendor's recorded
+    # timestamp), byte_stable whether a fresh projection of the same stream
+    # renders to the retained bytes (P1, one build), golden_stable whether that
+    # render is the committed evals/aep/runs/<run>.trace-ir.json byte for byte
+    # (P1 across builds; crates/metaharness-cli/tests/project.rs regenerates the
+    # golden). The census is held to the document it summarizes: events_total
+    # to the node count, unk to the unk family count; a recorded run opens with
+    # one session_start node and ends with one stream_closed node. The opening
+    # timestamp's millisecond value differs per run and is pinned by literal on
+    # each ProjectRecordedRun outcome below. Every invariant compares values
+    # the view reads; none is a bound an unsigned counter satisfies by type.
+  - name: metaharness.trace.MarkerEvidence
+    kind: enum
+    # Every shape stream_completeness (event.rs) decides between, one variant
+    # each: no marker (Truncated); a marker that is last and counts the nodes
+    # before it (Complete); and the three Inconsistent causes it names, a marker
+    # that is not the last line, a last marker whose count is wrong, and more
+    # than one marker.
+    variants: [absent, last-and-counting, misplaced, miscounting, duplicated]
+  - name: metaharness.trace.VendorReference
+    kind: enum
+    # Whether session.started carried a vendor transcript digest.
+    variants: [digest-named, digest-absent]
+  - name: metaharness.trace.RecordedRun
+    kind: enum
+    # The two committed metaharness.event/1 streams under evals/aep/runs/
+    # (16 and 14 lines; evals/aep/runs/README.md: hand-written inputs, not a
+    # model's). Reading them in the gate is not a paid run (invariant 5).
+    variants: [decomposer-clean, plan-reviewer-clean]
+
+commands:
+  - name: metaharness.trace.ClassifyEventKind
+    # One event of the named kind, framed and given to project_document; the
+    # family is read off the node the production writer emitted. One outcome
+    # per family. The eight unk kinds are the control-plane list minus
+    # stream.closed (projection.rs CONTROL_PLANE_EVENTS, a17); usage folds into
+    # run_outcome (design § 4.3).
+    input: [{name: kind, type: metaharness.trace.WireEventKind}]
+    outcomes:
+      - name: session-start
+        when: kind == session-started
+        emits: [metaharness.trace.FamilyClassified]
+        payload: {metaharness.trace.FamilyClassified: {family: session_start}}
+      - name: run-outcome
+        when: {any: [kind == session-ended, kind == usage]}
+        emits: [metaharness.trace.FamilyClassified]
+        payload: {metaharness.trace.FamilyClassified: {family: run_outcome}}
+      - name: assistant-text
+        when: kind == text
+        emits: [metaharness.trace.FamilyClassified]
+        payload: {metaharness.trace.FamilyClassified: {family: assistant_text}}
+      - name: assistant-thinking
+        when: kind == thinking
+        emits: [metaharness.trace.FamilyClassified]
+        payload: {metaharness.trace.FamilyClassified: {family: assistant_thinking}}
+      - name: thinking-estimate
+        when: kind == thinking-estimate
+        emits: [metaharness.trace.FamilyClassified]
+        payload: {metaharness.trace.FamilyClassified: {family: thinking_estimate}}
+      - name: synthetic-injection
+        when: kind == injection
+        emits: [metaharness.trace.FamilyClassified]
+        payload: {metaharness.trace.FamilyClassified: {family: synthetic_injection}}
+      - name: tool-call
+        when: kind == tool-requested
+        emits: [metaharness.trace.FamilyClassified]
+        payload: {metaharness.trace.FamilyClassified: {family: tool_call}}
+      - name: tool-result
+        when: kind == tool-result
+        emits: [metaharness.trace.FamilyClassified]
+        payload: {metaharness.trace.FamilyClassified: {family: tool_result}}
+      - name: rate-limit
+        when: kind == rate_limit
+        emits: [metaharness.trace.FamilyClassified]
+        payload: {metaharness.trace.FamilyClassified: {family: rate_limit}}
+      - name: opaque
+        when: kind == opaque
+        emits: [metaharness.trace.FamilyClassified]
+        payload: {metaharness.trace.FamilyClassified: {family: opaque}}
+      - name: stream-closed
+        when: kind == stream-closed
+        emits: [metaharness.trace.FamilyClassified]
+        payload: {metaharness.trace.FamilyClassified: {family: stream_closed}}
+        summary: The completeness marker is a terminal node of its own, never unk (a17).
+      # The eight unk kinds, one outcome each so that every one is driven and
+      # observed; the node names its kind and says why (UNK_REASON). Seven are
+      # guarded; the eighth, auth.expired, is the one kind no guard claims and is
+      # the unguarded default, which ESS therefore drives with exactly that kind.
+      # A default is kept on purpose: without one ESS requires the guards to
+      # partition the input, and a guard-negate mutant of any classify outcome
+      # is stillborn (ESS-COMMAND-004 overlap, ESS-COMMAND-005 uncovered input)
+      # instead of audited.
+      - name: unk-step-entered
+        when: kind == step-entered
+        emits: [metaharness.trace.UnkClassified]
+        payload: {metaharness.trace.UnkClassified: {family: unk, reason: "no trace-ir/1 family"}}
+      - name: unk-step-left
+        when: kind == step-left
+        emits: [metaharness.trace.UnkClassified]
+        payload: {metaharness.trace.UnkClassified: {family: unk, reason: "no trace-ir/1 family"}}
+      - name: unk-turn-started
+        when: kind == turn-started
+        emits: [metaharness.trace.UnkClassified]
+        payload: {metaharness.trace.UnkClassified: {family: unk, reason: "no trace-ir/1 family"}}
+      - name: unk-turn-ended
+        when: kind == turn-ended
+        emits: [metaharness.trace.UnkClassified]
+        payload: {metaharness.trace.UnkClassified: {family: unk, reason: "no trace-ir/1 family"}}
+      - name: unk-tool-decided
+        when: kind == tool-decided
+        emits: [metaharness.trace.UnkClassified]
+        payload: {metaharness.trace.UnkClassified: {family: unk, reason: "no trace-ir/1 family"}}
+      - name: unk-command-result
+        when: kind == command-result
+        emits: [metaharness.trace.UnkClassified]
+        payload: {metaharness.trace.UnkClassified: {family: unk, reason: "no trace-ir/1 family"}}
+      - name: unk-warning
+        when: kind == warning
+        emits: [metaharness.trace.UnkClassified]
+        payload: {metaharness.trace.UnkClassified: {family: unk, reason: "no trace-ir/1 family"}}
+      - name: unk-auth-expired
+        emits: [metaharness.trace.UnkClassified]
+        payload: {metaharness.trace.UnkClassified: {family: unk, reason: "no trace-ir/1 family"}}
+        summary: The twentieth row and the default; auth.expired is the only kind the eighteen guards above leave, so this outcome is driven with it (amendment a1, Q13).
+
+  - name: metaharness.trace.VerifyStreamCompleteness
+    # A short stream built through the production EventStream (which writes the
+    # marker; the miscounting and duplicated shapes alter the count or copy the
+    # marker it wrote) and read back through project_document. complete is
+    # MetaharnessBlock::stream_complete; markers the stream_closed family count;
+    # marker_last whether the document's last node is the marker. Verified,
+    # never copied: a marker that is present but does not add up is not complete.
+    input: [{name: marker, type: metaharness.trace.MarkerEvidence}]
+    outcomes:
+      - name: complete
+        when: marker == last-and-counting
+        emits: [metaharness.trace.CompletenessVerified]
+        payload: {metaharness.trace.CompletenessVerified: {markers: 1, marker_last: true, complete: true}}
+      - name: inconsistent-misplaced
+        when: marker == misplaced
+        emits: [metaharness.trace.CompletenessVerified]
+        payload: {metaharness.trace.CompletenessVerified: {markers: 1, marker_last: false, complete: false}}
+        summary: A line after the marker is the appended-to file a17 refuses.
+      - name: inconsistent-miscounting
+        when: marker == miscounting
+        emits: [metaharness.trace.CompletenessVerified]
+        payload: {metaharness.trace.CompletenessVerified: {markers: 1, marker_last: true, complete: false}}
+        summary: A last marker whose count disagrees with the nodes before it decides nothing.
+      - name: inconsistent-duplicated
+        when: marker == duplicated
+        emits: [metaharness.trace.CompletenessVerified]
+        payload: {metaharness.trace.CompletenessVerified: {markers: 2, marker_last: true, complete: false}}
+        summary: A stream ends once; production writes one marker and a file can carry two.
+      - name: truncated
+        emits: [metaharness.trace.CompletenessVerified]
+        payload: {metaharness.trace.CompletenessVerified: {markers: 0, marker_last: false, complete: false}}
+        summary: No marker is never read as complete (invariant 3 applied to the file).
+
+  - name: metaharness.trace.NameDigest
+    # One session.started line, with or without a vendor transcript digest on
+    # it, projected; over_stream_bytes is whether transcript_digest equals the
+    # SHA-256 of the framed bytes given to project_document, source is the
+    # header's metaharness.source, vendor_digest_named whether
+    # metaharness.vendor_transcript carries a digest.
+    input: [{name: vendor_reference, type: metaharness.trace.VendorReference}]
+    outcomes:
+      - name: stream-digest-beside-vendor-digest
+        when: vendor_reference == digest-named
+        emits: [metaharness.trace.DigestNamed]
+        payload: {metaharness.trace.DigestNamed: {over_stream_bytes: true, source: "metaharness.event/1", vendor_digest_named: true}}
+        summary: Two digests meaning two things, neither pretending to be the other (P3).
+      - name: stream-digest-alone
+        emits: [metaharness.trace.DigestNamed]
+        payload: {metaharness.trace.DigestNamed: {over_stream_bytes: true, source: "metaharness.event/1", vendor_digest_named: false}}
+
+  - name: metaharness.trace.ProjectRecordedRun
+    # Project one committed recorded stream, render it twice, and retain the
+    # rendered document as an immutable record. nodes and unk are read off the
+    # document; stream_complete is the verified a17 flag; byte_stable is whether
+    # the two renders are the same bytes (P1).
+    input: [{name: run, type: metaharness.trace.RecordedRun}]
+    outcomes:
+      - name: decomposer-clean-recorded
+        when: run == decomposer-clean
+        creates: metaharness.trace.ProjectionRecord
+        instance: record_id
+        emits: [metaharness.trace.ProjectionRecorded]
+        payload: {metaharness.trace.ProjectionRecorded: {record_id: {generated: true}, nodes: 16, unk: 0, stream_complete: true, byte_stable: true, opening_timestamp_ms: 1787302800000}}
+      - name: plan-reviewer-clean-recorded
+        creates: metaharness.trace.ProjectionRecord
+        instance: record_id
+        emits: [metaharness.trace.ProjectionRecorded]
+        payload: {metaharness.trace.ProjectionRecorded: {record_id: {generated: true}, nodes: 14, unk: 0, stream_complete: true, byte_stable: true, opening_timestamp_ms: 1787304000000}}
+    # The counts are the committed streams' line counts, which
+    # crates/metaharness-claude/tests/recorded_runs.rs holds byte for byte; a
+    # change there is deliberate and moves these literals with it. The opening
+    # timestamps are the streams' first lines, 2026-08-21T09:00:00.000Z and
+    # 2026-08-21T09:20:00.000Z, as milliseconds since the epoch: derived from
+    # the recorded string and from no clock (a15; trace_ir.rs parse_timestamp_ms).
+
+  - name: metaharness.trace.NormalizeRecord
+    # Each committed golden vendor record through its production reader
+    # (metaharness_claude::TranscriptReader via metaharness::ClaudeSeams,
+    # metaharness_codex::RolloutReader, metaharness_b10x::B10xSeams), framed by
+    # the production EventStream, then project_document; the recorded
+    # metaharness.event/1 stream is the fourth source and needs no reader.
+    # reader_applied is observed: false when the record's first line already
+    # parses as metaharness.event/1. adapter is the opening node's own adapter
+    # field; opening_family that node's family.
+    input: [{name: source, type: metaharness.trace.SourceKind}]
+    outcomes:
+      - name: claude-transcript-normalized
+        when: source == claude-code-stream-json
+        emits: [metaharness.trace.RecordNormalized]
+        payload: {metaharness.trace.RecordNormalized: {adapter: claude, reader_applied: true, opening_family: session_start}}
+      - name: codex-rollout-normalized
+        when: source == codex-rollout
+        emits: [metaharness.trace.RecordNormalized]
+        payload: {metaharness.trace.RecordNormalized: {adapter: codex, reader_applied: true, opening_family: session_start}}
+      - name: harness-record-normalized
+        when: source == harness-json
+        emits: [metaharness.trace.RecordNormalized]
+        payload: {metaharness.trace.RecordNormalized: {adapter: b10x, reader_applied: true, opening_family: session_start}}
+      - name: event-stream-projected
+        emits: [metaharness.trace.RecordNormalized]
+        payload: {metaharness.trace.RecordNormalized: {adapter: claude, reader_applied: false, opening_family: session_start}}
+    # Inputs: crates/metaharness-claude/fixtures/golden/transcript.jsonl,
+    # crates/metaharness-codex/fixtures/golden/rollout.jsonl,
+    # crates/metaharness-b10x/fixtures/golden/loop.jsonl (read as it stands;
+    # story:b10x-adapter-on-harness-over-llm re-records it later and no count
+    # of its nodes is declared here), evals/aep/runs/decomposer-clean.events.jsonl.
+    # UNMAPPED: reading a vendor record through metaharness project itself is
+    # story:project-reads-vendor-transcripts; nothing here claims it.
+
+# Conformance observations, not newly published runtime wire events.
+events:
+  - name: metaharness.trace.FamilyClassified
+    fields: [{name: family, type: metaharness.trace.NodeFamily}]
+  - name: metaharness.trace.UnkClassified
+    fields:
+      - {name: family, type: metaharness.trace.NodeFamily}
+      - {name: reason, type: String}
+  - name: metaharness.trace.CompletenessVerified
+    fields:
+      - {name: markers, type: Integer}
+      - {name: marker_last, type: Boolean}
+      - {name: complete, type: Boolean}
+  - name: metaharness.trace.DigestNamed
+    fields:
+      - {name: over_stream_bytes, type: Boolean}
+      - {name: source, type: String}
+      - {name: vendor_digest_named, type: Boolean}
+  - name: metaharness.trace.ProjectionRecorded
+    fields:
+      - {name: record_id, type: String}
+      - {name: nodes, type: Integer}
+      - {name: unk, type: Integer}
+      - {name: stream_complete, type: Boolean}
+      - {name: byte_stable, type: Boolean}
+      - {name: opening_timestamp_ms, type: Integer}
+  - name: metaharness.trace.RecordNormalized
+    fields:
+      - {name: adapter, type: metaharness.trace.Adapter}
+      - {name: reader_applied, type: Boolean}
+      - {name: opening_family, type: metaharness.trace.NodeFamily}
+
+# An immutable retained document, not a second run lifecycle.
+entities:
+  - name: metaharness.trace.ProjectionRecord
+    identity: {name: record_id, type: String}
+    fields: [{name: projection, type: metaharness.trace.RetainedDocument}]
+    lifecycle: {initial: Recorded, states: [Recorded], terminal: [Recorded], transitions: []}
+views:
+  - name: metaharness.trace.RetainedProjection
+    source: metaharness.trace.ProjectionRecord
+    consistency: read_your_writes
+    fields: [{name: projection, type: metaharness.trace.RetainedDocument}]

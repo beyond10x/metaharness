@@ -16,7 +16,7 @@ production target in `crates/metaharness-aep/src/drive/ess_conformance.rs`.
 CI installs ESS 0.56.0 from commit
 `84ee8d38eb69e3a4507de801fdcb248232ed6e6e`. Use that compiler locally.
 
-The committed count is **45 selected scenarios**: 45 passed, zero failed,
+The committed count is **79 selected scenarios**: 79 passed, zero failed,
 skipped, unsupported or synthesis refusals. Unknown suite versions, steps,
 bindings, shapes and predicates fail closed. The target handles only the
 constructs this suite uses; extending the specification may require extending it.
@@ -31,6 +31,7 @@ constructs this suite uses; extending the specification may require extending it
 | Tool decisions | Production Codex mapping and answer_events consult a real AEP engine; malformed, patch and unsupported calls are denied. |
 | Workspace and file containment | The production name predicate and owned tool server operate on a selected directory; an outside symlink is refused. This does not prove process or cgroup isolation. |
 | Accounting | Real finite and uncapped policy functions execute. Ledger views read files written by SpendBudget and AdmissionBudget, including persisted invocation count. |
+| Session format (`trace-ir/1`, domain `metaharness.trace`) | The production projection `project_document` and the three production readers run over committed inputs only: one framed event per wire kind, classified by the node the writer emits; completeness over three marker shapes built through the production `EventStream`; the digest over the framed bytes beside the vendor's reference; the two recorded `evals/aep/runs` streams retained as rendered documents whose view is read back from disk and re-projected; the three golden vendor records normalized through `ClaudeSeams`, `RolloutReader` and `B10xSeams`. No vendor process or model starts. |
 
 The immutable Recorded entities expose existing observations: a closed stream and
 snapshots of retained finite/admission ledgers. They add no running-session
@@ -138,3 +139,77 @@ Integer event literals are compared through exact decimal parsing into i64; the 
 count assertions first failed on 2.0 versus 2 serialization. Independent review
 then caught large-integer rounding; a reproduced red regression now passes after
 exact decimal normalization. Unknown shapes and out-of-range expectations still fail closed.
+
+## ADR 0096 extension — the session format domain
+
+Protocol amendment a26 (2026-10-20) names `spec/domains/trace.yaml` the owning
+specification of the `trace-ir/1` document (Atlas ADR 0096 point 7). The domain
+`metaharness.trace` adds 34 generated scenarios: nineteen classify outcomes
+(eleven family outcomes and one outcome per `unk` kind, seven guarded and
+`auth.expired` the unguarded default that only it can reach, so all twenty wire
+kinds are driven; a default is kept because without one ESS requires the guards
+to partition the input and every classify guard-negate mutant is stillborn
+instead of audited), five completeness shapes
+(absent, complete, misplaced, miscounting, duplicated: every verdict
+`stream_completeness` decides), two digest outcomes, two retained projections
+of the recorded runs (each pinning its node count and its opening timestamp in
+milliseconds by literal), two view-invariant scenarios carrying twelve predicates
+(`counts.nodes >= 1`, `counts.lines >= 1`; `counts.nodes == counts.lines`,
+`byte_stable == true`, `golden_stable == true` (a fresh render is the committed
+`evals/aep/runs/<run>.trace-ir.json` byte for byte, P1 across builds),
+`opening_node.index == 0`, `opening_node.source_line == 1`,
+`opening_timestamp_present == true`, `census.events_total == counts.nodes`,
+`census.unk == families.unk`, `families.session_start == 1`,
+`families.stream_closed == 1`), and four
+normalize outcomes, one per source kind. The combined 79-scenario model passes
+with no skipped, unsupported or refused obligations. Earlier 45-scenario/25-mutant
+results above are historical.
+
+Every value a scenario checks is read off the document `project_document` wrote
+or off the reader's emissions; the target restates no mapping. The retained
+view re-reads the rendered document from disk, re-projects the committed stream
+it names (`metaharness.run`) and compares bytes, so byte stability is observed
+at read time rather than remembered. The target now checks a `generated` payload
+field by shape and every literal field by value, admits a view predicate whose
+right-hand side is another field or a boolean, and accepts the ordinary
+`ess-conformance/34` suites `ess verify conform mutate` emits (whose reports
+read `inconclusive` for want of declared coverage; the collector scores them on
+executed scenarios, and the gate keeps the declared-coverage `/35` suite).
+
+Hardening evidence, 2026-10-20, each defect restored and rerun green:
+
+- Swapping the classify table's `assistant_text` payload to `assistant_thinking`
+  in the specification failed ClassifyEventKind/outcome/assistant-text
+  (78 passed, one failed).
+- Changing the production `UNK_REASON` constant and making the production
+  completeness flag copy the marker (`stream_complete = families contains
+  stream_closed`) failed all eight ClassifyEventKind/outcome/unk-* scenarios and
+  all three VerifyStreamCompleteness/outcome/inconsistent-* scenarios (68 passed,
+  eleven failed). A shape the domain does not name (here a duplicated marker read
+  as complete) is reported as an undeclared outcome, so it fails by scenario name
+  instead of aborting the run.
+- Review found three gaps in the first revision and each is closed in the
+  specification, not the target: the `unk` outcome was unguarded and seven of its
+  kinds were never driven (a production mutant reclassifying `auth.expired`
+  survived); `misplaced-or-miscounting` was one variant and only the misplaced
+  shape was built (a completeness check without the count comparison survived);
+  and `>= 0` bounds on unsigned counters could not fail. The regression guard
+  `crates/metaharness-aep/tests/adversary_trace_ir_domain.rs` reads the committed
+  suite and fails while any wire kind the domain states is never driven.
+- `ess verify conform mutate --class guard-negate --emit`, execution of every
+  emitted suite against production, and `--collect` killed **52 of 52 mutants**:
+  no survivors, inconclusive, stillborn, unwitnessed or equivalent results.
+  Baseline: 79 scenarios, zero refusals. Thirty-three mutants add synthesis
+  refusals but each is killed by executed scenarios. Other classes were not claimed.
+  An earlier revision guarded all nineteen classify outcomes with no default;
+  its audit left 19 classify mutants stillborn (ESS-COMMAND-004/005), which is
+  why `auth.expired` is the unguarded default above.
+
+Two boundaries are stated rather than claimed. `metaharness.source` is observed
+as the constant `metaharness.event/1`; whether it ever carries a vendor format
+name is `story:project-reads-vendor-transcripts`'s open question and is marked
+`UNMAPPED:` in the domain. The b10x golden record is read as captured from
+`b10x-harness 0.9.1` and no count of its nodes is declared, so a later
+re-recording moves no trace scenario. Reading a vendor record through
+`metaharness project` itself, changing any reader or the projection, and
+publishing a `trace-ir/1` schema remain outside this suite.
