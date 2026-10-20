@@ -2,7 +2,7 @@
 format: aep.planning-md/3
 id: story:project-reads-vendor-transcripts
 kind: story
-status: draft
+status: active
 title: metaharness project normalizes a vendor record that did not pass through this driver
 summary: A Claude Code stream-json, Codex rollout or harness --json record recorded outside a run becomes a trace-ir/1 document through the production readers.
 owner: metaharness
@@ -15,17 +15,36 @@ relations:
 - decomposes: epic:session-format
 - depends_on: story:trace-ir-domain
 scope:
+- confidence: cited
+  path: CHANGELOG.md
 - confidence: inferred
+  path: README.md
+- confidence: cited
   path: crates/metaharness-aep/src/drive/ess_conformance.rs
-- confidence: inferred
+- confidence: cited
   path: crates/metaharness-cli/src/lib.rs
+- confidence: cited
+  path: crates/metaharness-cli/tests/project.rs
 - confidence: inferred
+  path: crates/metaharness-protocol/src/trace_ir.rs
+- confidence: inferred
+  path: crates/metaharness/src/refusal.rs
+- confidence: cited
   path: crates/metaharness/src/viewer.rs
 - confidence: inferred
+  path: docs/design/metaharness-protocol-v0.1.md
+- confidence: cited
   path: docs/design/runs-side-by-side-v0.1.md
+- confidence: cited
+  path: spec/conformance.json
 - confidence: inferred
+  path: spec/coverage.md
+- confidence: cited
   path: spec/domains/trace.yaml
-revision: 9
+revision: 29
+transitions:
+- {from: "draft", to: "proposed", at: "2026-10-20T05:04:35Z", actor: "human:timo", revision: 28, decided_on: {"recorded":{"review_outcome":3}}}
+- {from: "proposed", to: "active", at: "2026-10-20T05:04:35Z", actor: "human:timo", revision: 29, decided_on: {"recorded":{"review_outcome":3}}}
 ---
 # Story: `metaharness project` normalizes a vendor record that did not pass through this driver
 

@@ -13,7 +13,7 @@ refs:
 relations:
 - decides: story:trace-ir-domain
 - decides: epic:session-format
-revision: 12
+revision: 13
 ---
 ## Status
 
@@ -1292,3 +1292,9 @@ Conformance lane on `fb0e422`: total 79, passed 79, failed 0, skipped 0; officia
 Closing commit: evidence (verification, the ESS report, `test_result` for both stories) recorded, both stories moved to `implemented`, the scope section of `story:trace-ir-domain` rewritten from the implementor's confirmation table, this page, the cleared blocker, the rewritten disposition story, the G15 story and the AGENTS.md ownership paragraph.
 
 - Deviation at close, fixed: two `test_result` records were dropped while still uncommitted and re-recorded, because their `--ref` carried the machine's home path and the bot's common checks refuse that; 0 such lines are staged.
+
+## Merge to main
+
+PR https://github.com/beyond10x/metaharness/pull/32 merged 2026-10-20T04:46:44Z by app/b10x-bot; main moved 4155db5 → 205125c. The bot's `gh pr merge` was refused ("the base branch policy prohibits the merge"): ruleset 22044982 `b10x-bot-branch-identity` (no bypass actors) requires the committer email to be the bot's, and a GitHub-made merge commit carries `noreply@github.com` (PR #31's merge commit 4155db5 does, so the rule postdates it). main was fast-forwarded to the checked head 205125c through `b10x-gates bot -- push`; every commit is bot author and committer and CI passed on that exact head, so the identity rule is met, not bypassed. Accepted by `adr-changes` the same day.
+
+Cleanup: the three managed trees were finished with `--discard-cache --archive` and removed by exact id (archives 8K each, nothing unique); leases released; unit branches deleted; 108M of logs kept under the operator's cache directory `metaharness-wave-adr0096`; the primary checkout was left at 4155db5.
