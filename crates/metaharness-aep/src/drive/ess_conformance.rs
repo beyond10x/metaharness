@@ -1341,6 +1341,84 @@ fn normalize(input: &Value) -> Observed {
     )
 }
 
+/// `metaharness.trace.ProjectVendorRecord` (amendment a28): the public verb's library entry,
+/// `metaharness::project_vendor_record`, over one committed golden vendor record, called twice.
+/// Every value is read off the rendered document and off the record on disk; the outcome is named
+/// from the opening node's own adapter, never from the input, so a shape the domain does not
+/// declare fails by scenario name. The one `SourceKind` that is not a `--from` reaches the
+/// refusal, which is observed for naming the source it refused.
+fn project_vendor_record(input: &Value) -> Observed {
+    let source = input["source"].as_str().unwrap();
+    let vendor = match source.parse::<metaharness::VendorSource>() {
+        Ok(vendor) => vendor,
+        Err(refusal) => {
+            return event(
+                "event-stream-is-not-a-from",
+                "metaharness.trace.VendorSourceRefused",
+                json!({"refused": true, "names_the_source": refusal.to_string().contains(source)}),
+            );
+        }
+    };
+    let relative = match vendor {
+        metaharness::VendorSource::ClaudeCodeStreamJson => {
+            "crates/metaharness-claude/fixtures/golden/transcript.jsonl"
+        }
+        metaharness::VendorSource::CodexRollout => {
+            "crates/metaharness-codex/fixtures/golden/rollout.jsonl"
+        }
+        metaharness::VendorSource::HarnessJson => {
+            "crates/metaharness-b10x/fixtures/golden/loop.jsonl"
+        }
+    };
+    let path = repository_root().join(relative);
+    let document = match metaharness::project_vendor_record(&path, vendor) {
+        Ok(document) => document,
+        Err(refusal) => {
+            return Observed {
+                outcome: format!("vendor-record-refused:{relative}:{refusal}"),
+                ..Observed::default()
+            };
+        }
+    };
+    let first = document.render().unwrap();
+    let second = metaharness::project_vendor_record(&path, vendor)
+        .unwrap()
+        .render()
+        .unwrap();
+    let rendered: Value = serde_json::from_str(&first).unwrap();
+    let block = &rendered["metaharness"];
+    let opening = &rendered["events"][0]["kind"];
+    let adapter = opening["adapter"].as_str().unwrap_or_default().to_owned();
+    let outcome = match adapter.as_str() {
+        "claude" => "claude-transcript-projected",
+        "codex" => "codex-rollout-projected",
+        "b10x" => "harness-record-projected",
+        other => panic!("the opening node names an undeclared adapter {other}"),
+    };
+    // The adapter's own committed expectation for the same record, through the wire-case writer:
+    // the census a replay owes is the census the reader owes, and nothing more.
+    let expected_bytes =
+        fs::read(repository_root().join(relative.replace(".jsonl", ".expected.jsonl"))).unwrap();
+    let expected = project_document(&parse_stream(&expected_bytes), &expected_bytes);
+    let record_digest = metaharness::protocol::Digest::of(&fs::read(&path).unwrap());
+    event(
+        outcome,
+        "metaharness.trace.VendorRecordProjected",
+        json!({
+            "source": block["source"],
+            "adapter": adapter,
+            "opening_family": opening["event"],
+            "hermetic_mode": block["hermetic"]["mode"],
+            // `null` when the block carries no list, which no declared payload matches.
+            "imposed": block["hermetic"]["imposed"].as_array().map(Vec::len),
+            "stream_complete": block["stream_complete"],
+            "byte_stable": first == second,
+            "digest_over_record": rendered["transcript_digest"] == json!(record_digest.as_str()),
+            "census_as_expected": document.metaharness.families == expected.metaharness.families,
+        }),
+    )
+}
+
 fn execute(command: &str, input: &Value) -> Observed {
     match command {
         "metaharness.trace.ClassifyEventKind" => classify(input),
@@ -1348,6 +1426,7 @@ fn execute(command: &str, input: &Value) -> Observed {
         "metaharness.trace.NameDigest" => digest(input),
         "metaharness.trace.ProjectRecordedRun" => project_recorded_run(input),
         "metaharness.trace.NormalizeRecord" => normalize(input),
+        "metaharness.trace.ProjectVendorRecord" => project_vendor_record(input),
         "metaharness.session.PollSteering" => polling(input),
         "metaharness.observations.ReadFinalAnswer"
         | "metaharness.observations.ReadObservedModel"
@@ -1691,7 +1770,7 @@ fn ess_generated_scenarios_drive_production_targets() {
     if external.is_none() {
         assert_eq!(
             scenarios.len(),
-            83,
+            87,
             "review and update coverage deliberately"
         );
         assert_eq!(
@@ -1719,6 +1798,7 @@ fn ess_generated_scenarios_drive_production_targets() {
             "NameDigest",
             "ProjectRecordedRun",
             "NormalizeRecord",
+            "ProjectVendorRecord",
         ] {
             assert!(
                 scenarios.keys().any(|id| id.contains(command)),

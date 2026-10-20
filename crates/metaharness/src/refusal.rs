@@ -171,6 +171,22 @@ pub enum Refusal {
         /// How many were given.
         given: usize,
     },
+    /// `project --from <format>` could not be honoured (design amendment a28): the format is not
+    /// one this build has a reader for, or the record is not that format.
+    ///
+    /// The second is decided by one rule, stated in a28 and repeated in the detail: **the
+    /// reader's first event is `session.started`.** The readers raise no error of their own — a
+    /// line they cannot read is `opaque` (design D4) — so without this rule a record handed to
+    /// the wrong reader would project as a column of opaque nodes that reads exactly like a run
+    /// whose record was unreadable.
+    ProjectionSource {
+        /// The `--from` value as given.
+        source: String,
+        /// The record, where one was read before the refusal.
+        path: Option<PathBuf>,
+        /// What was wrong, verbatim.
+        detail: String,
+    },
     /// A declared `--plugin` could not be resolved against this machine (amendment a16).
     ///
     /// The detail is the adapter's own sentence, which names the `claude plugin marketplace add`
@@ -374,6 +390,20 @@ impl fmt::Display for Refusal {
                  decided shape, and a third would have to be aligned against a rule nothing \
                  decides. Give one or two event streams"
             ),
+            Refusal::ProjectionSource {
+                source,
+                path,
+                detail,
+            } => match path {
+                Some(path) => write!(
+                    f,
+                    "project --from {source} is refused for {}: {detail}. Refused rather than \
+                     projected, because the readers turn what they cannot read into opaque nodes \
+                     and a document of those reads exactly like a run whose record was unreadable",
+                    path.display()
+                ),
+                None => write!(f, "project --from {source} is refused: {detail}"),
+            },
             Refusal::MarketplacePlugin { detail } => write!(f, "{detail}"),
             Refusal::MarketplacePluginUnsupported { kind } => write!(
                 f,

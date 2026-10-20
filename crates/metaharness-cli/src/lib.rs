@@ -26,7 +26,7 @@ use std::time::Duration;
 
 use clap::{Args, Parser, Subcommand};
 use metaharness::protocol::{Kind, RunSpec, VectorOutcome, parse_command_line};
-use metaharness::{Input, Metaharness, ProcessAuditor, Refusal, Run, RunExit};
+use metaharness::{Input, Metaharness, ProcessAuditor, Refusal, Run, RunExit, VendorSource};
 
 /// One interface to many agent harnesses.
 #[derive(Parser, Debug)]
@@ -121,7 +121,8 @@ pub struct ConformanceArgs {
     pub contract: bool,
 }
 
-/// `project <events.jsonl> [<events.jsonl>] [--to trace-ir] [--out <f>] [--html <f>]`.
+/// `project <events.jsonl> [<events.jsonl>] [--from <format>] [--to trace-ir] [--out <f>]
+/// [--html <f>]`.
 ///
 /// The stream is a **positional**, and up to two of them, because the viewer's whole subject is
 /// two runs read beside each other and a flag repeated twice reads as an accident
@@ -131,6 +132,14 @@ pub struct ProjectArgs {
     /// The event stream to project. Two of them under `--html`, one otherwise.
     #[arg(value_name = "EVENTS", required = true)]
     pub events: Vec<std::path::PathBuf>,
+    /// Read every record given as a vendor record of this format, through the adapter's own
+    /// reader, instead of as a `metaharness.event/1` stream (design amendment a28):
+    /// `claude-code-stream-json`, `codex-rollout` or `harness-json`.
+    ///
+    /// A string the library parses rather than a `clap` enum, so an unknown name is refused once,
+    /// by the library, in the same words on both faces (design D11).
+    #[arg(long, value_name = "FORMAT")]
+    pub from: Option<String>,
     /// The target form.
     #[arg(long, default_value = "trace-ir")]
     pub to: String,
@@ -233,6 +242,10 @@ pub fn execute(cli: Cli) -> i32 {
 /// outside this repository, not a writer here: the document is written, tagged and byte-stable,
 /// and `aep observe trace check` consumes the event stream this projects **from** rather than the
 /// document (`docs/design/runs-side-by-side-v0.1.md` P4).
+///
+/// Under `--from <format>` (amendment a28) every record is read through the adapter's production
+/// reader instead; the library picks the reader and states the one rule a wrong format is refused
+/// by, and nothing vendor-specific is parsed here.
 fn project(args: &ProjectArgs) -> i32 {
     if args.to != metaharness::TRACE_IR_FORM {
         return refuse(&Refusal::Io {
@@ -245,10 +258,19 @@ fn project(args: &ProjectArgs) -> i32 {
             ),
         });
     }
+    let source = match args.from.as_deref().map(str::parse::<VendorSource>) {
+        Some(Ok(source)) => Some(source),
+        Some(Err(refusal)) => return refuse(&refusal),
+        None => None,
+    };
 
     let mut documents = Vec::with_capacity(args.events.len());
     for path in &args.events {
-        match metaharness::project_file(path) {
+        let projected = match source {
+            Some(source) => metaharness::project_vendor_record(path, source),
+            None => metaharness::project_file(path),
+        };
+        match projected {
             Ok(document) => documents.push(document),
             Err(refusal) => return refuse(&refusal),
         }

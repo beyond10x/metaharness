@@ -49,6 +49,21 @@
 `metaharness project <events.jsonl>` reads a `metaharness.event/1` stream and writes one JSON
 document tagged `trace-ir/1` on stdout, or to `--out <file>`.
 
+> **Amendment a28 (protocol design, 2026-10-20).** `metaharness project --from <format> <record>`
+> reads a vendor record metaharness did not produce — `claude-code-stream-json`, `codex-rollout`
+> or `harness-json`, the `SourceKind` names of `spec/domains/trace.yaml` — through that adapter's
+> **production reader**, frames what it emits with the production `EventStream`, and writes the
+> same document form. Any other name is refused by name; a record that is not the declared format
+> is refused by one rule, *the reader's first event is `session.started`*, because the readers
+> raise no error of their own (a wrong reader makes `opaque` nodes). A replay is not a launch: the
+> attestation claims nothing (`HermeticMode::Off`, nothing imposed), the seam is `Seam::None`, and
+> the stream is closed by nobody (no `stream.closed`; `stream_complete: false`). The run id is the
+> record's file stem and the vendor reference carries the file name only, so the document is a
+> function of the record and not of how its path was typed; a node's `source_line` is the record
+> line the reader read it from. The three properties below hold unchanged under `--from`: the
+> readers read no clock (design D2), the verb opens one file, and the order is the production
+> stream's.
+
 **Byte-stable by construction, and the construction is the claim.** Three properties, each of
 which a test asserts rather than a sentence promising it:
 
@@ -132,6 +147,16 @@ vendor-transcript digest. Where the stream's `session.started` carried a `Transc
 reference travels too, under `metaharness.vendor_transcript` — the vendor's digest, named as the
 vendor's, in a field of its own. Two digests that mean two things, and neither pretending to be
 the other (invariant 3, and § 4.4's D6a which made these three fields exempt in the first place).
+
+> **Amendment a28 (protocol design, 2026-10-20).** Under `--from <format>` the file the document
+> is made from is the vendor record, so `transcript_digest` is the SHA-256 of the **record's**
+> bytes and `metaharness.source` carries the `--from` value — `claude-code-stream-json`,
+> `codex-rollout` or `harness-json` — instead of `metaharness.event/1`. The rule above is
+> unchanged: the digest names the file the document was made from, and `source` says what kind of
+> file that is. `metaharness.vendor_transcript.digest` then equals `transcript_digest`, and the
+> agreement is correct rather than redundant: both name one file, and the document says which.
+> Over an event stream nothing moves, and the committed `evals/aep/runs/*.trace-ir.json` keep their
+> bytes.
 
 ### 1.4 P4 — who reads what, and the acceptance line this corrects
 

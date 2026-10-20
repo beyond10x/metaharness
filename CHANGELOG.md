@@ -7,6 +7,33 @@ was amended and the amendment is named here.
 
 ### Added
 
+- `metaharness project --from <claude-code-stream-json|codex-rollout|harness-json> <record>`
+  (design amendment a28; Atlas ADR 0096 point 7, `story:project-reads-vendor-transcripts`): a
+  Claude Code `stream-json` transcript, a Codex rollout or a `b10x-harness --json` record recorded
+  outside a `metaharness run` is read through that adapter's production reader (`ClaudeSeams`,
+  `RolloutReader`, `B10xSeams` — the same three the conformance target drives), framed by the
+  production `EventStream` under the record's file stem, and projected by the same writer
+  (`TraceIrDocument::project_from`; `project_document` is the wire case). The document's
+  `metaharness.source` is the `--from` value and its `transcript_digest` is the SHA-256 of the
+  record's bytes — the file it was made from — so `metaharness.vendor_transcript.digest` equals it
+  and `vendor_transcript.path` carries the record's file name only, never the argv spelling; each
+  node's `source_line` is the record line the reader read it from (an event owed at `finish` cites
+  the last line). Over an event stream nothing moves and the committed
+  `evals/aep/runs/*.trace-ir.json` keep their bytes. A replay is not a launch: the attestation is
+  `HermeticMode::Off` with nothing imposed, the seam is `Seam::None`, and nobody closes the stream
+  (`stream_complete: false`, no `stream_closed`). The `--html` header labels a record's digest by
+  its source rather than as a stream's.
+  The name is parsed by the library (`metaharness::VendorSource`, `project_vendor_record`), so an
+  unknown `--from` — `metaharness-event-stream` included — is refused by name with the three
+  admitted spellings, and a record that is not the declared format is refused by one rule, *the
+  reader's first event is `session.started`* (`Refusal::ProjectionSource`, exit 2), because the
+  readers raise no error of their own and the wrong reader makes `opaque` nodes.
+  `crates/metaharness-cli/tests/project.rs` pins the census of each golden record against the
+  adapter's own expected stream, byte stability, the source and digest rule, every reader over
+  every record that is not its own, and that a vendor record without `--from` is still refused.
+  The ESS domain `metaharness.trace` gains `ProjectVendorRecord` with four scenarios (one per
+  vendor source, each reading the library entry's document, and the refusal of the event stream's
+  name); `spec/conformance.json` is regenerated and the count gate moves from 83 to 87.
 - `--scratch-cwd` (design amendment a27; takt gap G15, Atlas ADR 0098 point 2): `--cwd <dir>
   --scratch-cwd` declares the named directory as the embedder's disposable scratch copy, which a6
   could not tell from the operator's real tree. H7 is attested in a third state, **`declared`**

@@ -16,7 +16,7 @@ production target in `crates/metaharness-aep/src/drive/ess_conformance.rs`.
 CI installs ESS 0.56.0 from commit
 `84ee8d38eb69e3a4507de801fdcb248232ed6e6e`. Use that compiler locally.
 
-The committed count is **83 selected scenarios**: 83 passed, zero failed,
+The committed count is **87 selected scenarios**: 87 passed, zero failed,
 skipped, unsupported or synthesis refusals. Unknown suite versions, steps,
 bindings, shapes and predicates fail closed. The target handles only the
 constructs this suite uses; extending the specification may require extending it.
@@ -31,7 +31,7 @@ constructs this suite uses; extending the specification may require extending it
 | Tool decisions | Production Codex mapping and answer_events consult a real AEP engine; malformed, patch and unsupported calls are denied. |
 | Workspace and file containment | The production name predicate and owned tool server operate on a selected directory; an outside symlink is refused. This does not prove process or cgroup isolation. |
 | Accounting | Real finite and uncapped policy functions execute. Ledger views read files written by SpendBudget and AdmissionBudget, including persisted invocation count. |
-| Session format (`trace-ir/1`, domain `metaharness.trace`) | The production projection `project_document` and the three production readers run over committed inputs only: one framed event per wire kind, classified by the node the writer emits; completeness over three marker shapes built through the production `EventStream`; the digest over the framed bytes beside the vendor's reference; the two recorded `evals/aep/runs` streams retained as rendered documents whose view is read back from disk and re-projected; the three golden vendor records normalized through `ClaudeSeams`, `RolloutReader` and `B10xSeams`. No vendor process or model starts. |
+| Session format (`trace-ir/1`, domain `metaharness.trace`) | The production projection `project_document` and the three production readers run over committed inputs only: one framed event per wire kind, classified by the node the writer emits; completeness over three marker shapes built through the production `EventStream`; the digest over the framed bytes beside the vendor's reference; the two recorded `evals/aep/runs` streams retained as rendered documents whose view is read back from disk and re-projected; the three golden vendor records normalized through `ClaudeSeams`, `RolloutReader` and `B10xSeams`; the same three records through the verb's own library entry, `metaharness::project_vendor_record` (`metaharness project --from`, amendment a28), with the source name, the record digest, the unclaimed attestation and the census against the adapter's expected stream read off the rendered document, and the event stream's name refused as a `--from`. No vendor process or model starts. |
 
 The immutable Recorded entities expose existing observations: a closed stream and
 snapshots of retained finite/admission ledgers. They add no running-session
@@ -257,3 +257,48 @@ Loom's executor would; neither a vendor process nor a model starts, so the
 scenarios establish what the floor decides about the record, not what a vendor
 binary does in the copy. The Codex and b10x paths carry the same attestation rule
 and are pinned by unit tests and the Codex C1 vector, not by this domain.
+
+## Amendment a28 extension — the verb over a vendor record
+
+Protocol amendment a28 (2026-10-20) gives `metaharness project` a `--from
+<claude-code-stream-json|codex-rollout|harness-json>` that reads a vendor record
+metaharness did not produce through that adapter's production reader. The domain
+`metaharness.trace` gains `ProjectVendorRecord` with four generated scenarios:
+one per vendor source, each calling the verb's own library entry
+(`metaharness::project_vendor_record`) twice over the committed golden record and
+reading off the rendered document that `metaharness.source` is the format's name,
+the opening node is the adapter's `session_start`, `hermetic.mode` is `off` with
+nothing imposed, `stream_complete` is false (nobody closes a replayed stream),
+the two renders agree, `transcript_digest` is the SHA-256 of the record's bytes,
+and the family census equals the adapter's own committed expected stream projected
+through `project_document`; and the default, reached by the one `SourceKind` that
+is not a `--from`, observing that the entry refuses the event stream's name and
+names it. The outcome is named from the opening node's adapter, never from the
+input, so a shape the domain does not declare fails by scenario name. The two
+`UNMAPPED:` notes a26 left for `story:project-reads-vendor-transcripts` are
+settled in the domain. The combined 87-scenario model passes with no skipped,
+unsupported or refused obligations. Earlier 83-scenario/55-mutant results above
+are historical.
+
+Hardening evidence, 2026-10-20, each defect restored and rerun green:
+
+- Changing the specification's claude payload to `hermetic_mode: "strict"` (in a
+  scratch copy of `spec/`, run through `METAHARNESS_ESS_SUITE`) failed
+  ProjectVendorRecord/outcome/claude-transcript-projected (86 passed, one failed).
+- Making production write `metaharness.event/1` as the source of a replayed record
+  — the a28 regression, `viewer.rs` handing `project_from` the wire's name — failed
+  all three ProjectVendorRecord vendor outcomes by name (84 passed, three failed).
+- `ess verify conform mutate --class guard-negate --emit`, execution of every
+  emitted suite against production, and `--collect` killed **58 of 58 mutants**:
+  no survivors, inconclusive, stillborn, unwitnessed or equivalent results.
+  Baseline: 87 scenarios, zero refusals. Thirty-seven mutants add synthesis
+  refusals but each is killed by executed scenarios. The three new guards are
+  each killed by two scenarios of the command. Other classes were not claimed.
+
+Two boundaries are stated rather than claimed. The suite does not claim that a
+record other than the three goldens opens with `session.started` under its reader;
+a record that does not is refused by the verb (a28 point 4), and
+`crates/metaharness-cli/tests/project.rs` pins every reader over every record that
+is not its own, the recorded event stream included. The verb's exit code (0, or 2
+on the refusal) is pinned there too, not here: the target calls the library entry
+and reads the refusal, never the binary.

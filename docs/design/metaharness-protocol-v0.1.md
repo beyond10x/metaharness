@@ -52,6 +52,14 @@
 > the declaration a6 stands as written. The floor's H7 row now reads the attestation, which it never
 > did: under a6 it printed `ok` *"which metaharness created"* over a directory metaharness did not
 > create. § a27, and the H7 and H11 rows of § 8.1.
+> **Amendment a28, 2026-10-20**, from `story:project-reads-vendor-transcripts` (Atlas ADR 0096
+> point 7): `metaharness project --from <claude-code-stream-json|codex-rollout|harness-json>
+> <record>` reads a vendor record metaharness did not produce through that adapter's **production
+> reader** and projects what the reader emits. `metaharness.source` names the format and
+> `transcript_digest` the record's bytes — a15 point 2 applied to the file actually read; the
+> attestation claims nothing; a record that is not the declared format is refused by one stated
+> rule (the reader's first event is `session.started`); the stream is closed by nobody. § a28, and
+> the note at § 4.4.
 > **Amendment a7, 2026-08-22**, from the **first driven Codex run** (CX-M2): the § 7.4 matrix's
 > `PreToolUse` row moves from documented to **driven** — a real `codex exec` was refused one shell
 > call at metaharness's own hook and the vendor's record shows the command blocked with empty
@@ -821,6 +829,15 @@ and for diffing, and says so; a machine-readable trace-ir document is Q9's prere
 > not copied**: it is true only when a marker is present, is the last node, and counts exactly the
 > nodes before it.
 
+> **Amendment a28, 2026-10-20, extends a15's second point to a file that is not an event stream.**
+> `metaharness project --from <format> <record>` reads a vendor record through the adapter's
+> production reader and projects the stream the reader emits. The file that document is made from
+> is the record, so `transcript_digest` is the SHA-256 of the **record's** bytes and
+> `metaharness.source` carries the `--from` value — `claude-code-stream-json`, `codex-rollout` or
+> `harness-json` — instead of `metaharness.event/1`. `metaharness.vendor_transcript` then names
+> the same digest, which is correct rather than redundant: the vendor transcript *is* the source,
+> and the document says so. Over an event stream nothing moves. The rest is § a28.
+
 ---
 
 ## 5. The workflow frame
@@ -1473,6 +1490,7 @@ metaharness capabilities <kind> [--render]     # declared tiers, pinned versions
 metaharness conformance <kind>                 # the free vectors (§ 8.5) — no model, no credential
 metaharness project <events.jsonl> --out <f>   # the projection, as a verb (a15: --events became a positional)
 metaharness project --html <f> <a.jsonl> <b.jsonl>  # two runs, aligned, as one static page (a15)
+metaharness project --from <format> <record> --out <f>  # a vendor record through its production reader (a28)
 metaharness audit --transcript <f> [--events <f>] [--spec <s>] [--auditor <p>]  # judge offline
 metaharness doctor <kind>                      # installed vendor version vs the adapter's pin
 ```
@@ -2265,3 +2283,109 @@ without a directory is refused; a declared copy under strict is admitted (H7 `de
 1). The vendor adapters each carry a C1 vector reading the plan's attestation, and the scripted
 runner records the plan's cwd so the vector does not rest on argv alone. No event or frame wire
 changes beyond the optional field.
+
+### Amendment a28 — `metaharness project` reads a vendor record it did not produce (2026-10-20)
+
+Atlas ADR 0096 point 7 says Claude Code, Codex and harness transcripts are normalized into
+`trace-ir/1`. Until now that held only for a record that passed through a `metaharness run`: the
+verb read a `metaharness.event/1` stream and nothing else (a15; `runs-side-by-side-v0.1.md` § 1.1),
+the pass from a vendor record to that stream existed as a test
+(`crates/metaharness-claude/tests/recorded_runs.rs`) and as a conformance observation
+(`metaharness.trace.NormalizeRecord`), and a transcript recorded outside this driver had no
+command-line entry. `story:project-reads-vendor-transcripts` gives it one. Five decisions, in the
+order a reader meets them.
+
+**1. The flag is `--from <format>`, a declaration about every positional given.** Three values —
+`claude-code-stream-json`, `codex-rollout`, `harness-json` — which are the `SourceKind` names of
+`spec/domains/trace.yaml`, so the verb, the domain and the document (point 3) spell a source one
+way. It applies to every record on the command line, so `--html` over two records of one format
+works without first writing them out as streams. The name is parsed by the library
+(`metaharness::VendorSource`, `FromStr`), not by `clap` (D11: one refusal on both faces). Any other
+name is refused **by name**, with the three admitted names in the refusal, exit 2 — and
+`metaharness-event-stream` is refused too: the event stream is what `project` reads without the
+flag, and a spelling that meant *no reader* would make the flag optional in disguise. A replay is
+named after its file (point 2), and two records can share a file name: when two `--html` columns
+would carry one name, each carries the first eight hex digits of its own document's
+`transcript_digest` after it (`run · ff0d5eeb`), so two columns never read as one run twice;
+columns whose names differ keep their headers, which is what keeps the committed
+`evals/aep/runs/side-by-side.html` byte-identical.
+
+**2. The reader is the adapter's production reader, driven as a replay.** Claude through
+`metaharness::ClaudeSeams` (which is `TranscriptReader::new(..).with_seam(..)`), Codex through
+`metaharness_codex::RolloutReader`, the loop through `metaharness_b10x::B10xSeams` — the same three
+`NormalizeRecord` drives, from `metaharness::viewer` beside `project_file`, on D11's rule (the
+binary parses, the library decides) and invariant 2's (the vendor shapes stay in the adapter
+crates; the viewer chooses a reader and reads nothing vendor-specific itself). A replay is not a
+launch: the transcript reference names the record's **file name only** — never the argv spelling,
+which would make two spellings of one file two documents (P1 says the document is a function of
+the record), and never a canonical absolute path, which would put the machine's directories into a
+document people commit — beside the digest of the bytes read and their count; the attestation is
+`HermeticAttestation::none(HermeticMode::Off)` — no imposition, no declaration, `decisions: frame`
+as the constructor's least claim; the seam is `Seam::None`; the b10x factory is given no version,
+model or cwd, because the verb knows none (the opening record reads `harness_version: null` and
+`cwd: null`, and the model from the record). The run id is the record's file stem, so the viewer's
+column names a file a reader can find. Every line goes through `push_line` in order, then
+`finish`, and the production `EventStream` frames the result.
+
+**What a node's `source_line` means on a replay.** On the wire it is the stream line, total
+because one line is one event. Under `--from` there is no stream file — the only file the document
+names is the record, and one record line can carry several events — so `source_line` is the
+**record line the reader read the event from**: everything `push_line` returned for a line came
+from that line, which for an opaque node is the `kind.source_line` the reader itself states, and
+the two agree; what the reader owed at `finish` came from the whole record and cites its last line,
+because the reader had read all of it when it emitted them (the codex reader's `session.ended`,
+built from the last `task_complete`). The writer is told the line per framed event
+(`TraceIrDocument::project_from(.., source_lines)`); the wire path passes none and keeps its bytes.
+
+**3. `metaharness.source` names the format, and the digest names the record.** The story's
+Ambiguity is settled in the default's favour. `metaharness.source` is the `--from` value;
+`transcript_digest` is the SHA-256 of the record's bytes — a15 point 2 applied to the file actually
+read, and `trace-ir/1`'s own definition (*the raw transcript bytes*) read literally.
+`metaharness.vendor_transcript.digest` is then the same value, and the agreement is the point: the
+two fields name one file, and the document says which file that is. Over an event stream nothing
+moves — `source` stays `metaharness.event/1`, the digest stays over the stream, and the committed
+`evals/aep/runs/*.trace-ir.json` goldens keep their bytes (`golden_stable`). `adapter.written_against`
+stays `[metaharness.event/1]`: the projection consumes that wire whichever reader produced it; the
+reader's identity is the opening node's own `adapter`. In code, `TraceIrDocument::project_from(lines,
+bytes, source)` is the writer and `project_document` the wire case.
+
+**4. A record that is not the declared format is refused by one rule, stated here: the reader's
+first event is `session.started`.** Every reader turns a line it cannot read into `opaque` and
+raises no error (D4, O3), so the wrong reader over a record produces a document of opaque nodes that
+reads exactly like a run whose record was unreadable. The verb therefore refuses before framing when
+the first emission is not `session.started` — or when there is none — naming the format, the file
+and what the first event was (an `opaque` node's vendor type and source line, where that is what it
+was). Exit 2: metaharness could not do its job, never a verdict about the run. The rule holds for
+every reader over every record that is not its own, the recorded event stream included, and
+`crates/metaharness-cli/tests/project.rs` pins each pair. No format sniff on the first line is
+added: it would be a second copy of each adapter's format knowledge, outside the adapter crate.
+
+**5. The stream is closed by nobody.** No `stream.closed` marker is written. The marker is
+`EventStream::close`'s statement that metaharness ended a stream it was writing for a run it drove,
+with a reason it derived from that run. The verb drove nothing, and to pick a reason it would have to
+classify the vendor's record itself — the self-agreeing classification `recorded_runs.rs` refuses to
+derive even for a fixture. So the document reads `stream_complete: false`, `closed: null` and no
+`stream_closed` family, which is a17's reading — *nobody closed this stream* — and is what is true of
+it. The vendor's own terminal record (`run_outcome`, `terminal_reason`) is the one statement in the
+document about how the run ended. A consequence for the acceptance line: the census compared with
+the adapter's expected stream is the whole census, because neither side carries a marker.
+
+**Conformance.** `spec/domains/trace.yaml` gains `metaharness.trace.ProjectVendorRecord`, input
+`SourceKind`: three guarded outcomes, one per vendor source, each reading the library entry's
+document — `source` by literal, the opening node's adapter and family, `hermetic.mode` `off` with
+zero impositions, the family census equal to the adapter's expected stream's, two renders equal,
+the digest over the record, `stream_complete` false — and the default, reached by
+`metaharness-event-stream` alone, observing the refusal and that it names the source. Four
+scenarios; the count gate moves 83 → 87. A default is kept for the reason `ClassifyEventKind`
+keeps one: without it ESS requires the guards to partition the input and every guard-negate mutant
+of the command is stillborn instead of audited. The two `UNMAPPED:` notes a26 left for this story
+are settled in the domain. What the suite does not claim: that any record other than the three
+goldens opens with `session.started`.
+
+**Boundaries.** The Claude Code session JSONL under `~/.claude/projects/` is another format and
+another adapter (Atlas ADR 0088; `epic:session-mining`). No redaction: a document projected from
+an operator's real transcript is evidence and may contain anything the vendor wrote (`AGENTS.md`
+§ Safety envelope); this verb neither redacts nor commits. Not a launch: no hermetic claim, no
+seam, no decision census, and `--audit`'s floor is not consulted. `aep observe trace check` still
+reads event streams (a15 point 3); a record projected with `--from` has no stream file beside it,
+and writing one is not this amendment. No event or frame wire changes.

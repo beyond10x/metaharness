@@ -79,12 +79,16 @@ pub struct AdapterRef {
 pub struct TraceIrEvent {
     /// Its position in this document. What a verdict cites.
     pub index: usize,
-    /// The 1-based line of the event stream it came from.
+    /// The 1-based line of the file this document was made from that the event came from.
     ///
-    /// Exact here, and worth saying why: one line of a *vendor* transcript can carry several IR
-    /// events, which is what made this field hard on the other side of the seam. One line of a
-    /// `metaharness.event/1` stream is exactly one event, so the mapping back to the file is
-    /// total.
+    /// On the wire, exact and total: one line of a `metaharness.event/1` stream is exactly one
+    /// event, so the line is the node's own position. Under `metaharness project --from`
+    /// (amendment a28) the file is the vendor record and the line is the **record** line the
+    /// production reader read the event from — several events of one line share it, and an event
+    /// the reader owed at end of record cites the last line, because the reader had read the whole
+    /// record when it emitted it. That is the case that made this field hard on the other side of
+    /// the seam (one vendor line, several IR events), and the writer is told the line per framed
+    /// event rather than inferring it.
     pub source_line: usize,
     /// The timestamp the vendor recorded, verbatim, or [`None`].
     pub timestamp: Option<String>,
@@ -131,7 +135,10 @@ pub struct AssistantRequest {
 /// the document unchanged.
 #[derive(Debug, Clone, PartialEq, Serialize)]
 pub struct MetaharnessBlock {
-    /// The wire the document was projected from.
+    /// The format of the file the document was made from — and so of the bytes
+    /// [`TraceIrDocument::transcript_digest`] names: `metaharness.event/1` for a stream read off
+    /// the wire, or the vendor format a `metaharness project --from` replay read through its
+    /// production reader (amendment a28).
     pub source: &'static str,
     /// The run id every line of that stream carried.
     pub run: Option<String>,
@@ -222,9 +229,44 @@ impl TraceIrDocument {
 ///
 /// `bytes` is the stream exactly as it was read, because [`TraceIrDocument::transcript_digest`] is
 /// over those bytes and a digest recomputed from re-serialized lines would name a file that does
-/// not exist.
+/// not exist. The wire case of [`TraceIrDocument::project_from`]: the source is
+/// `metaharness.event/1`.
 #[must_use]
 pub fn project_document(lines: &[EventLine], bytes: &[u8]) -> TraceIrDocument {
+    TraceIrDocument::project_from(lines, bytes, crate::framing::EVENT_FORMAT, None)
+}
+
+impl TraceIrDocument {
+    /// Project framed lines read out of a file of the named format (amendment a28).
+    ///
+    /// `bytes` is that file exactly as it was read — the event stream itself, or the vendor record
+    /// a production reader turned into `lines` — because [`Self::transcript_digest`] is over those
+    /// bytes, and `source` is what the document says they are. `source_lines`, where given, is the
+    /// 1-based line of that file each framed line was read from, in order, and becomes the node's
+    /// [`TraceIrEvent::source_line`]; absent, each node cites its own position, which on the wire
+    /// is the stream line. Nothing else about the writer moves between the two cases: the
+    /// families, the `unk` census, the completeness verdict and the `adapter` block are the same
+    /// functions of `lines`, and `adapter.written_against` stays the wire, because that is what the
+    /// projection consumes whichever reader produced it.
+    #[must_use]
+    pub fn project_from(
+        lines: &[EventLine],
+        bytes: &[u8],
+        source: &'static str,
+        source_lines: Option<&[usize]>,
+    ) -> Self {
+        project(lines, bytes, source, source_lines)
+    }
+}
+
+/// The one writer behind both entries.
+fn project(
+    lines: &[EventLine],
+    bytes: &[u8],
+    source: &'static str,
+    source_lines: Option<&[usize]>,
+) -> TraceIrDocument {
+    one_source_line_per_framed_line(source_lines, lines.len());
     let mut events = Vec::with_capacity(lines.len());
     let mut families: BTreeMap<String, u32> = BTreeMap::new();
     let mut unk_kinds: BTreeMap<String, u32> = BTreeMap::new();
@@ -232,7 +274,7 @@ pub fn project_document(lines: &[EventLine], bytes: &[u8]) -> TraceIrDocument {
     let mut request_events: BTreeMap<String, Vec<usize>> = BTreeMap::new();
 
     let mut block = MetaharnessBlock {
-        source: crate::framing::EVENT_FORMAT,
+        source,
         run: lines.first().map(|line| line.run.to_string()),
         events_total: lines.len(),
         families: BTreeMap::new(),
@@ -292,7 +334,9 @@ pub fn project_document(lines: &[EventLine], bytes: &[u8]) -> TraceIrDocument {
 
         events.push(TraceIrEvent {
             index: position,
-            source_line: position + 1,
+            source_line: source_lines
+                .and_then(|source_lines| source_lines.get(position).copied())
+                .unwrap_or(position + 1),
             timestamp: line.at.clone(),
             timestamp_ms: line.at.as_deref().and_then(parse_timestamp_ms),
             kind: kind_of(family, &line.event),
@@ -325,6 +369,19 @@ pub fn project_document(lines: &[EventLine], bytes: &[u8]) -> TraceIrDocument {
         events,
         requests,
         metaharness: block,
+    }
+}
+
+/// A caller that names source lines names one per framed line (a28): a short tail would otherwise
+/// fall back to the node's own position in silence.
+fn one_source_line_per_framed_line(source_lines: Option<&[usize]>, framed: usize) {
+    if let Some(source_lines) = source_lines {
+        debug_assert_eq!(
+            source_lines.len(),
+            framed,
+            "one source line per framed line (a28): a short tail would silently fall back to the \
+             node's own position"
+        );
     }
 }
 
