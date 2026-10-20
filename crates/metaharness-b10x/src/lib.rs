@@ -41,12 +41,16 @@
 //! rather than being guessed empty.
 //!
 //! **MCP has stopped being one of those absences.** Since 0.12.1 the loop publishes
-//! `--mcp-profile` and `--mcp-registry` and writes an `mcp` field in its opening record; the 0.15.0
+//! `--mcp-profile` and `--mcp-registry` and writes an `mcp` field in its opening record; the 0.15.1
 //! capture in `fixtures/golden/` carries it as `"mcp":[]`. `mcp_servers` is still the hardcoded
 //! `[]` the old standing fact justified, because every observation so far — 2026-09-15 on 0.12.1,
-//! 2026-10-20 on 0.15.0 — saw that field only as `[]` and the shape of an element is unestablished
-//! — see `B10xSeam`'s own note and
-//! `docs/research/2026-10-20-b10x-harness-0.15.0-adapter-surface.md`.
+//! 2026-10-20 on 0.15.0 and 0.15.1 — saw that field only as `[]` and the shape of an element is
+//! unestablished — see `B10xSeam`'s own note and
+//! `docs/research/2026-10-20-b10x-harness-0.15.1-adapter-surface.md`.
+//!
+//! **The working directory is the loop's own word since 0.15.1.** The opening record's `cwd` is
+//! the `started` line's `cwd` — the canonical root the loop's file tools act in — and `null` when
+//! the line names none, never the directory metaharness planned (design a30, a31).
 
 #![allow(missing_docs)]
 
@@ -78,14 +82,14 @@ pub const ADAPTER_CLASS: &str = "direct_provider";
 /// Pinned for the reason the other adapters pin: every version-specific claim in here — the field
 /// names of the loop record, the shape of its terminal event — was observed against these, and a
 /// run against another is unverified rather than wrong.
-pub const PINNED_VERSIONS: [&str; 1] = ["0.15.0"];
+pub const PINNED_VERSIONS: [&str; 1] = ["0.15.1"];
 
 /// The immutable harness source revision this adapter is built against.
 ///
 /// The version identifies the released CLI; the revision identifies the Rust crates Cargo
 /// resolves. Both are checked by the AEP eval before it trusts an installed
 /// binary, so a filesystem timestamp is never mistaken for provenance.
-pub const HARNESS_REVISION: &str = "dd5c2a66218a5f2555c4a9fdab6fdfac8515cc6d";
+pub const HARNESS_REVISION: &str = "f0870131e58df3e1119860d0a255f46589026d62";
 
 /// Whether a directory component satisfies the pinned substrate adoption syntax.
 ///
@@ -102,8 +106,9 @@ pub fn workspace_component_is_adoptable(name: &str) -> bool {
 
 /// Validate exact workspace-relative process write directories before native launch.
 ///
-/// Harness 0.15.0 (`dd5c2a66`) canonicalizes the set before Substrate 0.7.17
-/// (`00fa634c`) validates workspace access. This adapter mirrors those syntax bounds
+/// Harness 0.15.1 (`f0870131`, `crates/harness-substrate` unchanged from 0.15.0)
+/// canonicalizes the set before Substrate 0.7.17 (`00fa634c`) validates workspace
+/// access. This adapter mirrors those syntax bounds
 /// without importing a different native dependency. Glob spelling is additionally
 /// refused: this declaration never expands a file-tool pattern into a mount.
 /// Existence, symlink safety and actual mount admission remain the host's job.
@@ -281,13 +286,13 @@ mod tests {
 
     /// **The one deliberate literal pair.** Every other reader of the pin goes through these two
     /// constants, so a move that forgot one of them would agree with itself everywhere else. Moved
-    /// 0.13.3 / `798325f0` → 0.15.0 / `dd5c2a66` on 2026-10-20: the commit the annotated tag
-    /// `0.15.0` points at, never the tag object, because the eval compares this with
-    /// `git rev-parse HEAD` in the harness checkout.
+    /// 0.13.3 / `798325f0` → 0.15.0 / `dd5c2a66` and then → 0.15.1 / `f0870131` on 2026-10-20:
+    /// the commit the annotated tag `0.15.1` (tag object `a0a2dfda`) points at, never the tag
+    /// object, because the eval compares this with `git rev-parse HEAD` in the harness checkout.
     #[test]
-    fn the_pin_names_the_harness_0_15_0_release_commit() {
-        assert_eq!(PINNED_VERSIONS, ["0.15.0"]);
-        assert_eq!(HARNESS_REVISION, "dd5c2a66218a5f2555c4a9fdab6fdfac8515cc6d");
+    fn the_pin_names_the_harness_0_15_1_release_commit() {
+        assert_eq!(PINNED_VERSIONS, ["0.15.1"]);
+        assert_eq!(HARNESS_REVISION, "f0870131e58df3e1119860d0a255f46589026d62");
     }
 
     /// The constants, both manifests and the lock name one harness: one revision, the released

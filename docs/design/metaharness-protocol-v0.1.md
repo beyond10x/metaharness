@@ -1240,7 +1240,7 @@ when its unobservability is a property of the mechanism rather than of the run.
 | H4 | no API key unless declared | `ANTHROPIC_API_KEY` is not in the allowlist unless the run declares `credentials: api_key` | record: credential source in the opening record | absent ⇒ `unk` | **gating** |
 | H5 | MCP surface is exactly what the launch gave | `--strict-mcp-config`, always | record: the MCP server **list** — length and names | list absent ⇒ `unk`, **never zero** | **gating** |
 | H6 | credential carriage is exactly declared | vendor adapters: one file into the scratch home, nothing else, **re-copied immediately before every spawn** (amendment a1); direct-provider adapters: no operator login is copied and the only source is the caller-named source or none (**amendment a14**) | **not directly assertable in any record.** The evidence is the effect: H1a, H4, H5 | — | **advisory**, and § 8.3 says why an attestation is not evidence |
-| H7 | the working directory is ours | a directory metaharness created; `--add-dir` never passed. **a6: under an operator-named `--cwd` this row is attested unavailable, never claimed** — and **a6.1: its reason states that the vendor sandbox was widened to that tree** (codex: `sandbox_mode = "workspace-write"`), because a run that may change the operator's repository must say so in its own record and not only in a scratch config file. **a27: under `--cwd <dir> --scratch-cwd` this row is `declared` — the embedder declared `<dir>` as its disposable scratch copy, metaharness did not create it, `--add-dir` is never passed, and the sandbox grant is stated as under a6.1. The floor reads `declared` as `ok` only when the record's `cwd` is the planned one; a declaration on any other row is `gap`; an a6 `unavailable` H7 is `gap`, which the floor never said before a27.** **a30: the direct-provider loop's `started` record names no working directory at the pinned release, so on b10x the record's `cwd` is `null`, never metaharness's plan echoed back, and the row is `unk` (*"the loop did not report its working directory"*) before the attestation is read: declared, a6 and metaharness-created alike** | record: `cwd` in the opening record, read beside the attestation's H7 state (a27) | absent ⇒ `unk` | **gating** |
+| H7 | the working directory is ours | a directory metaharness created; `--add-dir` never passed. **a6: under an operator-named `--cwd` this row is attested unavailable, never claimed** — and **a6.1: its reason states that the vendor sandbox was widened to that tree** (codex: `sandbox_mode = "workspace-write"`), because a run that may change the operator's repository must say so in its own record and not only in a scratch config file. **a27: under `--cwd <dir> --scratch-cwd` this row is `declared` — the embedder declared `<dir>` as its disposable scratch copy, metaharness did not create it, `--add-dir` is never passed, and the sandbox grant is stated as under a6.1. The floor reads `declared` as `ok` only when the record's `cwd` is the planned one; a declaration on any other row is `gap`; an a6 `unavailable` H7 is `gap`, which the floor never said before a27.** **a30: the direct-provider loop's `started` record names no working directory at the pinned release, so on b10x the record's `cwd` is `null`, never metaharness's plan echoed back, and the row is `unk` (*"the loop did not report its working directory"*) before the attestation is read: declared, a6 and metaharness-created alike** *(a31: superseded for the pinned release, 0.15.1, whose `started` record names the directory; the `unk` arm now applies only to a record that names none)* **a31: harness 0.15.1's `started` record names the canonical root its file tools act in, so on b10x the record's `cwd` is that directory and the row reads it as on every kind — `unk` only when the record names none; and on every kind the record and the plan are compared as directories, not spellings: equal, or both absolute and resolving (links followed) to the same path without any step reaching `/proc` or `/dev/fd`** | record: `cwd` in the opening record, read beside the attestation's H7 state (a27) | absent ⇒ `unk` | **gating** |
 | H8 | hooks and customizations are not skipped | an argv **denylist**: neither `--bare` nor **`--safe-mode`**, and neither `CLAUDE_CODE_SAFE_MODE` nor `CLAUDE_CODE_SIMPLE` in the child environment | launch: the argv and environment as values | n/a — launch assertion | **gating** |
 | H9 | the vendor version is the pinned one | `doctor` before the run | record: the harness version in the opening record | absent ⇒ `unk` | **gating** |
 | H10 | governing documents cannot move under the run | inputs are copied into the run directory, not referenced | record: the digest of the copied tree, in `session.started` | n/a | **gating** |
@@ -2274,7 +2274,8 @@ the opening record (`crates/metaharness-b10x/src/seam.rs`, `cwd: self.cwd`), so 
 `story:b10x-record-carries-the-loops-cwd` lands a declared H7 reads `ok` on b10x on the flag plus
 the echoed plan, never on a directory the loop itself reported; the record-versus-plan comparison
 of § 4 is real on the vendor kinds only. *(a30: it has landed. The record's cwd is `null` on this
-kind and H7 reads `unk`.)*
+kind and H7 reads `unk`.)* *(a31: harness 0.15.1 reports the directory; the record's cwd is the
+loop's own, and a declared H7 reads `ok` on b10x when that directory is the declared copy.)*
 
 **Conformance.** `spec/domains/workspace.yaml` gains `DeclareScratchWorkingDirectory` with four
 outcomes, each a real `metaharness` run over `ScriptedRunner` and no vendor process: the declaration
@@ -2324,7 +2325,8 @@ document people commit — beside the digest of the bytes read and their count; 
 `HermeticAttestation::none(HermeticMode::Off)` — no imposition, no declaration, `decisions: frame`
 as the constructor's least claim; the seam is `Seam::None`; the b10x factory is given no version,
 model or cwd, because the verb knows none (the opening record reads `harness_version: null` and
-`cwd: null`, and the model from the record). The run id is the record's file stem, so the viewer's
+`cwd: null`, and the model from the record; *a31: the `cwd` too comes from the record when its
+`started` line names one, as a 0.15.1 record does*). The run id is the record's file stem, so the viewer's
 column names a file a reader can find. Every line goes through `push_line` in order, then
 `finish`, and the production `EventStream` frames the result.
 
@@ -2463,7 +2465,7 @@ release writes none. Harness 0.15.1 (`f0870131`, tag `0.15.1`) writes a top-leve
 under `--substrate <socket>` (source read at that commit, `crates/harness-loop/src/event.rs`).
 Reading it means moving the pin, and that is `story:b10x-h7-from-the-loops-cwd`, the next unit of
 this wave, not this amendment. a29's last sentence of its second paragraph (*"so `cwd` on
-`session.started` stays the launch's"*) is superseded.
+`session.started` stays the launch's"*) is superseded. *(a31 moves the pin and reads it.)*
 
 **2. H7 says whose silence it is, before the attestation is read.** A `direct_provider` record
 with no `cwd` reads `unk`, *"the loop did not report its working directory"*. This is an arm beside
@@ -2488,7 +2490,9 @@ no verdict and still exits 0. The adversary pinned the two `--audit` exits over 
 (`crates/metaharness/tests/adversary_b10x_loops_cwd.rs`), and all three, with the strict run
 without `--cwd` and the strict a6 run, through the actual binary
 (`crates/metaharness-b10x/tests/adversary_native_cli_exits.rs`). Nothing in this workspace runs b10x
-under strict or `--audit`; whether Loom's executor does is not known here.
+under strict or `--audit`; whether Loom's executor does is not known here. *(a31: where the record
+names the created or declared directory these exits are 0 again; where it names none they stay
+3; the a6 run stays 1, with H7 `gap`.)*
 
 **4. One expected-stream field moves, and the vector guards it.**
 `crates/metaharness-b10x/fixtures/golden/loop.expected.jsonl` line 1 moves from
@@ -2496,8 +2500,96 @@ under strict or `--audit`; whether Loom's executor does is not known here.
 fixture README's command. The `golden-loop-record` vector first checks that the recorded
 `started` line names no `cwd`, so a re-recording from a release that writes one (0.15.1) fails the
 vector instead of replaying as `null`. `checked` stays 7 and `contract-result-b10x.json` keeps its bytes.
+*(a31 inverts the guard: the vector fails a replay that does not state the recorded `cwd`.)*
 
 No conformance scenario: `DeclareScratchWorkingDirectory` runs Claude only (`spec/coverage.md`), so
 there is no b10x scenario to move. No event or frame wire change, because `cwd` was already
 optional on `session.started`. The trace-ir/1 `SessionStart` node, the field's other reader, reads
 `null` on b10x as `metaharness project --from harness-json` already did (a28 point 2).
+
+### Amendment a31 — the b10x H7 row reads the working directory the loop reports (2026-10-20)
+
+Atlas ADR 0098 point 2: Loom's session executor acts on the verdict of `metaharness run b10x
+--hermetic strict --cwd <copy> --scratch-cwd`. a30 made that verdict honest by removing the plan's
+echo, which left H7 `unk` on every b10x run, because harness 0.15.0's `started` record named no
+directory. Harness 0.15.1 names one. `story:b10x-h7-from-the-loops-cwd` reads it. Five decisions.
+
+**1. The pin moves to 0.15.1.** `PINNED_VERSIONS` `0.15.1`, `HARNESS_REVISION`
+`f0870131e58df3e1119860d0a255f46589026d62` (the commit annotated tag `0.15.1`, object
+`a0a2dfdaf5b2702db5c77412c28f98b95f0c8794`, points at; reachable from harness `main`), both
+manifests and the lock together, on a25's rule. The lock holds one harness revision (`-catalogue`,
+`-loop`, `-wire` at 0.15.1) and one tools revision (0.2.0, `60d4d0e3`, unchanged); the llm 0.8.1
+move in harness's model port reaches no crate here. `crates/harness-catalogue`,
+`crates/harness-wire`, `crates/harness-substrate` and `crates/harness-loop/src/price.rs` are
+byte-identical from `dd5c2a66` to `f0870131`, so a29's served-reply list and a24's process-write
+contract stand unchanged. The b10x golden is re-recorded from a 0.15.1 binary with harness's
+emulator; per-claim evidence is `docs/research/2026-10-20-b10x-harness-0.15.1-adapter-surface.md`.
+
+**2. The record's `cwd` is the `started` line's `cwd`.** `LoopEvent::Started::cwd` at
+`f0870131` (`crates/harness-loop/src/event.rs:202-228`) is the canonical root the file tools act
+in, exactly as they resolved `--workspace`; absent under `--substrate <socket>` and for a root
+whose name is not UTF-8. The seam writes that string, and `null` when the line names none or names
+a non-string. Never the plan: `observe_launch` still ignores the planned directory (a30 point 1),
+and the vector `golden-loop-record` now fails a replay whose opening record does not state the
+recorded `cwd`, so a reader that dropped or replaced it cannot pass over a regenerated
+expectation. `metaharness project --from harness-json` states the record's `cwd` on the opening node
+(a28 point 2's `cwd: null` now holds only for a record that names none).
+
+**3. H7 compares directories, not spellings, on every kind.** Two names are one directory when they
+are byte-equal, or when both are absolute and resolve (links followed, `.` and `..` removed, as
+`realpath` does) to the same path. A name that does not resolve is compared as spelled, so only the
+filesystem can make two different names one directory, never the absence of an answer. **Nothing is
+resolved against metaharness's own process**, which says nothing about where the loop worked: a
+relative name is never resolved (it would be resolved against metaharness's working directory),
+and neither is a name whose resolution reaches `/proc` or `/dev/fd` at any step — `/proc/self/…`,
+`/proc/thread-self/…`, `/proc/<pid>/…`, `/dev/fd/<n>`, their `.`, `..` and doubled-slash spellings,
+`/dev/stdin` and its kin, and any link whose target leads there — because resolved inside
+metaharness each names metaharness's own working directory, root or file descriptor. The resolution
+is made component by component and the check on every resolved prefix, so the spelling cannot route
+around it; both kinds of name are compared as spelled and read `gap`
+(`crates/metaharness/tests/audit.rs`, one case per spelling; adversary pass 1's
+`/proc/self/cwd` run from inside the declared copy). A procfs mounted elsewhere than `/proc` is not
+recognised. A name that goes on past something that is not a directory (`<file>/..`, `<file>/.`,
+`<file>/`, a link whose target ends in `/` and lands on a file) does not resolve either, as
+`realpath` and the kernel refuse it with `ENOTDIR` (adversary pass 2). The case that needs the rule: the
+loop records the canonical root, while the directory metaharness creates is spelled under `TMPDIR`,
+and a `TMPDIR` under a linked home passes through a link. The native fixture ran exactly that
+(`TMPDIR` a link to a directory): the actual 0.15.1 loop recorded the directory under the link's
+target, the plan named it under the link, and before this rule the row would have read `gap` for
+the directory metaharness created. A named `--cwd` is canonicalized at launch already
+(`resolve_cwd_named`), so its literal comparison held before and holds now. The resolution runs when
+the floor is evaluated, while the run still owns the directory it created; so H7 reads the
+filesystem at call time, and the public `hermetic_floor` says so: evaluated after the directory is
+gone, a record naming it under another spelling than the plan's reads `gap` where it read `ok`
+(byte-equal names are unaffected). The rule is the floor's,
+not the adapter's, and applies to the vendor kinds too; no vendor-kind vector or fixture moves, and
+whether a vendor binary ever records another spelling of the planned directory is not observed
+here.
+
+**4. What the H7 row reads on b10x.** The arms are a27's and a30's, now fed the loop's value:
+`ok` *"which metaharness created"* when the record names the directory metaharness created; `ok`
+*"which was declared, not created"* under `--scratch-cwd` when it names the declared copy; `gap`
+*"metaharness could not impose it"* under a6 when it names the operator's tree; `gap` *"metaharness
+planned … and the session ran in …"* when it names another directory; `unk` *"the loop did not
+report its working directory"* when it names none (a30 point 2, kept, and still read before the
+attestation). One vector per shape over the golden bytes or a record derived from them at the spawn
+(`crates/metaharness/tests/b10x_h7_loops_cwd.rs`): present and equal under both spellings, present
+and different, absent, and a6.
+
+**5. The exits that move back.** a30 point 3 moved a strict b10x run, a strict declared copy and
+every `--audit` run (`--hermetic --audit`, plain `--audit`) from 0 to 3. Where the loop reports the
+created or declared directory they are **0** again: pinned over derived records in
+`b10x_h7_loops_cwd.rs` and through the production CLI and the actual 0.15.1 binary in
+`native_fixture.rs` (declared copy; created directory under a linked `TMPDIR`) and
+`adversary_native_cli_exits.rs` (strict without `--cwd`; `--hermetic --audit` with and without a
+declared copy). Where the record names none they stay **3** (`adversary_scratch_cwd.rs`,
+`adversary_b10x_loops_cwd*.rs`, now over the golden with its `cwd` removed); where it names another
+directory they are **1**. A strict a6 `--cwd` run without the declaration stays at **1**, with H7
+`gap` beside H11 `gap` (it was `unk` under a30). Bare `--hermetic` without `--audit` still owes no
+verdict and exits 0. Under `--substrate <socket>` the pinned loop names no directory, so a strict or
+audited confined-by-socket b10x run still exits 3; no run here exercises it.
+
+`loop.expected.jsonl` line 1 moves in `harness_version` (`0.15.0` → `0.15.1`) and `cwd` (`null` →
+`"/scratch/run/work"`, the recording's workspace, which the README places at that neutral path so
+the committed bytes name no machine path). `checked` stays 7; `contract-result-b10x.json` names
+`b10x 0.15.1`. No event or frame wire change: `cwd` was already optional on `session.started`.

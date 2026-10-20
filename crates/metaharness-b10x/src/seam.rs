@@ -20,8 +20,8 @@ pub struct B10xSeams {
 }
 
 impl B10xSeams {
-    /// No working directory is taken: the opening record's `cwd` is what the loop reported, and
-    /// at the pinned release it reports none (design a30).
+    /// No working directory is taken: the opening record's `cwd` is what the loop reported on its
+    /// `started` line, or `null` (design a30, a31).
     #[must_use]
     pub fn new(version: Option<String>, model: Option<String>) -> Self {
         Self { version, model }
@@ -155,14 +155,16 @@ impl HarnessSeam for B10xSeam {
                     // hardcoded `named` proved only that this adapter knew the CLI had flags.
                     credential_source: string("credential_source"),
                     output_style: None,
-                    // **What the loop reported, and at 0.15.0 it reports none**: `LoopEvent::Started`
-                    // has no working-directory field (harness `crates/harness-loop/src/event.rs`;
-                    // the golden record's line 1). This was the planned directory metaharness
-                    // handed `observe_launch`, so H7 compared the plan with its own echo and read
-                    // `ok` on it (design a30). The `cwd` key is ignored on purpose: the pinned
-                    // release writes none, 0.15.1 writes a top-level `cwd` (harness `f0870131`),
-                    // and reading it is `story:b10x-h7-from-the-loops-cwd`, not this change.
-                    cwd: None,
+                    // **What the loop reported, and nothing else** (design a31). The pinned release
+                    // writes a top-level `cwd` on `started`: the canonical root its file tools act
+                    // in (`LoopEvent::Started::cwd`, harness `crates/harness-loop/src/event.rs` at
+                    // `f0870131`; the golden record's line 1). It writes none under
+                    // `--substrate <socket>` or for a root whose name is not UTF-8, and a build
+                    // older than 0.15.1 writes none at all; a missing or non-string value is
+                    // `null`, *the record did not say*. Never the planned directory metaharness
+                    // handed `observe_launch`: echoing it made H7 compare the plan with itself
+                    // and read `ok` on it (design a30). H7 compares this value with the plan.
+                    cwd: string("cwd"),
                     // The catalogue behind the verbs, which is the only thing that differs from
                     // run to run here. The loop states it; this passes it through.
                     available_operations: value.get("operations").and_then(Value::as_array).map(
@@ -186,7 +188,7 @@ impl HarnessSeam for B10xSeam {
                     // both of them exactly as an unwanted one is.
                     //
                     // Absent on the line reads as `None`, *the record did not say*, and never as
-                    // an empty list. 0.15.0 writes the field on every run, empty included
+                    // an empty list. 0.15.1 writes the field on every run, empty included
                     // (`LoopEvent::Started`, harness `crates/harness-loop/src/event.rs`; the golden
                     // record carries `"withheld":[]`), so on the pinned binary "no key" means a
                     // build older than the field. Builds that skipped it when nothing was withheld
@@ -230,13 +232,13 @@ impl HarnessSeam for B10xSeam {
                     // standing claim behind the hardcoded `[]` was that `b10x-harness` has no MCP
                     // client at all; 0.12.1 has one — `--mcp-profile` and `--mcp-registry`
                     // (`b10x-harness run --help`, read 2026-09-15) — and its `started` record
-                    // carries an `mcp` field, which the 0.15.0 capture in `fixtures/golden/` holds
+                    // carries an `mcp` field, which the 0.15.1 capture in `fixtures/golden/` holds
                     // as `[]`. So the harness can now report servers and this asserts it reported
                     // none.
                     //
                     // It is deliberately **not** read here yet: the 2026-09-15 run on 0.12.1 and
-                    // the 2026-10-20 runs on 0.15.0 observed the field only as `[]`, so the shape
-                    // of an element is unestablished, and
+                    // the 2026-10-20 runs on 0.15.0 and 0.15.1 observed the field only as `[]`, so
+                    // the shape of an element is unestablished, and
                     // inventing one would be the guess this adapter refuses to make elsewhere.
                     // What closes it is a run that publishes a profile, recorded the way the
                     // `skills` move was — `docs/research/2026-09-15-b10x-harness-0.12.1-adapter-surface.md`.
@@ -331,7 +333,7 @@ impl HarnessSeam for B10xSeam {
                     cache_read_input_tokens: number("cached_input_tokens"),
                     // **Read from the record since the 0.12.1 observation.** It was a hardcoded
                     // `None` because the golden fixture, then a 0.9.1 recording, carried no such
-                    // field — and the 0.15.0 capture there carries none either, because harness's
+                    // field — and the 0.15.1 capture there carries none either, because harness's
                     // Responses emulator reports no cache-write counter. The paid run on
                     // 2026-09-15 saw `cache_creation_input_tokens` 2183 and
                     // 132 on the two `usage` lines of a two-turn run, so `None` here stopped being
@@ -697,15 +699,10 @@ mod tests {
         assert!(plugins.is_none());
     }
 
-    /// The loop's `started` line names no working directory at the pinned release (harness
-    /// `LoopEvent::Started`), so the opening record carries none (design a30): not the directory
-    /// metaharness planned and handed to `observe_launch` — echoing it made H7 compare the plan
-    /// with itself — and not the line's `cwd` key, which the pinned release never writes and
-    /// 0.15.1 does: reading it is `story:b10x-h7-from-the-loops-cwd`, so this ignores it on
-    /// purpose.
-    #[test]
-    fn the_opening_record_carries_no_working_directory_the_loop_did_not_report() {
-        let mut seams = B10xSeams::new(Some("0.15.0".to_owned()), None);
+    /// The opening record's `cwd` for one `started` line, through a seam whose launch planned
+    /// another directory.
+    fn opening_cwd_of(line: &str) -> Option<String> {
+        let mut seams = B10xSeams::new(Some("0.15.1".to_owned()), None);
         seams.observe_launch(None, "m".to_owned(), "/planned/by/metaharness".to_owned());
         let mut seam = seams.build(
             TranscriptRef {
@@ -716,17 +713,41 @@ mod tests {
             HermeticAttestation::none(HermeticMode::Strict),
             Seam::None,
         );
-        let event = one(
-            &mut *seam,
-            r#"{"kind":"started","model":"m","published_tools":[],"cwd":"/named/by/a/later/release"}"#,
-        );
-        let Event::SessionStarted { cwd, .. } = event else {
+        let Event::SessionStarted { cwd, .. } = one(&mut *seam, line) else {
             panic!("an opening record")
         };
+        cwd
+    }
+
+    /// The pinned loop's `started` line names its working directory (harness `LoopEvent::Started`
+    /// at 0.15.1, a top-level `cwd`: the canonical root its file tools act in), and the opening
+    /// record carries exactly that one (design a31). Not the directory metaharness planned and
+    /// handed to `observe_launch`: echoing it made H7 compare the plan with itself (a30).
+    #[test]
+    fn the_opening_record_carries_the_working_directory_the_loop_reported() {
         assert_eq!(
-            cwd, None,
-            "neither the plan's directory nor the line's `cwd` key reaches the record"
+            opening_cwd_of(
+                r#"{"kind":"started","model":"m","published_tools":[],"cwd":"/reported/by/the/loop"}"#
+            )
+            .as_deref(),
+            Some("/reported/by/the/loop"),
+            "the line's own `cwd`, byte for byte, and never the plan"
         );
+    }
+
+    /// Absent on the line is `null` in the record, never the plan (design a30, kept by a31): the
+    /// pinned loop writes no `cwd` under `--substrate <socket>` or for a root whose name is not
+    /// UTF-8, and a build older than 0.15.1 writes none at all. A `cwd` that is not a string is no
+    /// directory either, and reads the same way.
+    #[test]
+    fn a_started_line_that_names_no_working_directory_is_null_and_never_the_plan() {
+        for line in [
+            r#"{"kind":"started","model":"m","published_tools":[]}"#,
+            r#"{"kind":"started","model":"m","published_tools":[],"cwd":null}"#,
+            r#"{"kind":"started","model":"m","published_tools":[],"cwd":7}"#,
+        ] {
+            assert_eq!(opening_cwd_of(line), None, "{line}");
+        }
     }
 
     #[test]

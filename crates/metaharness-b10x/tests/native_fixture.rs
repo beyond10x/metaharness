@@ -330,8 +330,27 @@ fn event_lines(root: &Path) -> Vec<Value> {
         .collect()
 }
 
-#[allow(clippy::too_many_lines)]
+/// Where the run works.
+#[derive(Clone, Copy, PartialEq, Eq)]
+enum Workspace {
+    /// `--cwd <root>/work`, which metaharness canonicalizes before the launch.
+    Named,
+    /// No `--cwd`: metaharness creates the directory under `TMPDIR`, and `TMPDIR` is
+    /// `<root>/tmp-link`, a link to `<root>/tmp`, so the planned spelling passes through a link
+    /// and the loop's canonical one does not (design a31).
+    CreatedUnderALinkedTmpdir,
+}
+
 fn run(mode: Mode, extra: &[&str]) -> (PathBuf, Vec<Value>, Vec<Value>, i32) {
+    run_in(mode, extra, Workspace::Named)
+}
+
+#[allow(clippy::too_many_lines)]
+fn run_in(
+    mode: Mode,
+    extra: &[&str],
+    workspace: Workspace,
+) -> (PathBuf, Vec<Value>, Vec<Value>, i32) {
     require_isolation();
     let vendor =
         PathBuf::from(std::env::var_os("METAHARNESS_NATIVE_B10X").expect("explicit actual vendor"));
@@ -353,6 +372,13 @@ fn run(mode: Mode, extra: &[&str]) -> (PathBuf, Vec<Value>, Vec<Value>, i32) {
     fs::create_dir_all(home.join(".local/bin")).unwrap();
     fs::create_dir_all(&cwd).unwrap();
     fs::create_dir_all(root.join("tmp")).unwrap();
+    let tmpdir = match workspace {
+        Workspace::Named => root.join("tmp"),
+        Workspace::CreatedUnderALinkedTmpdir => {
+            std::os::unix::fs::symlink(root.join("tmp"), root.join("tmp-link")).unwrap();
+            root.join("tmp-link")
+        }
+    };
     fs::write(cwd.join("fixture.txt"), "owned-native-fixture-content").unwrap();
     if matches!(mode, Mode::ProcessWrites { .. }) {
         for path in [
@@ -367,35 +393,36 @@ fn run(mode: Mode, extra: &[&str]) -> (PathBuf, Vec<Value>, Vec<Value>, i32) {
     std::os::unix::fs::symlink(vendor, home.join(".local/bin/b10x-harness")).unwrap();
     let provider = Provider::start(mode, &root);
     let mut command = Command::new(driver);
+    command.args([
+        "run",
+        "b10x",
+        "--credentials",
+        "none",
+        "--decisions",
+        "observe",
+        "--model",
+        MODEL,
+        "--model-endpoint",
+        &provider.endpoint,
+        "--model-wire",
+        "openai-responses",
+        "--prompt",
+        if matches!(mode, Mode::Scoper) {
+            SCOPER_ROLE
+        } else {
+            "Perform only the fixture's file read, then return its answer."
+        },
+        "--max-turns",
+        if matches!(mode, Mode::RepeatTool) {
+            "1"
+        } else {
+            "3"
+        },
+    ]);
+    if workspace == Workspace::Named {
+        command.arg("--cwd").arg(&cwd);
+    }
     command
-        .args([
-            "run",
-            "b10x",
-            "--credentials",
-            "none",
-            "--decisions",
-            "observe",
-            "--model",
-            MODEL,
-            "--model-endpoint",
-            &provider.endpoint,
-            "--model-wire",
-            "openai-responses",
-            "--prompt",
-            if matches!(mode, Mode::Scoper) {
-                SCOPER_ROLE
-            } else {
-                "Perform only the fixture's file read, then return its answer."
-            },
-            "--max-turns",
-            if matches!(mode, Mode::RepeatTool) {
-                "1"
-            } else {
-                "3"
-            },
-            "--cwd",
-        ])
-        .arg(&cwd)
         .arg("--retain-dir")
         .arg(root.join("retained"))
         .args(extra)
@@ -403,7 +430,7 @@ fn run(mode: Mode, extra: &[&str]) -> (PathBuf, Vec<Value>, Vec<Value>, i32) {
         .env("HOME", &home)
         .env("PATH", "/usr/local/bin:/usr/bin:/bin")
         .env("LANG", "C.UTF-8")
-        .env("TMPDIR", root.join("tmp"))
+        .env("TMPDIR", &tmpdir)
         .current_dir(&cwd)
         .stdin(Stdio::piped())
         .stdout(fs::File::create(root.join("events.jsonl")).unwrap())
@@ -488,7 +515,86 @@ fn run(mode: Mode, extra: &[&str]) -> (PathBuf, Vec<Value>, Vec<Value>, i32) {
     );
     let events = event_lines(&root);
     eprintln!("private native evidence: {}", root.display());
+    // The loop reports the canonical root its file tools act in (harness 0.15.1), and the record
+    // states exactly that, never the plan (design a31): the named directory itself, or the one
+    // metaharness created under the canonical form of `TMPDIR`, which is gone by now.
+    if let Some(start) = events.iter().find(|e| e["event"] == "session.started") {
+        let recorded = start["cwd"]
+            .as_str()
+            .unwrap_or_else(|| panic!("the loop reported its working directory: {start}"));
+        match workspace {
+            Workspace::Named => assert_eq!(
+                Path::new(recorded),
+                fs::canonicalize(&cwd).unwrap(),
+                "{start}"
+            ),
+            Workspace::CreatedUnderALinkedTmpdir => {
+                // The directory metaharness created is `<scratch>/work`, where `<scratch>` holds
+                // the transcript the opening record names (`start_b10x`), spelled through the link.
+                let planned = Path::new(
+                    start["transcript"]["path"]
+                        .as_str()
+                        .expect("the opening record names its transcript"),
+                )
+                .parent()
+                .expect("the transcript lies in the run's scratch")
+                .join("work");
+                assert!(
+                    planned.starts_with(&tmpdir),
+                    "planned through the link: {start}"
+                );
+                assert_ne!(Path::new(recorded), planned, "two spellings: {start}");
+                assert_eq!(
+                    Path::new(recorded),
+                    canonical_now(&planned),
+                    "the canonical spelling of the directory metaharness created: {start}"
+                );
+            }
+        }
+    }
     (root, events, requests, status.code().unwrap_or(-1))
+}
+
+/// `path` canonicalized as far as it still exists, the rest appended as spelled: the directory a
+/// run created is gone once the run has ended, its ancestors are not.
+fn canonical_now(path: &Path) -> PathBuf {
+    let mut existing = path;
+    let mut rest = Vec::new();
+    loop {
+        if let Ok(canonical) = fs::canonicalize(existing) {
+            return rest
+                .iter()
+                .rev()
+                .fold(canonical, |out, part| out.join(part));
+        }
+        rest.push(existing.file_name().expect("a named component"));
+        existing = existing.parent().expect("an ancestor exists");
+    }
+}
+
+/// The rendered report's line for one floor row (`H7`), which `metaharness run` writes to stderr.
+fn row_line<'a>(stderr: &'a str, row: &str) -> &'a str {
+    let found: Vec<&str> = stderr
+        .lines()
+        .filter(|line| line.split_whitespace().next() == Some(row))
+        .collect();
+    assert_eq!(found.len(), 1, "one {row} line: {stderr}");
+    found[0]
+}
+
+/// Every gating row the rendered report says is not `ok`.
+fn gating_not_ok(stderr: &str) -> Vec<&str> {
+    stderr
+        .lines()
+        .filter(|line| {
+            let words: Vec<&str> = line.split_whitespace().collect();
+            words.len() > 2
+                && words[0].starts_with('H')
+                && words[0][1..].starts_with(|c: char| c.is_ascii_digit())
+                && words[1] != "ok"
+                && words[2] == "gating"
+        })
+        .collect()
 }
 
 fn one<'a>(events: &'a [Value], name: &str) -> &'a Value {
@@ -502,24 +608,18 @@ fn assert_closed(events: &[Value], code: i32) {
     assert_eq!(events.last(), Some(closed));
     assert_eq!(closed["process"], json!({"kind":"exited","code":code}));
     let start = one(events, "session.started");
-    assert_eq!(start["harness_version"], "0.15.0");
+    assert_eq!(start["harness_version"], "0.15.1");
     assert_eq!(start["model"], MODEL);
     assert_eq!(start["credential_source"], "none");
     assert_eq!(start["hermetic"]["decisions"], "observe");
-    // Every run here passes `--cwd`, and the loop's `started` line names no directory, so the
-    // record states none rather than the plan (design a30).
-    assert!(
-        start.get("cwd").is_some_and(Value::is_null),
-        "the record carries no working directory the loop did not report: {start}"
-    );
 }
 
 /// `run b10x --hermetic strict --cwd <copy> --scratch-cwd` through the production CLI and the
-/// actual binary: the declaration is attested, the loop reports no working directory, H7 is the
-/// one gating row that is not `ok`, and the process exits 3 (design a30).
+/// actual binary: the declaration is attested, the loop reports the copy, H7 is `ok` in a27's
+/// words, no gating row is left, and the process exits 0 (design a31; a30 had it at 3).
 #[test]
 #[ignore = "actual b10x and production CLI; explicit paths and isolated loopback network namespace"]
-fn actual_b10x_strict_declared_copy_is_unk_on_h7_and_exits_3() {
+fn actual_b10x_strict_declared_copy_is_ok_on_h7_and_exits_0() {
     let _serial = NATIVE_RUN
         .lock()
         .unwrap_or_else(std::sync::PoisonError::into_inner);
@@ -536,24 +636,50 @@ fn actual_b10x_strict_declared_copy_is_unk_on_h7_and_exits_3() {
         "H7 is declared: {start}"
     );
     let stderr = fs::read_to_string(root.join("stderr.log")).unwrap();
-    let not_ok: Vec<&str> = stderr
-        .lines()
-        .filter(|line| {
-            let words: Vec<&str> = line.split_whitespace().collect();
-            words.len() > 2
-                && words[0].starts_with('H')
-                && words[0][1..].starts_with(|c: char| c.is_ascii_digit())
-                && words[1] != "ok"
-                && words[2] == "gating"
-        })
-        .collect();
-    assert_eq!(not_ok.len(), 1, "{stderr}");
+    assert_eq!(gating_not_ok(&stderr), Vec::<&str>::new(), "{stderr}");
+    let h7 = row_line(&stderr, "H7");
     assert!(
-        not_ok[0].trim_start().starts_with("H7   unk")
-            && not_ok[0].ends_with("the loop did not report its working directory"),
+        h7.trim_start().starts_with("H7   ok")
+            && h7.contains(&format!(
+                "the session ran in {}, which was declared, not created",
+                start["cwd"].as_str().unwrap()
+            )),
         "{stderr}"
     );
-    assert_eq!(code, 3, "{stderr}");
+    assert_eq!(code, 0, "{stderr}");
+}
+
+/// `run b10x --hermetic strict` with no `--cwd`, `TMPDIR` reached through a link: metaharness
+/// plans the directory it creates under the link, the actual loop reports its canonical root,
+/// and the floor compares directories, not spellings (design a31), so H7 is `ok`, *which
+/// metaharness created*, and the process exits 0. The check in `run_in` holds the two spellings
+/// apart.
+#[test]
+#[ignore = "actual b10x and production CLI; explicit paths and isolated loopback network namespace"]
+fn actual_b10x_strict_in_a_directory_created_under_a_linked_tmpdir_is_ok_on_h7_and_exits_0() {
+    let _serial = NATIVE_RUN
+        .lock()
+        .unwrap_or_else(std::sync::PoisonError::into_inner);
+    let (root, events, requests, code) = run_in(
+        Mode::Text,
+        &["--hermetic", "strict"],
+        Workspace::CreatedUnderALinkedTmpdir,
+    );
+    assert_eq!(requests.len(), 1);
+    assert_closed(&events, 0);
+    let stderr = fs::read_to_string(root.join("stderr.log")).unwrap();
+    assert_eq!(gating_not_ok(&stderr), Vec::<&str>::new(), "{stderr}");
+    let start = one(&events, "session.started");
+    let h7 = row_line(&stderr, "H7");
+    assert!(
+        h7.trim_start().starts_with("H7   ok")
+            && h7.ends_with(&format!(
+                "the session ran in {}, which metaharness created",
+                start["cwd"].as_str().unwrap()
+            )),
+        "{stderr}"
+    );
+    assert_eq!(code, 0, "{stderr}");
 }
 
 #[test]

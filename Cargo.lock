@@ -331,8 +331,8 @@ checksum = "f2032f911046de80f0a198e0901378627c33f59ea0ac00e363d481118bd70a53"
 
 [[package]]
 name = "b10x-harness-catalogue"
-version = "0.15.0"
-source = "git+https://github.com/beyond10x/harness?rev=dd5c2a66218a5f2555c4a9fdab6fdfac8515cc6d#dd5c2a66218a5f2555c4a9fdab6fdfac8515cc6d"
+version = "0.15.1"
+source = "git+https://github.com/beyond10x/harness?rev=f0870131e58df3e1119860d0a255f46589026d62#f0870131e58df3e1119860d0a255f46589026d62"
 dependencies = [
  "b10x-harness-wire",
  "b10x-tool-code-editor",
@@ -347,8 +347,8 @@ dependencies = [
 
 [[package]]
 name = "b10x-harness-loop"
-version = "0.15.0"
-source = "git+https://github.com/beyond10x/harness?rev=dd5c2a66218a5f2555c4a9fdab6fdfac8515cc6d#dd5c2a66218a5f2555c4a9fdab6fdfac8515cc6d"
+version = "0.15.1"
+source = "git+https://github.com/beyond10x/harness?rev=f0870131e58df3e1119860d0a255f46589026d62#f0870131e58df3e1119860d0a255f46589026d62"
 dependencies = [
  "b10x-harness-wire",
  "jsonschema",
@@ -360,8 +360,8 @@ dependencies = [
 
 [[package]]
 name = "b10x-harness-wire"
-version = "0.15.0"
-source = "git+https://github.com/beyond10x/harness?rev=dd5c2a66218a5f2555c4a9fdab6fdfac8515cc6d#dd5c2a66218a5f2555c4a9fdab6fdfac8515cc6d"
+version = "0.15.1"
+source = "git+https://github.com/beyond10x/harness?rev=f0870131e58df3e1119860d0a255f46589026d62#f0870131e58df3e1119860d0a255f46589026d62"
 dependencies = [
  "httpdate",
  "serde",

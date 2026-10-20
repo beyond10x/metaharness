@@ -134,22 +134,15 @@ fn compare(id: &str, tier: ConformanceTier, expectation: &str, observed: &Value)
 
 fn golden_loop_vector(input: &str) -> VectorOutcome {
     let id = "golden-loop-record";
-    // First, what the expected stream's `"cwd":null` rests on: a recorded `started` line that
-    // names no working directory. This reader ignores the key, so a recording from a release that
-    // writes one (0.15.1 does) would replay as `null` and pass the byte comparison below while
-    // contradicting the record it came from (design a30).
-    if let Some(named) = recorded_working_directory(input) {
-        return VectorOutcome::failed(
-            id,
-            ConformanceTier::C2,
-            format!(
-                "the recorded `started` line names a working directory ({named}), and this reader \
-                 writes `cwd: null`: read it (story:b10x-h7-from-the-loops-cwd) before \
-                 re-recording"
-            ),
-        );
-    }
     let observed = golden_replay(input);
+    // First, what the expected stream's `cwd` rests on: the replayed opening record states the
+    // directory the recorded `started` line names, and `null` only when it names none (design
+    // a31). The expectation is regenerated from this reader, so a reader that dropped or replaced
+    // the key would pass the byte comparison below over a regenerated file while contradicting
+    // the record it came from; this compares the replay with the record instead.
+    if let Err(detail) = working_directory_carried(input, &observed) {
+        return VectorOutcome::failed(id, ConformanceTier::C2, detail);
+    }
     if observed == GOLDEN_LOOP_EXPECTED {
         VectorOutcome::passed(id, ConformanceTier::C2)
     } else {
@@ -161,21 +154,47 @@ fn golden_loop_vector(input: &str) -> VectorOutcome {
     }
 }
 
-/// The `cwd` the recorded loop's `started` line states, if it states one. The `started` line and
-/// not the first one: a `credential-renewed` line comes before it when a token was renewed.
-fn recorded_working_directory(input: &str) -> Option<String> {
-    input
+/// Whether the replay's opening record states the working directory the recorded `started` line
+/// names — that string, or `null` when the line names none — and in which words it does not.
+///
+/// The `started` line and not the first one: a `credential-renewed` line comes before it when a
+/// token was renewed. A `cwd` that is not a string names no directory, on both sides.
+fn working_directory_carried(input: &str, replay: &str) -> Result<(), String> {
+    let recorded = input
         .lines()
         .filter_map(|line| serde_json::from_str::<Value>(line).ok())
-        .find(|value| value.get("kind").and_then(Value::as_str) == Some("started"))?
-        .get("cwd")
-        .map(Value::to_string)
+        .find(|value| value.get("kind").and_then(Value::as_str) == Some("started"))
+        .and_then(|started| {
+            started
+                .get("cwd")
+                .and_then(Value::as_str)
+                .map(str::to_owned)
+        });
+    let replayed = replay
+        .lines()
+        .filter_map(|line| serde_json::from_str::<Value>(line).ok())
+        .find(|event| event.get("event").and_then(Value::as_str) == Some("session.started"))
+        .and_then(|opening| {
+            opening
+                .get("cwd")
+                .and_then(Value::as_str)
+                .map(str::to_owned)
+        });
+    if recorded == replayed {
+        Ok(())
+    } else {
+        Err(format!(
+            "the recorded `started` line names the working directory {recorded:?} and the replayed \
+             `session.started` states {replayed:?}: the record's `cwd` is the loop's own word \
+             (design a31)"
+        ))
+    }
 }
 
 fn reader() -> Box<dyn HarnessSeam> {
     let mut attestation = HermeticAttestation::none(HermeticMode::Strict);
     attestation.decisions = DecisionMode::Observe;
-    B10xSeams::new(Some("0.15.0".to_owned()), Some("b10x-emulated".to_owned())).build(
+    B10xSeams::new(Some("0.15.1".to_owned()), Some("b10x-emulated".to_owned())).build(
         TranscriptRef {
             path: Some("/scratch/run/loop.jsonl".to_owned()),
             digest: None,
@@ -291,24 +310,55 @@ mod tests {
         );
     }
 
-    /// The pinned loop names no working directory, so the replay states none (design a30).
+    /// The opening record with its `cwd` key removed: the absent shape, which the pinned loop
+    /// writes under `--substrate <socket>` and for a root whose name is not UTF-8 (harness
+    /// `LoopEvent::Started`), and which no committed recording carries.
+    fn without_a_working_directory(record: &str) -> String {
+        record
+            .lines()
+            .map(|line| match serde_json::from_str::<Value>(line) {
+                Ok(mut value) if value["kind"] == "started" => {
+                    value
+                        .as_object_mut()
+                        .expect("the started line is an object")
+                        .remove("cwd")
+                        .expect("the recorded started line names a working directory");
+                    format!("{value}\n")
+                }
+                _ => format!("{line}\n"),
+            })
+            .collect()
+    }
+
+    fn opening_cwd(stream: &str) -> Value {
+        stream
+            .lines()
+            .filter_map(|line| serde_json::from_str::<Value>(line).ok())
+            .find(|event| event["event"] == "session.started")
+            .expect("the stream opens")
+            .get("cwd")
+            .cloned()
+            .expect("`session.started` always carries the `cwd` key")
+    }
+
+    /// The pinned loop names its working directory, and the replay states exactly that one
+    /// (design a31): present and carried, never `reader()`'s plan and never `null`.
     ///
-    /// Line 1 is checked first, because `"cwd":null` in the expected stream is true only of a
-    /// record that names no directory: the harness's own `started` record has no such field at
-    /// 0.15.0 (`LoopEvent::Started`, harness `crates/harness-loop/src/event.rs`). The whole key
-    /// set is pinned beside it, because the reason H7 prints on this kind — *the loop did not
-    /// report its working directory* — is a claim about every key of that line, not only about one
-    /// spelled `cwd`; a re-recording that adds a key fails here and a reader decides whether it
-    /// names the directory before anything else moves.
+    /// Line 1 is read first, because the expected stream's `cwd` is true only of a record that
+    /// names it: the harness's own `started` record carries `cwd` from 0.15.1
+    /// (`LoopEvent::Started`, harness `crates/harness-loop/src/event.rs` at `f0870131`), the
+    /// canonical root its file tools act in. The whole key set is pinned beside it, so a
+    /// re-recording that adds or drops a key fails here and a reader decides what it says before
+    /// anything else moves.
     #[test]
-    fn the_pinned_loop_names_no_working_directory_and_the_replay_records_null() {
+    fn the_pinned_loop_names_its_working_directory_and_the_replay_carries_it() {
         let started: Value =
             serde_json::from_str(GOLDEN_LOOP.lines().next().expect("the recorded loop opens"))
                 .expect("the opening line is JSON");
         assert_eq!(started["kind"], "started");
-        assert!(
-            started.get("cwd").is_none(),
-            "the recorded opening line names a working directory: {started}"
+        assert_eq!(
+            started["cwd"], "/scratch/run/work",
+            "the recording's workspace, at the neutral path the fixture README names: {started}"
         );
         let mut keys: Vec<&str> = started
             .as_object()
@@ -323,6 +373,7 @@ mod tests {
                 "agents",
                 "context",
                 "credential_source",
+                "cwd",
                 "kind",
                 "mcp",
                 "memories",
@@ -334,80 +385,90 @@ mod tests {
                 "toolchains",
                 "withheld",
             ],
-            "the recorded `started` line gained or lost a key: read whether it names the working \
-             directory before re-pinning this list"
+            "the recorded `started` line gained or lost a key: read what it says before \
+             re-pinning this list"
         );
 
-        let opening: Value = serde_json::from_str(
-            GOLDEN_LOOP_EXPECTED
-                .lines()
-                .next()
-                .expect("the expected stream opens"),
-        )
-        .expect("the expected opening line is JSON");
-        assert!(
-            opening.get("cwd").is_some_and(Value::is_null),
-            "the committed expectation states no working directory: {opening}"
+        assert_eq!(
+            opening_cwd(GOLDEN_LOOP_EXPECTED),
+            started["cwd"],
+            "the committed expectation states the directory the loop reported"
         );
-        let replayed: Value = serde_json::from_str(
-            golden_replay(GOLDEN_LOOP)
-                .lines()
-                .next()
-                .expect("the replay opens"),
-        )
-        .expect("the replayed opening line is JSON");
-        assert!(
-            replayed.get("cwd").is_some_and(Value::is_null),
-            "a loop that names no directory is replayed as `cwd: null`, never as the plan \
-             `reader()` was handed: {replayed}"
+        assert_eq!(
+            opening_cwd(&golden_replay(GOLDEN_LOOP)),
+            started["cwd"],
+            "the replay states the directory the loop reported, never the plan `reader()` was \
+             handed and never `null`"
         );
     }
 
-    /// The vector refuses a recording whose opening line names a working directory, instead of
-    /// replaying it as `null`: this reader ignores the key, so a recording from 0.15.1, which
-    /// writes one, would otherwise leave a passing vector over a record that contradicts it.
+    /// The absent shape, over a record derived from the golden by removing its `cwd` key (the
+    /// golden carries one, so this shape cannot be recorded from the pinned emulator run): the
+    /// replay states `null`, never `reader()`'s plan (design a30, kept by a31), and the stream
+    /// differs from the expectation in that one field of line 1.
     #[test]
-    fn a_recorded_opening_line_that_names_a_working_directory_fails_the_golden_vector() {
-        let named = GOLDEN_LOOP.replacen(
-            "{\"kind\":\"started\",",
-            "{\"kind\":\"started\",\"cwd\":\"/somewhere\",",
-            1,
+    fn a_recorded_opening_line_without_a_working_directory_replays_as_null() {
+        let absent = without_a_working_directory(GOLDEN_LOOP);
+        assert_ne!(absent, GOLDEN_LOOP, "the derivation removed the key");
+        let replay = golden_replay(&absent);
+        assert_eq!(opening_cwd(&replay), Value::Null, "{replay}");
+        let expected_lines: Vec<&str> = GOLDEN_LOOP_EXPECTED.lines().collect();
+        let replayed_lines: Vec<&str> = replay.lines().collect();
+        assert_eq!(expected_lines.len(), replayed_lines.len());
+        assert_eq!(
+            &expected_lines[1..],
+            &replayed_lines[1..],
+            "only line 1 moves"
         );
-        assert_ne!(
-            named, GOLDEN_LOOP,
-            "the substitution found the opening line"
-        );
-        let outcome = golden_loop_vector(&named);
-        assert!(!outcome.passed, "{outcome:#?}");
-        assert!(
-            outcome.detail.contains("working directory"),
-            "the failure names what the record said: {}",
-            outcome.detail
+        assert_eq!(
+            replayed_lines[0],
+            expected_lines[0].replacen("\"cwd\":\"/scratch/run/work\"", "\"cwd\":null", 1),
+            "and in line 1 only the `cwd` value"
         );
     }
 
-    /// The check reads the `started` line, wherever it falls: the loop writes `credential-renewed`
-    /// before it when a stale token was renewed (harness `LoopEvent::CredentialRenewed`), and a
-    /// check that read the first line would pass that recording on the renewal and fail it later
-    /// for a reason that does not name the directory.
+    /// The golden vector holds the replay to the record, not only to a file regenerated from the
+    /// same reader: a replay that drops the recorded directory, or states another one (the plan
+    /// `reader()` might be handed), fails it in words that name both; a replay of a record that
+    /// names none must state none.
     #[test]
-    fn a_started_line_after_a_credential_renewal_that_names_a_working_directory_fails_the_vector() {
+    fn the_golden_vector_fails_a_replay_that_does_not_state_the_recorded_directory() {
+        let replay = golden_replay(GOLDEN_LOOP);
+        assert_eq!(working_directory_carried(GOLDEN_LOOP, &replay), Ok(()));
+        for wrong in ["\"cwd\":null", "\"cwd\":\"/scratch/run/plan\""] {
+            let replayed = replay.replacen("\"cwd\":\"/scratch/run/work\"", wrong, 1);
+            assert_ne!(
+                replayed, replay,
+                "the substitution found the opening record"
+            );
+            let detail = working_directory_carried(GOLDEN_LOOP, &replayed)
+                .expect_err("a replay that does not state the recorded directory fails");
+            assert!(
+                detail.contains("/scratch/run/work") && detail.contains("working directory"),
+                "{detail}"
+            );
+        }
+        let absent = without_a_working_directory(GOLDEN_LOOP);
+        assert_eq!(
+            working_directory_carried(&absent, &golden_replay(&absent)),
+            Ok(())
+        );
+        assert!(working_directory_carried(&absent, &replay).is_err());
+    }
+
+    /// The seam reads the `started` line wherever it falls: the loop writes `credential-renewed`
+    /// before it when a stale token was renewed (harness `LoopEvent::CredentialRenewed`), and the
+    /// opening record still states the directory that line names.
+    #[test]
+    fn a_started_line_after_a_credential_renewal_carries_its_working_directory() {
         let renewed = r#"{"kind":"credential-renewed","provider":"codex","expires_unix":1,"refresh_token_rotated":false,"byte_preserving":true}"#;
         let named = format!(
             "{renewed}\n{}",
-            GOLDEN_LOOP.replacen(
-                "{\"kind\":\"started\",",
-                "{\"kind\":\"started\",\"cwd\":\"/somewhere\",",
-                1,
-            )
+            GOLDEN_LOOP.replacen("\"cwd\":\"/scratch/run/work\"", "\"cwd\":\"/somewhere\"", 1)
         );
-        let outcome = golden_loop_vector(&named);
-        assert!(!outcome.passed, "{outcome:#?}");
-        assert!(
-            outcome.detail.contains("working directory"),
-            "the failure names what the `started` line said: {}",
-            outcome.detail
-        );
+        assert_eq!(opening_cwd(&golden_replay(&named)), "/somewhere");
+        let absent = format!("{renewed}\n{}", without_a_working_directory(GOLDEN_LOOP));
+        assert_eq!(opening_cwd(&golden_replay(&absent)), Value::Null);
     }
 
     #[test]

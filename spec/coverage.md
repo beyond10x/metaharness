@@ -209,9 +209,10 @@ Two boundaries are stated rather than claimed. `metaharness.source` is observed
 as the constant `metaharness.event/1`; whether it ever carries a vendor format
 name is `story:project-reads-vendor-transcripts`'s open question and is marked
 `UNMAPPED:` in the domain. The b10x golden record is read as captured from
-`b10x-harness 0.15.0` (re-recorded 2026-10-20 over the 0.9.1 capture this
-suite was written against) and no count of its nodes is declared, so the
-re-recording moved no trace scenario. Reading a vendor record through
+`b10x-harness 0.15.1` (re-recorded 2026-10-20, over a 0.15.0 capture that had
+replaced the 0.9.1 capture this suite was written against) and no count of its
+nodes is declared, so neither re-recording moved a trace scenario; the 0.15.1
+one adds the `started` line's `cwd`, which no scenario reads. Reading a vendor record through
 `metaharness project` itself, changing any reader or the projection, and
 publishing a `trace-ir/1` schema remain outside this suite.
 

@@ -1,9 +1,10 @@
 //! Adversary pass 1 against amendment a30 (`story:b10x-record-carries-the-loops-cwd`).
 //!
-//! Each case measures the production builder, b10x seam and floor over the bytes
-//! `b10x-harness 0.15.0` wrote (the adapter's golden `loop.jsonl`, replayed by a scripted
-//! runner), and then holds a document the unit published to what was measured. No vendor
-//! process, no credential, no network.
+//! Each case measures the production builder, b10x seam and floor over a loop record whose
+//! `started` line names no working directory — the state a30 measured — and then holds a document
+//! the unit published to what was measured. Since a31 that record is derived: the adapter's golden
+//! `loop.jsonl`, which `b10x-harness 0.15.1` wrote with a `cwd`, with that key removed, replayed
+//! by a scripted runner. No vendor process, no credential, no network.
 
 use std::path::{Path, PathBuf};
 
@@ -18,9 +19,32 @@ const B10X_RECORDED_LOOP: &str = include_str!("../../metaharness-b10x/fixtures/g
 const CLI_REFERENCE: &str = include_str!("../../../website/docs/reference/cli.md");
 const CHANGELOG: &str = include_str!("../../../CHANGELOG.md");
 
-/// A b10x run over the recorded loop through the production builder, seam and floor, audited.
+/// The recorded loop with its `started` line's `cwd` removed (checked present first).
+fn recorded_loop_naming_no_directory() -> Vec<String> {
+    B10X_RECORDED_LOOP
+        .lines()
+        .map(
+            |line| match serde_json::from_str::<serde_json::Value>(line) {
+                Ok(mut value) if value["kind"] == "started" => {
+                    assert!(
+                        value
+                            .as_object_mut()
+                            .and_then(|object| object.remove("cwd"))
+                            .is_some(),
+                        "the recorded started line names a working directory"
+                    );
+                    value.to_string()
+                }
+                _ => line.to_owned(),
+            },
+        )
+        .collect()
+}
+
+/// A b10x run over the derived record through the production builder, seam and floor, audited.
 fn audited_b10x_run(mode: HermeticMode, audit: bool, copy: Option<&Path>) -> (Run, AuditReport) {
-    let mut runner = ScriptedRunner::of_lines(B10X_RECORDED_LOOP.lines(), ScriptedLog::new());
+    let mut runner =
+        ScriptedRunner::of_lines(recorded_loop_naming_no_directory(), ScriptedLog::new());
     let mut seams = metaharness_b10x::B10xSeams::new(
         Some(metaharness_b10x::PINNED_VERSIONS[0].to_owned()),
         None,
@@ -70,7 +94,8 @@ fn embedder_copy() -> (tempfile::TempDir, PathBuf) {
 /// `website/docs/reference/cli.md`'s flag table says of `--scratch-cwd`, with no kind named,
 /// that "`--hermetic strict` passes on the pair". The unit qualified the bullet further down
 /// ("on the vendor kinds") and left the table row standing. Measured here: on b10x the pair under
-/// strict exits 3, H7 alone. A reader of the flag table is told 0.
+/// strict exits 3, H7 alone, when the loop's record names no directory — which the pinned 0.15.1
+/// loop still writes under `--substrate <socket>` (a31). A reader of the flag table is told 0.
 #[test]
 fn the_cli_flag_table_does_not_promise_strict_passes_on_a_b10x_declared_copy() {
     let (_root, copy) = embedder_copy();
