@@ -2,9 +2,9 @@
 format: aep.planning-md/3
 id: story:metaharness-tools-adopts-tool-contract
 kind: story
-status: draft
-title: metaharness-tools adopts b10x-tool-contract from tools 0.2.0
-summary: Depend on the Apache-2.0 contract crate at the tools 0.2.0 tag by git rev; resolve_verb and the served catalogue speak the contract's names; the implementation crates follow in story:metaharness-tools-on-tools-crates at the same tag.
+status: active
+title: metaharness-tools resolves the tool-contract names harness maps
+summary: resolve_verb, subjects_of_verb and Server::call accept the contract names b10x-harness-catalogue maps (fs.read, fs.list, fs.glob, code.write, code.edit) and resolve them as their harness entries; no tools dependency.
 owner: metaharness
 tags:
 - pins
@@ -15,41 +15,41 @@ refs:
   reference: adr-0097
 relations:
 - decomposes: epic:layer-pins-follow-their-owners
+- depends_on: story:b10x-adapter-on-harness-over-llm
 scope:
-- confidence: inferred
+- confidence: cited
   path: CHANGELOG.md
 - confidence: inferred
-  path: Cargo.lock
-- confidence: inferred
-  path: crates/metaharness-tools/Cargo.toml
-- confidence: inferred
   path: crates/metaharness-tools/src/lib.rs
-- confidence: inferred
+- confidence: cited
   path: crates/metaharness-tools/src/resolve.rs
-- confidence: inferred
+- confidence: cited
   path: crates/metaharness-tools/src/server.rs
-- confidence: inferred
+- confidence: cited
   path: crates/metaharness-tools/src/tests.rs
-revision: 10
+revision: 42
+transitions:
+- {from: "draft", to: "proposed", at: "2026-10-20T09:05:37Z", actor: "human:timo", revision: 30}
+- {from: "proposed", to: "active", at: "2026-10-20T09:05:38Z", actor: "human:timo", revision: 31}
 ---
-# Story: `metaharness-tools` adopts `b10x-tool-contract` from tools 0.1.0
+# Story: `metaharness-tools` resolves the tool-contract names harness maps
 
 ## Scheduling
 
-Draft, filed 2026-10-20 when tools 0.1.0 was released; candidate for the wave after wave 2
-(`adr-changes`, 2026-10-20). Blocked by `dependency-blocker:tools-0-2-0-release`: at tools 0.1.0 the
-contract YAMLs are embedded only by the proprietary implementation crates, so `b10x-tool-contract`
-alone carries no command names or schemas (`adr-changes` relaying tools, 2026-10-20); tools runs
-`story:contract-documents-without-an-implementation` and releases 0.2.0 after it. This story pins
-tools 0.2.0. `b10x-tool-contract` is Apache-2.0, as metaharness is.
+Unit 3 of wave 3 of 2026-10-20, after `story:b10x-adapter-on-harness-over-llm` (unit 1,
+`depends_on`), which pins harness 0.15.0 and takes `b10x-harness-catalogue`. Re-scoped after the
+approval against harness `main` `947d0e48`: the catalogue there carries the contract-name mapping
+(`harness_operation`, `tools_operation`), so this story needs no tools dependency and no longer waits
+for tools 0.2.0 (decision D6 of wave 3; the `dependency-blocker:tools-0-2-0-release` edge was
+removed).
 
 ## Outcome
 
-The tool catalogue metaharness serves over MCP and resolves back from a run is described by the
-`tool-contract/1` profile that `tools` publishes (ADR 0095 point 2), through the `b10x-tool-contract`
-crate at the tools 0.1.0 tag, so the names and schemas a caller will one day supply
-(`story:caller-supplied-catalogue-on-every-kind`) are the organization's and not this repository's
-spelling of them. The implementations stay where they are until the licence decision.
+A caller may name an owned-surface tool by its `tool-contract/1` command name (`fs.read`, `fs.list`,
+`fs.glob`, `code.write`, `code.edit`) when it invokes, describes or is resolved by metaharness, and
+the run admits and scopes it exactly as it does the harness entry it maps to, so the names a caller
+will one day supply (`story:caller-supplied-catalogue-on-every-kind`) can be the organization's
+(ADR 0095 point 2). The mapping is harness's (`b10x-harness-catalogue`), not a second table here.
 
 ## Context
 
@@ -65,26 +65,55 @@ spelling of them. The implementations stay where they are until the licence deci
 
 ## Acceptance
 
-`crates/metaharness-tools/Cargo.toml` depends on `b10x-tool-contract` at the git rev of the tools
-0.2.0 tag (recorded in `dependency-blocker:tools-0-2-0-release` when it clears) and on no other
-tools crate; `resolve_verb`
-maps each operation it already recognises onto the contract's command name where the contract
-declares one and says `Unknown` where it does not, pinned by the existing resolve tests plus one per
-contract command; the catalogue the server publishes carries the contract's names and input schemas
-for the commands the local operations implement; `task check` exits 0; `CHANGELOG.md` names the tools
-release and the licence boundary.
+`resolve_verb` and `subjects_of_verb` accept each name `harness_catalogue::harness_operation` maps at
+the harness revision unit 1 pins and resolve it to the same neutral `Operation` and subjects as its
+harness entry, harness names still accepted, pinned by the existing resolve tests plus one resolve
+and one subjects case per mapped name; `Server::call` performs a `tool_invoke` or `tool_describe`
+naming a mapped contract name as its harness entry; metaharness adds no tools dependency and no name
+table of its own; `task check` exits 0; `CHANGELOG.md` names the mapping's source.
 
 ## Out of scope
 
-- Depending on `b10x-tool-fs`, `b10x-tool-code-editor` or `b10x-tool-toolchain` (blocked by
-  `decision-blocker:tools-implementation-licence`; `story:metaharness-tools-on-tools-crates`).
-- Removing `b10x-harness-tools` from either `Cargo.toml` (same story).
+- Publishing contract names in the served catalogue (decision D6): the b10x run and the metaharness
+  server share one catalogue (`crates/metaharness-tools/src/lib.rs:14-16`) and harness keeps its names
+  model-facing (harness `crates/harness-catalogue/src/local.rs:32-33`), so renaming here would show the
+  model two vocabularies.
+- Publishing the contract schemas: harness's catalogue drops `expected_sha256`
+  (`catalogue.rs:476-483`, `operations.rs:205,216`, `local.rs:520,543`); advertising it would promise
+  a guard nobody runs. That needs a harness change.
+- A dependency on the tools crates or `b10x-tool-contract`.
 
 ## Scope
 
-- inferred: `crates/metaharness-tools/Cargo.toml`, `crates/metaharness-tools/src/lib.rs`,
-  `crates/metaharness-tools/src/resolve.rs`, `crates/metaharness-tools/src/server.rs`,
-  `crates/metaharness-tools/src/tests.rs`, `Cargo.lock`, `CHANGELOG.md`.
-- Shares `crates/metaharness-tools/src/lib.rs` and `Cargo.lock` with `story:metaharness-tools-on-tools-crates`
-  (blocked) and `crates/metaharness-tools/src/server.rs` with `story:caller-supplied-catalogue-on-every-kind`,
-  which depends on this story.
+Derived 2026-10-20 by `aep:story-scoper` against metaharness `3d697011` and harness `947d0e48`
+(harness main); assumes unit 1 lands first. Cited unless marked inferred.
+
+- **Primary surface:** `crates/metaharness-tools`.
+- `crates/metaharness-tools/src/resolve.rs:1-25,29,78-91,105-117`; `src/server.rs:104-123`
+  (`Server::call` performs a mapped contract name as its harness entry); `src/tests.rs:262-389` (one
+  resolve and one subjects case per mapped name, 10 new); `CHANGELOG.md` `[Unreleased]`.
+- **Symbols:** `resolve_verb`, `subjects_of_verb`, `Server::call`;
+  `harness_catalogue::{harness_operation, tools_operation, operation_of, subjects_of}` (harness
+  `crates/harness-catalogue/src/lib.rs:59,62`, `local.rs:118-143`: `file_read`→`fs.read`,
+  `dir_list`→`fs.list`, `find`→`fs.glob`, `file_write`→`code.write`, `file_edit`→`code.edit`).
+- inferred: `crates/metaharness-tools/src/lib.rs:12-20,50-52`.
+- **Not touched:** `crates/metaharness-tools/Cargo.toml`, `Cargo.lock`, `crates/metaharness/src/run.rs`,
+  fixtures.
+- **Shared with unit 1 (sequential):** unit 1's path rewrite in `resolve.rs:29,113,135`,
+  `server.rs:5`, `tests.rs:114`, `lib.rs`, `CHANGELOG.md`; with
+  `story:caller-supplied-catalogue-on-every-kind`, `server.rs`.
+- **Safety fact:** resolve and subjects must translate the same names, because `Run::out_of_scope`
+  admits a call with no subjects (`crates/metaharness/src/run.rs:1025-1027`); routing both through
+  `harness_operation` makes that structural. Contract ids are dotted and entry names are not, so they
+  cannot collide (harness `local.rs:118-124`, `catalogue.rs:931-941`).
+- **Estimate:** 10 new tests, 0-3 changed; fixtures 0.
+
+## Ambiguities
+
+- D2 (accepted by `b10x-chef-orchestrator`, 2026-10-20): contract name in, existing neutral operation
+  out, harness names still accepted.
+- D6 (coordinator, 2026-10-20, after the re-scope): the mapping is harness's; no tools dependency; the
+  served catalogue keeps harness's names (Out of scope). Reversible: a later story may publish the
+  contract names once harness does.
+- Optional, not in the Acceptance: a dev-dependency on the tools revision harness pins, to check the
+  mapping against the contract file (`tool_fs::CONTRACT_YAML`).

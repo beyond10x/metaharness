@@ -2,7 +2,7 @@
 format: aep.planning-md/3
 id: story:metaharness-tools-on-tools-crates
 kind: story
-status: draft
+status: active
 title: metaharness-tools builds on the tools crates
 summary: The owned tool surface and the b10x catalogue come from tools instead of b10x-harness-tools at harness 798325f.
 owner: metaharness
@@ -17,36 +17,23 @@ relations:
 - decomposes: epic:layer-pins-follow-their-owners
 - depends_on: story:trace-ir-domain
 - depends_on: story:metaharness-tools-adopts-tool-contract
-scope:
-- confidence: inferred
-  path: CHANGELOG.md
-- confidence: inferred
-  path: Cargo.lock
-- confidence: inferred
-  path: crates/metaharness-b10x/Cargo.toml
-- confidence: inferred
-  path: crates/metaharness-b10x/src/seam.rs
-- confidence: inferred
-  path: crates/metaharness-cli/src/lib.rs
-- confidence: inferred
-  path: crates/metaharness-tools/Cargo.toml
-- confidence: inferred
-  path: crates/metaharness-tools/src/lib.rs
-- confidence: inferred
-  path: crates/metaharness-tools/src/resolve.rs
-revision: 11
+- depends_on: story:b10x-adapter-on-harness-over-llm
+revision: 47
+transitions:
+- {from: "draft", to: "proposed", at: "2026-10-20T09:05:39Z", actor: "human:timo", revision: 33, decided_on: {"recorded":{"review_outcome":2}}}
+- {from: "proposed", to: "active", at: "2026-10-20T09:05:40Z", actor: "human:timo", revision: 34, decided_on: {"recorded":{"review_outcome":2}}}
 ---
 # Story: `metaharness-tools` builds on the `tools` crates
 
 ## Scheduling
 
-Draft. `dependency-blocker:tools-first-release` cleared on 2026-10-20 (tools 0.1.0, tag `a9bf6eb6`
-on `046dfb14`). `decision-blocker:tools-implementation-licence` cleared the same day with option A:
-Timo decided (about 10:10, relayed by `adr-changes`) that the implementation crates moved from
-harness (`b10x-tool-fs`, `b10x-tool-code-editor`, `b10x-tool-toolchain`) become Apache-2.0 in tools
-0.2.0. This story therefore pins tools 0.2.0 and is held by `dependency-blocker:tools-0-2-0-release`
-until that tag exists; it goes into wave 3 beside `story:metaharness-tools-adopts-tool-contract`
-(`depends_on`), both at the same tag. Not in wave 2.
+In wave 3 of 2026-10-20 as unit 4, then superseded by unit 1 (decision D5, after the re-scope against
+harness `main` `947d0e48`): harness 0.15.0 deletes `b10x-harness-tools`, so
+`story:b10x-adapter-on-harness-over-llm` must replace it with `b10x-harness-catalogue` in both
+manifests, and that catalogue's `LocalOperations` runs `fs` and `code-editor` through the tools crates
+(harness `crates/harness-catalogue/src/local.rs:243-257,499-557`). No unit is dispatched for this
+story; the coordinator verifies its Acceptance on the integration branch after unit 1 merges and
+records the result.
 
 ## Outcome
 
@@ -67,28 +54,35 @@ tool contracts.
 
 ## Acceptance
 
-`task check` exits 0 with no `b10x-harness-tools` or `b10x-harness-wire` dependency in
-`crates/metaharness-tools/Cargo.toml` or `crates/metaharness-b10x/Cargo.toml`; the three verbs are
-served from the `tools` crates at a git revision reachable from `tools` main (invariant 10's rule,
-applied to `tools`); `resolve_verb` maps the `tool-contract/1` command names onto the same neutral
-operations the recorded vectors already assert; the b10x adapter's `rendering()` still derives from
-the catalogue; `CHANGELOG.md` names the `tools` release.
+Closing evidence, read after unit 1 merges: the file operations metaharness serves run in the tools
+crates through `b10x-harness-catalogue` (the containment check runs in tools); `git grep -n
+'b10x.harness.tools'` outside `CHANGELOG.md` and `.engineering/` returns 0 hits; `Cargo.lock` holds
+one harness revision and one tools revision, with `b10x-tool-fs` and `b10x-tool-code-editor` from it;
+the containment refusal scenario (`crates/metaharness-aep/src/drive/ess_conformance.rs:513-516`)
+passes in the whole gate.
 
 ## Out of scope
 
-- Writing the tool contracts (`tools`).
-- The b10x adapter's loop pin (`story:b10x-adapter-on-harness-over-llm`).
+- Contract names (`story:metaharness-tools-adopts-tool-contract`).
+- Contract schemas: harness's catalogue drops `expected_sha256` (`catalogue.rs:476-483`,
+  `operations.rs:205,216`); a harness change first.
+- A direct tools dependency in metaharness: which tools tag metaharness links is decided by the tools
+  tag harness 0.15.0 pins (0.1.0 at `947d0e48`, `Cargo.toml:37-40`); a direct pin would add a second
+  tools revision.
 
 ## Scope
 
-- cited: `crates/metaharness-tools/Cargo.toml`, `crates/metaharness-tools/src/lib.rs`,
-  `crates/metaharness-tools/src/resolve.rs`, `crates/metaharness-b10x/Cargo.toml`, `Cargo.lock`,
-  `CHANGELOG.md`.
-- inferred: `crates/metaharness-b10x/src/seam.rs` (where `rendering()` reads the catalogue),
-  `crates/metaharness-cli/src/lib.rs:300` (server construction).
+Derived 2026-10-20 by `aep:story-scoper` against metaharness `3d697011` and harness `947d0e48`.
 
-## External prerequisite
+- **Primary surface:** none after unit 1. The doc lines naming `b10x-harness-tools` moved to unit 1's
+  scope.
+- **Safety fact:** the containment text in tools (`046dfb14` `tool-fs/src/error.rs:51`) is the text
+  `ess_conformance.rs:513-516` expects.
 
-`tools` release holding the former `harness-tools` code under `tool-contract/1` (ADR 0097 point 3,
-ADR 0095 T1). Cross-store edges are not admitted by `aep` (`/` in the id); the blocker carries the
-reference in prose.
+## Ambiguities
+
+- D3 (changed by the approval): the verb/catalogue/search layer comes from `b10x-harness-catalogue`.
+- D5 (coordinator, 2026-10-20): this story's code lands in unit 1; it closes on the evidence above.
+  The tools crates harness pins at `947d0e48` are tools 0.1.0, `LicenseRef-B10x-Proprietary`
+  (tools `crates/tool-fs/Cargo.toml:4`), the licence class of the harness crates metaharness links
+  today; they become Apache-2.0 when harness moves to tools 0.2.0.
