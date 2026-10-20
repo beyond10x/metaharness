@@ -160,7 +160,7 @@ fn process_write_plan(input: &Value) -> Observed {
     let result = builder.start_with(
         Input::Prompt("fixture".to_owned()),
         &mut runner,
-        &mut B10xSeams::new(None, None, None),
+        &mut B10xSeams::new(None, None),
     );
     let admitted = result.is_ok();
     let launched = log.launched();
@@ -389,7 +389,7 @@ fn wireless_interrupt() -> Observed {
         .start_with_clock(
             Input::Prompt("poll fixture".into()),
             &mut runner,
-            &mut metaharness_b10x::B10xSeams::new(None, None, None),
+            &mut metaharness_b10x::B10xSeams::new(None, None),
             Box::new(clock.clone()),
         )
         .unwrap();
@@ -1257,7 +1257,7 @@ fn vendor_emissions(source: &str, relative: &str, record: &[u8], text: &str) -> 
             )
         }
         "harness-json" => {
-            let mut seam = metaharness_b10x::B10xSeams::new(None, None, None).build(
+            let mut seam = metaharness_b10x::B10xSeams::new(None, None).build(
                 transcript,
                 attestation,
                 Seam::None,

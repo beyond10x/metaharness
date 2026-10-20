@@ -1,16 +1,20 @@
-//! Adversary cases against amendment a27 (`story:strict-hermetic-with-embedder-scratch-cwd`).
+//! Adversary cases against amendment a27 (`story:strict-hermetic-with-embedder-scratch-cwd`), and
+//! its b10x cases as amendment a30 left them (`story:b10x-record-carries-the-loops-cwd`).
 //!
 //! Each case drives the production builder, a scripted runner and the production floor, and
-//! asserts a sentence of a27 or of the story's acceptance statement. No vendor process, no
+//! asserts a sentence of a27, of a30 or of a story's acceptance statement. No vendor process, no
 //! credential, no network.
 
 use std::path::{Path, PathBuf};
 
 use metaharness::protocol::{
     CredentialSource, DecisionMode, Event, HermeticAttestation, HermeticMode, HermeticRow, Kind,
-    RowVerdict, Verdict,
+    RowVerdict, Severity, Verdict,
 };
-use metaharness::{Input, ManualClock, Metaharness, Run, ScriptedLog, ScriptedRunner, SeamFactory};
+use metaharness::{
+    AuditReport, FakeAuditor, Input, ManualClock, Metaharness, Run, ScriptedLog, ScriptedRunner,
+    SeamFactory,
+};
 
 /// A fresh root holding `copy/`, the directory the embedder made.
 fn embedder_copy() -> (tempfile::TempDir, PathBuf) {
@@ -46,12 +50,14 @@ const B10X_STARTED: &str =
     r#"{"kind":"started","model":"synthetic","published_tools":[],"credential_source":"none"}"#;
 const B10X_FINISHED: &str = r#"{"kind":"finished","stop":{"kind":"completed"}}"#;
 
+/// The bytes `b10x-harness 0.15.0` wrote, recorded for the adapter's golden vector.
+const B10X_RECORDED_LOOP: &str = include_str!("../../metaharness-b10x/fixtures/golden/loop.jsonl");
+
+/// What H7 says on this kind when the record names no working directory (design a30).
+const LOOP_REPORTED_NO_CWD: &str = "the loop did not report its working directory";
+
 fn production_seams() -> metaharness_b10x::B10xSeams {
-    metaharness_b10x::B10xSeams::new(
-        Some(metaharness_b10x::PINNED_VERSIONS[0].to_owned()),
-        None,
-        None,
-    )
+    metaharness_b10x::B10xSeams::new(Some(metaharness_b10x::PINNED_VERSIONS[0].to_owned()), None)
 }
 
 /// A strict b10x run over `copy` with the loop's lines and the seam factory chosen by the case.
@@ -85,7 +91,8 @@ fn b10x_strict_run_with(
 }
 
 /// A strict b10x run over `copy` through the **production** b10x seam, whose `started` line
-/// carries no working directory of its own (`metaharness-b10x/src/seam.rs`, `cwd: self.cwd`).
+/// carries no working directory of its own, so the opening record carries none either (design
+/// a30).
 fn b10x_strict_run(copy: &Path, declared: bool) -> Run {
     let mut seams = production_seams();
     let mut runner = ScriptedRunner::of_lines([B10X_STARTED, B10X_FINISHED], ScriptedLog::new());
@@ -111,23 +118,31 @@ fn b10x_strict_run(copy: &Path, declared: bool) -> Run {
     run
 }
 
-/// a27 § 4 and CHANGELOG "Changed": *"an a6 `--cwd` directory is now a `gap` in metaharness's own
-/// words, where before the arm compared two paths and printed `ok` 'which metaharness created'
-/// over a directory metaharness did not create"*; a27 "The b10x kind": *"the same rule applies
-/// there"*. `metaharness aep drive` passes `--cwd` on the b10x arm (`drive.rs`), so this is the
-/// driven arm's floor row.
+/// a27 § 4 and CHANGELOG "Changed" said an a6 `--cwd` directory is a `gap` in metaharness's own
+/// words; a27 "The b10x kind" said the same rule applies there. On b10x that `gap` stood on
+/// metaharness's echo of its own plan, and design a30 removes the echo: the loop's `started` line
+/// names no working directory, so the record carries none and H7 reads `unk` in the loop's words.
+/// The `(None, _)` arm runs before the attestation is read, which is why the a6 `unavailable` no
+/// longer decides the row on this kind. The attestation still says it — a launch fact, which the
+/// floor reports beside the record and does not substitute for it. `metaharness aep drive` passes
+/// `--cwd` on the b10x arm (`drive.rs`), so this is the driven arm's floor row.
 #[test]
-fn b10x_a6_named_directory_is_a_gap_on_h7_in_metaharness_own_words() {
+fn b10x_a6_named_directory_is_unk_on_h7_because_the_loop_reported_no_directory() {
     let (_root, copy) = embedder_copy();
     let run = b10x_strict_run(&copy, false);
     let h7 = floor_row(&run, HermeticRow::H7);
-    assert_eq!(h7.verdict, Verdict::Gap, "{}", h7.detail);
+    assert_eq!(h7.verdict, Verdict::Unk, "{}", h7.detail);
+    assert_eq!(h7.detail, LOOP_REPORTED_NO_CWD);
     assert!(
         !h7.detail.contains("which metaharness created"),
         "{}",
         h7.detail
     );
-    let (attested, _) = opening(&run);
+    let (attested, event_cwd) = opening(&run);
+    assert_eq!(
+        event_cwd, None,
+        "the record carries no directory the loop did not report"
+    );
     assert!(
         attested
             .unavailable
@@ -136,48 +151,149 @@ fn b10x_a6_named_directory_is_a_gap_on_h7_in_metaharness_own_words() {
         "a6: H7 is attested unavailable under an operator-named --cwd; b10x attested: {:?}",
         attested.unavailable
     );
+    // The exit does not move: a6 attests H11 unavailable on this kind too, its `gap` outranks
+    // H7's `unk`, and the run still ends at 1 as it did when H7 was the `gap`.
+    let report = run
+        .audit(&mut FakeAuditor::default())
+        .expect("the floor always runs");
+    assert_eq!(
+        floor_row(&run, HermeticRow::H11).verdict,
+        Verdict::Gap,
+        "{}",
+        report.render()
+    );
+    assert_eq!(run.exit(Some(&report)).code(), 1, "{}", report.render());
 }
 
-/// a27 § 4 on this kind, pinned as **today's state** and written to announce the landing of
-/// `story:b10x-record-carries-the-loops-cwd`. The loop's `started` line names `/somewhere/else`;
-/// the plan is the embedder's copy. The production seam never reads the line's cwd and writes the
-/// planned one into the opening record (`metaharness-b10x/src/seam.rs`, `cwd: self.cwd`), so the
-/// floor compares the plan with its own echo and reads H7 `ok` — on the flag plus the echo, not on
-/// a directory the loop reported. That is the story's gap, and neither the seam nor the golden
-/// expected stream is this unit's to change.
+/// a27 § 4 on this kind, after `story:b10x-record-carries-the-loops-cwd` (design a30). This case
+/// was written to go red when that story landed: it pinned H7 `ok` on b10x under the declaration
+/// although the loop's line named `/somewhere/else`, because the seam wrote the plan into the
+/// record and the floor compared the plan with its own echo.
 ///
-/// When the seam reads the line's cwd, this case goes red under either landing shape — no echo at
-/// all leaves the record without a cwd (`None`, H7 `unk`), a fallback echo in the shape
-/// `model: string("model").or_else(|| self.model.clone())` puts `/somewhere/else` in the record
-/// (H7 `gap`) — and the test is then inverted: assert `Verdict::Gap` and a record carrying the
-/// loop's directory, which is the comparison a27 § 4 describes made real on this kind.
+/// The line still names `/somewhere/else`, under a top-level `cwd` key. The pinned release 0.15.0
+/// writes none and 0.15.1 does; reading it is `story:b10x-h7-from-the-loops-cwd`, so the seam
+/// ignores the key on purpose. It no longer echoes the plan either, so the record carries no
+/// working directory and H7 is `unk`: never `ok` on the flag plus the plan.
 #[test]
-fn b10x_declared_copy_h7_reads_ok_on_the_echoed_plan_although_the_loop_named_another_directory() {
+fn b10x_declared_copy_h7_is_unk_and_never_ok_on_the_plan_when_the_loop_reports_no_directory() {
     let (_root, copy) = embedder_copy();
     let started = r#"{"kind":"started","model":"synthetic","published_tools":[],"credential_source":"none","cwd":"/somewhere/else"}"#;
     let run = b10x_strict_run_with(&copy, true, started, &mut production_seams());
-    let planned = std::fs::canonicalize(&copy).unwrap().display().to_string();
     let (attested, event_cwd) = opening(&run);
     assert!(attested.declares(HermeticRow::H7));
     assert_eq!(
-        event_cwd.as_deref(),
-        Some(planned.as_str()),
-        "the b10x opening record no longer echoes the plan over a loop line naming another \
-         directory: story:b10x-record-carries-the-loops-cwd has landed; invert this case to \
-         assert a record carrying the loop's directory and H7 gap"
+        event_cwd, None,
+        "the b10x opening record carries neither the plan nor the line's `cwd` key, which this \
+         unit ignores on purpose"
     );
     let h7 = floor_row(&run, HermeticRow::H7);
-    assert_eq!(
-        h7.verdict,
-        Verdict::Ok,
-        "today H7 is ok on b10x under the declaration although the loop named /somewhere/else, \
-         because the seam echoes the plan (story:b10x-record-carries-the-loops-cwd); when the seam \
-         reads the line's cwd this flips to gap and the test is to be inverted: {}",
+    assert_eq!(h7.verdict, Verdict::Unk, "{}", h7.detail);
+    assert_eq!(h7.detail, LOOP_REPORTED_NO_CWD);
+    assert!(
+        !h7.detail.contains("declared, not created"),
+        "the declaration does not stand in for the record: {}",
         h7.detail
     );
+}
+
+/// A strict b10x run that replays the bytes `b10x-harness 0.15.0` wrote, in `copy` declared as the
+/// embedder's scratch copy or, given none, in the directory metaharness creates; and its audit.
+///
+/// The recorded line is checked first: what both callers pin rests on the pinned loop naming no
+/// working directory, and a re-recording that names one has to fail here rather than pass on the
+/// null. The production builder, seam and floor; a scripted runner replays the record; the exit is
+/// the one `metaharness run` returns for a strict run (`run.exit(Some(&report))`).
+fn b10x_strict_run_over_the_recorded_loop(copy: Option<&Path>) -> (Run, AuditReport) {
+    let opening_line: serde_json::Value = serde_json::from_str(
+        B10X_RECORDED_LOOP
+            .lines()
+            .next()
+            .expect("the recorded loop opens"),
+    )
+    .expect("the opening line is JSON");
+    assert_eq!(opening_line["kind"], "started");
     assert!(
-        h7.detail.contains("declared, not created"),
-        "the row must say the directory was declared, never that metaharness created it: {}",
-        h7.detail
+        opening_line.get("cwd").is_none(),
+        "the recorded opening line names a working directory: {opening_line}"
+    );
+
+    let mut runner = ScriptedRunner::of_lines(B10X_RECORDED_LOOP.lines(), ScriptedLog::new());
+    let mut seams = production_seams();
+    let mut builder = Metaharness::new(Kind::B10x)
+        .with_hermetic(HermeticMode::Strict)
+        .with_credentials(CredentialSource::None)
+        .with_decisions(DecisionMode::Observe)
+        .with_model_endpoint("http://127.0.0.1:1")
+        .with_model("b10x-emulated");
+    if let Some(copy) = copy {
+        builder = builder.with_cwd(copy).with_scratch_cwd();
+    }
+    let mut run = builder
+        .start_with_clock(
+            Input::Prompt("fixture".to_owned()),
+            &mut runner,
+            &mut seams,
+            Box::new(ManualClock::new()),
+        )
+        .expect("the run plans on b10x");
+    run.drain().unwrap();
+    assert!(run.wants_audit(), "strict owes a verdict");
+    let report = run
+        .audit(&mut FakeAuditor::default())
+        .expect("the floor always runs");
+    (run, report)
+}
+
+/// Every gating row that is not `ok`, with its words.
+fn gating_not_ok(report: &AuditReport) -> Vec<(HermeticRow, Verdict, String)> {
+    report
+        .rows
+        .iter()
+        .filter(|row| row.severity == Severity::Gating && row.verdict != Verdict::Ok)
+        .map(|row| (row.row, row.verdict, row.detail.clone()))
+        .collect()
+}
+
+/// The story's pinned exit: `metaharness run b10x --hermetic strict --cwd <copy> --scratch-cwd`
+/// over the bytes `b10x-harness 0.15.0` wrote ends at **3**, nobody found out, and H7 is the one
+/// gating row that is not `ok`. It was 0 while the seam echoed the plan.
+#[test]
+fn b10x_strict_declared_copy_over_the_recorded_loop_exits_3_on_h7() {
+    let (_root, copy) = embedder_copy();
+    let (run, report) = b10x_strict_run_over_the_recorded_loop(Some(&copy));
+    assert_eq!(run.exit(Some(&report)).code(), 3, "{}", report.render());
+    let (attested, event_cwd) = opening(&run);
+    assert!(attested.declares(HermeticRow::H7));
+    assert_eq!(event_cwd, None);
+    assert_eq!(
+        gating_not_ok(&report),
+        [(
+            HermeticRow::H7,
+            Verdict::Unk,
+            LOOP_REPORTED_NO_CWD.to_owned()
+        )],
+        "H7 is the only gating row not ok"
+    );
+}
+
+/// The same holds without `--cwd`, where metaharness creates the directory: the row's evidence is
+/// the record (§ 8.1 H7), not who made the directory, so a strict b10x run in metaharness's own
+/// scratch cwd is `unk` on H7 and ends at 3 as well. Before design a30 the record echoed that
+/// directory and the row read `ok`, *"which metaharness created"*.
+#[test]
+fn b10x_strict_run_in_metaharness_own_scratch_cwd_exits_3_on_h7() {
+    let (run, report) = b10x_strict_run_over_the_recorded_loop(None);
+    assert_eq!(run.exit(Some(&report)).code(), 3, "{}", report.render());
+    let (attested, event_cwd) = opening(&run);
+    assert!(!attested.declares(HermeticRow::H7));
+    assert_eq!(event_cwd, None);
+    assert_eq!(
+        gating_not_ok(&report),
+        [(
+            HermeticRow::H7,
+            Verdict::Unk,
+            LOOP_REPORTED_NO_CWD.to_owned()
+        )],
+        "H7 is the only gating row not ok"
     );
 }

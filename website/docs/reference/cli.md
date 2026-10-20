@@ -35,7 +35,7 @@ the beyond10x loop, which it observes — see [the b10x adapter](../harnesses/b1
 | `--model <NAME>` | — | The model to ask for. Passed through to the vendor, which resolves it. |
 | `--max-turns <N>` | — | A ceiling on turns. |
 | `--cwd <DIR>` | scratch | A named working directory for the child, **which it can write to**. Alone, the operator's real tree: trades two hermetic rows for real work — see below. |
-| `--scratch-cwd` | off | Declares the `--cwd` directory as the embedder's **disposable scratch copy**. H7 is attested `declared`, H11 is measured from the copy, and `--hermetic strict` passes on the pair — see below. Refused without `--cwd`. |
+| `--scratch-cwd` | off | Declares the `--cwd` directory as the embedder's **disposable scratch copy**. H7 is attested `declared`, H11 is measured from the copy, and `--hermetic strict` passes on the pair on the vendor kinds; on b10x H7 is `unk` and it exits 3 — see below. Refused without `--cwd`. |
 
 ### Hermeticity
 
@@ -160,7 +160,8 @@ same sandbox grant — and the attestation changes:
   above it is `ok`; a `CLAUDE.md` or `AGENTS.md` above it is a gap, and `--hermetic strict` exits 1
   after the run. A memory file at the copy's root is the copy's own and is listed in the
   attestation's `ambient_inputs`.
-- `--hermetic strict` **passes** on a declared copy with nothing above it.
+- `--hermetic strict` **passes** on a declared copy with nothing above it, on the vendor kinds. On
+  b10x the pinned loop (0.15.0) reports no working directory, so H7 is `unk` and strict exits 3.
 - Without `--cwd` the flag is refused by name on every kind.
 
 Design amendment **a27**. The declaration confines nothing; making the copy is the embedder's job.

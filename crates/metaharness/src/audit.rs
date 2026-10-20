@@ -606,6 +606,14 @@ pub fn hermetic_floor(events: &[Event], inputs: &FloorInputs<'_>) -> Vec<RowVerd
 
     // H7 — the working directory is ours.
     rows.push(match (cwd.as_deref(), inputs.planned_cwd) {
+        // The direct-provider loop's `started` record names no working directory at the pinned
+        // release, so its record carries none, and the row says whose silence it is (a30). Read
+        // before the attestation, so neither a declaration nor an a6 `unavailable` decides it.
+        (None, _) if adapter_class == "direct_provider" => row(
+            HermeticRow::H7,
+            Verdict::Unk,
+            "the loop did not report its working directory",
+        ),
         (None, _) => row(
             HermeticRow::H7,
             Verdict::Unk,

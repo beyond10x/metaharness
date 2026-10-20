@@ -17,28 +17,25 @@ pub struct B10xSeams {
     version: Option<String>,
     /// The model the caller asked for, so the opening record names one before the loop does.
     model: Option<String>,
-    /// The workspace the run was pointed at.
-    cwd: Option<String>,
 }
 
 impl B10xSeams {
+    /// No working directory is taken: the opening record's `cwd` is what the loop reported, and
+    /// at the pinned release it reports none (design a30).
     #[must_use]
-    pub fn new(version: Option<String>, model: Option<String>, cwd: Option<String>) -> Self {
-        Self {
-            version,
-            model,
-            cwd,
-        }
+    pub fn new(version: Option<String>, model: Option<String>) -> Self {
+        Self { version, model }
     }
 }
 
 impl SeamFactory for B10xSeams {
-    fn observe_launch(&mut self, harness_version: Option<String>, model: String, cwd: String) {
+    /// The planned directory is not kept. Writing it into the opening record made the floor's H7
+    /// compare metaharness's plan with metaharness's own echo of it (design a30).
+    fn observe_launch(&mut self, harness_version: Option<String>, model: String, _cwd: String) {
         if harness_version.is_some() {
             self.version = harness_version;
         }
         self.model = Some(model);
-        self.cwd = Some(cwd);
     }
 
     fn build(
@@ -50,7 +47,6 @@ impl SeamFactory for B10xSeams {
         Box::new(B10xSeam {
             version: self.version.clone(),
             model: self.model.clone(),
-            cwd: self.cwd.clone(),
             transcript,
             attestation,
             // Recorded and not used to decide anything: this adapter adjudicates nothing, and the
@@ -69,7 +65,6 @@ impl SeamFactory for B10xSeams {
 pub struct B10xSeam {
     version: Option<String>,
     model: Option<String>,
-    cwd: Option<String>,
     transcript: TranscriptRef,
     attestation: HermeticAttestation,
     control: Seam,
@@ -160,7 +155,14 @@ impl HarnessSeam for B10xSeam {
                     // hardcoded `named` proved only that this adapter knew the CLI had flags.
                     credential_source: string("credential_source"),
                     output_style: None,
-                    cwd: self.cwd.clone(),
+                    // **What the loop reported, and at 0.15.0 it reports none**: `LoopEvent::Started`
+                    // has no working-directory field (harness `crates/harness-loop/src/event.rs`;
+                    // the golden record's line 1). This was the planned directory metaharness
+                    // handed `observe_launch`, so H7 compared the plan with its own echo and read
+                    // `ok` on it (design a30). The `cwd` key is ignored on purpose: the pinned
+                    // release writes none, 0.15.1 writes a top-level `cwd` (harness `f0870131`),
+                    // and reading it is `story:b10x-h7-from-the-loops-cwd`, not this change.
+                    cwd: None,
                     // The catalogue behind the verbs, which is the only thing that differs from
                     // run to run here. The loop states it; this passes it through.
                     available_operations: value.get("operations").and_then(Value::as_array).map(
@@ -551,12 +553,7 @@ mod tests {
     use metaharness_protocol::HermeticMode;
 
     fn seam() -> Box<dyn HarnessSeam> {
-        B10xSeams::new(
-            Some("0.1.0".to_owned()),
-            Some("gpt-5.6-sol".to_owned()),
-            Some("/work".to_owned()),
-        )
-        .build(
+        B10xSeams::new(Some("0.1.0".to_owned()), Some("gpt-5.6-sol".to_owned())).build(
             TranscriptRef {
                 path: None,
                 digest: None,
@@ -689,12 +686,47 @@ mod tests {
             Some("api-key:environment"),
             "the loop's own credential class crosses instead of an adapter literal"
         );
-        assert_eq!(cwd.as_deref(), Some("/work"));
+        assert!(
+            cwd.is_none(),
+            "the loop named no working directory, so the record states none: {cwd:?}"
+        );
         assert!(
             slash_commands.is_none(),
             "the loop has none, so it states none"
         );
         assert!(plugins.is_none());
+    }
+
+    /// The loop's `started` line names no working directory at the pinned release (harness
+    /// `LoopEvent::Started`), so the opening record carries none (design a30): not the directory
+    /// metaharness planned and handed to `observe_launch` — echoing it made H7 compare the plan
+    /// with itself — and not the line's `cwd` key, which the pinned release never writes and
+    /// 0.15.1 does: reading it is `story:b10x-h7-from-the-loops-cwd`, so this ignores it on
+    /// purpose.
+    #[test]
+    fn the_opening_record_carries_no_working_directory_the_loop_did_not_report() {
+        let mut seams = B10xSeams::new(Some("0.15.0".to_owned()), None);
+        seams.observe_launch(None, "m".to_owned(), "/planned/by/metaharness".to_owned());
+        let mut seam = seams.build(
+            TranscriptRef {
+                path: None,
+                digest: None,
+                bytes: None,
+            },
+            HermeticAttestation::none(HermeticMode::Strict),
+            Seam::None,
+        );
+        let event = one(
+            &mut *seam,
+            r#"{"kind":"started","model":"m","published_tools":[],"cwd":"/named/by/a/later/release"}"#,
+        );
+        let Event::SessionStarted { cwd, .. } = event else {
+            panic!("an opening record")
+        };
+        assert_eq!(
+            cwd, None,
+            "neither the plan's directory nor the line's `cwd` key reaches the record"
+        );
     }
 
     #[test]
@@ -1038,7 +1070,7 @@ mod turn_count_tests {
     use metaharness_protocol::{Event, HarnessSeam, Seam, SeamFactory, TranscriptRef};
 
     fn seam() -> Box<dyn HarnessSeam> {
-        super::B10xSeams::new(None, None, None).build(
+        super::B10xSeams::new(None, None).build(
             TranscriptRef {
                 path: None,
                 digest: None,
