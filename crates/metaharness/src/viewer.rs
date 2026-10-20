@@ -215,7 +215,7 @@ pub fn project_vendor_record(
             )
         }
         VendorSource::HarnessJson => {
-            let mut seam = metaharness_b10x::B10xSeams::new(None, None, None).build(
+            let mut seam = metaharness_b10x::B10xSeams::new(None, None).build(
                 transcript,
                 attestation,
                 Seam::None,

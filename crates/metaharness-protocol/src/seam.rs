@@ -46,8 +46,10 @@ pub trait SeamFactory {
     ///
     /// Most vendor records state these themselves and their factories ignore this call. A direct
     /// provider loop writes no provider-side session metadata, so its observer needs the exact
-    /// executable version metaharness queried and the cwd metaharness created. The default keeps
-    /// existing adapters free of a method whose values they do not consume.
+    /// executable version metaharness queried. The planned cwd is offered too, and the b10x
+    /// observer does not keep it: the record's cwd is what the loop reported, never the plan
+    /// (amendment a30). The default keeps existing adapters free of a method whose values they do
+    /// not consume.
     fn observe_launch(&mut self, _harness_version: Option<String>, _model: String, _cwd: String) {}
 
     /// Build the seam for this transcript, attestation and control tier.

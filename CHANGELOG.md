@@ -55,6 +55,23 @@ was amended and the amendment is named here.
   (`harness_version` `0.9.1` → `0.15.0`, `credential_source` `api-key:environment` → `none`);
   `contract-result-b10x.json` reads `provider: "b10x 0.15.0"`; the native fixture expects
   `0.15.0`. The four enforcement excerpts stay 0.9.1 captures.
+- **Behaviour change:** `metaharness run b10x --hermetic strict --cwd <copy> --scratch-cwd` now
+  exits **3** where it exited 0. A strict b10x run without `--cwd` moves the same way. So does
+  every b10x run with `--audit`, in any `--hermetic` mode including none (`--hermetic --audit`,
+  plain `--audit`), with or without a declared copy, because `--audit` judges the same floor. `--hermetic` without `--audit` owes no verdict and still exits 0. The
+  cause is design amendment a30 (`story:b10x-record-carries-the-loops-cwd`, Atlas ADR 0098
+  point 2): the b10x opening record's `cwd` is `null`, where it was metaharness's own planned
+  directory echoed back. The pinned release, harness 0.15.0, writes no working directory on its
+  `started` record. 0.15.1 writes a top-level `cwd`, and reading it is
+  `story:b10x-h7-from-the-loops-cwd`; until then this adapter ignores that key on purpose. The
+  floor's H7 row now reads `unk`, *"the loop did not report its working directory"*, on the
+  `direct_provider` class, before the attestation is read. Before, a declared copy read `ok` on
+  the plan, an a6 `--cwd` read `gap` and a metaharness-created directory read `ok`. A strict a6
+  `--cwd` run without the declaration still exits 1, on H11. The vendor kinds are unchanged.
+  `B10xSeams::new` drops its third (`cwd`) parameter. The b10x golden `loop.expected.jsonl`
+  line 1 changes in that one field (`"cwd":"/scratch/run/work"` → `"cwd":null`). The
+  `golden-loop-record` vector now fails a recording whose `started` line names a `cwd`, and
+  `checked` stays 7.
 
 ### Added
 

@@ -211,7 +211,7 @@ fn an_honoured_interrupt_without_a_control_wire_stops_the_owned_process() {
         .start_with(
             Input::Prompt("fixture".into()),
             &mut runner,
-            &mut metaharness_b10x::B10xSeams::new(None, None, None),
+            &mut metaharness_b10x::B10xSeams::new(None, None),
         )
         .unwrap();
     assert!(matches!(run.poll_event().unwrap(), EventPoll::Idle));

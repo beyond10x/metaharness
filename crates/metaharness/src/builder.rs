@@ -380,7 +380,7 @@ impl Metaharness {
             Kind::B10x => self.start_with(
                 input,
                 &mut crate::spawn::SpawnRunner::new(),
-                &mut metaharness_b10x::B10xSeams::new(None, None, None),
+                &mut metaharness_b10x::B10xSeams::new(None, None),
             ),
         }
     }
@@ -671,8 +671,10 @@ fn start_b10x(
         }
     } else if spec.cwd.is_some() {
         // a6 on this kind, in the same words the vendor launches use: H7 is attested unavailable,
-        // never claimed, so the floor's H7 arm reads `gap` here too and does not print "which
-        // metaharness created" over the operator's tree (a27 § 4; adversary finding 1).
+        // never claimed (a27 § 4; adversary finding 1). The floor's H7 row reads `unk` here, not
+        // `gap`: the loop reports no working directory, and that arm runs before the attestation
+        // is read (a30). Either way it never prints "which metaharness created" over the
+        // operator's tree.
         attestation.unavailable.push(UnavailableControl {
             row: HermeticRow::H7,
             why: format!(

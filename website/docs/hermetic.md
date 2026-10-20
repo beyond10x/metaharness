@@ -69,8 +69,11 @@ The attestation knows a third state beside imposed and unavailable, for one row 
 [`--cwd <DIR> --scratch-cwd`](reference/cli.md#--scratch-cwd-the-embedders-disposable-copy) H7 is
 **`declared`** — the embedder declared the directory as its disposable scratch copy — and the floor
 reads it `ok` only when the record's cwd is the one planned. H11 stays measured. On the b10x kind
-the opening record's cwd is metaharness's own echo of its plan, not the loop's report, so that
-comparison is weaker there than on the vendor kinds.
+the loop's opening record names no working directory (`b10x-harness` 0.15.0), so the record's cwd
+is `null` and H7 is `unk`, *"the loop did not report its working directory"*, whoever made the
+directory. A strict or `--audit` b10x run whose other gating rows hold therefore exits 3, a
+declared copy included; a strict `--cwd` run without the declaration still exits 1, on H11, and
+bare `--hermetic` without `--audit` owes no verdict and exits 0.
 
 ## The three modes
 

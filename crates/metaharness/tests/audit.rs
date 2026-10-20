@@ -448,6 +448,53 @@ fn a_working_directory_that_is_not_the_planned_one_is_a_gap() {
     );
 }
 
+/// Design a30: the direct-provider loop's `started` record names no working directory at the pinned
+/// release, so its opening record carries none and H7 says whose silence it is — beside H1a and
+/// H1b, the floor's other `direct_provider` arms.
+#[test]
+fn a_direct_provider_record_with_no_working_directory_is_unk_in_the_loops_words() {
+    let spec = RunSpec::new(Kind::B10x);
+    let record = with_record(good_record(), |record| {
+        if let Event::SessionStarted {
+            adapter,
+            adapter_class,
+            cwd,
+            ..
+        } = record
+        {
+            *adapter = "b10x".to_owned();
+            *adapter_class = "direct_provider".to_owned();
+            *cwd = None;
+        }
+    });
+    let rows = hermetic_floor(&[record], &inputs(&spec, &pins(), &[]));
+    let h7 = rows
+        .iter()
+        .find(|row| row.row == HermeticRow::H7)
+        .expect("H7");
+    assert_eq!(h7.verdict, Verdict::Unk, "{}", h7.detail);
+    assert_eq!(h7.detail, "the loop did not report its working directory");
+}
+
+/// The vendor kinds keep their own words: their record has a cwd field, and a record without one
+/// is a record that did not carry it, not a loop that never reports one.
+#[test]
+fn a_vendor_record_with_no_working_directory_is_unk_in_the_records_words() {
+    let spec = RunSpec::new(Kind::Claude);
+    let record = with_record(good_record(), |record| {
+        if let Event::SessionStarted { cwd, .. } = record {
+            *cwd = None;
+        }
+    });
+    let rows = hermetic_floor(&[record], &inputs(&spec, &pins(), &[]));
+    let h7 = rows
+        .iter()
+        .find(|row| row.row == HermeticRow::H7)
+        .expect("H7");
+    assert_eq!(h7.verdict, Verdict::Unk, "{}", h7.detail);
+    assert_eq!(h7.detail, "the opening record carries no working directory");
+}
+
 #[test]
 fn a_launch_row_the_attestation_is_silent_about_is_unk_and_not_a_pass() {
     let spec = RunSpec::new(Kind::Claude);

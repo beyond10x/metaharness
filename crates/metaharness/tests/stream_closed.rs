@@ -320,7 +320,7 @@ mod codex_terminal_regression {
         ] {
             let mut seam: Box<dyn SeamFactory> = match kind {
                 Kind::Claude => Box::new(metaharness::ClaudeSeams),
-                Kind::B10x => Box::new(metaharness_b10x::B10xSeams::new(None, None, None)),
+                Kind::B10x => Box::new(metaharness_b10x::B10xSeams::new(None, None)),
                 Kind::Codex => unreachable!("covered by the Codex-specific cases"),
             };
             let mut runner = ScriptedRunner::of_lines([terminal], ScriptedLog::new());
@@ -538,7 +538,7 @@ fn scripted_b10x_keeps_a_logical_program_without_probing_an_installation() {
         .start_with_clock(
             Input::Prompt("synthetic".into()),
             &mut runner,
-            &mut metaharness_b10x::B10xSeams::new(None, None, None),
+            &mut metaharness_b10x::B10xSeams::new(None, None),
             Box::new(metaharness::ManualClock::new()),
         )
         .expect("a scripted run needs no installed vendor");

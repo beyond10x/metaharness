@@ -17,7 +17,7 @@ fn launch(builder: Metaharness) -> Vec<String> {
     std::fs::create_dir(&cwd).unwrap();
     let log = ScriptedLog::new();
     let mut runner = ScriptedRunner::of_lines(Vec::<String>::new(), log.clone());
-    let mut seams = metaharness_b10x::B10xSeams::new(None, None, None);
+    let mut seams = metaharness_b10x::B10xSeams::new(None, None);
     let _run = builder
         .with_cwd(cwd)
         .start_with(Input::Prompt("fixture".to_owned()), &mut runner, &mut seams)
@@ -78,7 +78,7 @@ fn declaration_refuses_unsupported_adapters_absent_confinement_and_invalid_paths
         spec.process_write_subtree = paths.into_iter().map(str::to_owned).collect();
         let log = ScriptedLog::new();
         let mut runner = ScriptedRunner::of_lines(Vec::<String>::new(), log.clone());
-        let mut seams = metaharness_b10x::B10xSeams::new(None, None, None);
+        let mut seams = metaharness_b10x::B10xSeams::new(None, None);
         let result = Metaharness::from_spec(spec).start_with(
             Input::Prompt("fixture".to_owned()),
             &mut runner,

@@ -506,6 +506,54 @@ fn assert_closed(events: &[Value], code: i32) {
     assert_eq!(start["model"], MODEL);
     assert_eq!(start["credential_source"], "none");
     assert_eq!(start["hermetic"]["decisions"], "observe");
+    // Every run here passes `--cwd`, and the loop's `started` line names no directory, so the
+    // record states none rather than the plan (design a30).
+    assert!(
+        start.get("cwd").is_some_and(Value::is_null),
+        "the record carries no working directory the loop did not report: {start}"
+    );
+}
+
+/// `run b10x --hermetic strict --cwd <copy> --scratch-cwd` through the production CLI and the
+/// actual binary: the declaration is attested, the loop reports no working directory, H7 is the
+/// one gating row that is not `ok`, and the process exits 3 (design a30).
+#[test]
+#[ignore = "actual b10x and production CLI; explicit paths and isolated loopback network namespace"]
+fn actual_b10x_strict_declared_copy_is_unk_on_h7_and_exits_3() {
+    let _serial = NATIVE_RUN
+        .lock()
+        .unwrap_or_else(std::sync::PoisonError::into_inner);
+    let (root, events, requests, code) =
+        run(Mode::Text, &["--hermetic", "strict", "--scratch-cwd"]);
+    assert_eq!(requests.len(), 1);
+    assert_closed(&events, 0);
+    let start = one(&events, "session.started");
+    assert_eq!(start["hermetic"]["mode"], "strict");
+    assert!(
+        start["hermetic"]["declared"]
+            .as_array()
+            .is_some_and(|declared| declared.iter().any(|control| control["row"] == "h7")),
+        "H7 is declared: {start}"
+    );
+    let stderr = fs::read_to_string(root.join("stderr.log")).unwrap();
+    let not_ok: Vec<&str> = stderr
+        .lines()
+        .filter(|line| {
+            let words: Vec<&str> = line.split_whitespace().collect();
+            words.len() > 2
+                && words[0].starts_with('H')
+                && words[0][1..].starts_with(|c: char| c.is_ascii_digit())
+                && words[1] != "ok"
+                && words[2] == "gating"
+        })
+        .collect();
+    assert_eq!(not_ok.len(), 1, "{stderr}");
+    assert!(
+        not_ok[0].trim_start().starts_with("H7   unk")
+            && not_ok[0].ends_with("the loop did not report its working directory"),
+        "{stderr}"
+    );
+    assert_eq!(code, 3, "{stderr}");
 }
 
 #[test]
