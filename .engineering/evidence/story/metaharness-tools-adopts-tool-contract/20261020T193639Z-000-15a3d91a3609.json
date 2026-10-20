@@ -1,0 +1,14 @@
+{
+  "at": "2026-10-20T19:36:39Z",
+  "actor": "human:timo",
+  "artifact": "story:metaharness-tools-adopts-tool-contract",
+  "kind": "story",
+  "revision": 42,
+  "change": {
+    "change": "evidence",
+    "kind": "review_outcome",
+    "source": "review-result:adr0096-w3-contract-names-adversary-2",
+    "review": "review-result:adr0096-w3-contract-names-adversary-2",
+    "outcome": "escalated"
+  }
+}

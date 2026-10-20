@@ -1,0 +1,14 @@
+{
+  "at": "2026-10-20T17:22:42Z",
+  "actor": "human:timo",
+  "artifact": "story:b10x-record-carries-the-loops-cwd",
+  "kind": "story",
+  "revision": 29,
+  "change": {
+    "change": "evidence",
+    "kind": "review_outcome",
+    "source": "review-result:adr0096-w3-loops-cwd-adversary-2",
+    "review": "review-result:adr0096-w3-loops-cwd-adversary-2",
+    "outcome": "fixed"
+  }
+}

@@ -1,0 +1,13 @@
+{
+  "at": "2026-10-20T18:47:34Z",
+  "actor": "human:timo",
+  "artifact": "story:b10x-h7-from-the-loops-cwd",
+  "kind": "story",
+  "revision": 3,
+  "change": {
+    "change": "evidence",
+    "kind": "verification",
+    "source": "coordinator, wave 3 of 2026-10-20: the claim that the b10x H7 row is decided from the directory harness 0.15.1 records. Baseline d595b42: H7 unk on every b10x run, strict and --audit exit 3. Treatment 2b03d47 (merged 34c427b): 872 passed, 0 failed, 37 ignored, six gate steps exit 0, native lanes 9/9 and 4/4 on a 0.15.1 binary; a clean strict run exits 0 with H7 ok from the record. Correction round 2 verified by the coordinator from the diff (audit.rs:824 requires a directory before more components) and its own run: both adversary files unedited (sha256 8e20d872, 476b64f1) and green (1 and 2 passed), audit tests 55 passed, exit 0",
+    "reference": "unit commit 2b03d47, merge 34c427b"
+  }
+}

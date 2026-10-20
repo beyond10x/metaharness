@@ -2,7 +2,7 @@
 format: aep.planning-md/3
 id: story:b10x-record-carries-the-loops-cwd
 kind: story
-status: active
+status: implemented
 title: The b10x opening record's working directory comes from the loop, not from metaharness's echo
 summary: On b10x session.started.cwd is metaharness's own plan echoed back (seam.rs:163), so H7 is decided by the plan; read it from the loop's record and say unk where the loop reports none.
 owner: metaharness
@@ -37,10 +37,11 @@ scope:
   path: docs/design/metaharness-protocol-v0.1.md
 - confidence: cited
   path: website/docs/hermetic.md
-revision: 29
+revision: 31
 transitions:
 - {from: "draft", to: "proposed", at: "2026-10-20T09:05:36Z", actor: "human:timo", revision: 28}
 - {from: "proposed", to: "active", at: "2026-10-20T09:05:37Z", actor: "human:timo", revision: 29}
+- {from: "active", to: "implemented", at: "2026-10-20T19:39:50Z", actor: "human:timo", revision: 31, decided_on: {"recorded":{"test_result":1,"review_outcome":2,"verification":1,"ess_conformance_coverage_v1":1}}}
 ---
 # Story: the b10x opening record's working directory comes from the loop, not from metaharness's echo
 
@@ -126,3 +127,12 @@ cited unless marked inferred.
   `audit.rs:162-173`), so a clean `run b10x --hermetic strict --cwd <copy> --scratch-cwd` moves from
   exit 0 to exit 3; whether Loom's executor runs b10x under strict is not known here.
 - **Estimate:** 3 tests changed, 2-3 new; 1 field on 1 fixture line.
+## Delivered (wave 3 of 2026-10-20, unit 2)
+
+Commit `0aa85270`, merged `d595b42`; two `aep:adversary` passes
+(`review-result:adr0096-w3-loops-cwd-adversary-1`, `-2`), all findings fixed (documents only; no behaviour
+defect found). At harness 0.15.0 the b10x `session.started.cwd` is `null` and H7 reads `unk` with "the loop
+did not report its working directory" (amendment a30); `B10xSeams::new` lost its third parameter.
+Beyond the story, named in the changelog: strict b10x runs without `--cwd` and every `--audit` b10x run
+also moved to exit 3 at 0.15.0. Unit 2b (`story:b10x-h7-from-the-loops-cwd`) restored an observed H7 on
+0.15.1 in the same wave; this story's `unk` branch remains for records without `cwd`.

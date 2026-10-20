@@ -1,0 +1,13 @@
+{
+  "at": "2026-10-20T19:39:49Z",
+  "actor": "human:timo",
+  "artifact": "story:b10x-record-carries-the-loops-cwd",
+  "kind": "story",
+  "revision": 30,
+  "change": {
+    "change": "evidence",
+    "kind": "test_result",
+    "source": "task check, one step at a time, on integration/adr-0096-wave-3 at 6ec311c: 6 steps exit 0, 73 test binaries, 895 passed, 0 failed, 38 ignored, conformance 87/87",
+    "reference": "w3close-5-test.log in the wave's cache directory metaharness-wave-adr0096/w2-closing"
+  }
+}

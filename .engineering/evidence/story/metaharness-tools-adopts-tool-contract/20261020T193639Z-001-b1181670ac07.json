@@ -1,0 +1,13 @@
+{
+  "at": "2026-10-20T19:36:39Z",
+  "actor": "human:timo",
+  "artifact": "story:metaharness-tools-adopts-tool-contract",
+  "kind": "story",
+  "revision": 42,
+  "change": {
+    "change": "evidence",
+    "kind": "verification",
+    "source": "coordinator, wave 3 of 2026-10-20: the claim that a contract name harness maps resolves, with its subjects, as its entry on metaharness's own surface only. Baseline 34c427b: fs.read resolved Unknown with no subject, and the server answered it is not a tool this run has. Treatment 9f4d6a0 (merged 6ec311c): 37 metaharness-tools unit cases and the run_loop end-to-end case (owned surface: fs.read src/lib.rs allowed, fs.read ../../etc/passwd denied naming the path; b10x record: neither) pass; the stale-digest code.write/code.edit cases refuse and change nothing; coordinator's own run after its pass-2 residue edits: run_loop 52, metaharness-tools 37+2+2+1+2, the pass-2 file 1 passed 1 ignored, clippy, docs check and fmt exit 0",
+    "reference": "unit commit 9f4d6a0, merge 6ec311c"
+  }
+}

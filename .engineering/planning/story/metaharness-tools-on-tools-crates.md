@@ -2,7 +2,7 @@
 format: aep.planning-md/3
 id: story:metaharness-tools-on-tools-crates
 kind: story
-status: active
+status: implemented
 title: metaharness-tools builds on the tools crates
 summary: The owned tool surface and the b10x catalogue come from tools instead of b10x-harness-tools at harness 798325f.
 owner: metaharness
@@ -18,10 +18,11 @@ relations:
 - depends_on: story:trace-ir-domain
 - depends_on: story:metaharness-tools-adopts-tool-contract
 - depends_on: story:b10x-adapter-on-harness-over-llm
-revision: 47
+revision: 49
 transitions:
 - {from: "draft", to: "proposed", at: "2026-10-20T09:05:39Z", actor: "human:timo", revision: 33, decided_on: {"recorded":{"review_outcome":2}}}
 - {from: "proposed", to: "active", at: "2026-10-20T09:05:40Z", actor: "human:timo", revision: 34, decided_on: {"recorded":{"review_outcome":2}}}
+- {from: "active", to: "implemented", at: "2026-10-20T19:39:51Z", actor: "human:timo", revision: 49, decided_on: {"recorded":{"test_result":1,"review_outcome":2,"verification":1,"ess_conformance_coverage_v1":1}}}
 ---
 # Story: `metaharness-tools` builds on the `tools` crates
 
@@ -86,3 +87,13 @@ Derived 2026-10-20 by `aep:story-scoper` against metaharness `3d697011` and harn
   The tools crates harness pins at `947d0e48` are tools 0.1.0, `LicenseRef-B10x-Proprietary`
   (tools `crates/tool-fs/Cargo.toml:4`), the licence class of the harness crates metaharness links
   today; they become Apache-2.0 when harness moves to tools 0.2.0.
+## Delivered (wave 3 of 2026-10-20, closed on evidence)
+
+No unit of its own (decision D5). Read on the integration branch at `6ec311c` after unit 3 merged:
+`Cargo.lock` holds one harness revision (`f0870131`) and one tools revision (`60d4d0e3`, tools 0.2.0,
+Apache-2.0) with `b10x-tool-code-editor`, `b10x-tool-contract`, `b10x-tool-fs` and `b10x-tool-toolchain`;
+the served file operations run in those crates through `b10x-harness-catalogue`; the whole gate passed
+(conformance 87/87, the containment refusal scenario among them). `git grep -n 'b10x.harness.tools'`
+outside `CHANGELOG.md` and `.engineering/` returns 1 hit, in the dated research page
+`docs/research/2026-10-20-b10x-harness-0.15.0-adapter-surface.md:43`, which describes a probe that linked
+the old crate at `798325f0` to measure 0.13.3; no build or code reference remains.

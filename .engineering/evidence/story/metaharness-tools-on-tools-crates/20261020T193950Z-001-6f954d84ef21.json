@@ -1,0 +1,13 @@
+{
+  "at": "2026-10-20T19:39:50Z",
+  "actor": "human:timo",
+  "artifact": "story:metaharness-tools-on-tools-crates",
+  "kind": "story",
+  "revision": 48,
+  "change": {
+    "change": "evidence",
+    "kind": "verification",
+    "source": "coordinator, wave 3 of 2026-10-20, closing evidence at 6ec311c: Cargo.lock one harness revision f0870131 and one tools revision 60d4d0e3 (b10x-tool-code-editor, -contract, -fs, -toolchain); served file operations run in the tools crates through b10x-harness-catalogue; whole gate green with conformance 87/87 including the containment refusal; b10x.harness.tools outside CHANGELOG and .engineering: 1 hit, a dated research page describing the 0.13.3 probe",
+    "reference": "integration head 6ec311c"
+  }
+}

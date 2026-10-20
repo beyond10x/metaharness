@@ -2,7 +2,7 @@
 format: aep.planning-md/3
 id: story:b10x-adapter-on-harness-over-llm
 kind: story
-status: active
+status: implemented
 title: The b10x adapter pins the harness release that builds on llm
 summary: HARNESS_REVISION, PINNED_VERSIONS and the three git pins move to the llm-based harness release, qualified with the credential-free native fixture and a research page.
 owner: metaharness
@@ -71,10 +71,11 @@ scope:
   path: spec/coverage.md
 - confidence: inferred
   path: website/docs/harnesses/b10x.md
-revision: 57
+revision: 59
 transitions:
 - {from: "draft", to: "proposed", at: "2026-10-20T09:05:35Z", actor: "human:timo", revision: 40, decided_on: {"recorded":{"review_outcome":2}}}
 - {from: "proposed", to: "active", at: "2026-10-20T09:05:36Z", actor: "human:timo", revision: 41, decided_on: {"recorded":{"review_outcome":2}}}
+- {from: "active", to: "implemented", at: "2026-10-20T19:39:50Z", actor: "human:timo", revision: 59, decided_on: {"recorded":{"test_result":1,"review_outcome":4,"verification":1,"ess_conformance_coverage_v1":1}}}
 ---
 # Story: the b10x adapter pins the harness release that builds on llm
 
@@ -217,3 +218,14 @@ Derived 2026-10-20 by `aep:story-scoper` against metaharness `3d697011` and harn
   `evals/aep/driven.steps.yaml:32`. The two manifest comments (`crates/metaharness-tools/Cargo.toml:14-23`,
   `crates/metaharness-b10x/Cargo.toml:14-18`) are deleted, not rewritten; the reasoning goes in the
   commit message.
+## Delivered (wave 3 of 2026-10-20, unit 1)
+
+Commit `40283285`, merged `0a7b3885`; two `aep:adversary` passes
+(`review-result:adr0096-w3-adapter-adversary-1`, `-2`), all findings fixed. Pinned harness 0.15.0
+(`dd5c2a66`) with `b10x-harness-catalogue` as `harness_catalogue::`; unit 2b (`story:b10x-h7-from-the-loops-cwd`)
+moved the pin on to 0.15.1 (`f0870131`) in the same wave. Golden re-recorded with harness's emulator;
+native fixture 7/7; amendment a29; research page `docs/research/2026-10-20-b10x-harness-0.15.0-adapter-surface.md`
+lists 17 + 10 served replies that moved from 0.13.3 (the trailing-slash ones are the tools code-editor
+contract, confirmed by its owner). Corrections kept visible: the relayed "one model-facing change" was
+two; the emulator did not move; the manifest comments and the fetched-repository comment lists were
+deleted, not rewritten; a coordinator doc fix (`aeb70214`) corrected the trailing-slash attribution.

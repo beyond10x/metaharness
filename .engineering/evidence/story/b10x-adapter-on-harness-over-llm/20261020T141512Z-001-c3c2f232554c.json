@@ -1,0 +1,13 @@
+{
+  "at": "2026-10-20T14:15:12Z",
+  "actor": "human:timo",
+  "artifact": "story:b10x-adapter-on-harness-over-llm",
+  "kind": "story",
+  "revision": 57,
+  "change": {
+    "change": "evidence",
+    "kind": "verification",
+    "source": "coordinator, wave 3 of 2026-10-20: the claim that metaharness builds and serves on harness 0.15.0 through b10x-harness-catalogue. Baseline 04ab7bed: workspace 836 passed with b10x-harness-tools at 798325f; red runs on the new pins (b10x lib 3 failed, contract golden 1 failed, native fixture 6 failed). Treatment 40283285 (merged 0a7b3885): 846 passed, 0 failed, 31 ignored, six gate steps exit 0, native fixture 7/7 against a 0.15.0 binary, one harness and one tools revision in Cargo.lock, acceptance grep 0 hits; the coordinator re-ran the doc-reading adversary tests and the docs check after its addendum (2 and 1 passed, docs check exit 0)",
+    "reference": "unit commit 40283285, merge 0a7b3885"
+  }
+}

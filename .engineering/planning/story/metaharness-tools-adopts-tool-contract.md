@@ -2,7 +2,7 @@
 format: aep.planning-md/3
 id: story:metaharness-tools-adopts-tool-contract
 kind: story
-status: active
+status: implemented
 title: metaharness-tools resolves the tool-contract names harness maps
 summary: resolve_verb, subjects_of_verb and Server::call accept the contract names b10x-harness-catalogue maps (fs.read, fs.list, fs.glob, code.write, code.edit) and resolve them as their harness entries; no tools dependency.
 owner: metaharness
@@ -27,10 +27,11 @@ scope:
   path: crates/metaharness-tools/src/server.rs
 - confidence: cited
   path: crates/metaharness-tools/src/tests.rs
-revision: 42
+revision: 44
 transitions:
 - {from: "draft", to: "proposed", at: "2026-10-20T09:05:37Z", actor: "human:timo", revision: 30}
 - {from: "proposed", to: "active", at: "2026-10-20T09:05:38Z", actor: "human:timo", revision: 31}
+- {from: "active", to: "implemented", at: "2026-10-20T19:39:50Z", actor: "human:timo", revision: 44, decided_on: {"recorded":{"test_result":1,"review_outcome":2,"verification":1,"ess_conformance_coverage_v1":1}}}
 ---
 # Story: `metaharness-tools` resolves the tool-contract names harness maps
 
@@ -117,3 +118,14 @@ Derived 2026-10-20 by `aep:story-scoper` against metaharness `3d697011` and harn
   contract names once harness does.
 - Optional, not in the Acceptance: a dev-dependency on the tools revision harness pins, to check the
   mapping against the contract file (`tool_fs::CONTRACT_YAML`).
+## Delivered (wave 3 of 2026-10-20, unit 3)
+
+Commit `9f4d6a0`, merged `6ec311c`; two `aep:adversary` passes
+(`review-result:adr0096-w3-contract-names-adversary-1`, `-2`). Contract names harness maps at 0.15.1
+(`fs.read`, `fs.list`, `fs.glob`, `code.write`, `code.edit`) resolve with their subjects as their entry on
+metaharness's own surface only (`VerbSurface`); a b10x record keeps them unknown; a contract-named invoke
+carrying `expected_sha256` is refused as `precondition-failed` (amendment a32). Pass 2's pre-existing
+finding (a b10x record drops the subject the loop reported) is `story:b10x-record-keeps-the-loops-subjects`,
+its acceptance case committed and ignored. The end-to-end frame-scope case in `run_loop.rs` is the
+implementor's, applied by the coordinator. Measured on the way and routed to harness: a harness-named
+`file_write` accepts and ignores `expected_sha256` despite `additionalProperties: false`.

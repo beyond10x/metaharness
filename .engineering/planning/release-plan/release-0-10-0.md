@@ -2,7 +2,7 @@
 format: aep.planning-md/3
 id: release-plan:release-0-10-0
 kind: release-plan
-status: draft
+status: superseded
 title: Publish Metaharness 0.10.0 so takt can pin the strict scratch-cwd admission and the trace domain
 owner: metaharness
 tags:
@@ -13,7 +13,9 @@ refs:
 relations:
 - delivers: story:strict-hermetic-with-embedder-scratch-cwd
 - delivers: epic:session-format
-revision: 1
+revision: 4
+transitions:
+- {from: "draft", to: "superseded", at: "2026-10-20T10:47:10Z", actor: "human:timo", revision: 3}
 ---
 ## Why this release
 
@@ -62,5 +64,12 @@ A paid run; a vendor pin move; the ESS pin (stays 0.56.0); crates.io or any othe
 
 ## Status
 
-Draft, written with the wave proposal; executes only after the wave closes and only under the
-approval the proposal asks for.
+Tagged, not published (2026-10-20). Steps 1-4 ran: commit `3d697011` "Release 0.10.0"
+(https://github.com/beyond10x/metaharness/pull/34, four checks green, `main` fast-forwarded through the
+bot), annotated tag `0.10.0` object `a659a23291b71f65ceab79f6392538355b0f9a59` on that commit, Release
+workflow run 39396148010 green, four archives present and `SHA256SUMS` verified. Step 4's scan refused
+the x86_64 Linux executable: "artifact breaks 1 private rule(s): line 21914 private-identifiers"; the
+aarch64 executable passed. The match was a sample tracker key compiled in from `aep-cli`'s help text at
+the aep pin `6d7a44d` (aep 0.68.0). Decided by `b10x-chef-orchestrator` (option A): no GitHub Release for
+0.10.0; the tag stays and is pinnable by git; `release-plan:release-0-10-1` ships the same features
+against aep 0.68.1. This plan is superseded by that record.

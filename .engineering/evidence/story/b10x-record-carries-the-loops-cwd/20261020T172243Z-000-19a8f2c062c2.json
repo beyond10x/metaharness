@@ -1,0 +1,13 @@
+{
+  "at": "2026-10-20T17:22:43Z",
+  "actor": "human:timo",
+  "artifact": "story:b10x-record-carries-the-loops-cwd",
+  "kind": "story",
+  "revision": 29,
+  "change": {
+    "change": "evidence",
+    "kind": "verification",
+    "source": "coordinator, wave 3 of 2026-10-20: the claim that the b10x opening record no longer echoes metaharness's planned cwd and H7 reads unk in the loop's words. Baseline 0a7b3885: seam test left Some(/planned/by/metaharness), strict declared-copy run over the golden exit 0 with H7 ok. Treatment 0aa85270 (merged d595b42): 857 passed with the adversary's cases, 0 failed; six gate steps exit 0; native lanes 8/8 and 4/4 on the 0.15.0 binary; strict and --audit b10x runs exit 3 with H7 unk the only gating row not ok; the coordinator applied the pass-2 note's wording and re-ran the doc-reading cases (2 and 1 passed), the docs check and fmt (exit 0)",
+    "reference": "unit commit 0aa85270, merge d595b42"
+  }
+}
