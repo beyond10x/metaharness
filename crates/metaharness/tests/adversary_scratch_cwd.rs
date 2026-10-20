@@ -10,9 +10,7 @@ use metaharness::protocol::{
     CredentialSource, DecisionMode, Event, HermeticAttestation, HermeticMode, HermeticRow, Kind,
     RowVerdict, Verdict,
 };
-use metaharness::{
-    Input, ManualClock, Metaharness, Run, ScriptedLog, ScriptedRunner, SeamFactory,
-};
+use metaharness::{Input, ManualClock, Metaharness, Run, ScriptedLog, ScriptedRunner, SeamFactory};
 
 /// A fresh root holding `copy/`, the directory the embedder made.
 fn embedder_copy() -> (tempfile::TempDir, PathBuf) {
@@ -63,8 +61,7 @@ fn b10x_strict_run_with(
     started: &str,
     seams: &mut dyn SeamFactory,
 ) -> Run {
-    let mut runner =
-        ScriptedRunner::of_lines([started, B10X_FINISHED], ScriptedLog::new());
+    let mut runner = ScriptedRunner::of_lines([started, B10X_FINISHED], ScriptedLog::new());
     let mut builder = Metaharness::new(Kind::B10x)
         .with_hermetic(HermeticMode::Strict)
         .with_credentials(CredentialSource::None)
