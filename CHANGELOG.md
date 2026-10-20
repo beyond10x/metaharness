@@ -67,7 +67,9 @@ was amended and the amendment is named here.
   now refused with the same text as an existing one, where 0.13.3 said *No such file or directory*
   and so told a model whether it exists; `file_edit` of `plain.txt/` and `file_edit` or
   `file_write` of a link spelled with a trailing `/` are now applied to the file, through the link,
-  where 0.13.3 refused them. Every target stays inside the workspace.
+  where 0.13.3 refused them only because the OS answered ENOTDIR. That is the tools code-editor
+  contract (`link/` is `link`, a link landing inside the workspace is followed), an intended
+  difference, not a regression. Every target stays inside the workspace.
 
 ## [0.10.1] — 2026-10-20
 
