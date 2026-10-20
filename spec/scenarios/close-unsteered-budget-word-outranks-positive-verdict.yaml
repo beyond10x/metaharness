@@ -1,0 +1,20 @@
+type: ess-scenario/1
+domain: metaharness.session
+scenario: close-unsteered-budget-word-outranks-positive-verdict
+summary: >-
+  A terminal record with is_error false and a budget word in one field only closes the stream as
+  budget, not completed.
+
+timeline:
+  - at: 2026-10-20T00:00:00Z
+    command: metaharness.session.CloseUnsteeredStream
+    input:
+      terminal_present: true
+      is_error: false
+      subtype: success
+      stop_reason: end_turn
+      terminal_reason: budget-exhausted
+    outcome: observed-budget-stop
+    events:
+      - event: metaharness.session.StreamClassified
+        payload: {reason: budget}

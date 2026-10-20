@@ -1,0 +1,20 @@
+type: ess-scenario/1
+domain: metaharness.session
+scenario: close-unsteered-explicit-error-outranks-success
+summary: >-
+  A terminal record with is_error true closes the stream as error even when its subtype is the
+  legacy success word and no budget word is present.
+
+timeline:
+  - at: 2026-10-20T00:00:00Z
+    command: metaharness.session.CloseUnsteeredStream
+    input:
+      terminal_present: true
+      is_error: true
+      subtype: success
+      stop_reason: end_turn
+      terminal_reason: completed
+    outcome: failed-or-unknown-terminal
+    events:
+      - event: metaharness.session.StreamClassified
+        payload: {reason: error}

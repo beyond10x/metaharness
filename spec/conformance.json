@@ -1,9 +1,29 @@
 {
   "coverage": {
-    "authored": [],
-    "authored_sources": {},
+    "authored": [
+      "metaharness.session/authored/close-unsteered-budget-word-outranks-positive-verdict",
+      "metaharness.session/authored/close-unsteered-explicit-error-outranks-success",
+      "metaharness.spending/authored/finite-charge-above-positive-cap"
+    ],
+    "authored_sources": {
+      "scenarios/close-unsteered-budget-word-outranks-positive-verdict.yaml": {
+        "digest": "sha256:b3e38c0c9b725c7c8e9383c99861e8a79777c0c2784329f60f8c61403a39e43e",
+        "disposition": "accepted",
+        "scenario": "metaharness.session/authored/close-unsteered-budget-word-outranks-positive-verdict"
+      },
+      "scenarios/close-unsteered-explicit-error-outranks-success.yaml": {
+        "digest": "sha256:54590d4ce79780e1018d7bfd89eed058e57d1414fb1c5f5f82532de2321b9d25",
+        "disposition": "accepted",
+        "scenario": "metaharness.session/authored/close-unsteered-explicit-error-outranks-success"
+      },
+      "scenarios/finite-charge-above-positive-cap.yaml": {
+        "digest": "sha256:332e92c68316fd0ce92c57508642b8d8c62b2a0d1fde7a08bc4aa84c9ce3e4a1",
+        "disposition": "accepted",
+        "scenario": "metaharness.spending/authored/finite-charge-above-positive-cap"
+      }
+    },
     "counts": {
-      "authored": 0,
+      "authored": 3,
       "generated": 87,
       "outside": 0,
       "refused": 0
@@ -104,16 +124,16 @@
       "filter": {
         "kind": "all"
       },
-      "origins": "generated",
+      "origins": "generated_and_authored",
       "scope": {
         "kind": "system"
       }
     }
   },
   "provenance": {
-    "contract_digest": "f75edbc39a4de570eb9f19bed8d84b4f80c62cbd759e28502641c23928235b88",
+    "contract_digest": "cbef7df09ddba922a2e4267186a6e6ce255ce6ae6e15113d8d3d2f0ea356f680",
     "scenario_initial_state": "empty",
-    "spec_digest": "d74d6ae1304488c841a4e6042b6bb6ea8e70ea66eb9b9dc9772f6ee7ca5bdc4a",
+    "spec_digest": "f2a307eec9ba70327a06ff28c6efaa5dca75241755a1e2d2463771a92e49fdf8",
     "specification_version": "v1",
     "suite_version": "ess-conformance/35",
     "system": "metaharness"
@@ -4571,39 +4591,6 @@
             "outcome": "failed-or-unknown-terminal"
           },
           "step": "expect_outcome"
-        },
-        {
-          "command": "metaharness.session.CloseUnsteeredStream",
-          "input": {
-            "is_error": {
-              "kind": "literal",
-              "value": true
-            },
-            "stop_reason": {
-              "kind": "literal",
-              "value": "stop_reason"
-            },
-            "subtype": {
-              "kind": "literal",
-              "value": "success"
-            },
-            "terminal_present": {
-              "kind": "literal",
-              "value": true
-            },
-            "terminal_reason": {
-              "kind": "literal",
-              "value": "terminal_reason"
-            }
-          },
-          "step": "execute_command"
-        },
-        {
-          "outcome": {
-            "command": "metaharness.session.CloseUnsteeredStream",
-            "outcome": "failed-or-unknown-terminal"
-          },
-          "step": "expect_outcome"
         }
       ]
     },
@@ -7414,6 +7401,170 @@
         }
       ]
     },
+    "metaharness.session/authored/close-unsteered-budget-word-outranks-positive-verdict": {
+      "purpose": "A terminal record with is_error false and a budget word in one field only closes the stream as budget, not completed.",
+      "source": [
+        {
+          "kind": "domain",
+          "name": "metaharness.session"
+        },
+        {
+          "kind": "type",
+          "name": "metaharness.session.CloseReason"
+        },
+        {
+          "kind": "command",
+          "name": "metaharness.session.CloseUnsteeredStream"
+        },
+        {
+          "kind": "outcome",
+          "name": {
+            "command": "metaharness.session.CloseUnsteeredStream",
+            "outcome": "observed-budget-stop"
+          }
+        },
+        {
+          "kind": "event",
+          "name": "metaharness.session.StreamClassified"
+        }
+      ],
+      "steps": [
+        {
+          "command": "metaharness.session.CloseUnsteeredStream",
+          "input": {
+            "is_error": {
+              "kind": "literal",
+              "value": false
+            },
+            "stop_reason": {
+              "kind": "literal",
+              "value": "end_turn"
+            },
+            "subtype": {
+              "kind": "literal",
+              "value": "success"
+            },
+            "terminal_present": {
+              "kind": "literal",
+              "value": true
+            },
+            "terminal_reason": {
+              "kind": "literal",
+              "value": "budget-exhausted"
+            }
+          },
+          "step": "execute_command"
+        },
+        {
+          "outcome": {
+            "command": "metaharness.session.CloseUnsteeredStream",
+            "outcome": "observed-budget-stop"
+          },
+          "step": "expect_outcome"
+        },
+        {
+          "event": "metaharness.session.StreamClassified",
+          "payload": {
+            "reason": "budget"
+          },
+          "shape": {
+            "reason": {
+              "holds": "enum",
+              "variants": [
+                "completed",
+                "budget",
+                "killed",
+                "error",
+                "steer-halt"
+              ]
+            }
+          },
+          "step": "expect_event"
+        }
+      ]
+    },
+    "metaharness.session/authored/close-unsteered-explicit-error-outranks-success": {
+      "purpose": "A terminal record with is_error true closes the stream as error even when its subtype is the legacy success word and no budget word is present.",
+      "source": [
+        {
+          "kind": "domain",
+          "name": "metaharness.session"
+        },
+        {
+          "kind": "type",
+          "name": "metaharness.session.CloseReason"
+        },
+        {
+          "kind": "command",
+          "name": "metaharness.session.CloseUnsteeredStream"
+        },
+        {
+          "kind": "outcome",
+          "name": {
+            "command": "metaharness.session.CloseUnsteeredStream",
+            "outcome": "failed-or-unknown-terminal"
+          }
+        },
+        {
+          "kind": "event",
+          "name": "metaharness.session.StreamClassified"
+        }
+      ],
+      "steps": [
+        {
+          "command": "metaharness.session.CloseUnsteeredStream",
+          "input": {
+            "is_error": {
+              "kind": "literal",
+              "value": true
+            },
+            "stop_reason": {
+              "kind": "literal",
+              "value": "end_turn"
+            },
+            "subtype": {
+              "kind": "literal",
+              "value": "success"
+            },
+            "terminal_present": {
+              "kind": "literal",
+              "value": true
+            },
+            "terminal_reason": {
+              "kind": "literal",
+              "value": "completed"
+            }
+          },
+          "step": "execute_command"
+        },
+        {
+          "outcome": {
+            "command": "metaharness.session.CloseUnsteeredStream",
+            "outcome": "failed-or-unknown-terminal"
+          },
+          "step": "expect_outcome"
+        },
+        {
+          "event": "metaharness.session.StreamClassified",
+          "payload": {
+            "reason": "error"
+          },
+          "shape": {
+            "reason": {
+              "holds": "enum",
+              "variants": [
+                "completed",
+                "budget",
+                "killed",
+                "error",
+                "steer-halt"
+              ]
+            }
+          },
+          "step": "expect_event"
+        }
+      ]
+    },
     "metaharness.spending.CheckFiniteTerms/outcome/invalid-finite-terms": {
       "purpose": "`metaharness.spending.CheckFiniteTerms` answers `invalid-finite-terms` for an input no other branch's guard claims",
       "source": [
@@ -7637,6 +7788,30 @@
         {
           "event": "metaharness.workspace.ScratchCwdAttested",
           "step": "expect_no_event"
+        },
+        {
+          "command": "metaharness.spending.CheckFiniteTerms",
+          "input": {
+            "terms": {
+              "kind": "literal",
+              "value": {
+                "assumed_micro_usd_per_run": 1.0,
+                "cap_micro_usd": 0.0
+              }
+            }
+          },
+          "step": "execute_command"
+        },
+        {
+          "outcome": {
+            "command": "metaharness.spending.CheckFiniteTerms",
+            "outcome": "invalid-finite-terms"
+          },
+          "step": "expect_outcome"
+        },
+        {
+          "error": "metaharness.spending.InvalidFiniteTerms",
+          "step": "expect_error"
         }
       ]
     },
@@ -9078,6 +9253,60 @@
           },
           "step": "expect_view",
           "view": "metaharness.spending.RetainedFiniteLedger"
+        }
+      ]
+    },
+    "metaharness.spending/authored/finite-charge-above-positive-cap": {
+      "purpose": "A positive assumed charge above a positive cap is refused as invalid finite terms, so the charge-against-cap comparison is held without a zero cap deciding the refusal first.",
+      "source": [
+        {
+          "kind": "domain",
+          "name": "metaharness.spending"
+        },
+        {
+          "kind": "type",
+          "name": "metaharness.spending.FiniteTerms"
+        },
+        {
+          "kind": "command",
+          "name": "metaharness.spending.CheckFiniteTerms"
+        },
+        {
+          "kind": "outcome",
+          "name": {
+            "command": "metaharness.spending.CheckFiniteTerms",
+            "outcome": "invalid-finite-terms"
+          }
+        },
+        {
+          "kind": "error",
+          "name": "metaharness.spending.InvalidFiniteTerms"
+        }
+      ],
+      "steps": [
+        {
+          "command": "metaharness.spending.CheckFiniteTerms",
+          "input": {
+            "terms": {
+              "kind": "literal",
+              "value": {
+                "assumed_micro_usd_per_run": 6000000.0,
+                "cap_micro_usd": 5000000.0
+              }
+            }
+          },
+          "step": "execute_command"
+        },
+        {
+          "outcome": {
+            "command": "metaharness.spending.CheckFiniteTerms",
+            "outcome": "invalid-finite-terms"
+          },
+          "step": "expect_outcome"
+        },
+        {
+          "error": "metaharness.spending.InvalidFiniteTerms",
+          "step": "expect_error"
         }
       ]
     },

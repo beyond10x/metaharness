@@ -1770,7 +1770,7 @@ fn ess_generated_scenarios_drive_production_targets() {
     if external.is_none() {
         assert_eq!(
             scenarios.len(),
-            87,
+            90,
             "review and update coverage deliberately"
         );
         assert_eq!(
@@ -1881,10 +1881,12 @@ fn ess_suite_matches_the_current_specification() {
     let status = Process::new("ess")
         .args(["verify", "conform", "synthesize", "--path"])
         .arg(root.join("spec"))
+        .arg("--scenarios")
+        .arg(root.join("spec"))
         .args(["--suite-format", "5", "--strict-requires", "--out"])
         .arg(&output)
         .output()
-        .expect("ESS 0.56.0 is a gate prerequisite");
+        .expect("ESS 0.66.0 is a gate prerequisite");
     assert!(
         status.status.success(),
         "{}",
@@ -1894,7 +1896,7 @@ fn ess_suite_matches_the_current_specification() {
     assert_eq!(
         fresh,
         suite(),
-        "regenerate spec/conformance.json with ESS 0.56.0"
+        "regenerate spec/conformance.json with ESS 0.66.0"
     );
 }
 

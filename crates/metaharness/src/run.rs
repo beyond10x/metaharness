@@ -1675,4 +1675,67 @@ mod tests {
             "no RETAIN_FAILED warning named the missing transcript: {lines:?}"
         );
     }
+
+    /// The reason [`super::Run::reason_from_record`] closes a stream with, for one terminal record.
+    fn closing_reason(terminal: &str) -> metaharness_protocol::CloseReason {
+        let mut runner = ScriptedRunner::of_lines([terminal.to_string()], ScriptedLog::new());
+        let mut run = Metaharness::new(Kind::Claude)
+            .with_decisions(metaharness_protocol::DecisionMode::Observe)
+            .start_with_clock(
+                Input::Prompt("terminal".to_string()),
+                &mut runner,
+                &mut ScriptedSeams,
+                Box::new(ManualClock::new()),
+            )
+            .expect("a scripted run starts");
+        run.drain().expect("the run drains");
+        match run.events().last() {
+            Some(metaharness_protocol::Event::StreamClosed { reason, .. }) => *reason,
+            other => panic!("the stream did not close: {other:?}"),
+        }
+    }
+
+    /// A terminal record that carries no `is_error`, left out or `null`, is outside what
+    /// `positive-terminal-record` in `spec/domains/session.yaml` decides: ESS reads a comparison
+    /// with an absent value as unknown. Production decides it, and this pins how. Any subtype but
+    /// the legacy `success` closes `error`, because success is never read from absence (amendment
+    /// a18), unless `stop_reason` or `terminal_reason` carries a budget word, which closes
+    /// `budget` first (`reason_from_record`, `run.rs:1226-1230`).
+    #[test]
+    fn a_terminal_record_without_is_error_closes_error_for_any_other_subtype() {
+        for record in [
+            r#"{"emit":"session.ended"}"#,
+            r#"{"emit":"session.ended","is_error":null}"#,
+            r#"{"emit":"session.ended","subtype":"error_during_execution","stop_reason":"end_turn","terminal_reason":"completed"}"#,
+            r#"{"emit":"session.ended","is_error":null,"subtype":"error_during_execution","stop_reason":"end_turn","terminal_reason":"completed"}"#,
+        ] {
+            assert_eq!(
+                closing_reason(record),
+                metaharness_protocol::CloseReason::Error,
+                "{record}"
+            );
+        }
+    }
+
+    /// The other half of the absent-`is_error` rule: the legacy subtype `success` closes
+    /// `completed`, and a budget word beside it still closes `budget`.
+    #[test]
+    fn a_terminal_record_without_is_error_closes_completed_for_the_legacy_success_subtype() {
+        for (record, expected) in [
+            (
+                r#"{"emit":"session.ended","subtype":"success"}"#,
+                metaharness_protocol::CloseReason::Completed,
+            ),
+            (
+                r#"{"emit":"session.ended","is_error":null,"subtype":"success","stop_reason":"end_turn","terminal_reason":"completed"}"#,
+                metaharness_protocol::CloseReason::Completed,
+            ),
+            (
+                r#"{"emit":"session.ended","subtype":"success","terminal_reason":"budget-exhausted"}"#,
+                metaharness_protocol::CloseReason::Budget,
+            ),
+        ] {
+            assert_eq!(closing_reason(record), expected, "{record}");
+        }
+    }
 }
