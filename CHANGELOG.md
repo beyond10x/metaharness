@@ -3,6 +3,18 @@
 What changed. The design document carries *why*; where code and design disagreed, the design
 was amended and the amendment is named here.
 
+## [0.10.1] — 2026-10-20
+
+### Changed
+
+- The eight AEP crates are linked at aep 0.68.1 (`2481b48395afbaea9ad9b6165dbc0a80b80e1c01`) instead of 0.68.0
+  (`6d7a44d3607d2d9a6ffdf0a165993c546c43d0db`). 0.68.1 is 0.68.0 with the sample tracker keys in `aep-cli`'s help text and its
+  sibling crates replaced by neutral ones (`EX-1`…`EX-3`). The 0.10.0 x86_64 Linux executable
+  carried one of those keys, `b10x-gates scan-artifact` refused it, and 0.10.0's GitHub Release
+  was therefore not published; the `0.10.0` tag stays and is pinnable by git. No behaviour of
+  the `metaharness` binary changes. The eval test that admits a matching child `aep` reads the
+  linked version (`aep_cli::VERSION`) instead of the literal `0.68.0`, so it follows the pin.
+
 ## [0.10.0] — 2026-10-20
 
 ### Added

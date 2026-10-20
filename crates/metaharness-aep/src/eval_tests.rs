@@ -311,7 +311,7 @@ fn plan_of(arm: Arm, harness: Harness) -> Plan {
 
     #[test]
     fn current_aep_runtime_admits_matching_child_executable() {
-        let directory = version_fixture("0.68.0");
+        let directory = version_fixture(aep_cli::VERSION);
         let case = plan_of(Arm::Raw, Harness::Claude).case;
         let refusals = child_path_refusals(&[case], directory.path().to_str().unwrap());
         assert!(refusals.is_empty(), "matching current AEP must be admitted: {refusals:?}");
