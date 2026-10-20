@@ -66,8 +66,8 @@ pub use framing::{
     FramingError, RunId, parse_command_line, parse_event_line,
 };
 pub use hermetic::{
-    Assertion, HermeticAttestation, HermeticMode, HermeticRow, ImposedControl, RowVerdict,
-    Severity, UnavailableControl, Verdict,
+    Assertion, DeclaredControl, HermeticAttestation, HermeticMode, HermeticRow, ImposedControl,
+    RowVerdict, Severity, UnavailableControl, Verdict,
 };
 pub use plugin::{
     InstalledPlugin, MarketplacePlugin, MarketplacePluginError, PluginContent, PluginInstall,

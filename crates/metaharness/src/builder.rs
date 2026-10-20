@@ -208,6 +208,17 @@ impl Metaharness {
         self
     }
 
+    /// Declare the `--cwd` directory as this embedder's disposable scratch copy (amendment a27).
+    ///
+    /// H7 is attested `declared` rather than unavailable, H11 is measured by the ancestor walk
+    /// from that directory, and `--hermetic strict` passes on the pair. Meaningless without
+    /// [`Metaharness::with_cwd`], and [`check_spec`] refuses it by name.
+    #[must_use]
+    pub fn with_scratch_cwd(mut self) -> Self {
+        self.spec.scratch_cwd = true;
+        self
+    }
+
     /// Copy the run's raw vendor wire into this directory when the run ends.
     ///
     /// The capture surface the adapter contract's golden samples come from (CT-2): the retained
@@ -621,7 +632,55 @@ fn start_b10x(
             },
         },
     ]);
-    if spec.cwd.is_some() {
+    if spec.scratch_cwd && spec.cwd.is_some() {
+        // Amendment a27 on this kind: the attestation is assembled here and not in the adapter,
+        // and the same rule holds — H7 is declared, H11 is measured from the copy, and the b10x
+        // adapter decides nothing about either (invariant 9).
+        attestation
+            .declared
+            .push(metaharness_protocol::DeclaredControl {
+                row: HermeticRow::H7,
+                declaration: format!(
+                    "the embedder declared {} as its disposable scratch copy (--cwd --scratch-cwd); \
+                     metaharness did not create it, --add-dir is never passed, and the loop's \
+                     tools work in that copy, which is the proposal the embedder rechecks",
+                    cwd.display()
+                ),
+            });
+        let above = memory_ancestors(&cwd);
+        if above.is_empty() {
+            attestation.imposed.push(ImposedControl {
+                row: HermeticRow::H11,
+                how: format!(
+                    "the ancestor walk from the declared scratch copy {} found no CLAUDE.md and no \
+                     AGENTS.md above it, and HOME is absent from the child environment; a memory \
+                     file at the copy's root is the copy's own",
+                    cwd.display()
+                ),
+            });
+        } else {
+            attestation.unavailable.push(UnavailableControl {
+                row: HermeticRow::H11,
+                why: format!(
+                    "the ancestor walk from the declared scratch copy found {} memory file(s) above \
+                     it, which the declaration does not cover: the copy is the embedder's, the \
+                     directories above it are not",
+                    above.len()
+                ),
+            });
+        }
+    } else if spec.cwd.is_some() {
+        // a6 on this kind, in the same words the vendor launches use: H7 is attested unavailable,
+        // never claimed, so the floor's H7 arm reads `gap` here too and does not print "which
+        // metaharness created" over the operator's tree (a27 § 4; adversary finding 1).
+        attestation.unavailable.push(UnavailableControl {
+            row: HermeticRow::H7,
+            why: format!(
+                "the run was pointed at the operator's directory {} (--cwd), which metaharness \
+                 did not create; the loop works in that tree and nothing in this launch widens it",
+                cwd.display()
+            ),
+        });
         attestation.unavailable.push(UnavailableControl {
             row: HermeticRow::H11,
             why: format!(
@@ -640,6 +699,7 @@ fn start_b10x(
             why: "the ancestor walk from the scratch cwd found an ambient memory file".to_owned(),
         });
     }
+    list_declared_copy_memory_files(&spec, &cwd, &mut attestation);
     attestation.imposed.push(ImposedControl {
         row: HermeticRow::H6,
         how: "the direct-provider launch copies no operator login; its only credential source is the caller-named source, or none".to_owned(),
@@ -790,11 +850,12 @@ fn start_claude(
             loopback: loopback_params(loopback.as_ref()),
             tool_server: tool_server(),
         };
-        let plan = metaharness_claude::plan_launch(&spec, &context).map_err(|refusal| {
+        let mut plan = metaharness_claude::plan_launch(&spec, &context).map_err(|refusal| {
             Refusal::Launch {
                 detail: refusal.to_string(),
             }
         })?;
+        list_declared_copy_memory_files(&spec, &plan.cwd, &mut plan.attestation);
 
         // The plan names four pieces of I/O and performs none of them, because a pure function
         // that wrote to a disk would be a pure function nobody could test. This is where they
@@ -1037,10 +1098,11 @@ fn start_codex(
         plugins: plugin_trees(&spec),
         loopback: codex_loopback_params(loopback.as_ref()),
     };
-    let plan =
+    let mut plan =
         metaharness_codex::plan_launch(&spec, &context).map_err(|refusal| Refusal::Launch {
             detail: refusal.to_string(),
         })?;
+    list_declared_copy_memory_files(&spec, &plan.cwd, &mut plan.attestation);
 
     let channel = crate::spawn_codex::CodexHookChannel::create(scratch.path())?;
     materialise_codex(&plan, scratch.path(), &channel)?;
@@ -1552,6 +1614,17 @@ fn resolve_frame(in_memory: Option<Frame>, spec: &RunSpec) -> Result<Option<Fram
 ///
 /// [`Refusal::NoAdapter`] or [`Refusal::ToolSurfaceOwned`].
 pub fn check_spec(spec: &RunSpec) -> Result<(), Refusal> {
+    // A declaration about a directory nobody named (amendment a27). Refused on every kind rather
+    // than ignored: a flag that is read nowhere is a run that differs from what was asked for and
+    // says so nowhere. Here and not in clap's `requires`, so the library face refuses identically.
+    if spec.scratch_cwd && spec.cwd.is_none() {
+        return Err(Refusal::Launch {
+            detail: "--scratch-cwd declares the --cwd directory as the embedder's disposable \
+                     scratch copy and means nothing without --cwd; name the directory with --cwd \
+                     or drop the declaration"
+                .to_owned(),
+        });
+    }
     if !spec.process_write_subtree.is_empty() {
         if spec.kind != Kind::B10x {
             return Err(Refusal::Launch {
@@ -1875,6 +1948,34 @@ fn memory_ancestors(cwd: &std::path::Path) -> Vec<PathBuf> {
         }
     }
     found
+}
+
+/// Memory files at the root of an embedder's declared scratch copy, listed as the copy's own
+/// (design amendment a27).
+///
+/// The ancestor walk starts **above** the working directory, so a `CLAUDE.md` or `AGENTS.md` at
+/// the copy's root never enters H11's verdict: the copy is the embedder's, and what it put there is
+/// in context by its own declaration. The record still has to name it — an input the run had and
+/// nobody listed is the reading § 8.1 refuses — so it goes into `ambient_inputs`, the list of
+/// inputs metaharness reports and does not claim to have removed. Nothing is listed when nothing
+/// was declared: under a6 the operator's tree is theirs, memory files and all.
+fn list_declared_copy_memory_files(
+    spec: &RunSpec,
+    cwd: &std::path::Path,
+    attestation: &mut metaharness_protocol::HermeticAttestation,
+) {
+    if !spec.scratch_cwd {
+        return;
+    }
+    for name in ["CLAUDE.md", "AGENTS.md"] {
+        let candidate = cwd.join(name);
+        if candidate.is_file() {
+            attestation.ambient_inputs.push(format!(
+                "memory file inside the declared scratch copy, the copy's own: {}",
+                candidate.display()
+            ));
+        }
+    }
 }
 
 #[cfg(test)]
@@ -3351,5 +3452,224 @@ mod b10x_launch_tests {
             check_spec(&priced).is_ok(),
             "b10x is the one that takes one"
         );
+    }
+}
+
+#[cfg(test)]
+mod scratch_cwd_tests {
+    //! Amendment a27: `--hermetic strict --cwd <dir> --scratch-cwd` over a directory the embedder
+    //! made, driven through the scripted runner and judged by the real floor. No vendor process,
+    //! no credential, no network.
+
+    use std::path::{Path, PathBuf};
+
+    use metaharness_protocol::{
+        CredentialSource, Event, HermeticAttestation, HermeticMode, HermeticRow, Kind, RunSpec,
+        Verdict,
+    };
+
+    use super::{Input, Metaharness, check_spec};
+    use crate::audit::RunExit;
+    use crate::auditor::FakeAuditor;
+    use crate::clock::ManualClock;
+    use crate::refusal::Refusal;
+    use crate::run::Run;
+    use crate::scripted::{ScriptedLog, ScriptedRunner, ScriptedSeams};
+
+    /// The opening record a strict run needs, naming the directory the child really ran in.
+    fn opening_record(cwd: &Path) -> String {
+        format!(
+            r#"{{"emit":"session.started","harness_version":"{}","output_style":"default","plugins":[],"mcp_servers":[],"credential_source":"none","cwd":"{}"}}"#,
+            metaharness_claude::PINNED_VERSIONS[0],
+            cwd.display()
+        )
+    }
+
+    const END: &str = r#"{"emit":"session.ended","is_error":false,"subtype":"success"}"#;
+
+    /// A fresh root holding `copy/`, the directory the embedder made.
+    fn embedder_copy() -> (tempfile::TempDir, PathBuf) {
+        let root = tempfile::tempdir().unwrap();
+        let copy = root.path().join("copy");
+        std::fs::create_dir(&copy).unwrap();
+        (root, copy)
+    }
+
+    /// A strict Claude run over `copy`, drained to its end, with or without the declaration.
+    fn strict_run(copy: &Path, declared: bool) -> (Run, ScriptedLog) {
+        let canonical = std::fs::canonicalize(copy).unwrap();
+        let log = ScriptedLog::new();
+        let mut runner =
+            ScriptedRunner::of_lines([opening_record(&canonical), END.to_owned()], log.clone());
+        let mut seams = ScriptedSeams;
+        let mut builder = Metaharness::new(Kind::Claude)
+            .with_hermetic(HermeticMode::Strict)
+            .with_credentials(CredentialSource::None)
+            .with_cwd(copy);
+        if declared {
+            builder = builder.with_scratch_cwd();
+        }
+        let mut run = builder
+            .start_with_clock(
+                Input::Prompt("vector".to_owned()),
+                &mut runner,
+                &mut seams,
+                Box::new(ManualClock::new()),
+            )
+            .expect("a named directory plans");
+        run.drain().unwrap();
+        (run, log)
+    }
+
+    fn attestation(run: &Run) -> HermeticAttestation {
+        run.events()
+            .iter()
+            .find_map(|event| {
+                if let Event::SessionStarted { hermetic, .. } = event {
+                    Some(hermetic.clone())
+                } else {
+                    None
+                }
+            })
+            .expect("the run opened")
+    }
+
+    fn verdict(run: &Run, row: HermeticRow) -> (Verdict, String) {
+        let rows = run.hermetic_floor();
+        let found = rows.iter().find(|verdict| verdict.row == row).unwrap();
+        (found.verdict, found.detail.clone())
+    }
+
+    fn exit(run: &Run) -> RunExit {
+        let report = run
+            .audit(&mut FakeAuditor::missing())
+            .expect("no auditor was asked for");
+        run.exit(Some(&report))
+    }
+
+    /// The acceptance statement: a declared copy under strict exits 0, H7 is `declared`, and H11
+    /// is measured by the walk from the copy.
+    #[test]
+    fn a_declared_scratch_copy_passes_strict_with_h7_declared_and_h11_measured() {
+        let (_root, copy) = embedder_copy();
+        let (run, log) = strict_run(&copy, true);
+        let canonical = std::fs::canonicalize(&copy).unwrap();
+
+        // Done when 4: the directory the child ran in is read off the launch plan the runner was
+        // handed, not inferred from the argv, which carries no cwd at all.
+        assert_eq!(log.launched_cwds(), vec![canonical.clone()]);
+
+        let attested = attestation(&run);
+        let h7 = attested
+            .declaration(HermeticRow::H7)
+            .expect("H7 is declared, not imposed and not unavailable");
+        assert!(h7.declaration.contains("embedder"), "{}", h7.declaration);
+        assert!(
+            h7.declaration.contains(&canonical.display().to_string()),
+            "{}",
+            h7.declaration
+        );
+        assert!(!attested.claims(HermeticRow::H7));
+        assert!(
+            attested
+                .unavailable
+                .iter()
+                .all(|control| control.row != HermeticRow::H7)
+        );
+        assert!(
+            attested.claims(HermeticRow::H11),
+            "H11 is measured and clean: {attested:?}"
+        );
+
+        let (h7_verdict, h7_detail) = verdict(&run, HermeticRow::H7);
+        assert_eq!(h7_verdict, Verdict::Ok, "{h7_detail}");
+        assert!(h7_detail.contains("declared"), "{h7_detail}");
+        assert!(
+            !h7_detail.contains("which metaharness created"),
+            "{h7_detail}"
+        );
+        assert_eq!(verdict(&run, HermeticRow::H11).0, Verdict::Ok);
+        assert_eq!(exit(&run), RunExit::Ok);
+    }
+
+    /// The declaration does not stand in for the measurement: a memory file above the copy is a
+    /// gap on H11 and strict still exits 1.
+    #[test]
+    fn a_memory_file_above_the_declared_copy_still_fails_strict() {
+        let (root, copy) = embedder_copy();
+        std::fs::write(root.path().join("AGENTS.md"), "above the copy").unwrap();
+        let (run, _log) = strict_run(&copy, true);
+
+        let attested = attestation(&run);
+        assert!(attested.declares(HermeticRow::H7));
+        assert!(!attested.claims(HermeticRow::H11));
+        let (h11_verdict, h11_detail) = verdict(&run, HermeticRow::H11);
+        assert_eq!(h11_verdict, Verdict::Gap, "{h11_detail}");
+        assert!(h11_detail.contains("1 memory file"), "{h11_detail}");
+        assert_eq!(verdict(&run, HermeticRow::H7).0, Verdict::Ok);
+        assert_eq!(exit(&run), RunExit::Gap);
+    }
+
+    /// A memory file at the copy's root is the copy's own: in context by the declaration, named in
+    /// the record, and not H11's business.
+    #[test]
+    fn a_memory_file_at_the_copys_root_is_listed_as_the_copys_own() {
+        let (_root, copy) = embedder_copy();
+        std::fs::write(copy.join("CLAUDE.md"), "the copy's own").unwrap();
+        let (run, _log) = strict_run(&copy, true);
+        let attested = attestation(&run);
+        let listed = attested
+            .ambient_inputs
+            .iter()
+            .any(|input| input.contains("CLAUDE.md") && input.contains("copy's own"));
+        assert!(listed, "{:?}", attested.ambient_inputs);
+        assert_eq!(verdict(&run, HermeticRow::H11).0, Verdict::Ok);
+        assert_eq!(exit(&run), RunExit::Ok);
+    }
+
+    /// Without the declaration a6 holds: the named directory is the operator's, H7 and H11 are
+    /// unavailable, nothing is declared, and strict exits 1.
+    #[test]
+    fn a_named_directory_without_the_declaration_keeps_the_a6_trade() {
+        let (_root, copy) = embedder_copy();
+        let (run, _log) = strict_run(&copy, false);
+        let attested = attestation(&run);
+        assert_eq!(
+            attested.declared,
+            Vec::<metaharness_protocol::DeclaredControl>::new()
+        );
+        assert!(
+            attested
+                .unavailable
+                .iter()
+                .any(|control| control.row == HermeticRow::H7)
+        );
+        let (h7_verdict, h7_detail) = verdict(&run, HermeticRow::H7);
+        assert_eq!(h7_verdict, Verdict::Gap, "{h7_detail}");
+        assert_eq!(verdict(&run, HermeticRow::H11).0, Verdict::Gap);
+        assert_eq!(exit(&run), RunExit::Gap);
+    }
+
+    /// The declaration names a directory; without `--cwd` there is none, and the run is refused
+    /// by name on every kind rather than started with a flag nobody read.
+    #[test]
+    fn the_declaration_without_a_directory_is_refused_by_name_on_every_kind() {
+        for kind in [Kind::Claude, Kind::Codex, Kind::B10x] {
+            let mut spec = RunSpec::new(kind);
+            spec.scratch_cwd = true;
+            let refusal = check_spec(&spec).expect_err("refused");
+            let Refusal::Launch { detail } = &refusal else {
+                panic!("{kind:?}: expected a launch refusal, got {refusal:?}");
+            };
+            assert!(
+                detail.contains("--scratch-cwd") && detail.contains("--cwd"),
+                "{detail}"
+            );
+
+            let mut named = RunSpec::new(kind);
+            named.cwd = Some("/embedder/copy".into());
+            named.scratch_cwd = true;
+            assert!(check_spec(&named).is_ok(), "{kind:?}: the pair is admitted");
+        }
     }
 }

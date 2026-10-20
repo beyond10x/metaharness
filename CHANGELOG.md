@@ -7,6 +7,23 @@ was amended and the amendment is named here.
 
 ### Added
 
+- `--scratch-cwd` (design amendment a27; takt gap G15, Atlas ADR 0098 point 2): `--cwd <dir>
+  --scratch-cwd` declares the named directory as the embedder's disposable scratch copy, which a6
+  could not tell from the operator's real tree. H7 is attested in a third state, **`declared`**
+  (`HermeticAttestation.declared`, a list beside `imposed` and `unavailable`, absent on the wire
+  when empty so no committed stream or expected document changes bytes; `HermeticRow::
+  admits_declaration` admits H7 alone). H11 stays measured by the ancestor walk from the copy: a
+  memory file above it still fails `--hermetic strict` with exit 1 after the run, one at the copy's
+  root is listed in `ambient_inputs` as the copy's own. `--hermetic strict` passes on a declared
+  copy with nothing above it. Without `--cwd` the flag is refused by name on every kind
+  (`check_spec`; `Metaharness::with_scratch_cwd`). Both vendor launches and the b10x path attest
+  it; the agent-visible execution context reads `workspace=embedder-scratch`. A C1 vector per
+  vendor adapter (`c1-scratch-cwd-declaration`) reads the plan's attestation, and
+  `ScriptedLog::launched_cwds` records each spawn's planned cwd so a test does not rest on argv,
+  which carries none. The ESS domain `metaharness.workspace` gains
+  `DeclareScratchWorkingDirectory` with four scenarios, each a real strict Claude run over
+  `ScriptedRunner` judged by the production floor; `spec/conformance.json` is regenerated and the
+  count gate moves from 79 to 83.
 - The session format `trace-ir/1` (Atlas ADR 0096 point 7) is the ESS domain `metaharness.trace`
   in `spec/domains/trace.yaml`, declared in `spec/system.yaml` and `spec/ess-inputs.yaml`. ESS
   0.56.0 generates 34 scenarios for it — nineteen classify (eleven family outcomes and one outcome
@@ -29,6 +46,13 @@ was amended and the amendment is named here.
 
 ### Changed
 
+- The hermetic floor's H7 row reads the attestation beside the record (a27): an a6 `--cwd`
+  directory is now a `gap` in metaharness's own words, where before the arm compared two paths and
+  printed `ok` *"which metaharness created"* over a directory metaharness did not create. The exit
+  code of a `--cwd` strict run does not move (H11 already made it 1); the row's words do. A
+  `declared` entry on any row but H7 is read as a `gap`. The b10x path now attests H7 unavailable
+  under a6 like the vendor launches; on that kind the record's cwd is metaharness's echo of its
+  plan until `story:b10x-record-carries-the-loops-cwd`, so a declared H7 there is `ok` on the echo.
 - The conformance target checks a `generated` payload field by shape and every literal field by
   value, admits a view invariant whose right-hand side is another field, an integer or a boolean
   (`census.events_total == counts.nodes`, `opening_node.index == 0`, `byte_stable == true`), and

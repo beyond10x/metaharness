@@ -16,7 +16,7 @@ production target in `crates/metaharness-aep/src/drive/ess_conformance.rs`.
 CI installs ESS 0.56.0 from commit
 `84ee8d38eb69e3a4507de801fdcb248232ed6e6e`. Use that compiler locally.
 
-The committed count is **79 selected scenarios**: 79 passed, zero failed,
+The committed count is **83 selected scenarios**: 83 passed, zero failed,
 skipped, unsupported or synthesis refusals. Unknown suite versions, steps,
 bindings, shapes and predicates fail closed. The target handles only the
 constructs this suite uses; extending the specification may require extending it.
@@ -213,3 +213,47 @@ name is `story:project-reads-vendor-transcripts`'s open question and is marked
 re-recording moves no trace scenario. Reading a vendor record through
 `metaharness project` itself, changing any reader or the projection, and
 publishing a `trace-ir/1` schema remain outside this suite.
+
+## Amendment a27 extension — the declared scratch working directory
+
+Protocol amendment a27 (2026-10-20) admits `--hermetic strict` over an embedder's
+declared scratch copy (`--cwd <dir> --scratch-cwd`). The domain
+`metaharness.workspace` gains `DeclareScratchWorkingDirectory` with four
+generated scenarios: the declaration without a directory is refused
+(`check_spec`, every kind); a declared copy under strict is admitted (H7
+`declared`, H11 imposed, exit 0); a declared copy with an `AGENTS.md` one level
+above it reports H7 `declared`, H11 unavailable and exit 1; a named directory
+without the declaration keeps a6 (H7 unavailable, exit 1). Each scenario is a real
+strict Claude run over `ScriptedRunner` in a directory the target made, drained to
+its end; the H7 state and H11 verdict are read off `session.started`'s attestation,
+the exit code off the production floor through `Run::audit` and `Run::exit`, and the
+planned cwd off the runner's log (`ScriptedLog::launched_cwds`), never off argv.
+The outcome is derived from those observations and not from the probe, so a shape
+the domain does not declare fails by scenario name. The combined 83-scenario model
+passes with no skipped, unsupported or refused obligations. Earlier
+79-scenario/52-mutant results above are historical.
+
+Hardening evidence, 2026-10-20, each defect restored and rerun green:
+
+- Changing the specification's admitted payload to `exit_code: 1` (in a scratch
+  copy of `spec/`, run through `METAHARNESS_ESS_SUITE`) failed
+  DeclareScratchWorkingDirectory/outcome/strict-admits-the-declared-copy
+  (82 passed, one failed).
+- Making the production floor read H11 `ok` whenever H7 is declared — the
+  measured walk ignored under the declaration — failed
+  DeclareScratchWorkingDirectory/outcome/memory-above-the-copy-fails-strict
+  (82 passed, one failed), reported as the undeclared shape
+  `("declared", false, 0)` rather than aborting the run.
+- `ess verify conform mutate --class guard-negate --emit`, execution of every
+  emitted suite against production, and `--collect` killed **55 of 55 mutants**:
+  no survivors, inconclusive, stillborn, unwitnessed or equivalent results.
+  Baseline: 83 scenarios, zero refusals. Thirty-five mutants add synthesis
+  refusals but each is killed by executed scenarios. The three new guards are
+  each killed by two scenarios of the command. Other classes were not claimed.
+
+Two boundaries are stated rather than claimed. The declaration confines nothing
+(`story:confinement-of-vendor-kinds`) and the target makes the copy itself, as
+Loom's executor would; neither a vendor process nor a model starts, so the
+scenarios establish what the floor decides about the record, not what a vendor
+binary does in the copy. The Codex and b10x paths carry the same attestation rule
+and are pinned by unit tests and the Codex C1 vector, not by this domain.

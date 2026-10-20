@@ -164,6 +164,11 @@ pub enum ScopeAnnounce {
 /// neither can grow a knob the other cannot express.
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 #[cfg_attr(feature = "clap", derive(clap::Args))]
+#[allow(
+    clippy::struct_excessive_bools,
+    reason = "each bool is one `--flag` of the run verb, and the anti-drift test derives the flag \
+              set from these fields; a state enum here would be a second spelling of the argv"
+)]
 pub struct RunSpec {
     /// Which harness.
     #[cfg_attr(feature = "clap", arg(value_enum))]
@@ -393,6 +398,23 @@ pub struct RunSpec {
     #[cfg_attr(feature = "clap", arg(long, value_name = "DIR"))]
     pub cwd: Option<PathBuf>,
 
+    /// Declare the `--cwd` directory as the embedder's **disposable scratch copy** (amendment a27).
+    ///
+    /// a6 treats every named directory as the operator's real tree. An embedder that made a copy
+    /// of the workspace to run in, and rechecks that copy's changes before anything reaches the
+    /// repository, is not that: its writes are the proposal, its memory files are copies. Under
+    /// this declaration H7 ("the working directory is ours") is attested **`declared`** — the
+    /// embedder declared the directory, metaharness did not create it, `--add-dir` is never
+    /// passed — and H11 stays **measured** by the ancestor walk from that directory. A memory file
+    /// above it still fails `--hermetic strict`; one at the copy's root is the copy's own and is
+    /// listed as an ambient input. The vendor sandbox is widened over the copy exactly as under
+    /// `--cwd` alone (a6.1).
+    ///
+    /// Meaningless without `--cwd`, and refused by name rather than ignored: a declaration about a
+    /// directory nobody named is a run that differs from what was asked for and says so nowhere.
+    #[cfg_attr(feature = "clap", arg(long))]
+    pub scratch_cwd: bool,
+
     /// Copy the run's raw vendor wire into this directory when the run ends.
     ///
     /// The retained transcript or rollout and every raw hook input the vendor wrote are copied
@@ -568,6 +590,7 @@ impl RunSpec {
             plugin_dir: Vec::new(),
             plugin: Vec::new(),
             cwd: None,
+            scratch_cwd: false,
             retain_dir: None,
             strict_version: false,
             audit: false,
@@ -599,10 +622,10 @@ impl RunSpec {
             HermeticMode::On => "on",
             HermeticMode::Strict => "strict",
         };
-        let workspace = if self.cwd.is_some() {
-            "operator-named"
-        } else {
-            "metaharness-scratch"
+        let workspace = match (self.cwd.is_some(), self.scratch_cwd) {
+            (true, true) => "embedder-scratch",
+            (true, false) => "operator-named",
+            (false, _) => "metaharness-scratch",
         };
         let decisions = match self.decisions {
             DecisionMode::Ask => "metaharness asks the embedder before each mediated call",

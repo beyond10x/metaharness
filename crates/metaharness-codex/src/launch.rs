@@ -1181,7 +1181,13 @@ fn sandbox_mode(spec: &RunSpec) -> &'static str {
 /// Wrapped by hand at the width the rest of this document uses: a comment that runs off the side
 /// of a terminal is one an operator reading a retained scratch home will not read.
 fn sandbox_reason(spec: &RunSpec) -> &'static str {
-    if spec.cwd.is_some() {
+    if spec.scratch_cwd && spec.cwd.is_some() {
+        "This run was pointed at the embedder's declared scratch copy (--cwd --scratch-cwd,\n\
+         # amendment a27), so the child can edit files in it: the copy's changes are the proposal\n\
+         # the embedder rechecks. The grant is the same as under --cwd alone (a6.1); what differs\n\
+         # is the attestation, where H7 reads declared instead of unavailable. --add-dir is still\n\
+         # never passed, and no writable_roots widens it past this copy."
+    } else if spec.cwd.is_some() {
         "This run was pointed at the operator's own tree (--cwd, amendment a6), so the child\n\
          # can edit files in it — that is what a6 trades H7 and H11 for. Without this grant the\n\
          # trade buys a repository nobody can write to, which is what a paid run found on\n\
@@ -1257,7 +1263,8 @@ fn attest(
         ),
     )];
 
-    attest_cwd(spec, context, &mut imposed, &mut unavailable);
+    let mut declared = Vec::new();
+    attest_cwd(spec, context, &mut imposed, &mut unavailable, &mut declared);
 
     match spec.credentials {
         CredentialSource::OperatorLogin => imposed.push(control_imposed(
@@ -1296,6 +1303,7 @@ fn attest(
         decisions: spec.decisions,
         imposed,
         unavailable,
+        declared,
         ambient_inputs: ambient_inputs(spec),
         installed_plugins: installed_plugins(plugin_installs),
     }
@@ -1343,8 +1351,45 @@ fn attest_cwd(
     context: &LaunchContext,
     imposed: &mut Vec<ImposedControl>,
     unavailable: &mut Vec<UnavailableControl>,
+    declared: &mut Vec<metaharness_protocol::DeclaredControl>,
 ) {
-    if spec.cwd.is_some() {
+    if spec.scratch_cwd && spec.cwd.is_some() {
+        // Amendment a27: an embedder's declared scratch copy. H7 is stated by the party that made
+        // the directory, never claimed here; the sandbox grant is the same as under `--cwd` alone
+        // and is stated in the same row for the same reason as a6.1. H11 is measured by the walk a
+        // scratch cwd gets, because the declaration covers the copy and nothing above it.
+        declared.push(metaharness_protocol::DeclaredControl {
+            row: HermeticRow::H7,
+            declaration: format!(
+                "the embedder declared {} as its disposable scratch copy (--cwd --scratch-cwd); \
+                 metaharness did not create it and --add-dir is never passed. THE CHILD COULD WRITE \
+                 TO THAT COPY: sandbox_mode = \"{SANDBOX_WORKSPACE_WRITE}\" for this run, as under \
+                 --cwd alone (a6.1), because the copy's changes are the proposal the embedder \
+                 rechecks",
+                context.cwd.display()
+            ),
+        });
+        if context.memory_ancestors.is_empty() {
+            imposed.push(control_imposed(
+                HermeticRow::H11,
+                format!(
+                    "the ancestor walk from the declared scratch copy {} found no AGENTS.md and no \
+                     CLAUDE.md above it; a memory file at the copy's root is the copy's own",
+                    context.cwd.display()
+                ),
+            ));
+        } else {
+            unavailable.push(control_unavailable(
+                HermeticRow::H11,
+                format!(
+                    "the ancestor walk from the declared scratch copy found {} memory file(s) \
+                     above it, which the declaration does not cover: the copy is the embedder's, \
+                     the directories above it are not",
+                    context.memory_ancestors.len()
+                ),
+            ));
+        }
+    } else if spec.cwd.is_some() {
         unavailable.push(control_unavailable(
             HermeticRow::H7,
             format!(
@@ -1993,6 +2038,91 @@ mod tests {
             "the scratch case must state its posture just as plainly: {}",
             row.how
         );
+    }
+
+    // ------------------------------------------------------- the declared scratch copy (a27)
+
+    /// A plan for a run in the embedder's declared scratch copy.
+    fn declared_copy_plan(memory_ancestors: Vec<PathBuf>) -> LaunchPlan {
+        let mut spec = spec();
+        spec.cwd = Some(PathBuf::from("/embedder/copy"));
+        spec.scratch_cwd = true;
+        let mut context = context();
+        context.cwd = PathBuf::from("/embedder/copy");
+        context.memory_ancestors = memory_ancestors;
+        plan_launch(&spec, &context).expect("a declared copy plans")
+    }
+
+    /// The embedder's declared copy: H7 is `declared` — naming the copy and the `workspace-write`
+    /// grant, a6.1's rule — and neither imposed nor unavailable; H11 is imposed by the same walk a
+    /// scratch cwd gets; the scratch config still grants the tree.
+    #[test]
+    fn a_declared_scratch_copy_declares_h7_and_measures_h11() {
+        let plan = declared_copy_plan(Vec::new());
+        let declared = plan
+            .attestation
+            .declaration(HermeticRow::H7)
+            .expect("H7 is declared");
+        assert!(
+            declared.declaration.contains("/embedder/copy"),
+            "{}",
+            declared.declaration
+        );
+        assert!(
+            declared.declaration.contains("workspace-write"),
+            "{}",
+            declared.declaration
+        );
+        assert!(!plan.attestation.claims(HermeticRow::H7));
+        assert!(
+            plan.attestation
+                .unavailable
+                .iter()
+                .all(|control| control.row != HermeticRow::H7)
+        );
+        assert!(plan.attestation.claims(HermeticRow::H11));
+        assert!(
+            plan.attestation
+                .declared
+                .iter()
+                .all(|control| control.row.admits_declaration()),
+            "only H7 may be declared: {:?}",
+            plan.attestation.declared
+        );
+        assert!(grants_the_named_tree(&plan.config), "{}", plan.config);
+        assert!(plan.config.contains("amendment a27"), "{}", plan.config);
+    }
+
+    /// A memory file above the declared copy is measured, not declared away: H11 goes unavailable
+    /// with the count named, H7 stays declared, and the launch is not refused.
+    #[test]
+    fn a_memory_file_above_the_declared_copy_is_attested_unavailable_not_refused() {
+        let plan = declared_copy_plan(vec![PathBuf::from("/embedder/AGENTS.md")]);
+        assert!(plan.attestation.declares(HermeticRow::H7));
+        assert!(!plan.attestation.claims(HermeticRow::H11));
+        let h11 = plan
+            .attestation
+            .unavailable
+            .iter()
+            .find(|control| control.row == HermeticRow::H11)
+            .expect("H11 unavailable");
+        assert!(h11.why.contains("1 memory file"), "{}", h11.why);
+    }
+
+    /// The declaration without `--cwd` is the library's refusal (`check_spec`), not this plan's:
+    /// over a scratch cwd the flag changes nothing here, and nothing is declared.
+    #[test]
+    fn a_declaration_without_a_directory_changes_nothing_in_the_plan() {
+        let mut spec = spec();
+        spec.scratch_cwd = true;
+        let plan = plan_launch(&spec, &context()).expect("a scratch cwd plans");
+        assert_eq!(
+            plan.attestation.declared,
+            Vec::<metaharness_protocol::DeclaredControl>::new()
+        );
+        assert!(plan.attestation.claims(HermeticRow::H7));
+        assert!(plan.attestation.claims(HermeticRow::H11));
+        assert!(!grants_the_named_tree(&plan.config), "{}", plan.config);
     }
 
     /// `--hermetic strict` must still refuse a named-cwd run: the grant changes what the child may

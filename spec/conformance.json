@@ -4,7 +4,7 @@
     "authored_sources": {},
     "counts": {
       "authored": 0,
-      "generated": 79,
+      "generated": 83,
       "outside": 0,
       "refused": 0
     },
@@ -87,7 +87,11 @@
       "metaharness.workspace.DeclareProcessWrites/outcome/file-scope-is-not-process-scope",
       "metaharness.workspace.DeclareProcessWrites/outcome/process-explicit-subtrees",
       "metaharness.workspace.DeclareProcessWrites/outcome/process-invalid-directory",
-      "metaharness.workspace.DeclareProcessWrites/outcome/process-read-only-default"
+      "metaharness.workspace.DeclareProcessWrites/outcome/process-read-only-default",
+      "metaharness.workspace.DeclareScratchWorkingDirectory/outcome/declaration-without-directory",
+      "metaharness.workspace.DeclareScratchWorkingDirectory/outcome/memory-above-the-copy-fails-strict",
+      "metaharness.workspace.DeclareScratchWorkingDirectory/outcome/named-without-declaration-keeps-a6",
+      "metaharness.workspace.DeclareScratchWorkingDirectory/outcome/strict-admits-the-declared-copy"
     ],
     "knowledge": "complete_inventory",
     "outside": [],
@@ -103,9 +107,9 @@
     }
   },
   "provenance": {
-    "contract_digest": "6e05547588b9f54ec4cf48c10c5ac443b156dfe94b6c935b167404837852a777",
+    "contract_digest": "5ea3d11b4bbeaaef2c95fa3b72fa52a767230447769e8d4fe54ea57e02dd80fc",
     "scenario_initial_state": "empty",
-    "spec_digest": "dcfb12252a5d3a0a0d0ce6971322452553564ff7ed806b1fcbb876771640f91c",
+    "spec_digest": "3f7e041d364d4355b18bcaee719bfa05cd9ba7daa1f37aa5ff08613c34cd10d3",
     "specification_version": "v1",
     "suite_version": "ess-conformance/35",
     "system": "metaharness"
@@ -204,6 +208,10 @@
         {
           "kind": "event",
           "name": "metaharness.workspace.ProcessWritePlanned"
+        },
+        {
+          "kind": "event",
+          "name": "metaharness.workspace.ScratchCwdAttested"
         }
       ],
       "steps": [
@@ -312,6 +320,10 @@
         {
           "event": "metaharness.workspace.ProcessWritePlanned",
           "step": "expect_no_event"
+        },
+        {
+          "event": "metaharness.workspace.ScratchCwdAttested",
+          "step": "expect_no_event"
         }
       ]
     },
@@ -408,6 +420,10 @@
         {
           "kind": "event",
           "name": "metaharness.workspace.ProcessWritePlanned"
+        },
+        {
+          "kind": "event",
+          "name": "metaharness.workspace.ScratchCwdAttested"
         }
       ],
       "steps": [
@@ -515,6 +531,10 @@
         },
         {
           "event": "metaharness.workspace.ProcessWritePlanned",
+          "step": "expect_no_event"
+        },
+        {
+          "event": "metaharness.workspace.ScratchCwdAttested",
           "step": "expect_no_event"
         },
         {
@@ -633,6 +653,10 @@
         {
           "kind": "event",
           "name": "metaharness.workspace.ProcessWritePlanned"
+        },
+        {
+          "kind": "event",
+          "name": "metaharness.workspace.ScratchCwdAttested"
         }
       ],
       "steps": [
@@ -737,6 +761,10 @@
         {
           "event": "metaharness.workspace.ProcessWritePlanned",
           "step": "expect_no_event"
+        },
+        {
+          "event": "metaharness.workspace.ScratchCwdAttested",
+          "step": "expect_no_event"
         }
       ]
     },
@@ -833,6 +861,10 @@
         {
           "kind": "event",
           "name": "metaharness.workspace.ProcessWritePlanned"
+        },
+        {
+          "kind": "event",
+          "name": "metaharness.workspace.ScratchCwdAttested"
         }
       ],
       "steps": [
@@ -937,6 +969,10 @@
         {
           "event": "metaharness.workspace.ProcessWritePlanned",
           "step": "expect_no_event"
+        },
+        {
+          "event": "metaharness.workspace.ScratchCwdAttested",
+          "step": "expect_no_event"
         }
       ]
     },
@@ -1033,6 +1069,10 @@
         {
           "kind": "event",
           "name": "metaharness.workspace.ProcessWritePlanned"
+        },
+        {
+          "kind": "event",
+          "name": "metaharness.workspace.ScratchCwdAttested"
         }
       ],
       "steps": [
@@ -1137,6 +1177,10 @@
         {
           "event": "metaharness.workspace.ProcessWritePlanned",
           "step": "expect_no_event"
+        },
+        {
+          "event": "metaharness.workspace.ScratchCwdAttested",
+          "step": "expect_no_event"
         }
       ]
     },
@@ -1233,6 +1277,10 @@
         {
           "kind": "event",
           "name": "metaharness.workspace.ProcessWritePlanned"
+        },
+        {
+          "kind": "event",
+          "name": "metaharness.workspace.ScratchCwdAttested"
         }
       ],
       "steps": [
@@ -1337,6 +1385,10 @@
         {
           "event": "metaharness.workspace.ProcessWritePlanned",
           "step": "expect_no_event"
+        },
+        {
+          "event": "metaharness.workspace.ScratchCwdAttested",
+          "step": "expect_no_event"
         }
       ]
     },
@@ -1433,6 +1485,10 @@
         {
           "kind": "event",
           "name": "metaharness.workspace.ProcessWritePlanned"
+        },
+        {
+          "kind": "event",
+          "name": "metaharness.workspace.ScratchCwdAttested"
         }
       ],
       "steps": [
@@ -1537,6 +1593,10 @@
         {
           "event": "metaharness.workspace.ProcessWritePlanned",
           "step": "expect_no_event"
+        },
+        {
+          "event": "metaharness.workspace.ScratchCwdAttested",
+          "step": "expect_no_event"
         }
       ]
     },
@@ -1633,6 +1693,10 @@
         {
           "kind": "event",
           "name": "metaharness.workspace.ProcessWritePlanned"
+        },
+        {
+          "kind": "event",
+          "name": "metaharness.workspace.ScratchCwdAttested"
         }
       ],
       "steps": [
@@ -1737,6 +1801,10 @@
         {
           "event": "metaharness.workspace.ProcessWritePlanned",
           "step": "expect_no_event"
+        },
+        {
+          "event": "metaharness.workspace.ScratchCwdAttested",
+          "step": "expect_no_event"
         }
       ]
     },
@@ -1833,6 +1901,10 @@
         {
           "kind": "event",
           "name": "metaharness.workspace.ProcessWritePlanned"
+        },
+        {
+          "kind": "event",
+          "name": "metaharness.workspace.ScratchCwdAttested"
         }
       ],
       "steps": [
@@ -1941,6 +2013,10 @@
         },
         {
           "event": "metaharness.workspace.ProcessWritePlanned",
+          "step": "expect_no_event"
+        },
+        {
+          "event": "metaharness.workspace.ScratchCwdAttested",
           "step": "expect_no_event"
         },
         {
@@ -2055,6 +2131,10 @@
         {
           "kind": "event",
           "name": "metaharness.workspace.ProcessWritePlanned"
+        },
+        {
+          "kind": "event",
+          "name": "metaharness.workspace.ScratchCwdAttested"
         }
       ],
       "steps": [
@@ -2164,6 +2244,10 @@
         {
           "event": "metaharness.workspace.ProcessWritePlanned",
           "step": "expect_no_event"
+        },
+        {
+          "event": "metaharness.workspace.ScratchCwdAttested",
+          "step": "expect_no_event"
         }
       ]
     },
@@ -2260,6 +2344,10 @@
         {
           "kind": "event",
           "name": "metaharness.workspace.ProcessWritePlanned"
+        },
+        {
+          "kind": "event",
+          "name": "metaharness.workspace.ScratchCwdAttested"
         }
       ],
       "steps": [
@@ -2369,6 +2457,10 @@
         {
           "event": "metaharness.workspace.ProcessWritePlanned",
           "step": "expect_no_event"
+        },
+        {
+          "event": "metaharness.workspace.ScratchCwdAttested",
+          "step": "expect_no_event"
         }
       ]
     },
@@ -2465,6 +2557,10 @@
         {
           "kind": "event",
           "name": "metaharness.workspace.ProcessWritePlanned"
+        },
+        {
+          "kind": "event",
+          "name": "metaharness.workspace.ScratchCwdAttested"
         }
       ],
       "steps": [
@@ -2569,6 +2665,10 @@
         {
           "event": "metaharness.workspace.ProcessWritePlanned",
           "step": "expect_no_event"
+        },
+        {
+          "event": "metaharness.workspace.ScratchCwdAttested",
+          "step": "expect_no_event"
         }
       ]
     },
@@ -2665,6 +2765,10 @@
         {
           "kind": "event",
           "name": "metaharness.workspace.ProcessWritePlanned"
+        },
+        {
+          "kind": "event",
+          "name": "metaharness.workspace.ScratchCwdAttested"
         }
       ],
       "steps": [
@@ -2769,6 +2873,10 @@
         {
           "event": "metaharness.workspace.ProcessWritePlanned",
           "step": "expect_no_event"
+        },
+        {
+          "event": "metaharness.workspace.ScratchCwdAttested",
+          "step": "expect_no_event"
         }
       ]
     },
@@ -2865,6 +2973,10 @@
         {
           "kind": "event",
           "name": "metaharness.workspace.ProcessWritePlanned"
+        },
+        {
+          "kind": "event",
+          "name": "metaharness.workspace.ScratchCwdAttested"
         }
       ],
       "steps": [
@@ -2979,6 +3091,10 @@
         {
           "event": "metaharness.workspace.ProcessWritePlanned",
           "step": "expect_no_event"
+        },
+        {
+          "event": "metaharness.workspace.ScratchCwdAttested",
+          "step": "expect_no_event"
         }
       ]
     },
@@ -3075,6 +3191,10 @@
         {
           "kind": "event",
           "name": "metaharness.workspace.ProcessWritePlanned"
+        },
+        {
+          "kind": "event",
+          "name": "metaharness.workspace.ScratchCwdAttested"
         }
       ],
       "steps": [
@@ -3189,6 +3309,10 @@
         {
           "event": "metaharness.workspace.ProcessWritePlanned",
           "step": "expect_no_event"
+        },
+        {
+          "event": "metaharness.workspace.ScratchCwdAttested",
+          "step": "expect_no_event"
         }
       ]
     },
@@ -3285,6 +3409,10 @@
         {
           "kind": "event",
           "name": "metaharness.workspace.ProcessWritePlanned"
+        },
+        {
+          "kind": "event",
+          "name": "metaharness.workspace.ScratchCwdAttested"
         }
       ],
       "steps": [
@@ -3399,6 +3527,10 @@
         {
           "event": "metaharness.workspace.ProcessWritePlanned",
           "step": "expect_no_event"
+        },
+        {
+          "event": "metaharness.workspace.ScratchCwdAttested",
+          "step": "expect_no_event"
         }
       ]
     },
@@ -3495,6 +3627,10 @@
         {
           "kind": "event",
           "name": "metaharness.workspace.ProcessWritePlanned"
+        },
+        {
+          "kind": "event",
+          "name": "metaharness.workspace.ScratchCwdAttested"
         }
       ],
       "steps": [
@@ -3609,6 +3745,10 @@
         {
           "event": "metaharness.workspace.ProcessWritePlanned",
           "step": "expect_no_event"
+        },
+        {
+          "event": "metaharness.workspace.ScratchCwdAttested",
+          "step": "expect_no_event"
         }
       ]
     },
@@ -3705,6 +3845,10 @@
         {
           "kind": "event",
           "name": "metaharness.workspace.ProcessWritePlanned"
+        },
+        {
+          "kind": "event",
+          "name": "metaharness.workspace.ScratchCwdAttested"
         }
       ],
       "steps": [
@@ -3819,6 +3963,10 @@
         {
           "event": "metaharness.workspace.ProcessWritePlanned",
           "step": "expect_no_event"
+        },
+        {
+          "event": "metaharness.workspace.ScratchCwdAttested",
+          "step": "expect_no_event"
         }
       ]
     },
@@ -3915,6 +4063,10 @@
         {
           "kind": "event",
           "name": "metaharness.workspace.ProcessWritePlanned"
+        },
+        {
+          "kind": "event",
+          "name": "metaharness.workspace.ScratchCwdAttested"
         }
       ],
       "steps": [
@@ -4040,6 +4192,10 @@
         },
         {
           "event": "metaharness.workspace.ProcessWritePlanned",
+          "step": "expect_no_event"
+        },
+        {
+          "event": "metaharness.workspace.ScratchCwdAttested",
           "step": "expect_no_event"
         },
         {
@@ -4236,6 +4392,10 @@
         {
           "kind": "event",
           "name": "metaharness.workspace.ProcessWritePlanned"
+        },
+        {
+          "kind": "event",
+          "name": "metaharness.workspace.ScratchCwdAttested"
         }
       ],
       "steps": [
@@ -4361,6 +4521,10 @@
         },
         {
           "event": "metaharness.workspace.ProcessWritePlanned",
+          "step": "expect_no_event"
+        },
+        {
+          "event": "metaharness.workspace.ScratchCwdAttested",
           "step": "expect_no_event"
         },
         {
@@ -4524,6 +4688,10 @@
         {
           "kind": "event",
           "name": "metaharness.workspace.ProcessWritePlanned"
+        },
+        {
+          "kind": "event",
+          "name": "metaharness.workspace.ScratchCwdAttested"
         }
       ],
       "steps": [
@@ -4650,6 +4818,10 @@
         {
           "event": "metaharness.workspace.ProcessWritePlanned",
           "step": "expect_no_event"
+        },
+        {
+          "event": "metaharness.workspace.ScratchCwdAttested",
+          "step": "expect_no_event"
         }
       ]
     },
@@ -4754,6 +4926,10 @@
         {
           "kind": "event",
           "name": "metaharness.workspace.ProcessWritePlanned"
+        },
+        {
+          "kind": "event",
+          "name": "metaharness.workspace.ScratchCwdAttested"
         }
       ],
       "steps": [
@@ -4866,6 +5042,10 @@
         {
           "event": "metaharness.workspace.ProcessWritePlanned",
           "step": "expect_no_event"
+        },
+        {
+          "event": "metaharness.workspace.ScratchCwdAttested",
+          "step": "expect_no_event"
         }
       ]
     },
@@ -4970,6 +5150,10 @@
         {
           "kind": "event",
           "name": "metaharness.workspace.ProcessWritePlanned"
+        },
+        {
+          "kind": "event",
+          "name": "metaharness.workspace.ScratchCwdAttested"
         }
       ],
       "steps": [
@@ -5082,6 +5266,10 @@
         {
           "event": "metaharness.workspace.ProcessWritePlanned",
           "step": "expect_no_event"
+        },
+        {
+          "event": "metaharness.workspace.ScratchCwdAttested",
+          "step": "expect_no_event"
         }
       ]
     },
@@ -5186,6 +5374,10 @@
         {
           "kind": "event",
           "name": "metaharness.workspace.ProcessWritePlanned"
+        },
+        {
+          "kind": "event",
+          "name": "metaharness.workspace.ScratchCwdAttested"
         }
       ],
       "steps": [
@@ -5297,6 +5489,10 @@
         },
         {
           "event": "metaharness.workspace.ProcessWritePlanned",
+          "step": "expect_no_event"
+        },
+        {
+          "event": "metaharness.workspace.ScratchCwdAttested",
           "step": "expect_no_event"
         },
         {
@@ -5415,6 +5611,10 @@
         {
           "kind": "event",
           "name": "metaharness.workspace.ProcessWritePlanned"
+        },
+        {
+          "kind": "event",
+          "name": "metaharness.workspace.ScratchCwdAttested"
         }
       ],
       "steps": [
@@ -5539,6 +5739,10 @@
         {
           "event": "metaharness.workspace.ProcessWritePlanned",
           "step": "expect_no_event"
+        },
+        {
+          "event": "metaharness.workspace.ScratchCwdAttested",
+          "step": "expect_no_event"
         }
       ]
     },
@@ -5635,6 +5839,10 @@
         {
           "kind": "event",
           "name": "metaharness.workspace.ProcessWritePlanned"
+        },
+        {
+          "kind": "event",
+          "name": "metaharness.workspace.ScratchCwdAttested"
         }
       ],
       "steps": [
@@ -5759,6 +5967,10 @@
         {
           "event": "metaharness.workspace.ProcessWritePlanned",
           "step": "expect_no_event"
+        },
+        {
+          "event": "metaharness.workspace.ScratchCwdAttested",
+          "step": "expect_no_event"
         }
       ]
     },
@@ -5855,6 +6067,10 @@
         {
           "kind": "event",
           "name": "metaharness.workspace.ProcessWritePlanned"
+        },
+        {
+          "kind": "event",
+          "name": "metaharness.workspace.ScratchCwdAttested"
         }
       ],
       "steps": [
@@ -5979,6 +6195,10 @@
         {
           "event": "metaharness.workspace.ProcessWritePlanned",
           "step": "expect_no_event"
+        },
+        {
+          "event": "metaharness.workspace.ScratchCwdAttested",
+          "step": "expect_no_event"
         }
       ]
     },
@@ -6075,6 +6295,10 @@
         {
           "kind": "event",
           "name": "metaharness.workspace.ProcessWritePlanned"
+        },
+        {
+          "kind": "event",
+          "name": "metaharness.workspace.ScratchCwdAttested"
         }
       ],
       "steps": [
@@ -6199,6 +6423,10 @@
         {
           "event": "metaharness.workspace.ProcessWritePlanned",
           "step": "expect_no_event"
+        },
+        {
+          "event": "metaharness.workspace.ScratchCwdAttested",
+          "step": "expect_no_event"
         }
       ]
     },
@@ -6295,6 +6523,10 @@
         {
           "kind": "event",
           "name": "metaharness.workspace.ProcessWritePlanned"
+        },
+        {
+          "kind": "event",
+          "name": "metaharness.workspace.ScratchCwdAttested"
         }
       ],
       "steps": [
@@ -6419,6 +6651,10 @@
         {
           "event": "metaharness.workspace.ProcessWritePlanned",
           "step": "expect_no_event"
+        },
+        {
+          "event": "metaharness.workspace.ScratchCwdAttested",
+          "step": "expect_no_event"
         }
       ]
     },
@@ -6517,6 +6753,10 @@
           "name": "metaharness.workspace.ProcessWritePlanned"
         },
         {
+          "kind": "event",
+          "name": "metaharness.workspace.ScratchCwdAttested"
+        },
+        {
           "kind": "view",
           "name": "metaharness.session.RetainedClosure"
         }
@@ -6613,6 +6853,10 @@
         },
         {
           "event": "metaharness.workspace.ProcessWritePlanned",
+          "step": "expect_no_event"
+        },
+        {
+          "event": "metaharness.workspace.ScratchCwdAttested",
           "step": "expect_no_event"
         },
         {
@@ -6781,6 +7025,10 @@
           "name": "metaharness.workspace.ProcessWritePlanned"
         },
         {
+          "kind": "event",
+          "name": "metaharness.workspace.ScratchCwdAttested"
+        },
+        {
           "kind": "error",
           "name": "metaharness.spending.InvalidFiniteTerms"
         }
@@ -6885,6 +7133,10 @@
         {
           "event": "metaharness.workspace.ProcessWritePlanned",
           "step": "expect_no_event"
+        },
+        {
+          "event": "metaharness.workspace.ScratchCwdAttested",
+          "step": "expect_no_event"
         }
       ]
     },
@@ -6981,6 +7233,10 @@
         {
           "kind": "event",
           "name": "metaharness.workspace.ProcessWritePlanned"
+        },
+        {
+          "kind": "event",
+          "name": "metaharness.workspace.ScratchCwdAttested"
         },
         {
           "kind": "view",
@@ -7135,6 +7391,10 @@
           "step": "expect_no_event"
         },
         {
+          "event": "metaharness.workspace.ScratchCwdAttested",
+          "step": "expect_no_event"
+        },
+        {
           "step": "query_view",
           "view": "metaharness.session.RetainedClosure"
         },
@@ -7261,6 +7521,10 @@
         {
           "kind": "event",
           "name": "metaharness.workspace.ProcessWritePlanned"
+        },
+        {
+          "kind": "event",
+          "name": "metaharness.workspace.ScratchCwdAttested"
         },
         {
           "kind": "view",
@@ -7416,6 +7680,10 @@
           "step": "expect_no_event"
         },
         {
+          "event": "metaharness.workspace.ScratchCwdAttested",
+          "step": "expect_no_event"
+        },
+        {
           "step": "query_view",
           "view": "metaharness.session.RetainedClosure"
         },
@@ -7544,6 +7812,10 @@
           "name": "metaharness.workspace.ProcessWritePlanned"
         },
         {
+          "kind": "event",
+          "name": "metaharness.workspace.ScratchCwdAttested"
+        },
+        {
           "kind": "error",
           "name": "metaharness.spending.UncappedAuthorizationRequired"
         }
@@ -7648,6 +7920,10 @@
         },
         {
           "event": "metaharness.workspace.ProcessWritePlanned",
+          "step": "expect_no_event"
+        },
+        {
+          "event": "metaharness.workspace.ScratchCwdAttested",
           "step": "expect_no_event"
         },
         {
@@ -7825,6 +8101,10 @@
           "name": "metaharness.workspace.ProcessWritePlanned"
         },
         {
+          "kind": "event",
+          "name": "metaharness.workspace.ScratchCwdAttested"
+        },
+        {
           "kind": "view",
           "name": "metaharness.spending.RetainedFiniteLedger"
         }
@@ -7921,6 +8201,10 @@
         },
         {
           "event": "metaharness.workspace.ProcessWritePlanned",
+          "step": "expect_no_event"
+        },
+        {
+          "event": "metaharness.workspace.ScratchCwdAttested",
           "step": "expect_no_event"
         },
         {
@@ -8032,6 +8316,10 @@
           "name": "metaharness.workspace.ProcessWritePlanned"
         },
         {
+          "kind": "event",
+          "name": "metaharness.workspace.ScratchCwdAttested"
+        },
+        {
           "kind": "view",
           "name": "metaharness.spending.RetainedAdmission"
         }
@@ -8128,6 +8416,10 @@
         },
         {
           "event": "metaharness.workspace.ProcessWritePlanned",
+          "step": "expect_no_event"
+        },
+        {
+          "event": "metaharness.workspace.ScratchCwdAttested",
           "step": "expect_no_event"
         },
         {
@@ -8306,6 +8598,10 @@
         {
           "kind": "event",
           "name": "metaharness.workspace.ProcessWritePlanned"
+        },
+        {
+          "kind": "event",
+          "name": "metaharness.workspace.ScratchCwdAttested"
         }
       ],
       "steps": [
@@ -8423,6 +8719,10 @@
         {
           "event": "metaharness.workspace.ProcessWritePlanned",
           "step": "expect_no_event"
+        },
+        {
+          "event": "metaharness.workspace.ScratchCwdAttested",
+          "step": "expect_no_event"
         }
       ]
     },
@@ -8523,6 +8823,10 @@
         {
           "kind": "event",
           "name": "metaharness.workspace.ProcessWritePlanned"
+        },
+        {
+          "kind": "event",
+          "name": "metaharness.workspace.ScratchCwdAttested"
         }
       ],
       "steps": [
@@ -8640,6 +8944,10 @@
         {
           "event": "metaharness.workspace.ProcessWritePlanned",
           "step": "expect_no_event"
+        },
+        {
+          "event": "metaharness.workspace.ScratchCwdAttested",
+          "step": "expect_no_event"
         }
       ]
     },
@@ -8740,6 +9048,10 @@
         {
           "kind": "event",
           "name": "metaharness.workspace.ProcessWritePlanned"
+        },
+        {
+          "kind": "event",
+          "name": "metaharness.workspace.ScratchCwdAttested"
         }
       ],
       "steps": [
@@ -8857,6 +9169,10 @@
         {
           "event": "metaharness.workspace.ProcessWritePlanned",
           "step": "expect_no_event"
+        },
+        {
+          "event": "metaharness.workspace.ScratchCwdAttested",
+          "step": "expect_no_event"
         }
       ]
     },
@@ -8957,6 +9273,10 @@
         {
           "kind": "event",
           "name": "metaharness.workspace.ProcessWritePlanned"
+        },
+        {
+          "kind": "event",
+          "name": "metaharness.workspace.ScratchCwdAttested"
         }
       ],
       "steps": [
@@ -9074,6 +9394,10 @@
         {
           "event": "metaharness.workspace.ProcessWritePlanned",
           "step": "expect_no_event"
+        },
+        {
+          "event": "metaharness.workspace.ScratchCwdAttested",
+          "step": "expect_no_event"
         }
       ]
     },
@@ -9174,6 +9498,10 @@
         {
           "kind": "event",
           "name": "metaharness.workspace.ProcessWritePlanned"
+        },
+        {
+          "kind": "event",
+          "name": "metaharness.workspace.ScratchCwdAttested"
         }
       ],
       "steps": [
@@ -9293,6 +9621,10 @@
           "step": "expect_no_event"
         },
         {
+          "event": "metaharness.workspace.ScratchCwdAttested",
+          "step": "expect_no_event"
+        },
+        {
           "command": "metaharness.trace.ClassifyEventKind",
           "input": {
             "kind": {
@@ -9408,6 +9740,10 @@
         {
           "kind": "event",
           "name": "metaharness.workspace.ProcessWritePlanned"
+        },
+        {
+          "kind": "event",
+          "name": "metaharness.workspace.ScratchCwdAttested"
         }
       ],
       "steps": [
@@ -9525,6 +9861,10 @@
         {
           "event": "metaharness.workspace.ProcessWritePlanned",
           "step": "expect_no_event"
+        },
+        {
+          "event": "metaharness.workspace.ScratchCwdAttested",
+          "step": "expect_no_event"
         }
       ]
     },
@@ -9625,6 +9965,10 @@
         {
           "kind": "event",
           "name": "metaharness.workspace.ProcessWritePlanned"
+        },
+        {
+          "kind": "event",
+          "name": "metaharness.workspace.ScratchCwdAttested"
         }
       ],
       "steps": [
@@ -9742,6 +10086,10 @@
         {
           "event": "metaharness.workspace.ProcessWritePlanned",
           "step": "expect_no_event"
+        },
+        {
+          "event": "metaharness.workspace.ScratchCwdAttested",
+          "step": "expect_no_event"
         }
       ]
     },
@@ -9842,6 +10190,10 @@
         {
           "kind": "event",
           "name": "metaharness.workspace.ProcessWritePlanned"
+        },
+        {
+          "kind": "event",
+          "name": "metaharness.workspace.ScratchCwdAttested"
         }
       ],
       "steps": [
@@ -9959,6 +10311,10 @@
         {
           "event": "metaharness.workspace.ProcessWritePlanned",
           "step": "expect_no_event"
+        },
+        {
+          "event": "metaharness.workspace.ScratchCwdAttested",
+          "step": "expect_no_event"
         }
       ]
     },
@@ -10059,6 +10415,10 @@
         {
           "kind": "event",
           "name": "metaharness.workspace.ProcessWritePlanned"
+        },
+        {
+          "kind": "event",
+          "name": "metaharness.workspace.ScratchCwdAttested"
         }
       ],
       "steps": [
@@ -10176,6 +10536,10 @@
         {
           "event": "metaharness.workspace.ProcessWritePlanned",
           "step": "expect_no_event"
+        },
+        {
+          "event": "metaharness.workspace.ScratchCwdAttested",
+          "step": "expect_no_event"
         }
       ]
     },
@@ -10276,6 +10640,10 @@
         {
           "kind": "event",
           "name": "metaharness.workspace.ProcessWritePlanned"
+        },
+        {
+          "kind": "event",
+          "name": "metaharness.workspace.ScratchCwdAttested"
         }
       ],
       "steps": [
@@ -10393,6 +10761,10 @@
         {
           "event": "metaharness.workspace.ProcessWritePlanned",
           "step": "expect_no_event"
+        },
+        {
+          "event": "metaharness.workspace.ScratchCwdAttested",
+          "step": "expect_no_event"
         }
       ]
     },
@@ -10493,6 +10865,10 @@
         {
           "kind": "event",
           "name": "metaharness.workspace.ProcessWritePlanned"
+        },
+        {
+          "kind": "event",
+          "name": "metaharness.workspace.ScratchCwdAttested"
         }
       ],
       "steps": [
@@ -10610,6 +10986,10 @@
         {
           "event": "metaharness.workspace.ProcessWritePlanned",
           "step": "expect_no_event"
+        },
+        {
+          "event": "metaharness.workspace.ScratchCwdAttested",
+          "step": "expect_no_event"
         }
       ]
     },
@@ -10710,6 +11090,10 @@
         {
           "kind": "event",
           "name": "metaharness.workspace.ProcessWritePlanned"
+        },
+        {
+          "kind": "event",
+          "name": "metaharness.workspace.ScratchCwdAttested"
         }
       ],
       "steps": [
@@ -10832,6 +11216,10 @@
         {
           "event": "metaharness.workspace.ProcessWritePlanned",
           "step": "expect_no_event"
+        },
+        {
+          "event": "metaharness.workspace.ScratchCwdAttested",
+          "step": "expect_no_event"
         }
       ]
     },
@@ -10932,6 +11320,10 @@
         {
           "kind": "event",
           "name": "metaharness.workspace.ProcessWritePlanned"
+        },
+        {
+          "kind": "event",
+          "name": "metaharness.workspace.ScratchCwdAttested"
         }
       ],
       "steps": [
@@ -11054,6 +11446,10 @@
         {
           "event": "metaharness.workspace.ProcessWritePlanned",
           "step": "expect_no_event"
+        },
+        {
+          "event": "metaharness.workspace.ScratchCwdAttested",
+          "step": "expect_no_event"
         }
       ]
     },
@@ -11154,6 +11550,10 @@
         {
           "kind": "event",
           "name": "metaharness.workspace.ProcessWritePlanned"
+        },
+        {
+          "kind": "event",
+          "name": "metaharness.workspace.ScratchCwdAttested"
         }
       ],
       "steps": [
@@ -11276,6 +11676,10 @@
         {
           "event": "metaharness.workspace.ProcessWritePlanned",
           "step": "expect_no_event"
+        },
+        {
+          "event": "metaharness.workspace.ScratchCwdAttested",
+          "step": "expect_no_event"
         }
       ]
     },
@@ -11376,6 +11780,10 @@
         {
           "kind": "event",
           "name": "metaharness.workspace.ProcessWritePlanned"
+        },
+        {
+          "kind": "event",
+          "name": "metaharness.workspace.ScratchCwdAttested"
         }
       ],
       "steps": [
@@ -11498,6 +11906,10 @@
         {
           "event": "metaharness.workspace.ProcessWritePlanned",
           "step": "expect_no_event"
+        },
+        {
+          "event": "metaharness.workspace.ScratchCwdAttested",
+          "step": "expect_no_event"
         }
       ]
     },
@@ -11598,6 +12010,10 @@
         {
           "kind": "event",
           "name": "metaharness.workspace.ProcessWritePlanned"
+        },
+        {
+          "kind": "event",
+          "name": "metaharness.workspace.ScratchCwdAttested"
         }
       ],
       "steps": [
@@ -11720,6 +12136,10 @@
         {
           "event": "metaharness.workspace.ProcessWritePlanned",
           "step": "expect_no_event"
+        },
+        {
+          "event": "metaharness.workspace.ScratchCwdAttested",
+          "step": "expect_no_event"
         }
       ]
     },
@@ -11820,6 +12240,10 @@
         {
           "kind": "event",
           "name": "metaharness.workspace.ProcessWritePlanned"
+        },
+        {
+          "kind": "event",
+          "name": "metaharness.workspace.ScratchCwdAttested"
         }
       ],
       "steps": [
@@ -11942,6 +12366,10 @@
         {
           "event": "metaharness.workspace.ProcessWritePlanned",
           "step": "expect_no_event"
+        },
+        {
+          "event": "metaharness.workspace.ScratchCwdAttested",
+          "step": "expect_no_event"
         }
       ]
     },
@@ -12042,6 +12470,10 @@
         {
           "kind": "event",
           "name": "metaharness.workspace.ProcessWritePlanned"
+        },
+        {
+          "kind": "event",
+          "name": "metaharness.workspace.ScratchCwdAttested"
         }
       ],
       "steps": [
@@ -12164,6 +12596,10 @@
         {
           "event": "metaharness.workspace.ProcessWritePlanned",
           "step": "expect_no_event"
+        },
+        {
+          "event": "metaharness.workspace.ScratchCwdAttested",
+          "step": "expect_no_event"
         }
       ]
     },
@@ -12264,6 +12700,10 @@
         {
           "kind": "event",
           "name": "metaharness.workspace.ProcessWritePlanned"
+        },
+        {
+          "kind": "event",
+          "name": "metaharness.workspace.ScratchCwdAttested"
         }
       ],
       "steps": [
@@ -12386,6 +12826,10 @@
         {
           "event": "metaharness.workspace.ProcessWritePlanned",
           "step": "expect_no_event"
+        },
+        {
+          "event": "metaharness.workspace.ScratchCwdAttested",
+          "step": "expect_no_event"
         }
       ]
     },
@@ -12482,6 +12926,10 @@
         {
           "kind": "event",
           "name": "metaharness.workspace.ProcessWritePlanned"
+        },
+        {
+          "kind": "event",
+          "name": "metaharness.workspace.ScratchCwdAttested"
         }
       ],
       "steps": [
@@ -12596,6 +13044,10 @@
         {
           "event": "metaharness.workspace.ProcessWritePlanned",
           "step": "expect_no_event"
+        },
+        {
+          "event": "metaharness.workspace.ScratchCwdAttested",
+          "step": "expect_no_event"
         }
       ]
     },
@@ -12692,6 +13144,10 @@
         {
           "kind": "event",
           "name": "metaharness.workspace.ProcessWritePlanned"
+        },
+        {
+          "kind": "event",
+          "name": "metaharness.workspace.ScratchCwdAttested"
         }
       ],
       "steps": [
@@ -12805,6 +13261,10 @@
         },
         {
           "event": "metaharness.workspace.ProcessWritePlanned",
+          "step": "expect_no_event"
+        },
+        {
+          "event": "metaharness.workspace.ScratchCwdAttested",
           "step": "expect_no_event"
         }
       ]
@@ -12985,6 +13445,10 @@
         {
           "kind": "event",
           "name": "metaharness.workspace.ProcessWritePlanned"
+        },
+        {
+          "kind": "event",
+          "name": "metaharness.workspace.ScratchCwdAttested"
         }
       ],
       "steps": [
@@ -13116,6 +13580,10 @@
         {
           "event": "metaharness.workspace.ProcessWritePlanned",
           "step": "expect_no_event"
+        },
+        {
+          "event": "metaharness.workspace.ScratchCwdAttested",
+          "step": "expect_no_event"
         }
       ]
     },
@@ -13220,6 +13688,10 @@
         {
           "kind": "event",
           "name": "metaharness.workspace.ProcessWritePlanned"
+        },
+        {
+          "kind": "event",
+          "name": "metaharness.workspace.ScratchCwdAttested"
         }
       ],
       "steps": [
@@ -13351,6 +13823,10 @@
         {
           "event": "metaharness.workspace.ProcessWritePlanned",
           "step": "expect_no_event"
+        },
+        {
+          "event": "metaharness.workspace.ScratchCwdAttested",
+          "step": "expect_no_event"
         }
       ]
     },
@@ -13455,6 +13931,10 @@
         {
           "kind": "event",
           "name": "metaharness.workspace.ProcessWritePlanned"
+        },
+        {
+          "kind": "event",
+          "name": "metaharness.workspace.ScratchCwdAttested"
         }
       ],
       "steps": [
@@ -13586,6 +14066,10 @@
         {
           "event": "metaharness.workspace.ProcessWritePlanned",
           "step": "expect_no_event"
+        },
+        {
+          "event": "metaharness.workspace.ScratchCwdAttested",
+          "step": "expect_no_event"
         }
       ]
     },
@@ -13690,6 +14174,10 @@
         {
           "kind": "event",
           "name": "metaharness.workspace.ProcessWritePlanned"
+        },
+        {
+          "kind": "event",
+          "name": "metaharness.workspace.ScratchCwdAttested"
         }
       ],
       "steps": [
@@ -13821,6 +14309,10 @@
         {
           "event": "metaharness.workspace.ProcessWritePlanned",
           "step": "expect_no_event"
+        },
+        {
+          "event": "metaharness.workspace.ScratchCwdAttested",
+          "step": "expect_no_event"
         }
       ]
     },
@@ -13921,6 +14413,10 @@
         {
           "kind": "event",
           "name": "metaharness.workspace.ProcessWritePlanned"
+        },
+        {
+          "kind": "event",
+          "name": "metaharness.workspace.ScratchCwdAttested"
         },
         {
           "kind": "view",
@@ -14055,6 +14551,10 @@
           "step": "expect_no_event"
         },
         {
+          "event": "metaharness.workspace.ScratchCwdAttested",
+          "step": "expect_no_event"
+        },
+        {
           "step": "query_view",
           "view": "metaharness.trace.RetainedProjection"
         },
@@ -14165,6 +14665,10 @@
         {
           "kind": "event",
           "name": "metaharness.workspace.ProcessWritePlanned"
+        },
+        {
+          "kind": "event",
+          "name": "metaharness.workspace.ScratchCwdAttested"
         },
         {
           "kind": "view",
@@ -14296,6 +14800,10 @@
         },
         {
           "event": "metaharness.workspace.ProcessWritePlanned",
+          "step": "expect_no_event"
+        },
+        {
+          "event": "metaharness.workspace.ScratchCwdAttested",
           "step": "expect_no_event"
         },
         {
@@ -14600,6 +15108,10 @@
         {
           "kind": "event",
           "name": "metaharness.workspace.ProcessWritePlanned"
+        },
+        {
+          "kind": "event",
+          "name": "metaharness.workspace.ScratchCwdAttested"
         }
       ],
       "steps": [
@@ -14714,6 +15226,10 @@
         {
           "event": "metaharness.workspace.ProcessWritePlanned",
           "step": "expect_no_event"
+        },
+        {
+          "event": "metaharness.workspace.ScratchCwdAttested",
+          "step": "expect_no_event"
         }
       ]
     },
@@ -14810,6 +15326,10 @@
         {
           "kind": "event",
           "name": "metaharness.workspace.ProcessWritePlanned"
+        },
+        {
+          "kind": "event",
+          "name": "metaharness.workspace.ScratchCwdAttested"
         }
       ],
       "steps": [
@@ -14924,6 +15444,10 @@
         {
           "event": "metaharness.workspace.ProcessWritePlanned",
           "step": "expect_no_event"
+        },
+        {
+          "event": "metaharness.workspace.ScratchCwdAttested",
+          "step": "expect_no_event"
         }
       ]
     },
@@ -15020,6 +15544,10 @@
         {
           "kind": "event",
           "name": "metaharness.workspace.ProcessWritePlanned"
+        },
+        {
+          "kind": "event",
+          "name": "metaharness.workspace.ScratchCwdAttested"
         }
       ],
       "steps": [
@@ -15134,6 +15662,10 @@
         {
           "event": "metaharness.workspace.ProcessWritePlanned",
           "step": "expect_no_event"
+        },
+        {
+          "event": "metaharness.workspace.ScratchCwdAttested",
+          "step": "expect_no_event"
         }
       ]
     },
@@ -15230,6 +15762,10 @@
         {
           "kind": "event",
           "name": "metaharness.workspace.ProcessWritePlanned"
+        },
+        {
+          "kind": "event",
+          "name": "metaharness.workspace.ScratchCwdAttested"
         }
       ],
       "steps": [
@@ -15344,6 +15880,10 @@
         {
           "event": "metaharness.workspace.ProcessWritePlanned",
           "step": "expect_no_event"
+        },
+        {
+          "event": "metaharness.workspace.ScratchCwdAttested",
+          "step": "expect_no_event"
         }
       ]
     },
@@ -15440,6 +15980,10 @@
         {
           "kind": "event",
           "name": "metaharness.workspace.ProcessWritePlanned"
+        },
+        {
+          "kind": "event",
+          "name": "metaharness.workspace.ScratchCwdAttested"
         }
       ],
       "steps": [
@@ -15554,6 +16098,10 @@
         {
           "event": "metaharness.workspace.ProcessWritePlanned",
           "step": "expect_no_event"
+        },
+        {
+          "event": "metaharness.workspace.ScratchCwdAttested",
+          "step": "expect_no_event"
         }
       ]
     },
@@ -15650,6 +16198,10 @@
         {
           "kind": "event",
           "name": "metaharness.workspace.ProcessWritePlanned"
+        },
+        {
+          "kind": "event",
+          "name": "metaharness.workspace.ScratchCwdAttested"
         },
         {
           "kind": "view",
@@ -15801,6 +16353,10 @@
           "step": "expect_no_event"
         },
         {
+          "event": "metaharness.workspace.ScratchCwdAttested",
+          "step": "expect_no_event"
+        },
+        {
           "step": "query_view",
           "view": "metaharness.session.RetainedClosure"
         },
@@ -15929,6 +16485,10 @@
           "name": "metaharness.workspace.ProcessWritePlanned"
         },
         {
+          "kind": "event",
+          "name": "metaharness.workspace.ScratchCwdAttested"
+        },
+        {
           "kind": "error",
           "name": "metaharness.workspace.InvalidName"
         }
@@ -16029,6 +16589,10 @@
         },
         {
           "event": "metaharness.workspace.ProcessWritePlanned",
+          "step": "expect_no_event"
+        },
+        {
+          "event": "metaharness.workspace.ScratchCwdAttested",
           "step": "expect_no_event"
         },
         {
@@ -16147,6 +16711,10 @@
         {
           "kind": "event",
           "name": "metaharness.workspace.ProcessWritePlanned"
+        },
+        {
+          "kind": "event",
+          "name": "metaharness.workspace.ScratchCwdAttested"
         }
       ],
       "steps": [
@@ -16256,6 +16824,10 @@
         {
           "event": "metaharness.trace.UnkClassified",
           "step": "expect_no_event"
+        },
+        {
+          "event": "metaharness.workspace.ScratchCwdAttested",
+          "step": "expect_no_event"
         }
       ]
     },
@@ -16352,6 +16924,10 @@
         {
           "kind": "event",
           "name": "metaharness.workspace.ProcessWritePlanned"
+        },
+        {
+          "kind": "event",
+          "name": "metaharness.workspace.ScratchCwdAttested"
         }
       ],
       "steps": [
@@ -16461,6 +17037,10 @@
         {
           "event": "metaharness.trace.UnkClassified",
           "step": "expect_no_event"
+        },
+        {
+          "event": "metaharness.workspace.ScratchCwdAttested",
+          "step": "expect_no_event"
         }
       ]
     },
@@ -16557,6 +17137,10 @@
         {
           "kind": "event",
           "name": "metaharness.workspace.ProcessWritePlanned"
+        },
+        {
+          "kind": "event",
+          "name": "metaharness.workspace.ScratchCwdAttested"
         }
       ],
       "steps": [
@@ -16666,6 +17250,10 @@
         {
           "event": "metaharness.trace.UnkClassified",
           "step": "expect_no_event"
+        },
+        {
+          "event": "metaharness.workspace.ScratchCwdAttested",
+          "step": "expect_no_event"
         }
       ]
     },
@@ -16762,6 +17350,10 @@
         {
           "kind": "event",
           "name": "metaharness.workspace.ProcessWritePlanned"
+        },
+        {
+          "kind": "event",
+          "name": "metaharness.workspace.ScratchCwdAttested"
         }
       ],
       "steps": [
@@ -16870,6 +17462,892 @@
         },
         {
           "event": "metaharness.trace.UnkClassified",
+          "step": "expect_no_event"
+        },
+        {
+          "event": "metaharness.workspace.ScratchCwdAttested",
+          "step": "expect_no_event"
+        }
+      ]
+    },
+    "metaharness.workspace.DeclareScratchWorkingDirectory/outcome/declaration-without-directory": {
+      "purpose": "`metaharness.workspace.DeclareScratchWorkingDirectory` answers `declaration-without-directory` for an input that satisfies that branch's guard",
+      "source": [
+        {
+          "kind": "type",
+          "name": "metaharness.workspace.ScratchCwdProbe"
+        },
+        {
+          "kind": "command",
+          "name": "metaharness.workspace.DeclareScratchWorkingDirectory"
+        },
+        {
+          "kind": "outcome",
+          "name": {
+            "command": "metaharness.workspace.DeclareScratchWorkingDirectory",
+            "outcome": "declaration-without-directory"
+          }
+        },
+        {
+          "kind": "event",
+          "name": "metaharness.boundaries.CallDecided"
+        },
+        {
+          "kind": "event",
+          "name": "metaharness.boundaries.FileRead"
+        },
+        {
+          "kind": "event",
+          "name": "metaharness.boundaries.FrameRead"
+        },
+        {
+          "kind": "event",
+          "name": "metaharness.observations.NativeStatusClassified"
+        },
+        {
+          "kind": "event",
+          "name": "metaharness.observations.PresenceRead"
+        },
+        {
+          "kind": "event",
+          "name": "metaharness.observations.ToolOutcomeRead"
+        },
+        {
+          "kind": "event",
+          "name": "metaharness.session.ClosureRecorded"
+        },
+        {
+          "kind": "event",
+          "name": "metaharness.session.CompletionClassified"
+        },
+        {
+          "kind": "event",
+          "name": "metaharness.session.PollingObserved"
+        },
+        {
+          "kind": "event",
+          "name": "metaharness.session.StreamClassified"
+        },
+        {
+          "kind": "event",
+          "name": "metaharness.spending.AdmissionRecorded"
+        },
+        {
+          "kind": "event",
+          "name": "metaharness.spending.FiniteLedgerRecorded"
+        },
+        {
+          "kind": "event",
+          "name": "metaharness.trace.CompletenessVerified"
+        },
+        {
+          "kind": "event",
+          "name": "metaharness.trace.DigestNamed"
+        },
+        {
+          "kind": "event",
+          "name": "metaharness.trace.FamilyClassified"
+        },
+        {
+          "kind": "event",
+          "name": "metaharness.trace.ProjectionRecorded"
+        },
+        {
+          "kind": "event",
+          "name": "metaharness.trace.RecordNormalized"
+        },
+        {
+          "kind": "event",
+          "name": "metaharness.trace.UnkClassified"
+        },
+        {
+          "kind": "event",
+          "name": "metaharness.workspace.ProcessWritePlanned"
+        },
+        {
+          "kind": "event",
+          "name": "metaharness.workspace.ScratchCwdAttested"
+        },
+        {
+          "kind": "error",
+          "name": "metaharness.workspace.DeclarationWithoutDirectory"
+        }
+      ],
+      "steps": [
+        {
+          "command": "metaharness.workspace.DeclareScratchWorkingDirectory",
+          "input": {
+            "probe": {
+              "kind": "literal",
+              "value": "undirected"
+            }
+          },
+          "step": "execute_command"
+        },
+        {
+          "outcome": {
+            "command": "metaharness.workspace.DeclareScratchWorkingDirectory",
+            "outcome": "declaration-without-directory"
+          },
+          "step": "expect_outcome"
+        },
+        {
+          "error": "metaharness.workspace.DeclarationWithoutDirectory",
+          "step": "expect_error"
+        },
+        {
+          "event": "metaharness.boundaries.CallDecided",
+          "step": "expect_no_event"
+        },
+        {
+          "event": "metaharness.boundaries.FileRead",
+          "step": "expect_no_event"
+        },
+        {
+          "event": "metaharness.boundaries.FrameRead",
+          "step": "expect_no_event"
+        },
+        {
+          "event": "metaharness.observations.NativeStatusClassified",
+          "step": "expect_no_event"
+        },
+        {
+          "event": "metaharness.observations.PresenceRead",
+          "step": "expect_no_event"
+        },
+        {
+          "event": "metaharness.observations.ToolOutcomeRead",
+          "step": "expect_no_event"
+        },
+        {
+          "event": "metaharness.session.ClosureRecorded",
+          "step": "expect_no_event"
+        },
+        {
+          "event": "metaharness.session.CompletionClassified",
+          "step": "expect_no_event"
+        },
+        {
+          "event": "metaharness.session.PollingObserved",
+          "step": "expect_no_event"
+        },
+        {
+          "event": "metaharness.session.StreamClassified",
+          "step": "expect_no_event"
+        },
+        {
+          "event": "metaharness.spending.AdmissionRecorded",
+          "step": "expect_no_event"
+        },
+        {
+          "event": "metaharness.spending.FiniteLedgerRecorded",
+          "step": "expect_no_event"
+        },
+        {
+          "event": "metaharness.trace.CompletenessVerified",
+          "step": "expect_no_event"
+        },
+        {
+          "event": "metaharness.trace.DigestNamed",
+          "step": "expect_no_event"
+        },
+        {
+          "event": "metaharness.trace.FamilyClassified",
+          "step": "expect_no_event"
+        },
+        {
+          "event": "metaharness.trace.ProjectionRecorded",
+          "step": "expect_no_event"
+        },
+        {
+          "event": "metaharness.trace.RecordNormalized",
+          "step": "expect_no_event"
+        },
+        {
+          "event": "metaharness.trace.UnkClassified",
+          "step": "expect_no_event"
+        },
+        {
+          "event": "metaharness.workspace.ProcessWritePlanned",
+          "step": "expect_no_event"
+        },
+        {
+          "event": "metaharness.workspace.ScratchCwdAttested",
+          "step": "expect_no_event"
+        }
+      ]
+    },
+    "metaharness.workspace.DeclareScratchWorkingDirectory/outcome/memory-above-the-copy-fails-strict": {
+      "purpose": "`metaharness.workspace.DeclareScratchWorkingDirectory` answers `memory-above-the-copy-fails-strict` for an input that satisfies that branch's guard",
+      "source": [
+        {
+          "kind": "type",
+          "name": "metaharness.workspace.CwdAttestation"
+        },
+        {
+          "kind": "type",
+          "name": "metaharness.workspace.ScratchCwdProbe"
+        },
+        {
+          "kind": "command",
+          "name": "metaharness.workspace.DeclareScratchWorkingDirectory"
+        },
+        {
+          "kind": "outcome",
+          "name": {
+            "command": "metaharness.workspace.DeclareScratchWorkingDirectory",
+            "outcome": "memory-above-the-copy-fails-strict"
+          }
+        },
+        {
+          "kind": "event",
+          "name": "metaharness.boundaries.CallDecided"
+        },
+        {
+          "kind": "event",
+          "name": "metaharness.boundaries.FileRead"
+        },
+        {
+          "kind": "event",
+          "name": "metaharness.boundaries.FrameRead"
+        },
+        {
+          "kind": "event",
+          "name": "metaharness.observations.NativeStatusClassified"
+        },
+        {
+          "kind": "event",
+          "name": "metaharness.observations.PresenceRead"
+        },
+        {
+          "kind": "event",
+          "name": "metaharness.observations.ToolOutcomeRead"
+        },
+        {
+          "kind": "event",
+          "name": "metaharness.session.ClosureRecorded"
+        },
+        {
+          "kind": "event",
+          "name": "metaharness.session.CompletionClassified"
+        },
+        {
+          "kind": "event",
+          "name": "metaharness.session.PollingObserved"
+        },
+        {
+          "kind": "event",
+          "name": "metaharness.session.StreamClassified"
+        },
+        {
+          "kind": "event",
+          "name": "metaharness.spending.AdmissionRecorded"
+        },
+        {
+          "kind": "event",
+          "name": "metaharness.spending.FiniteLedgerRecorded"
+        },
+        {
+          "kind": "event",
+          "name": "metaharness.trace.CompletenessVerified"
+        },
+        {
+          "kind": "event",
+          "name": "metaharness.trace.DigestNamed"
+        },
+        {
+          "kind": "event",
+          "name": "metaharness.trace.FamilyClassified"
+        },
+        {
+          "kind": "event",
+          "name": "metaharness.trace.ProjectionRecorded"
+        },
+        {
+          "kind": "event",
+          "name": "metaharness.trace.RecordNormalized"
+        },
+        {
+          "kind": "event",
+          "name": "metaharness.trace.UnkClassified"
+        },
+        {
+          "kind": "event",
+          "name": "metaharness.workspace.ProcessWritePlanned"
+        },
+        {
+          "kind": "event",
+          "name": "metaharness.workspace.ScratchCwdAttested"
+        }
+      ],
+      "steps": [
+        {
+          "command": "metaharness.workspace.DeclareScratchWorkingDirectory",
+          "input": {
+            "probe": {
+              "kind": "literal",
+              "value": "declared-under-memory"
+            }
+          },
+          "step": "execute_command"
+        },
+        {
+          "outcome": {
+            "command": "metaharness.workspace.DeclareScratchWorkingDirectory",
+            "outcome": "memory-above-the-copy-fails-strict"
+          },
+          "step": "expect_outcome"
+        },
+        {
+          "event": "metaharness.workspace.ScratchCwdAttested",
+          "payload": {
+            "exit_code": 1.0,
+            "h11_imposed": false,
+            "h7": "declared"
+          },
+          "shape": {
+            "exit_code": {
+              "holds": "primitive",
+              "kind": "integer"
+            },
+            "h11_imposed": {
+              "holds": "primitive",
+              "kind": "boolean"
+            },
+            "h7": {
+              "holds": "enum",
+              "variants": [
+                "declared",
+                "unavailable"
+              ]
+            }
+          },
+          "step": "expect_event"
+        },
+        {
+          "event": "metaharness.boundaries.CallDecided",
+          "step": "expect_no_event"
+        },
+        {
+          "event": "metaharness.boundaries.FileRead",
+          "step": "expect_no_event"
+        },
+        {
+          "event": "metaharness.boundaries.FrameRead",
+          "step": "expect_no_event"
+        },
+        {
+          "event": "metaharness.observations.NativeStatusClassified",
+          "step": "expect_no_event"
+        },
+        {
+          "event": "metaharness.observations.PresenceRead",
+          "step": "expect_no_event"
+        },
+        {
+          "event": "metaharness.observations.ToolOutcomeRead",
+          "step": "expect_no_event"
+        },
+        {
+          "event": "metaharness.session.ClosureRecorded",
+          "step": "expect_no_event"
+        },
+        {
+          "event": "metaharness.session.CompletionClassified",
+          "step": "expect_no_event"
+        },
+        {
+          "event": "metaharness.session.PollingObserved",
+          "step": "expect_no_event"
+        },
+        {
+          "event": "metaharness.session.StreamClassified",
+          "step": "expect_no_event"
+        },
+        {
+          "event": "metaharness.spending.AdmissionRecorded",
+          "step": "expect_no_event"
+        },
+        {
+          "event": "metaharness.spending.FiniteLedgerRecorded",
+          "step": "expect_no_event"
+        },
+        {
+          "event": "metaharness.trace.CompletenessVerified",
+          "step": "expect_no_event"
+        },
+        {
+          "event": "metaharness.trace.DigestNamed",
+          "step": "expect_no_event"
+        },
+        {
+          "event": "metaharness.trace.FamilyClassified",
+          "step": "expect_no_event"
+        },
+        {
+          "event": "metaharness.trace.ProjectionRecorded",
+          "step": "expect_no_event"
+        },
+        {
+          "event": "metaharness.trace.RecordNormalized",
+          "step": "expect_no_event"
+        },
+        {
+          "event": "metaharness.trace.UnkClassified",
+          "step": "expect_no_event"
+        },
+        {
+          "event": "metaharness.workspace.ProcessWritePlanned",
+          "step": "expect_no_event"
+        }
+      ]
+    },
+    "metaharness.workspace.DeclareScratchWorkingDirectory/outcome/named-without-declaration-keeps-a6": {
+      "purpose": "`metaharness.workspace.DeclareScratchWorkingDirectory` answers `named-without-declaration-keeps-a6` for an input no other branch's guard claims",
+      "source": [
+        {
+          "kind": "type",
+          "name": "metaharness.workspace.CwdAttestation"
+        },
+        {
+          "kind": "type",
+          "name": "metaharness.workspace.ScratchCwdProbe"
+        },
+        {
+          "kind": "command",
+          "name": "metaharness.workspace.DeclareScratchWorkingDirectory"
+        },
+        {
+          "kind": "outcome",
+          "name": {
+            "command": "metaharness.workspace.DeclareScratchWorkingDirectory",
+            "outcome": "named-without-declaration-keeps-a6"
+          }
+        },
+        {
+          "kind": "event",
+          "name": "metaharness.boundaries.CallDecided"
+        },
+        {
+          "kind": "event",
+          "name": "metaharness.boundaries.FileRead"
+        },
+        {
+          "kind": "event",
+          "name": "metaharness.boundaries.FrameRead"
+        },
+        {
+          "kind": "event",
+          "name": "metaharness.observations.NativeStatusClassified"
+        },
+        {
+          "kind": "event",
+          "name": "metaharness.observations.PresenceRead"
+        },
+        {
+          "kind": "event",
+          "name": "metaharness.observations.ToolOutcomeRead"
+        },
+        {
+          "kind": "event",
+          "name": "metaharness.session.ClosureRecorded"
+        },
+        {
+          "kind": "event",
+          "name": "metaharness.session.CompletionClassified"
+        },
+        {
+          "kind": "event",
+          "name": "metaharness.session.PollingObserved"
+        },
+        {
+          "kind": "event",
+          "name": "metaharness.session.StreamClassified"
+        },
+        {
+          "kind": "event",
+          "name": "metaharness.spending.AdmissionRecorded"
+        },
+        {
+          "kind": "event",
+          "name": "metaharness.spending.FiniteLedgerRecorded"
+        },
+        {
+          "kind": "event",
+          "name": "metaharness.trace.CompletenessVerified"
+        },
+        {
+          "kind": "event",
+          "name": "metaharness.trace.DigestNamed"
+        },
+        {
+          "kind": "event",
+          "name": "metaharness.trace.FamilyClassified"
+        },
+        {
+          "kind": "event",
+          "name": "metaharness.trace.ProjectionRecorded"
+        },
+        {
+          "kind": "event",
+          "name": "metaharness.trace.RecordNormalized"
+        },
+        {
+          "kind": "event",
+          "name": "metaharness.trace.UnkClassified"
+        },
+        {
+          "kind": "event",
+          "name": "metaharness.workspace.ProcessWritePlanned"
+        },
+        {
+          "kind": "event",
+          "name": "metaharness.workspace.ScratchCwdAttested"
+        }
+      ],
+      "steps": [
+        {
+          "command": "metaharness.workspace.DeclareScratchWorkingDirectory",
+          "input": {
+            "probe": {
+              "kind": "literal",
+              "value": "named-only"
+            }
+          },
+          "step": "execute_command"
+        },
+        {
+          "outcome": {
+            "command": "metaharness.workspace.DeclareScratchWorkingDirectory",
+            "outcome": "named-without-declaration-keeps-a6"
+          },
+          "step": "expect_outcome"
+        },
+        {
+          "event": "metaharness.workspace.ScratchCwdAttested",
+          "payload": {
+            "exit_code": 1.0,
+            "h11_imposed": false,
+            "h7": "unavailable"
+          },
+          "shape": {
+            "exit_code": {
+              "holds": "primitive",
+              "kind": "integer"
+            },
+            "h11_imposed": {
+              "holds": "primitive",
+              "kind": "boolean"
+            },
+            "h7": {
+              "holds": "enum",
+              "variants": [
+                "declared",
+                "unavailable"
+              ]
+            }
+          },
+          "step": "expect_event"
+        },
+        {
+          "event": "metaharness.boundaries.CallDecided",
+          "step": "expect_no_event"
+        },
+        {
+          "event": "metaharness.boundaries.FileRead",
+          "step": "expect_no_event"
+        },
+        {
+          "event": "metaharness.boundaries.FrameRead",
+          "step": "expect_no_event"
+        },
+        {
+          "event": "metaharness.observations.NativeStatusClassified",
+          "step": "expect_no_event"
+        },
+        {
+          "event": "metaharness.observations.PresenceRead",
+          "step": "expect_no_event"
+        },
+        {
+          "event": "metaharness.observations.ToolOutcomeRead",
+          "step": "expect_no_event"
+        },
+        {
+          "event": "metaharness.session.ClosureRecorded",
+          "step": "expect_no_event"
+        },
+        {
+          "event": "metaharness.session.CompletionClassified",
+          "step": "expect_no_event"
+        },
+        {
+          "event": "metaharness.session.PollingObserved",
+          "step": "expect_no_event"
+        },
+        {
+          "event": "metaharness.session.StreamClassified",
+          "step": "expect_no_event"
+        },
+        {
+          "event": "metaharness.spending.AdmissionRecorded",
+          "step": "expect_no_event"
+        },
+        {
+          "event": "metaharness.spending.FiniteLedgerRecorded",
+          "step": "expect_no_event"
+        },
+        {
+          "event": "metaharness.trace.CompletenessVerified",
+          "step": "expect_no_event"
+        },
+        {
+          "event": "metaharness.trace.DigestNamed",
+          "step": "expect_no_event"
+        },
+        {
+          "event": "metaharness.trace.FamilyClassified",
+          "step": "expect_no_event"
+        },
+        {
+          "event": "metaharness.trace.ProjectionRecorded",
+          "step": "expect_no_event"
+        },
+        {
+          "event": "metaharness.trace.RecordNormalized",
+          "step": "expect_no_event"
+        },
+        {
+          "event": "metaharness.trace.UnkClassified",
+          "step": "expect_no_event"
+        },
+        {
+          "event": "metaharness.workspace.ProcessWritePlanned",
+          "step": "expect_no_event"
+        }
+      ]
+    },
+    "metaharness.workspace.DeclareScratchWorkingDirectory/outcome/strict-admits-the-declared-copy": {
+      "purpose": "`metaharness.workspace.DeclareScratchWorkingDirectory` answers `strict-admits-the-declared-copy` for an input that satisfies that branch's guard",
+      "source": [
+        {
+          "kind": "type",
+          "name": "metaharness.workspace.CwdAttestation"
+        },
+        {
+          "kind": "type",
+          "name": "metaharness.workspace.ScratchCwdProbe"
+        },
+        {
+          "kind": "command",
+          "name": "metaharness.workspace.DeclareScratchWorkingDirectory"
+        },
+        {
+          "kind": "outcome",
+          "name": {
+            "command": "metaharness.workspace.DeclareScratchWorkingDirectory",
+            "outcome": "strict-admits-the-declared-copy"
+          }
+        },
+        {
+          "kind": "event",
+          "name": "metaharness.boundaries.CallDecided"
+        },
+        {
+          "kind": "event",
+          "name": "metaharness.boundaries.FileRead"
+        },
+        {
+          "kind": "event",
+          "name": "metaharness.boundaries.FrameRead"
+        },
+        {
+          "kind": "event",
+          "name": "metaharness.observations.NativeStatusClassified"
+        },
+        {
+          "kind": "event",
+          "name": "metaharness.observations.PresenceRead"
+        },
+        {
+          "kind": "event",
+          "name": "metaharness.observations.ToolOutcomeRead"
+        },
+        {
+          "kind": "event",
+          "name": "metaharness.session.ClosureRecorded"
+        },
+        {
+          "kind": "event",
+          "name": "metaharness.session.CompletionClassified"
+        },
+        {
+          "kind": "event",
+          "name": "metaharness.session.PollingObserved"
+        },
+        {
+          "kind": "event",
+          "name": "metaharness.session.StreamClassified"
+        },
+        {
+          "kind": "event",
+          "name": "metaharness.spending.AdmissionRecorded"
+        },
+        {
+          "kind": "event",
+          "name": "metaharness.spending.FiniteLedgerRecorded"
+        },
+        {
+          "kind": "event",
+          "name": "metaharness.trace.CompletenessVerified"
+        },
+        {
+          "kind": "event",
+          "name": "metaharness.trace.DigestNamed"
+        },
+        {
+          "kind": "event",
+          "name": "metaharness.trace.FamilyClassified"
+        },
+        {
+          "kind": "event",
+          "name": "metaharness.trace.ProjectionRecorded"
+        },
+        {
+          "kind": "event",
+          "name": "metaharness.trace.RecordNormalized"
+        },
+        {
+          "kind": "event",
+          "name": "metaharness.trace.UnkClassified"
+        },
+        {
+          "kind": "event",
+          "name": "metaharness.workspace.ProcessWritePlanned"
+        },
+        {
+          "kind": "event",
+          "name": "metaharness.workspace.ScratchCwdAttested"
+        }
+      ],
+      "steps": [
+        {
+          "command": "metaharness.workspace.DeclareScratchWorkingDirectory",
+          "input": {
+            "probe": {
+              "kind": "literal",
+              "value": "declared"
+            }
+          },
+          "step": "execute_command"
+        },
+        {
+          "outcome": {
+            "command": "metaharness.workspace.DeclareScratchWorkingDirectory",
+            "outcome": "strict-admits-the-declared-copy"
+          },
+          "step": "expect_outcome"
+        },
+        {
+          "event": "metaharness.workspace.ScratchCwdAttested",
+          "payload": {
+            "exit_code": 0.0,
+            "h11_imposed": true,
+            "h7": "declared"
+          },
+          "shape": {
+            "exit_code": {
+              "holds": "primitive",
+              "kind": "integer"
+            },
+            "h11_imposed": {
+              "holds": "primitive",
+              "kind": "boolean"
+            },
+            "h7": {
+              "holds": "enum",
+              "variants": [
+                "declared",
+                "unavailable"
+              ]
+            }
+          },
+          "step": "expect_event"
+        },
+        {
+          "event": "metaharness.boundaries.CallDecided",
+          "step": "expect_no_event"
+        },
+        {
+          "event": "metaharness.boundaries.FileRead",
+          "step": "expect_no_event"
+        },
+        {
+          "event": "metaharness.boundaries.FrameRead",
+          "step": "expect_no_event"
+        },
+        {
+          "event": "metaharness.observations.NativeStatusClassified",
+          "step": "expect_no_event"
+        },
+        {
+          "event": "metaharness.observations.PresenceRead",
+          "step": "expect_no_event"
+        },
+        {
+          "event": "metaharness.observations.ToolOutcomeRead",
+          "step": "expect_no_event"
+        },
+        {
+          "event": "metaharness.session.ClosureRecorded",
+          "step": "expect_no_event"
+        },
+        {
+          "event": "metaharness.session.CompletionClassified",
+          "step": "expect_no_event"
+        },
+        {
+          "event": "metaharness.session.PollingObserved",
+          "step": "expect_no_event"
+        },
+        {
+          "event": "metaharness.session.StreamClassified",
+          "step": "expect_no_event"
+        },
+        {
+          "event": "metaharness.spending.AdmissionRecorded",
+          "step": "expect_no_event"
+        },
+        {
+          "event": "metaharness.spending.FiniteLedgerRecorded",
+          "step": "expect_no_event"
+        },
+        {
+          "event": "metaharness.trace.CompletenessVerified",
+          "step": "expect_no_event"
+        },
+        {
+          "event": "metaharness.trace.DigestNamed",
+          "step": "expect_no_event"
+        },
+        {
+          "event": "metaharness.trace.FamilyClassified",
+          "step": "expect_no_event"
+        },
+        {
+          "event": "metaharness.trace.ProjectionRecorded",
+          "step": "expect_no_event"
+        },
+        {
+          "event": "metaharness.trace.RecordNormalized",
+          "step": "expect_no_event"
+        },
+        {
+          "event": "metaharness.trace.UnkClassified",
+          "step": "expect_no_event"
+        },
+        {
+          "event": "metaharness.workspace.ProcessWritePlanned",
           "step": "expect_no_event"
         }
       ]

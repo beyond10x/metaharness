@@ -30,8 +30,8 @@ use std::path::PathBuf;
 
 use metaharness_protocol::{
     ConformanceTier, ContractObligations, CredentialSource, DecisionMode, Digest, EventStream,
-    HermeticAttestation, HermeticMode, Kind, Obligation, PluginContent, PluginTree, RunId, RunSpec,
-    Seam, ToolSurface, TranscriptRef, VectorOutcome, tree_digest,
+    HermeticAttestation, HermeticMode, HermeticRow, Kind, Obligation, PluginContent, PluginTree,
+    RunId, RunSpec, Seam, ToolSurface, TranscriptRef, VectorOutcome, tree_digest,
 };
 use serde_json::{Value, json};
 
@@ -51,6 +51,7 @@ pub const CONTRACT_OBLIGATIONS: ContractObligations = ContractObligations {
         "c1-observe-mode",
         "c1-plugin-injection",
         "c1-marketplace-plugin",
+        "c1-scratch-cwd-declaration",
     ]),
     recorded_wire: Obligation::Filled(&["golden-transcript"]),
     recorded_hook_input: Obligation::Filled(&["golden-hook-input"]),
@@ -68,6 +69,7 @@ use crate::transcript::TranscriptReader;
 pub fn conformance_vectors() -> Vec<VectorOutcome> {
     let mut outcomes = launch_vectors();
     outcomes.push(observe_mode_vector());
+    outcomes.push(scratch_cwd_vector());
     outcomes.push(plugin_injection_vector());
     outcomes.push(marketplace_plugin_vector());
     outcomes.extend(replay_vectors());
@@ -128,6 +130,121 @@ fn observe_mode_vector() -> VectorOutcome {
             ));
         }
     }
+    if differences.is_empty() {
+        VectorOutcome::passed(id, ConformanceTier::C1)
+    } else {
+        VectorOutcome::failed(id, ConformanceTier::C1, differences.join("; "))
+    }
+}
+
+/// C1 — **the declared scratch copy** (amendment a27), read off the attestation the way the
+/// observe vector reads the decision mode, so the three shapes are pinned without a fixture: under
+/// `--cwd <dir> --scratch-cwd` H7 is `declared` and neither imposed nor unavailable and H11 is
+/// imposed when the walk above the copy finds nothing; with a memory file above the copy H11 is
+/// unavailable with the count named while H7 stays declared; and the same directory without the
+/// declaration keeps a6's two unavailable rows and declares nothing.
+#[allow(
+    clippy::too_many_lines,
+    reason = "three launches of one synthetic world, read top to bottom as the three shapes a27 \
+              names; splitting it would put one vector in three places"
+)]
+fn scratch_cwd_vector() -> VectorOutcome {
+    let id = "c1-scratch-cwd-declaration";
+    let mut differences = Vec::new();
+    let copy = PathBuf::from("/embedder/copy");
+
+    let mut spec = base_spec();
+    spec.cwd = Some(copy.clone());
+    spec.scratch_cwd = true;
+    let mut context = base_context();
+    context.cwd.clone_from(&copy);
+    match plan_launch(&spec, &context) {
+        Err(refusal) => differences.push(format!("the declared copy was refused: {refusal}")),
+        Ok(plan) => {
+            let attestation = &plan.attestation;
+            match attestation.declaration(HermeticRow::H7) {
+                None => differences.push("H7 is not declared".to_string()),
+                Some(declared) if !declared.declaration.contains("/embedder/copy") => differences
+                    .push(format!(
+                        "H7's declaration does not name the copy: {}",
+                        declared.declaration
+                    )),
+                Some(_) => {}
+            }
+            if attestation.claims(HermeticRow::H7) {
+                differences.push("H7 is claimed as imposed under a declaration".to_string());
+            }
+            if attestation
+                .unavailable
+                .iter()
+                .any(|control| control.row == HermeticRow::H7)
+            {
+                differences.push("H7 is attested unavailable under a declaration".to_string());
+            }
+            if !attestation.claims(HermeticRow::H11) {
+                differences.push(
+                    "H11 is not imposed although the walk above the copy found nothing".to_string(),
+                );
+            }
+            if plan.cwd != copy {
+                differences.push(format!("the plan's cwd is {}", plan.cwd.display()));
+            }
+        }
+    }
+
+    // A memory file above the copy is measured, not declared away.
+    let mut polluted = base_context();
+    polluted.cwd.clone_from(&copy);
+    polluted.memory_ancestors = vec![PathBuf::from("/embedder/AGENTS.md")];
+    match plan_launch(&spec, &polluted) {
+        Err(refusal) => differences.push(format!(
+            "a memory file above the declared copy refused the launch instead of being \
+             attested: {refusal}"
+        )),
+        Ok(plan) => {
+            if !plan.attestation.declares(HermeticRow::H7) {
+                differences.push("H7 is not declared when a memory file is above".to_string());
+            }
+            if plan.attestation.claims(HermeticRow::H11) {
+                differences.push("H11 is imposed over a memory file above the copy".to_string());
+            }
+            let measured = plan.attestation.unavailable.iter().any(|control| {
+                control.row == HermeticRow::H11 && control.why.contains("1 memory file")
+            });
+            if !measured {
+                differences
+                    .push("H11 is not attested unavailable with the count named".to_string());
+            }
+        }
+    }
+
+    // Without the declaration, a6 as written.
+    let mut named = base_spec();
+    named.cwd = Some(copy.clone());
+    let mut context = base_context();
+    context.cwd = copy;
+    match plan_launch(&named, &context) {
+        Err(refusal) => differences.push(format!("the a6 directory was refused: {refusal}")),
+        Ok(plan) => {
+            if !plan.attestation.declared.is_empty() {
+                differences.push(format!(
+                    "a directory nobody declared carries a declaration: {:?}",
+                    plan.attestation.declared
+                ));
+            }
+            for row in [HermeticRow::H7, HermeticRow::H11] {
+                if !plan
+                    .attestation
+                    .unavailable
+                    .iter()
+                    .any(|control| control.row == row)
+                {
+                    differences.push(format!("{} is not unavailable under a6", row.id()));
+                }
+            }
+        }
+    }
+
     if differences.is_empty() {
         VectorOutcome::passed(id, ConformanceTier::C1)
     } else {

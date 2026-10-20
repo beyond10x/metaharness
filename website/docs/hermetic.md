@@ -65,6 +65,13 @@ not hermeticity. This distinction is load-bearing enough that getting it wrong h
 a real defect: an early build treated *"this run pinned no documents"* as *"nobody found out
 whether the documents moved"*, which made `--hermetic strict` unpassable.
 
+The attestation knows a third state beside imposed and unavailable, for one row only: under
+[`--cwd <DIR> --scratch-cwd`](reference/cli.md#--scratch-cwd-the-embedders-disposable-copy) H7 is
+**`declared`** — the embedder declared the directory as its disposable scratch copy — and the floor
+reads it `ok` only when the record's cwd is the one planned. H11 stays measured. On the b10x kind
+the opening record's cwd is metaharness's own echo of its plan, not the loop's report, so that
+comparison is weaker there than on the vendor kinds.
+
 ## The three modes
 
 | `--hermetic` | Behaviour |
