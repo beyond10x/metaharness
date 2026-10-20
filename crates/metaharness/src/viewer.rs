@@ -20,9 +20,12 @@
 
 use std::fmt::Write as _;
 use std::path::Path;
+use std::str::FromStr;
 
 use metaharness_protocol::{
-    EventLine, TraceIrDocument, TraceIrEvent, UNK_FAMILY, parse_event_line, project_document,
+    Digest, EVENT_FORMAT, Emission, Event, EventLine, EventStream, HermeticAttestation,
+    HermeticMode, RunId, Seam, SeamFactory as _, TraceIrDocument, TraceIrEvent, TranscriptRef,
+    UNK_FAMILY, parse_event_line, project_document,
 };
 use serde_json::Value;
 
@@ -83,6 +86,263 @@ pub fn project_file(path: &Path) -> Result<TraceIrDocument, Refusal> {
         lines.push(parsed);
     }
     Ok(project_document(&lines, &bytes))
+}
+
+// --- vendor records, through the production readers (amendment a28) ----------------------------
+
+/// A vendor record format `project --from` reads through its adapter's production reader.
+///
+/// Three names, spelled as `spec/domains/trace.yaml`'s `SourceKind` spells them, so the verb, the
+/// domain and the document's `metaharness.source` say one thing. The event stream is not among
+/// them on purpose: it is what `project` reads without `--from`, and a name that meant *no reader*
+/// would make the flag optional in disguise.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum VendorSource {
+    /// Claude Code `stream-json`, through `metaharness_claude::TranscriptReader`.
+    ClaudeCodeStreamJson,
+    /// A Codex session rollout, through `metaharness_codex::RolloutReader`.
+    CodexRollout,
+    /// A `b10x-harness --json` record, through `metaharness_b10x::B10xSeams`.
+    HarnessJson,
+}
+
+impl VendorSource {
+    /// The three, in the order the readers are listed.
+    pub const ALL: [VendorSource; 3] = [
+        VendorSource::ClaudeCodeStreamJson,
+        VendorSource::CodexRollout,
+        VendorSource::HarnessJson,
+    ];
+
+    /// The name, which is also what a projected document's `metaharness.source` carries.
+    #[must_use]
+    pub const fn as_str(self) -> &'static str {
+        match self {
+            VendorSource::ClaudeCodeStreamJson => "claude-code-stream-json",
+            VendorSource::CodexRollout => "codex-rollout",
+            VendorSource::HarnessJson => "harness-json",
+        }
+    }
+
+    /// Every name `--from` admits.
+    #[must_use]
+    pub fn names() -> [&'static str; 3] {
+        Self::ALL.map(Self::as_str)
+    }
+}
+
+impl FromStr for VendorSource {
+    type Err = Refusal;
+
+    /// By name, and refused by name: the refusal carries the three admitted spellings.
+    fn from_str(name: &str) -> Result<Self, Refusal> {
+        Self::ALL
+            .into_iter()
+            .find(|source| source.as_str() == name)
+            .ok_or_else(|| Refusal::ProjectionSource {
+                source: name.to_owned(),
+                path: None,
+                detail: format!(
+                    "this build reads {} through its production readers, and a \
+                     metaharness.event/1 stream is what `project` reads without --from",
+                    Self::names().join(", ")
+                ),
+            })
+    }
+}
+
+/// Read one vendor record through its adapter's production reader and project what it emits.
+///
+/// A replay is not a launch, and the reader is built the way
+/// `crates/metaharness-claude/tests/recorded_runs.rs` builds it: a transcript reference naming the
+/// record's **file name** — never the argv spelling, which would make two spellings of one file
+/// two documents, and never a canonical absolute path, which would put the machine's directories
+/// into a document people commit — the digest of the bytes read and their count; an attestation
+/// that claims nothing (`HermeticAttestation::none(HermeticMode::Off)`); `Seam::None`. The b10x
+/// factory is given no version, model or cwd, because this verb knows none. Every line goes
+/// through `push_line` in order, then `finish`; the production [`EventStream`] frames the result
+/// under the record's file stem, and nobody closes it (a28 point 5: the marker is metaharness's
+/// statement about a stream it wrote for a run it drove, and here it drove nothing). The
+/// document's `metaharness.source` is the format's name, its `transcript_digest` is over the
+/// record's bytes (a28 point 3), and each node's `source_line` is the record line the reader read
+/// it from — an event owed at `finish` cites the last line.
+///
+/// # Errors
+///
+/// [`Refusal::Io`] when the file cannot be read; [`Refusal::ProjectionSource`] when it is not
+/// UTF-8, or when the reader's first event is not `session.started` — the one rule by which a
+/// record of another format is told apart, because the readers raise no error of their own and the
+/// wrong reader makes `opaque` nodes.
+pub fn project_vendor_record(
+    path: &Path,
+    source: VendorSource,
+) -> Result<TraceIrDocument, Refusal> {
+    let bytes = std::fs::read(path).map_err(|error| Refusal::Io {
+        detail: format!("{} could not be read: {error}", path.display()),
+    })?;
+    let text = std::str::from_utf8(&bytes).map_err(|error| Refusal::ProjectionSource {
+        source: source.as_str().to_owned(),
+        path: Some(path.to_path_buf()),
+        detail: format!("the record is not UTF-8: {error}"),
+    })?;
+
+    let transcript = TranscriptRef {
+        path: path
+            .file_name()
+            .map(|name| name.to_string_lossy().into_owned()),
+        digest: Some(Digest::of(&bytes)),
+        bytes: u64::try_from(bytes.len()).ok(),
+    };
+    let attestation = HermeticAttestation::none(HermeticMode::Off);
+    let (emissions, record_lines) = match source {
+        VendorSource::ClaudeCodeStreamJson => {
+            let mut seam =
+                metaharness_claude::ClaudeSeams.build(transcript, attestation, Seam::None);
+            replay(
+                &mut seam,
+                text,
+                |seam, line| seam.push_line(line),
+                |seam| seam.finish(),
+            )
+        }
+        VendorSource::CodexRollout => {
+            let mut reader = metaharness_codex::RolloutReader::new(transcript, attestation);
+            replay(
+                &mut reader,
+                text,
+                metaharness_codex::RolloutReader::push_line,
+                metaharness_codex::RolloutReader::finish,
+            )
+        }
+        VendorSource::HarnessJson => {
+            let mut seam = metaharness_b10x::B10xSeams::new(None, None, None).build(
+                transcript,
+                attestation,
+                Seam::None,
+            );
+            replay(
+                &mut seam,
+                text,
+                |seam, line| seam.push_line(line),
+                |seam| seam.finish(),
+            )
+        }
+    };
+
+    // The rule. Not a format sniff on the first line — that would be a second copy of each
+    // adapter's format knowledge, outside the adapter crate — but what the production reader
+    // itself made of the record: a record of the declared format opens with `session.started`.
+    let first = emissions.first().map(|emission| &emission.event);
+    if !matches!(first, Some(Event::SessionStarted { .. })) {
+        return Err(Refusal::ProjectionSource {
+            source: source.as_str().to_owned(),
+            path: Some(path.to_path_buf()),
+            detail: not_a_record_of(source, first),
+        });
+    }
+
+    let run = path.file_stem().map_or_else(
+        || "record".to_owned(),
+        |stem| stem.to_string_lossy().into_owned(),
+    );
+    let mut stream = EventStream::new(RunId::new(run));
+    let lines: Vec<EventLine> = emissions
+        .into_iter()
+        .map(|emission| stream.stamp(emission))
+        .collect();
+    Ok(TraceIrDocument::project_from(
+        &lines,
+        &bytes,
+        source.as_str(),
+        Some(&record_lines),
+    ))
+}
+
+/// Why the reader's first event says the record is not of the declared format (a28 point 4), in
+/// the line's own words and only those: an empty vendor type is no type, and the loop's reader
+/// writes its own adapter id as an opaque record's `vendor_type`, which is the reader's convention
+/// rather than the line's, so neither is printed as what the line was.
+fn not_a_record_of(source: VendorSource, first: Option<&Event>) -> String {
+    let format = source.as_str();
+    match first {
+        None => "the reader produced no event, so there is nothing to project".to_owned(),
+        Some(Event::Opaque {
+            vendor_type,
+            vendor_subtype,
+            source_line,
+            ..
+        }) => {
+            let line = source_line.map_or_else(|| "?".to_owned(), |line| line.to_string());
+            let known = |value: &Option<String>| {
+                value
+                    .as_deref()
+                    .filter(|value| !value.is_empty() && *value != adapter_id(source))
+                    .map(ToOwned::to_owned)
+            };
+            match (known(vendor_type), known(vendor_subtype)) {
+                (Some(kind), Some(subtype)) => format!(
+                    "the reader's first event is opaque: line {line} is `{kind}/{subtype}`, which \
+                     the {format} reader could not read, and a record of that format opens with \
+                     session.started"
+                ),
+                (Some(kind), None) => format!(
+                    "the reader's first event is opaque: line {line} is `{kind}`, which the \
+                     {format} reader could not read, and a record of that format opens with \
+                     session.started"
+                ),
+                // The loop's reader puts the line's own `kind` in the subtype beside its adapter
+                // id, so a harness record opening with a kind this build does not know is named
+                // by that word.
+                (None, Some(kind)) => format!(
+                    "the reader's first event is opaque: line {line} is kind `{kind}`, which the \
+                     {format} reader could not read, and a record of that format opens with \
+                     session.started"
+                ),
+                (None, None) => format!(
+                    "the reader's first event is opaque: line {line} produced an opaque record of \
+                     the `{format}` reader, and a record of that format opens with session.started"
+                ),
+            }
+        }
+        Some(other) => format!(
+            "the reader's first event is {}, not session.started",
+            other.name()
+        ),
+    }
+}
+
+/// The adapter id a source's reader writes into `session.started.adapter`.
+const fn adapter_id(source: VendorSource) -> &'static str {
+    match source {
+        VendorSource::ClaudeCodeStreamJson => metaharness_claude::ADAPTER_ID,
+        VendorSource::CodexRollout => metaharness_codex::ADAPTER_ID,
+        VendorSource::HarnessJson => metaharness_b10x::ADAPTER_ID,
+    }
+}
+
+/// The emissions a reader owes for a record — every line through `push`, in order, then
+/// `finish` — beside the 1-based record line each came from. Everything `push` returned for a
+/// line came from that line; what `finish` owes came from the whole record and cites its last
+/// line, because the reader had read all of it when it emitted them.
+fn replay<R>(
+    reader: &mut R,
+    text: &str,
+    push: impl Fn(&mut R, &str) -> Vec<Emission>,
+    finish: impl Fn(&mut R) -> Vec<Emission>,
+) -> (Vec<Emission>, Vec<usize>) {
+    let mut emissions = Vec::new();
+    let mut record_lines = Vec::new();
+    let mut last = 0;
+    for (index, line) in text.lines().enumerate() {
+        last = index + 1;
+        let produced = push(reader, line);
+        record_lines.extend(std::iter::repeat_n(last, produced.len()));
+        emissions.extend(produced);
+    }
+    let owed = finish(reader);
+    record_lines.extend(std::iter::repeat_n(last, owed.len()));
+    emissions.extend(owed);
+    (emissions, record_lines)
 }
 
 // --- the alignment ------------------------------------------------------------------------------
@@ -478,9 +738,17 @@ pub fn render_page(documents: &[TraceIrDocument]) -> Result<String, Refusal> {
         AlignmentRule::ToolCallIndex
     };
 
-    let left = column(first, rule);
+    let mut left = column(first, rule);
     if let Some(second) = second {
-        let right = column(second, rule);
+        let mut right = column(second, rule);
+        // Two columns with one name would read as one run twice (a28 point 1: a replay is named
+        // after its file, and two records can share a file name). When the names are equal each
+        // carries the first eight hex digits of its own document's digest; columns whose names
+        // differ keep their headers, so a committed page does not move.
+        if left.run == right.run {
+            left.run = disambiguated(&left.run, first);
+            right.run = disambiguated(&right.run, second);
+        }
         let rows = align(&left, &right);
         return Ok(render(
             &left,
@@ -505,6 +773,13 @@ pub fn render_page(documents: &[TraceIrDocument]) -> Result<String, Refusal> {
         })
         .collect();
     Ok(render(&left, None, &rows, rule, first, None))
+}
+
+/// A column name beside the first eight hex digits of its document's `transcript_digest`, so two
+/// columns named after one file are told apart by what they were made from.
+fn disambiguated(run: &str, document: &TraceIrDocument) -> String {
+    let prefix: String = document.transcript_digest.chars().take(8).collect();
+    format!("{run} · {prefix}")
 }
 
 fn escape(text: &str) -> String {
@@ -581,10 +856,18 @@ fn header(column: &Column, document: &TraceIrDocument) -> String {
         .map(|(family, count)| format!("{family} {count}"))
         .collect::<Vec<_>>()
         .join(", ");
+    // The digest is labelled by what it is over: the event stream on the wire — the word the
+    // committed `evals/aep/runs/side-by-side.html` pins — or the vendor format a replay named as
+    // its source (a28), so a page over a record never calls the record's digest a stream's.
+    let digest_label = if document.metaharness.source == EVENT_FORMAT {
+        "stream"
+    } else {
+        document.metaharness.source
+    };
     format!(
         "<th><div class=\"run\">{}</div><div class=\"meta\">{} · {} event(s) · {}</div>\
          <div class=\"meta\">{}</div><div class=\"meta\">total {}</div>\
-         <div class=\"meta digest\">stream sha256:{}</div></th>",
+         <div class=\"meta digest\">{} sha256:{}</div></th>",
         escape(&column.run),
         if column.driven {
             "driven"
@@ -595,6 +878,7 @@ fn header(column: &Column, document: &TraceIrDocument) -> String {
         escape(&families),
         escape(&column.terminal),
         money(column.total_cost_usd),
+        escape(digest_label),
         escape(&document.transcript_digest),
     )
 }
@@ -808,5 +1092,34 @@ mod tests {
     fn a_call_with_no_decision_says_so_rather_than_reading_as_an_allow() {
         let page = render_page(&[document(&["Bash"])]).expect("renders");
         assert!(page.contains("no tool.decided crossed the wire for this call"));
+    }
+
+    /// a28 point 1 — a name `--from` does not admit is refused by name, and the refusal carries
+    /// the three it does. The event stream's own name is the case worth pinning: it is a
+    /// `SourceKind` of the domain and still not a `--from`.
+    #[test]
+    fn an_unknown_vendor_source_is_refused_naming_the_three_admitted_ones() {
+        let refusal = "metaharness-event-stream"
+            .parse::<VendorSource>()
+            .expect_err("the event stream is not a --from");
+        assert!(matches!(
+            refusal,
+            Refusal::ProjectionSource { path: None, .. }
+        ));
+        let text = refusal.to_string();
+        assert!(text.contains("metaharness-event-stream"), "{text}");
+        for name in VendorSource::names() {
+            assert!(text.contains(name), "{text}");
+        }
+    }
+
+    #[test]
+    fn every_vendor_source_round_trips_through_its_name() {
+        for source in VendorSource::ALL {
+            assert_eq!(
+                source.as_str().parse::<VendorSource>().expect("parses"),
+                source
+            );
+        }
     }
 }

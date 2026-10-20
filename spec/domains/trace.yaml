@@ -31,8 +31,11 @@ types:
     variants: [session_start, run_outcome, assistant_text, assistant_thinking, thinking_estimate, synthetic_injection, tool_call, tool_result, rate_limit, opaque, unk, stream_closed]
   - name: metaharness.trace.SourceKind
     kind: enum
-    # Input of the normalize command only: which committed record is read and
-    # through which production reader. Not a field of the document.
+    # Input of the normalize and project-vendor-record commands: which committed
+    # record is read and through which production reader. The three vendor names
+    # are also the values `metaharness project --from` admits (amendment a28),
+    # spelled one way in the verb, here and in DocumentHeader.source; the fourth
+    # is the stream the verb reads without the flag and is not a --from.
     variants: [claude-code-stream-json, codex-rollout, harness-json, metaharness-event-stream]
   - name: metaharness.trace.Adapter
     kind: enum
@@ -66,12 +69,12 @@ types:
       - {name: source, type: String}
     # format is the constant trace-ir/1 (IR_FORMAT); adapter is the constant
     # metaharness/project (IR_ADAPTER, distinct from the consumer's reader name);
-    # transcript_digest is the SHA-256 of the event stream's own bytes (P3, a15
-    # point 2), never of a vendor file. source is MetaharnessBlock::source,
-    # observed as the constant metaharness.event/1 in every production write.
-    # UNMAPPED: whether source ever carries a vendor format name is
-    # story:project-reads-vendor-transcripts's open question; nothing here
-    # declares it.
+    # transcript_digest is the SHA-256 of the file the document was made from:
+    # the event stream's own bytes for a stream read off the wire (P3, a15
+    # point 2), the vendor record's bytes under `metaharness project --from`
+    # (amendment a28). source is MetaharnessBlock::source and says which:
+    # the constant metaharness.event/1 for the wire, the SourceKind name for a
+    # vendor record; ProjectVendorRecord below reads both by literal.
   - name: metaharness.trace.Census
     kind: struct
     fields:
@@ -363,8 +366,50 @@ commands:
     # crates/metaharness-b10x/fixtures/golden/loop.jsonl (read as it stands;
     # story:b10x-adapter-on-harness-over-llm re-records it later and no count
     # of its nodes is declared here), evals/aep/runs/decomposer-clean.events.jsonl.
-    # UNMAPPED: reading a vendor record through metaharness project itself is
-    # story:project-reads-vendor-transcripts; nothing here claims it.
+    # Reading a vendor record through `metaharness project --from` itself is
+    # ProjectVendorRecord below (amendment a28).
+
+  - name: metaharness.trace.ProjectVendorRecord
+    # Amendment a28: the public verb's library entry,
+    # metaharness::project_vendor_record (crates/metaharness/src/viewer.rs),
+    # over each committed golden vendor record named under NormalizeRecord,
+    # called twice. Every value is read off the rendered document and off the
+    # record: source is metaharness.source; adapter and opening_family are the
+    # opening node's own; hermetic_mode and imposed are the metaharness.hermetic
+    # block's (a replay claims nothing); stream_complete is the verified a17
+    # flag (nobody closes a replayed stream, so it is false); byte_stable is
+    # whether the two renders agree; digest_over_record whether
+    # transcript_digest is the SHA-256 of the record's bytes; census_as_expected
+    # whether metaharness.families equals the families of the adapter's own
+    # committed expected stream projected through project_document (neither
+    # carries a marker). The outcome is named from the opening node's adapter,
+    # never from the input. The default is reached by the one SourceKind that is
+    # not a --from: the event stream is what `project` reads without the flag,
+    # and the entry refuses the name, naming it (exit 2 at the verb). A default
+    # is kept for ClassifyEventKind's reason: without one every guard-negate
+    # mutant of this command is stillborn instead of audited.
+    input: [{name: source, type: metaharness.trace.SourceKind}]
+    outcomes:
+      - name: claude-transcript-projected
+        when: source == claude-code-stream-json
+        emits: [metaharness.trace.VendorRecordProjected]
+        payload: {metaharness.trace.VendorRecordProjected: {source: "claude-code-stream-json", adapter: claude, opening_family: session_start, hermetic_mode: "off", imposed: 0, stream_complete: false, byte_stable: true, digest_over_record: true, census_as_expected: true}}
+      - name: codex-rollout-projected
+        when: source == codex-rollout
+        emits: [metaharness.trace.VendorRecordProjected]
+        payload: {metaharness.trace.VendorRecordProjected: {source: "codex-rollout", adapter: codex, opening_family: session_start, hermetic_mode: "off", imposed: 0, stream_complete: false, byte_stable: true, digest_over_record: true, census_as_expected: true}}
+      - name: harness-record-projected
+        when: source == harness-json
+        emits: [metaharness.trace.VendorRecordProjected]
+        payload: {metaharness.trace.VendorRecordProjected: {source: "harness-json", adapter: b10x, opening_family: session_start, hermetic_mode: "off", imposed: 0, stream_complete: false, byte_stable: true, digest_over_record: true, census_as_expected: true}}
+      - name: event-stream-is-not-a-from
+        emits: [metaharness.trace.VendorSourceRefused]
+        payload: {metaharness.trace.VendorSourceRefused: {refused: true, names_the_source: true}}
+        summary: The event stream is read without --from; its name as a --from is refused by name, with the three admitted names (a28 point 1).
+    # UNMAPPED: that a record other than the three goldens opens with
+    # session.started under its reader is not claimed here; a record that does
+    # not is refused by the verb (a28 point 4) and pinned per cross pair in
+    # crates/metaharness-cli/tests/project.rs, not driven by this suite.
 
 # Conformance observations, not newly published runtime wire events.
 events:
@@ -397,6 +442,21 @@ events:
       - {name: adapter, type: metaharness.trace.Adapter}
       - {name: reader_applied, type: Boolean}
       - {name: opening_family, type: metaharness.trace.NodeFamily}
+  - name: metaharness.trace.VendorRecordProjected
+    fields:
+      - {name: source, type: String}
+      - {name: adapter, type: metaharness.trace.Adapter}
+      - {name: opening_family, type: metaharness.trace.NodeFamily}
+      - {name: hermetic_mode, type: String}
+      - {name: imposed, type: Integer}
+      - {name: stream_complete, type: Boolean}
+      - {name: byte_stable, type: Boolean}
+      - {name: digest_over_record, type: Boolean}
+      - {name: census_as_expected, type: Boolean}
+  - name: metaharness.trace.VendorSourceRefused
+    fields:
+      - {name: refused, type: Boolean}
+      - {name: names_the_source, type: Boolean}
 
 # An immutable retained document, not a second run lifecycle.
 entities:

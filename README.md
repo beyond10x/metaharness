@@ -66,7 +66,7 @@ and that document disagree, the document is amended rather than the disagreement
 | `aep drive` | hosts AEP-governed execution above the pinned AEP library — `run`, `resume`, `status`, `eval`, and the hidden `hook` and `transition` verbs a native loop calls back into; the 0.7.0 headline. Verified free in `task check`: the hook and transition answers, resume compatibility and the pre-spend gates on `eval run` (`crates/metaharness-cli/tests/aep_native.rs`, `aep_resume.rs`, `aep_eval_live.rs`). **Where that verification holds, as of 2026-09-15:** `aep_native.rs` and `aep_eval_live.rs` on a machine with neither `metaharness` nor `b10x-harness` installed — 15 tests each on the Gate's own runner in run `34947429804`; `aep_resume.rs` on such a machine only since this change, because it asserted the operator's installed `metaharness` until then and failed at line 70 on every Gate run from `7cf2193` to `4a21dcc`, stopping `cargo test` before every later target. That last claim rests on a local run against a `PATH` holding neither binary; the Gate's own confirmation is pending. `run` and a live `eval run` reach a model and are not in the gate |
 | `capabilities`, `conformance`, `doctor` | work with no model and no credential |
 | `mcp-serve` | serves the owned tool surface over MCP on stdio |
-| `project` | writes a `trace-ir/1` document from an event stream, byte-stable; `--html` renders one or two runs as one static page. The stream's own `stream.closed` marker becomes a terminal node, and the document states whether the stream is whole |
+| `project` | writes a `trace-ir/1` document from an event stream, byte-stable; `--html` renders one or two runs as one static page. The stream's own `stream.closed` marker becomes a terminal node, and the document states whether the stream is whole. `--from claude-code-stream-json\|codex-rollout\|harness-json` reads a vendor record metaharness did not produce through that adapter's production reader (amendment a28): the document names the format as its source, its digest is over the record's bytes, the attestation claims nothing, and a record that is not the declared format is refused with exit 2 |
 | `run --audit` | prints the hermetic floor, the decision census, and one `stream:` line — a stream with no closing marker is named `TRUNCATED` rather than read as a run that did nothing |
 | `audit` over a foreign transcript | refuses with exit 2 |
 
@@ -78,7 +78,7 @@ per-change record of what was verified and what it cost to learn is in
 
 The gate is **`task check`** — ESS specification validation, `cargo fmt --check`,
 `cargo clippy --workspace --all-targets -D warnings`, `cargo test --workspace`.
-Install ESS 0.56.0 first. The tests execute 83 generated conformance scenarios and check suite
+Install ESS 0.56.0 first. The tests execute 87 generated conformance scenarios and check suite
 freshness; [spec/coverage.md](spec/coverage.md) records the coverage and hardening bounds.
 Green before any push.
 
