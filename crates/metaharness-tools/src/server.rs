@@ -3,8 +3,10 @@
 use std::io::{BufRead, Write};
 
 use b10x_harness_wire::{CallId, ToolCall, ToolName, ToolPort};
-use harness_catalogue::Verbs;
+use harness_catalogue::{DESCRIBE_VERB, INVOKE_VERB, Verbs};
 use serde_json::{Value, json};
+
+use crate::resolve::entry_of;
 
 /// The name the vendor prefixes its tools with, so the model sees `mcp__metaharness__tool_search`.
 ///
@@ -108,10 +110,43 @@ impl Server {
         let Ok(name) = ToolName::new(name) else {
             return failed(&format!("`{name}` is not a tool name this server can hold"));
         };
-        let arguments = params
+        let mut arguments = params
             .get("arguments")
             .cloned()
             .unwrap_or_else(|| json!({}));
+        // A verb may name its entry by the `tool-contract/1` command harness maps to it. The
+        // catalogue answers to harness's names only, so the name is translated here, by the same
+        // function the reader of the record uses, and the call is performed as that entry.
+        if matches!(name.as_str(), INVOKE_VERB | DESCRIBE_VERB)
+            && let Some(object) = arguments.as_object_mut()
+            && let Some(named) = object
+                .get("name")
+                .and_then(Value::as_str)
+                .map(ToOwned::to_owned)
+        {
+            let entry = entry_of(&named);
+            if entry != named {
+                // The contract's digest guard, which the entry it maps to does not run: harness
+                // performs `file_write` and `file_edit` without reading `expected_sha256`.
+                // Performing the call would drop the guard and change a file the contract says
+                // stays as it was, so it is refused here, before anything runs.
+                if name.as_str() == INVOKE_VERB
+                    && object
+                        .get("arguments")
+                        .and_then(|inner| inner.get("expected_sha256"))
+                        .is_some()
+                {
+                    return failed(&format!(
+                        "`{named}` was called with `expected_sha256`. Under tool-contract/1 a \
+                         write whose file does not have that digest is `precondition-failed` and \
+                         changes nothing; the implementation this server performs does not run \
+                         that check yet, so nothing was done. Call `{named}` without \
+                         `expected_sha256` to write without the check."
+                    ));
+                }
+                object.insert("name".to_owned(), Value::from(entry));
+            }
+        }
 
         // MCP carries no call identity of its own, so one is minted here. It reaches the verbs, is
         // never sent anywhere, and exists because `ToolCall` is the same type the b10x loop uses —

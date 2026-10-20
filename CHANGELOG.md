@@ -116,6 +116,36 @@ was amended and the amendment is named here.
 
 ### Added
 
+- metaharness's own tool surface accepts the `tool-contract/1` command names harness maps
+  wherever a verb names an entry. `fs.read`, `fs.list`, `fs.glob`, `code.write` and `code.edit`
+  stand for `file_read`, `dir_list`, `find`, `file_write` and `file_edit` (design amendment a32,
+  `story:metaharness-tools-adopts-tool-contract`, Atlas ADR 0095 point 2).
+  - The mapping's source is harness's own `harness_catalogue::harness_operation` at 0.15.1
+    (`f0870131`, `crates/harness-catalogue/src/local.rs:118-143`). metaharness keeps no name table
+    and takes no `tools` dependency.
+  - `metaharness mcp-serve` performs a `tool_invoke`, and answers a `tool_describe`, that names one
+    of these as its entry.
+  - `resolve_verb` and `subjects_of_verb` take a new `VerbSurface` argument, `Served` or
+    `HarnessLoop`, and translate contract names only for `Served`. The run passes `Served` under
+    `--tool-surface owned` and `HarnessLoop` for a b10x record, and gives both functions the same
+    value. So on the owned surface a step's subject scope refuses a contract name on a path outside
+    it exactly as it refuses the entry. On a b10x record, where the pinned loop's verbs answer
+    harness names only and refused the call, a contract name still reads as no operation and no
+    subject.
+  - Harness names are still accepted. A dotted name harness does not map (`code.delete`,
+    `process.run`) stays unknown. The served catalogue (`tools/list`, `tool_search`) keeps
+    harness's names.
+  - **Behaviour change:** under `--tool-surface owned` with a frame, such a `tool_invoke` used to be
+    denied as outside the operation vocabulary, with an `UNCOVERED_TOOL` warning and empty
+    `operations`. It is now decided as its entry, and its `tool.requested` carries the entry's
+    operation and subject.
+  - A contract-named `tool_invoke` that carries `expected_sha256` (any value, `null` included) is
+    refused with `isError: true` and nothing changes. tool-contract/1 makes that field a precondition
+    of `code.write` and `code.edit`, answered by `precondition-failed`. Harness 0.15.1 performs both
+    entries without reading it (`local.rs:520,543`, `catalogue.rs:476-483`), so the refusal names
+    `precondition-failed` and says the served implementation does not run that check yet.
+  - A harness-named call is unchanged: a `file_write` or `file_edit` carrying the field is still
+    performed with the field ignored, although its schema says `additionalProperties: false`.
 - `docs/research/2026-10-20-b10x-harness-0.15.1-adapter-surface.md`: every adapter claim about
   the binary, verified or labelled unverified against 0.15.1 — the `started` record's `cwd`
   observed in the golden recording and through the native fixture (including a run whose `TMPDIR`

@@ -23,6 +23,20 @@
 //! Under the owned surface every entry travels through **one** verb. A rendering table maps
 //! operations to tool names and would collapse all six onto `tool_invoke` — losing exactly the
 //! distinction a reader needs. So resolution takes the call: the name *and* its input.
+//!
+//! # A contract name is the entry harness maps it to — where metaharness serves the verbs
+//!
+//! On metaharness's own server the entry a verb names may be spelled as its `tool-contract/1`
+//! command (`fs.read`, `code.write`) as well as by its harness name (`file_read`, `file_write`).
+//! Which contract name stands for which entry is harness's to say —
+//! [`harness_catalogue::harness_operation`] — and this crate keeps no table of its own. The b10x
+//! loop metaharness launches publishes its entries flat by default (`--surface flat`, harness
+//! `crates/harness-cli/src/lib.rs:744`), and at the pinned release answers harness names only under
+//! either surface, so on its record a contract name reached no tool. [`VerbSurface`] says which of the two a call went
+//! through, and resolution and subjects take the same one, so a contract name cannot resolve to an
+//! operation while naming no subject: a call that names none is never judged on where it acts, and
+//! a frame's subject scope would let it through with any path. What is *served* keeps harness's
+//! names; the b10x run publishes the same catalogue, and two vocabularies would reach the model.
 
 use serde_json::Value;
 
@@ -50,6 +64,44 @@ pub enum Resolved {
     Unknown,
 }
 
+/// The catalogue entry a verb's `name` stands for.
+///
+/// A `tool-contract/1` command name harness maps is the entry it maps to; any other name is itself,
+/// so a harness entry name resolves as it always did and an unmapped name stays whatever the
+/// catalogue makes of it — unknown. Contract names are dotted and entry names are not, so the two
+/// cannot collide.
+pub(crate) fn entry_of(name: &str) -> &str {
+    harness_catalogue::harness_operation(name).unwrap_or(name)
+}
+
+/// Whose three verbs a call went through, which decides what a contract name in it was.
+///
+/// The verbs are the same three on every run that publishes them; what answers them is not.
+/// metaharness's own [`Server`](crate::Server) performs a `tool-contract/1` name harness maps as
+/// that entry. The b10x loop's verbs at the pinned release look an entry up by harness name only,
+/// so there a contract name was refused and reached no tool — and reading it as its entry would
+/// put an effect in the record that never happened.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum VerbSurface {
+    /// Served by metaharness over MCP (`--tool-surface owned`): a contract name harness maps is
+    /// its entry.
+    Served,
+    /// A b10x record: the harness loop answers harness names only (flat by default, and its own
+    /// verbs under `--surface verbs` look an entry up the same way), so a contract name is outside
+    /// the vocabulary.
+    HarnessLoop,
+}
+
+impl VerbSurface {
+    /// The catalogue entry a verb's `name` stands for on this surface.
+    fn entry(self, name: &str) -> &str {
+        match self {
+            Self::Served => entry_of(name),
+            Self::HarnessLoop => name,
+        }
+    }
+}
+
 /// The three verbs, with any vendor prefix taken off.
 ///
 /// A prefix and not a whole name, because the vendor chooses it: Claude Code publishes MCP tools
@@ -74,14 +126,18 @@ pub fn unprefixed(tool: &str) -> &str {
 /// resolution would be a claim about a tool that does not exist, and it would launder an unknown
 /// call into a recognised operation. The caller enforces that by only asking under the owned
 /// surface; this function does not guess.
+///
+/// `surface` is whose verbs answered the call, and the same rule keeps it honest: a contract name
+/// is an operation only where it was performed as one ([`VerbSurface`]).
 #[must_use]
-pub fn resolve_verb(tool: &str, input: &Value) -> Option<Resolved> {
+pub fn resolve_verb(tool: &str, input: &Value, surface: VerbSurface) -> Option<Resolved> {
     match unprefixed(tool) {
         SEARCH_VERB | DESCRIBE_VERB => Some(Resolved::Catalogue),
         INVOKE_VERB => Some(match input.get("name").and_then(Value::as_str) {
-            Some(entry) => operation_of(entry).map_or(Resolved::Unknown, |operation| {
-                Resolved::Operations(vec![operation.to_owned()])
-            }),
+            Some(entry) => operation_of(surface.entry(entry))
+                .map_or(Resolved::Unknown, |operation| {
+                    Resolved::Operations(vec![operation.to_owned()])
+                }),
             // A `tool_invoke` with no `name` never reached a tool — the verb refuses it. Reading it
             // as an operation would put an effect in the record that never happened.
             None => Resolved::Unknown,
@@ -100,9 +156,10 @@ pub fn resolve_verb(tool: &str, input: &Value) -> Option<Resolved> {
 /// finished run and a live gate answer the same question the same way.
 ///
 /// Empty for a catalogue question, for an entry outside the vocabulary, and for a tool that is not
-/// one of the verbs — in each case there is no entry whose arguments could name a subject.
+/// one of the verbs — in each case there is no entry whose arguments could name a subject. Pass the
+/// `surface` [`resolve_verb`] was given: a name that resolved to an operation names its subject.
 #[must_use]
-pub fn subjects_of_verb(tool: &str, input: &Value) -> Vec<String> {
+pub fn subjects_of_verb(tool: &str, input: &Value, surface: VerbSurface) -> Vec<String> {
     if unprefixed(tool) != INVOKE_VERB {
         return Vec::new();
     }
@@ -110,7 +167,7 @@ pub fn subjects_of_verb(tool: &str, input: &Value) -> Vec<String> {
         return Vec::new();
     };
     let arguments = input.get("arguments").cloned().unwrap_or(Value::Null);
-    harness_catalogue::subjects_of(entry, &arguments)
+    harness_catalogue::subjects_of(surface.entry(entry), &arguments)
         .into_iter()
         .map(|subject| subject.as_str().to_owned())
         .collect()

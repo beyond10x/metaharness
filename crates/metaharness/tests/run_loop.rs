@@ -1506,3 +1506,128 @@ fn a_call_that_named_no_subject_is_decided_by_the_operation_set_alone() {
     );
     assert_eq!(decisions(&mut started.run)[0].1, Decision::Allow);
 }
+
+/// A `tool-contract/1` name is judged where it acts, exactly as the harness entry it maps to.
+///
+/// `out_of_scope` admits a call that names no subject, so a contract name that resolved to an
+/// operation and named nothing would walk through a subject scope with any path it carried.
+#[test]
+fn a_contract_name_is_admitted_and_refused_by_the_step_scope_as_its_harness_entry() {
+    let mut frame = frame_admitting(OperationSet::of([Operation::FileRead]));
+    frame.subjects = SubjectScope {
+        rules: vec![
+            metaharness::protocol::SubjectRule {
+                subjects: vec!["file:src/**".to_owned()],
+                operations: OperationSet::of([Operation::FileRead]),
+            },
+            metaharness::protocol::SubjectRule {
+                subjects: vec!["**".to_owned()],
+                operations: OperationSet::empty(),
+            },
+        ],
+    };
+    let invoke = |id: &str, name: &str, path: &str| {
+        format!(
+            r#"{{"emit":"tool.requested","call_id":"{id}","name":"mcp__metaharness__tool_invoke","input":{{"name":"{name}","arguments":{{"path":"{path}"}}}},"decision_required":true,"seam":"hook"}}"#
+        )
+    };
+    let mut started = start(
+        Metaharness::new(Kind::Claude)
+            .with_tool_surface(ToolSurface::Owned)
+            .with_decisions(DecisionMode::Frame)
+            .with_frame(frame.seal()),
+        vec![
+            ScriptStep::line(INIT),
+            ScriptStep::line(invoke("c1", "fs.read", "src/lib.rs")),
+            ScriptStep::line(invoke("c2", "fs.read", "../../etc/passwd")),
+            ScriptStep::line(invoke("c3", "file_read", "../../etc/passwd")),
+            ScriptStep::line(END),
+        ],
+    );
+    let decided = decisions(&mut started.run);
+    let by_id = |id: &str| {
+        decided
+            .iter()
+            .find(|(call, _)| call == id)
+            .map(|(_, decision)| decision.clone())
+            .expect("every call is decided")
+    };
+
+    assert_eq!(
+        by_id("c1"),
+        Decision::Allow,
+        "in scope, admitted as file.read"
+    );
+    for id in ["c2", "c3"] {
+        let Decision::Deny { reason } = by_id(id) else {
+            panic!("{id} reaches outside the scope and is refused");
+        };
+        assert!(
+            reason.contains("../../etc/passwd"),
+            "{id} is refused for where it went, not for being unknown: {reason}"
+        );
+    }
+}
+
+/// The operations and subjects one recorded call carried.
+fn what_the_record_says(builder: Metaharness, line: &str) -> (Vec<String>, Vec<String>) {
+    let mut started = start(
+        builder,
+        vec![
+            ScriptStep::line(INIT),
+            ScriptStep::line(line),
+            ScriptStep::line(END),
+        ],
+    );
+    started.run.drain().expect("pumps");
+    started
+        .run
+        .events()
+        .iter()
+        .find_map(|event| match event {
+            Event::ToolRequested {
+                operations,
+                subjects,
+                ..
+            } => Some((operations.clone(), subjects.clone())),
+            _ => None,
+        })
+        .expect("the call was recorded")
+}
+
+/// Whose verbs a call went through decides what a contract name was.
+///
+/// metaharness's own server performs `fs.read` as `file_read`, so on the owned surface the record
+/// says what was read. The b10x loop's verbs at the pinned release answer harness names only and
+/// refused it, so on a b10x record it reached no tool and the record names no effect.
+#[test]
+fn a_contract_name_is_its_entry_on_the_served_surface_and_unknown_on_a_b10x_record() {
+    let input = r#"{"name":"fs.read","arguments":{"path":"src/lib.rs"}}"#;
+
+    assert_eq!(
+        what_the_record_says(
+            Metaharness::new(Kind::Claude)
+                .with_tool_surface(ToolSurface::Owned)
+                .with_decisions(DecisionMode::Frame),
+            &requested_with("mcp__metaharness__tool_invoke", input),
+        ),
+        (
+            vec!["file.read".to_owned()],
+            vec!["file:src/lib.rs".to_owned()]
+        ),
+        "served: performed as `file_read`"
+    );
+
+    assert_eq!(
+        what_the_record_says(
+            Metaharness::new(Kind::B10x)
+                .with_credentials(CredentialSource::None)
+                .with_decisions(DecisionMode::Observe)
+                .with_model_endpoint("http://127.0.0.1:1")
+                .with_model("synthetic-never-called"),
+            &requested_with("tool_invoke", input),
+        ),
+        (Vec::new(), Vec::new()),
+        "b10x record: the loop refused it, so no effect is recorded"
+    );
+}
