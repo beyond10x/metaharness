@@ -23,9 +23,9 @@ One interface to many agent harnesses: emit events, receive steering commands, r
 decide the tool surface per call. **Binary first** (`metaharness-cli`: `metaharness run <kind>`,
 `metaharness aep drive`), library second (`metaharness`, builder API). That ordering is what is
 true rather than what was intended: no repository in the organization takes a crate of this
-workspace as a Cargo dependency, while 31 files in five sibling repositories name
-`metaharness aep drive` (counted 2026-09-15 over `~/beyond10x`: aep 9, agentplugins 11, atlas 7,
-harness-builder 2, org-brain-successor 2), and `README.md` § *Where it sits*
+workspace as a Cargo dependency, while 92 files in six sibling repositories name
+`metaharness aep drive` (counted 2026-10-20 over `~/beyond10x`: agentplugins 40, atlas 26, aep 16,
+bench 8, mandate 1, harness 1; 31 in five on 2026-09-15), and `README.md` § *Where it sits*
 says an external driver integrates through the sealed frame document and **never links this
 workspace**. The builder API is the shape the binary is built from and the surface an embedder
 inside this workspace uses; it is not a published consumer surface, and a change that is
@@ -43,6 +43,14 @@ tools, or confine a vendor kind. Those six are the draft stories under
 `confinement-of-vendor-kinds`). Loom's session executor therefore governs a metaharness session as a
 whole and rechecks its proposed change before applying it (ADR 0098 point 2 and Consequences);
 nothing here is per-call governance on every kind until those stories close.
+
+This repository also owns the **session format**, `trace-ir/1` (Atlas ADR 0096 point 7): the ESS
+domain `metaharness.trace` in `spec/domains/trace.yaml` is its specification, checked in `task check`
+like the other domains; the mapping from the `metaharness.event/1` wire into it is
+`docs/design/runs-side-by-side-v0.1.md` § 1 and amendment a26 of the protocol design; and
+`metaharness project` writes it. Claude Code, Codex and harness records reach it through this
+repository's adapters. `metaharness aep drive` is kept as the governed-run driver until Loom's session
+executor runs a case (`decision-blocker:aep-drive-future`, option A, 2026-10-20; ADR 0098 Consequences).
 
 ## Invariants
 

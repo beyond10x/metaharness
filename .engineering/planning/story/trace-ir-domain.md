@@ -2,7 +2,7 @@
 format: aep.planning-md/3
 id: story:trace-ir-domain
 kind: story
-status: active
+status: implemented
 title: trace-ir/1 is the ESS domain metaharness.trace and its conformance runs in the gate
 summary: spec/domains/trace.yaml declares the session format; generated scenarios execute against the production projection and the three production readers; the suite count gate moves from 45.
 owner: metaharness
@@ -41,10 +41,11 @@ scope:
   path: spec/ess-inputs.yaml
 - confidence: cited
   path: spec/system.yaml
-revision: 19
+revision: 22
 transitions:
 - {from: "draft", to: "proposed", at: "2026-10-20T02:14:53Z", actor: "human:timo", revision: 18, decided_on: {"recorded":{"review_outcome":4}}}
 - {from: "proposed", to: "active", at: "2026-10-20T02:14:54Z", actor: "human:timo", revision: 19, decided_on: {"recorded":{"review_outcome":4}}}
+- {from: "active", to: "implemented", at: "2026-10-20T04:28:51Z", actor: "human:timo", revision: 22, decided_on: {"recorded":{"test_result":1,"review_outcome":7,"verification":1,"ess_conformance_coverage_v1":1}}}
 ---
 # Story: `trace-ir/1` is the ESS domain `metaharness.trace`, and its conformance runs in the gate
 
@@ -166,8 +167,11 @@ Each line is read from a file or a command, not asserted:
 5. `CHANGELOG.md` gains an `## [Unreleased]` heading above `## [0.9.3]` (line 6; none exists
    today) with the entry under it.
 6. The b10x golden record `crates/metaharness-b10x/fixtures/golden/loop.jsonl` is read as it stands
-   at harness 0.13.3 and is not changed by this story; `story:b10x-adapter-on-harness-over-llm`
-   re-records it later and depends on this story so the trace scenarios stay green across that move.
+   and is not changed by this story. It was captured from `b10x-harness 0.9.1`
+   (`crates/metaharness-b10x/fixtures/golden/version.txt:1`), not from the 0.13.3 pin, as the
+   implementor found; the domain states 0.9.1 and declares no b10x node count, so
+   `story:b10x-adapter-on-harness-over-llm`'s later re-record moves no scenario. That story depends
+   on this one so the trace scenarios stay green across the move.
 
 ## Hardening evidence required
 
@@ -223,6 +227,16 @@ story or the tree) or **inferred** (a reading that could be wrong).
   `crates/metaharness-b10x/fixtures/golden/loop.jsonl` (11, expected 10) — cited
 - **Confidence:** high — the story cites every file and line and the tree confirms them; the only
   fork (manifests) is an implementor's choice, not an unknown
+- **Implementor's confirmation (wave of 2026-10-20), corrections kept visible:** every cited line
+  confirmed except `spec/coverage.md:8` (wrong: no count there, it names the suite format; line 19
+  updated, line 121 is historical 0.9.0 text left as such); manifests `crates/metaharness-aep/Cargo.toml`
+  and `Cargo.lock` confirmed not needed (the Claude reader is reached through
+  `metaharness::ClaudeSeams`, `bridge.rs:35-37`; both files untouched); `README.md:81` confirmed and
+  updated; adapter crates, protocol crate, core, fixtures and `evals/` confirmed untouched (diff
+  against `d7fad09` empty); the golden fixtures' line counts confirmed by `wc -l`; the
+  `#[cfg(test)]` mount confirmed. One file was added that the scope did not list:
+  `crates/metaharness-aep/tests/adversary_trace_ir_domain.rs` (the adversary's 7 regression cases,
+  kept as part of the unit).
 - **Would collide with:** any unit touching `spec/`; the `execute` match, count gate or required
   list in `ess_conformance.rs`; the amendment tail of `metaharness-protocol-v0.1.md`;
   `CHANGELOG.md` Unreleased; `runs-side-by-side-v0.1.md` § 1. Known neighbours are sequenced after

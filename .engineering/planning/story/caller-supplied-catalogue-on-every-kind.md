@@ -15,6 +15,7 @@ relations:
 - decomposes: epic:loom-agent-work-through-metaharness
 - depends_on: story:metaharness-tools-on-tools-crates
 - depends_on: story:trace-ir-domain
+- depends_on: story:strict-hermetic-with-embedder-scratch-cwd
 scope:
 - confidence: inferred
   path: crates/metaharness-b10x/src/launch.rs

@@ -13,7 +13,7 @@ refs:
 relations:
 - decides: story:trace-ir-domain
 - decides: epic:session-format
-revision: 3
+revision: 12
 ---
 ## Status
 
@@ -1179,3 +1179,116 @@ URL. Verified: tree on 4155db5 = origin/main, both stories present."
   coordinator (AGENTS.md is a coordinator-owned shared file; the wave protocol holds implementors off
   it), verified by `grep`, no adversary pass (prose). Merged before the closing commit, which adds the
   ADR 0096 point 7 ownership sentence to the same section.
+
+## Unit stages (kept current)
+
+| unit | managed tree | branch | base | stage |
+|---|---|---|---|---|
+| integration | `wt-1c57662d33a0` | `integration/adr-0096-session-format` | `4155db5` | opening commit `d7fad09`; cheap gate green (ess validate ×2 exit 0 on 0.56.0, `cargo fmt --check` exit 0, store valid) |
+| 1 `story:trace-ir-domain` | `wt-4a933645b202`, build dir `target/` inside it, scratch `metaharness-wave-adr0096/trace-ir-domain/scratch` under the operator's cache directory | `impl/trace-ir-domain` | `d7fad09` | `aep:implementor` dispatched |
+| 2 `story:governance-unit-stated` | `wt-88fd3441a6bd`, no build, scratch `metaharness-wave-adr0096/governance-unit-stated/scratch` | `impl/governance-unit-stated` | `d7fad09` | coordinator-authored paragraph, unit commit `2a73b1e`, fast-forwarded into integration |
+
+Opening commit refusal and fix: the bot's common checks refused the first attempt with 6 findings,
+one per line of this page that carried the machine's home directory in a path; those lines were
+rewritten as relative descriptions and the commit was accepted.
+
+Decision recorded after the opening commit, for the closing commit: `decision-blocker:aep-drive-future`
+cleared with option A (Timo's answer "a", relayed by `adr-changes`), `story:aep-drive-disposition`
+rewritten to option A.
+
+## Unit 1 progress
+
+- `aep:implementor` returned green: scenario lane 45 → 72 (27 `metaharness.trace.*`), cargo lane 80 → 80
+  (no new `#[test]`; the cases are scenarios), five gate steps each exit 0, two red runs recorded
+  (count gate 72 vs 45 at `ess_conformance.rs:874`; `no production target for
+  metaharness.trace.ProjectRecordedRun` at :668). Hardening: 1 planted spec defect and 2 planted
+  production defects failed by scenario name and were restored; guard-negate mutation 43/43 killed.
+  Build measured: `target/` 1.3G (1.1G at the base build), free disk after 55G. Agent cost: 344,281
+  tokens, 104 tool uses, 1,902 s. Report: `metaharness-wave-adr0096/trace-ir-domain/implementor-report.md`
+  under the operator's cache directory.
+- Finding carried into the store: Done-when 6 of the story said the b10x golden record is "at harness
+  0.13.3"; it is from `b10x-harness 0.9.1` (`fixtures/golden/version.txt:1`). The story body was
+  corrected.
+- `aep:adversary` pass 1 dispatched against the unit tree.
+- `aep:adversary` pass 1 returned red: 5 findings, all `introduced` (2 warnings CONFIRMED: the
+  unguarded `unk` outcome drives one of eight kinds, so a mutant reclassifying `auth.expired` as
+  `opaque` passes 72/72; the `misplaced-or-miscounting` arm builds only the misplaced shape, so a
+  mutant without the marker-count comparison passes 72/72; 3 notes: vacuous `>= 0` invariants,
+  doc miscount of view invariants, an INFEASIBLE digest residue). It left 5 regression cases in
+  `crates/metaharness-aep/tests/adversary_trace_ir_domain.rs` (one red). Recorded as
+  `review-result:adr0096-trace-ir-domain-adversary-1`; finding 5 recorded `no-op`. Agent cost:
+  218,600 tokens, 57 tool uses, 1,184 s. Its 1.3G mutant-tree build directory was removed by exact
+  path after recording.
+- Correction round 1 dispatched to the same implementor (no case has failed twice) with
+  `metaharness-wave-adr0096/trace-ir-domain/correction-1.md`.
+- Correction round 1 returned green: scenario lane 72 → 79 (34 `metaharness.trace.*`: 19 classify,
+  5 completeness, 2 digest, 2 retained projections, 2 view-invariant scenarios carrying 8
+  predicates, 4 normalize); the adversary's 5 cases pass (red before: `13 of 20 wire kinds`; green
+  after); five gate steps each exit 0; planted spec defect fails 1 by name, planted production
+  defects fail 11 by name, all restored; guard-negate mutation 52/52 killed, 0 stillborn.
+  Deviation from the adversary's named fix on finding 1, measured: with all 19 classify guards and
+  no default ESS 0.56.0 emits 19 stillborn mutants (`ESS-COMMAND-004/005`), so `auth.expired` is
+  the one unguarded default and the other seven `unk` kinds are guarded; stated in the domain,
+  `spec/coverage.md` and the report. The two probe suites were deleted (unreferenced); the Rust
+  test file stays in the unit. Build `target/` 1.3G, free disk after 46G. Agent cost this round:
+  421,252 tokens, 46 tool uses, 814 s. Findings 1–4 of pass 1 recorded `fixed`.
+- `aep:adversary` pass 2 dispatched (the last of the two-pass budget).
+- Filed during the wave on `adr-changes`'s relay of takt's gap G15: `story:strict-hermetic-with-embedder-scratch-cwd`
+  (draft, under `epic:loom-agent-work-through-metaharness`, 12 inferred scope entries, ordering edges
+  from the confinement and catalogue stories); slated as the first unit of the next wave. Rides in
+  the closing store commit.
+- Adversary pass 2 was cut by HTTP 429 before reporting and resumed once on the same model.
+- `aep:adversary` pass 2 (the last of the budget) returned green for the tree: its 7 cases pass,
+  79/79 scenarios, byte-identical regeneration; 3 findings, all `introduced`, on suite strength
+  (1 warning: `opening_node.timestamp`/`timestamp_ms` exposed but read by no predicate, so a
+  mutant setting both to `None` passes 79/79 and is caught only by `metaharness-cli tests/project.rs:339`;
+  2 notes: `byte_stable` is self-referential while the committed `*.trace-ir.json` goldens are read
+  by no scenario; `census.unk == families.unk` is 0 == 0 on the driven input). Recorded as
+  `review-result:adr0096-trace-ir-domain-adversary-2`. Ledger between the passes
+  (`aep plan artifact findings`): carried 0, new 3, resolved 5. Agent cost: 290,343 tokens, 29 tool
+  uses, 557 s (plus 273,614 tokens, 22 tool uses, 384 s on the resumed run cut by HTTP 429). Its
+  recreated 1.5G mutant build directory was removed by exact path.
+- Correction round 2 dispatched to the same implementor (all three findings are new ground, none a
+  case that failed twice); the coordinator verifies this correction by reading the diff and the
+  gate exits, and opens no third attack.
+- Correction round 2 returned green: predicates 8 → 12 (`RetainedDocument` gains `golden_stable`,
+  `opening_timestamp_present`, `families.session_start == 1`, `families.stream_closed == 1`;
+  `ProjectionRecorded` carries `opening_timestamp_ms` pinned per run, 1787302800000 and
+  1787304000000), scenario total unchanged at 79, mutation 52/52 killed, five gate steps each
+  exit 0, protocol/adapter/core/manifest/evals diffs against `d7fad09` empty. Deviation stated by
+  the implementor: the adversary's named `opening_node.timestamp_ms == 1787302800000` is true for
+  one run only, so the literal lives on each record's payload. Agent cost this round: 446,774
+  tokens, 15 tool uses, 273 s.
+- Coordinator verification of the round-2 correction (no third attack): read the hunks;
+  `golden_stable` is `fresh == golden` with `golden` read from `evals/aep/runs/<run>.trace-ir.json`
+  (`ess_conformance.rs:1084,1109`), `opening_timestamp_present` is `opening["timestamp"].is_string()`
+  (:1107), `opening_timestamp_ms` is `document.events[0].timestamp_ms` (:1037); the 17 non-comment
+  lines removed from the target since the base are the old matcher bodies, the old `>=`/`>` view
+  operators and the `45` count gate, all replaced by the matchers the adversary audited in both
+  passes. No assertion dropped, no re-pinned test relaxed. Pass-2 findings 1–3 recorded `fixed`.
+
+## Integration
+
+| step | result |
+|---|---|
+| baseline measurement on `2a73b1e` (before unit 1) | `cargo test -p metaharness-aep ess_generated_scenarios_drive_production_targets` exit 0; conformance total 45, passed 45; `target/` 1.1G |
+| unit 1 commit | `4a4c905` on `impl/trace-ir-domain`, bot-authored, 0 home-path lines |
+| unit 1 merge | `fb0e422`, bot-authored merge commit, parents `2a73b1e` and `4a4c905`; the bot wrapper accepted `merge --no-ff --no-edit` (it merges without committing, then commits as the bot) |
+| treatment measurement and whole gate on `fb0e422` | see the gate table below |
+
+## Whole gate on `fb0e422`, one step at a time (each step's own exit status)
+
+| step | command | exit |
+|---|---|---|
+| 1 | `ess specify validate --path spec --strict-requires` (ESS 0.56.0) | 0 |
+| 2 | `ess specify validate --path spec/monetary --strict-requires` | 0 |
+| 3 | `cargo fmt --check` | 0 |
+| 4 | `cargo clippy --workspace --all-targets -- -D warnings` | 0 |
+| 5 | `cargo test --workspace` | 0: 59 test binaries, 803 passed, 0 failed, 31 ignored (the ignored ones are the live tests behind `METAHARNESS_LIVE`) |
+| 6 | `cargo run --locked --quiet -p metaharness-docs -- check` | 0 |
+
+Conformance lane on `fb0e422`: total 79, passed 79, failed 0, skipped 0; official `ess-conformance-report/2` `conformance_status: passed`, unsupported 0. Treatment vs baseline: 79 vs 45 scenarios with the same command, `VERIFIED`. Build directory of the integration tree after the gate: 3.4G; free disk 59G. Logs: `metaharness-wave-adr0096/closing/gate-*.log` under the operator's cache directory.
+
+Closing commit: evidence (verification, the ESS report, `test_result` for both stories) recorded, both stories moved to `implemented`, the scope section of `story:trace-ir-domain` rewritten from the implementor's confirmation table, this page, the cleared blocker, the rewritten disposition story, the G15 story and the AGENTS.md ownership paragraph.
+
+- Deviation at close, fixed: two `test_result` records were dropped while still uncommitted and re-recorded, because their `--ref` carried the machine's home path and the bot's common checks refuse that; 0 such lines are staged.

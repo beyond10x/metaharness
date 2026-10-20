@@ -14,6 +14,7 @@ refs:
 relations:
 - decomposes: epic:loom-agent-work-through-metaharness
 - depends_on: story:continuity-across-executor-calls
+- depends_on: story:strict-hermetic-with-embedder-scratch-cwd
 scope:
 - confidence: inferred
   path: crates/metaharness-claude/src/launch.rs

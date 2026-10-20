@@ -40,20 +40,23 @@ scope:
   path: crates/metaharness-cli/src/lib.rs
 - confidence: inferred
   path: docs/ROADMAP.md
-revision: 17
+revision: 18
 ---
 # Story: the decided future of `metaharness aep drive` is carried out
 
 ## Scheduling
 
-Draft. Blocked by `decision-blocker:aep-drive-future`; not in the wave of 2026-10-20. The blocker
-holds the options and their costs; this story is rewritten to the chosen option when it clears.
+Draft. `decision-blocker:aep-drive-future` was cleared on 2026-10-20 with option A (keep; Timo's
+answer "a", relayed by session `adr-changes`); this story was rewritten to that option the same day.
+Not in the wave of 2026-10-20.
 
 ## Outcome
 
-Whichever option the blocker records is carried out, and the overlap ADR 0098 Consequences names
+Option A is carried out: `metaharness aep drive` stays the governed-run driver inside this
+repository until Loom's session executor runs a case, and the overlap ADR 0098 Consequences names
 ("`metaharness aep drive` ... overlaps Commission; its future is decided in metaharness's plan") is
-closed in this repository's record.
+closed in this repository's record by a citation of the decision. The B-versus-C question is
+re-asked when that executor exists; a new decision-blocker carries it then.
 
 ## Context
 
@@ -68,23 +71,18 @@ repository), metaharness 11.
 
 ## Acceptance
 
-Until `decision-blocker:aep-drive-future` clears this story has no end state and stays `draft`;
-`aep plan artifact blocked` lists it. On clearing, the acceptance is rewritten to the chosen
-option's end state from the Procedure below before the story moves to `proposed`, and in every
-option `task check` exits 0 with the ESS conformance count gate in `ess_conformance.rs` equal to the
-count in that file at this story's dispatch (written into the Result section), and AGENTS.md § What
-this repository owns cites the decision and its reason.
+AGENTS.md § What this repository owns carries one sentence that `metaharness aep drive` is kept as
+the governed-run driver until Loom's session executor runs a case, naming
+`decision-blocker:aep-drive-future` and ADR 0098, where today that section says nothing about the
+overlap; `crates/metaharness-aep` is unchanged by this story and `task check` exits 0 with the ESS
+conformance count gate in `ess_conformance.rs` equal to the count in that file at this story's
+dispatch (written into the Result section).
 
-## Procedure, per option
+## Procedure
 
-- keep: nothing moves; AGENTS.md § Live-evaluating is unchanged; the citation above is added.
-- move to Loom: the ESS conformance target is re-homed into another crate of this workspace first,
-  with the count gate unchanged; the frame contract's coordinated migration is written as an Atlas
-  ADR before the crate leaves; the `Aep` verb is removed from `metaharness-cli`; the 92 external
-  files are listed with their owners in the closing record.
-- retire: as for move, minus the Atlas ADR for the frame, plus the statement of what replaces
-  `aep-eval driven|native` as the O3/O6 measurement (AGENTS.md § Serves) and the AEP change that
-  undoes ADR 0047's redirect to this binary.
+Option A, keep: nothing moves; AGENTS.md § Live-evaluating is unchanged; the sentence above is
+added. The former options B (move to Loom) and C (retire) and their costs stay recorded in the
+blocker for the day the question is re-asked.
 
 ## Order
 

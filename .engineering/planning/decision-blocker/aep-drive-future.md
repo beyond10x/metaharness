@@ -2,7 +2,7 @@
 format: aep.planning-md/3
 id: decision-blocker:aep-drive-future
 kind: decision-blocker
-status: open
+status: cleared
 title: Nobody has decided whether metaharness aep drive is kept, moved to Loom or retired
 owner: metaharness
 refs:
@@ -10,7 +10,9 @@ refs:
   reference: adr-0098
 relations:
 - blocks: story:aep-drive-disposition
-revision: 1
+revision: 3
+transitions:
+- {from: "open", to: "cleared", at: "2026-10-20T02:17:32Z", actor: "human:timo", revision: 3}
 ---
 ## The question
 
@@ -51,3 +53,11 @@ answers; this blocker is cleared by that answer and by nothing else.
 ## What it blocks
 
 `story:aep-drive-disposition`, which is rewritten to the chosen option when this clears.
+## Decision
+
+Resolved 2026-10-20: option A, keep `metaharness aep drive` until Loom's session executor runs a
+case (ADR 0098 point 2–3; takt first, ADR 0099 point 3). Timo's answer, verbatim, as relayed by
+session `adr-changes` the same day: "a". The relay: "Timo decided decision-blocker:aep-drive-future:
+A, keep `metaharness aep drive` until Loom's session executor runs (his answer "a", 2026-10-20)."
+Cleared on that answer and on nothing else. The B-versus-C question is re-asked when that executor
+exists and has measurements; nothing moves before then.

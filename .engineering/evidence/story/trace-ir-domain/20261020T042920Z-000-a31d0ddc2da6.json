@@ -1,0 +1,13 @@
+{
+  "at": "2026-10-20T04:29:20Z",
+  "actor": "human:timo",
+  "artifact": "story:trace-ir-domain",
+  "kind": "story",
+  "revision": 22,
+  "change": {
+    "change": "evidence",
+    "kind": "test_result",
+    "source": "task check, one step at a time, on integration/adr-0096-session-format at fb0e422: 6 steps exit 0, 59 test binaries, 803 passed, 0 failed, 31 ignored, conformance 79/79",
+    "reference": "gate-5-test.log in the wave's cache directory metaharness-wave-adr0096/closing"
+  }
+}

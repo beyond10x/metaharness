@@ -1,0 +1,13 @@
+{
+  "at": "2026-10-20T04:28:50Z",
+  "actor": "human:timo",
+  "artifact": "story:trace-ir-domain",
+  "kind": "story",
+  "revision": 20,
+  "change": {
+    "change": "evidence",
+    "kind": "verification",
+    "source": "cargo test -p metaharness-aep ess_generated_scenarios_drive_production_targets, conformance summary line",
+    "reference": "baseline 2a73b1e: total 45 vs treatment fb0e422: total 79"
+  }
+}

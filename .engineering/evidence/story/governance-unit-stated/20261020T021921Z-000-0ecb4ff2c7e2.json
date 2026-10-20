@@ -1,0 +1,13 @@
+{
+  "at": "2026-10-20T02:19:21Z",
+  "actor": "human:timo",
+  "artifact": "story:governance-unit-stated",
+  "kind": "story",
+  "revision": 5,
+  "change": {
+    "change": "evidence",
+    "kind": "verification",
+    "source": "grep -c 'unit of governance for agent' AGENTS.md on integration/adr-0096-session-format",
+    "reference": "baseline d7fad09: 0 vs treatment 2a73b1e: 1"
+  }
+}

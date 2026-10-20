@@ -2,7 +2,7 @@
 format: aep.planning-md/3
 id: story:governance-unit-stated
 kind: story
-status: active
+status: implemented
 title: AGENTS.md states the unit of governance for agent work
 summary: 'One paragraph in AGENTS.md: until the ADR 0098 gaps close, a caller governs the session and its proposed change, not every tool call.'
 owner: metaharness
@@ -16,10 +16,11 @@ relations:
 scope:
 - confidence: cited
   path: AGENTS.md
-revision: 5
+revision: 6
 transitions:
 - {from: "draft", to: "proposed", at: "2026-10-20T02:14:54Z", actor: "human:timo", revision: 4, decided_on: {"recorded":{"review_outcome":1}}}
 - {from: "proposed", to: "active", at: "2026-10-20T02:14:54Z", actor: "human:timo", revision: 5, decided_on: {"recorded":{"review_outcome":1}}}
+- {from: "active", to: "implemented", at: "2026-10-20T04:28:51Z", actor: "human:timo", revision: 6, decided_on: {"recorded":{"test_result":1,"review_outcome":1,"verification":1}}}
 ---
 # Story: AGENTS.md states the unit of governance for agent work
 
