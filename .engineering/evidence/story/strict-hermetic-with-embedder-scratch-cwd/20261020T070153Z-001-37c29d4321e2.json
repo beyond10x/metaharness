@@ -1,0 +1,13 @@
+{
+  "at": "2026-10-20T07:01:53Z",
+  "actor": "human:timo",
+  "artifact": "story:strict-hermetic-with-embedder-scratch-cwd",
+  "kind": "story",
+  "revision": 43,
+  "change": {
+    "change": "evidence",
+    "kind": "verification",
+    "source": "metaharness --hermetic strict --cwd <copy> --scratch-cwd through the scripted runner: builder::scratch_cwd_tests, 5 cases, and the metaharness.workspace.DeclareScratchWorkingDirectory scenarios",
+    "reference": "baseline (stub, no behaviour): 5 failed, H7 Ok over an uncreated directory, exit 101 (scratch red-run.log); treatment: 5 passed, H7 declared, H11 measured, 83/83 scenarios (scratch green-module.log, gate 5-test.log)"
+  }
+}

@@ -13,7 +13,7 @@ refs:
   reference: adr-0095
 - provider: atlas
   reference: adr-0097
-revision: 2
+revision: 4
 ---
 ## Status
 
@@ -50,8 +50,14 @@ and tools; L0: llm) instead of the pre-ADR harness that carried both.
 
 ## Parts
 
-- `story:metaharness-tools-on-tools-crates`, blocked by `dependency-blocker:tools-first-release`.
-- `story:b10x-adapter-on-harness-over-llm`, blocked by `dependency-blocker:harness-llm-release`.
+- `story:metaharness-tools-adopts-tool-contract`: the Apache-2.0 contract crate from tools 0.1.0
+  (tag `a9bf6eb6` on `046dfb14`, released 2026-10-20); unblocked.
+- `story:metaharness-tools-on-tools-crates`: the implementation crates; `dependency-blocker:tools-first-release`
+  cleared 2026-10-20, now blocked by `decision-blocker:tools-implementation-licence` (the three
+  implementation crates are `LicenseRef-B10x-Proprietary`; Timo decides).
+- `story:b10x-adapter-on-harness-over-llm`: `dependency-blocker:harness-llm-release` cleared
+  2026-10-20 (harness 0.14.0, tag `58cc4623` on `c50f4fd5`, llm 0.8.0); waits on the tools
+  implementation story and the budget hold.
 
 ## Order
 

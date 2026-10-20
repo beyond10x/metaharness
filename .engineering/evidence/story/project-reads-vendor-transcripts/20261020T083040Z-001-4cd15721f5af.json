@@ -1,0 +1,13 @@
+{
+  "at": "2026-10-20T08:30:40Z",
+  "actor": "human:timo",
+  "artifact": "story:project-reads-vendor-transcripts",
+  "kind": "story",
+  "revision": 29,
+  "change": {
+    "change": "evidence",
+    "kind": "verification",
+    "source": "metaharness project --from <format> over the three golden records (crates/metaharness-cli/tests/project.rs and adversary_project_from.rs)",
+    "reference": "baseline 83f1478: clap UnknownArgument --from, 6 cases red, exit 101 (scratch red.log); treatment: 23 + 6 cases green, family census equals the adapters' expected streams, 87/87 scenarios (scratch c2-verify2.log)"
+  }
+}

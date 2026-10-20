@@ -2,7 +2,7 @@
 format: aep.planning-md/3
 id: story:strict-hermetic-with-embedder-scratch-cwd
 kind: story
-status: active
+status: implemented
 title: --hermetic strict admits an embedder-declared scratch working directory
 summary: 'takt gap G15: metaharness 0.9.3 refuses HermeticMode::Strict with a named cwd (builder.rs:199-205, a6); Loom''s session executor needs strict over its own scratch copy, attested from the record.'
 owner: metaharness
@@ -54,10 +54,11 @@ scope:
   path: website/docs/hermetic.md
 - confidence: cited
   path: website/docs/reference/cli.md
-revision: 43
+revision: 45
 transitions:
 - {from: "draft", to: "proposed", at: "2026-10-20T05:04:34Z", actor: "human:timo", revision: 42}
 - {from: "proposed", to: "active", at: "2026-10-20T05:04:34Z", actor: "human:timo", revision: 43}
+- {from: "active", to: "implemented", at: "2026-10-20T08:35:01Z", actor: "human:timo", revision: 45, decided_on: {"recorded":{"test_result":1,"review_outcome":4,"verification":1,"ess_conformance_coverage_v1":1}}}
 ---
 # Story: `--hermetic strict` admits an embedder-declared scratch working directory
 
@@ -65,7 +66,7 @@ transitions:
 
 Draft, filed 2026-10-20 on takt's gap G15 (relayed by session `adr-changes`): it blocks takt's
 session-executor crate S2 (Atlas ADR 0098 point 2, ADR 0099 point 3). Proposed as the first unit of
-the wave after the trace-ir wave of 2026-10-20.
+the wave after the trace-ir wave of 2026-10-20. Implemented as unit 1 of wave 2 of 2026-10-20.
 
 ## Outcome
 
@@ -177,6 +178,19 @@ Derived 2026-10-20 by `aep:story-scoper` against the tree at `205125c`; cited un
 - Shared with the gap chain: `story:caller-supplied-catalogue-on-every-kind` and
   `story:confinement-of-vendor-kinds` touch `spec.rs`, `hermetic.rs` and the launch files; both
   carry a `depends_on` edge to this story, which lands first.
+- **Implementor's confirmation (wave 2 of 2026-10-20), corrections kept visible:** every cited
+  line confirmed; the b10x attestation site is `builder.rs:540-660`, not 603-648; `fixtures/c1` of
+  both adapters confirmed unnecessary (code vectors read `plan.attestation`); `hermetic.md`,
+  `CHANGELOG.md`, `scripted.rs` (`launched_cwds`) and the protocol `lib.rs` re-export confirmed
+  needed. Missing from the scope and edited: full struct literals in `protocol/tests/wire.rs`,
+  `metaharness/tests/audit.rs`, `tests/run_loop.rs`; the vector-count pin in
+  `claude/tests/adapter.rs`; the contract-result goldens `crates/metaharness/fixtures/golden/
+  contract-result-{claude,codex}.json` (`checked` 27 → 28, 17 → 18, applied by the coordinator);
+  `metaharness-aep` has no `metaharness-claude` dependency (the target used
+  `metaharness::capabilities(Kind::Claude).versions_pinned`). Added by the adversary:
+  `crates/metaharness/tests/adversary_scratch_cwd.rs` (2 cases kept). Production correction made
+  in scope: the base's H7 floor arm printed `ok` over an uncreated `--cwd` directory
+  (`audit.rs:620-624`), now `gap`; the b10x a6 branch attests H7 unavailable.
 
 ## Ambiguities
 

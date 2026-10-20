@@ -34,13 +34,20 @@ scope:
   path: crates/metaharness-b10x/src/vectors.rs
 - confidence: inferred
   path: docs/research
-revision: 11
+revision: 13
 ---
 # Story: the b10x adapter pins the harness release that builds on llm
 
 ## Scheduling
 
-Draft. Blocked by `dependency-blocker:harness-llm-release`. Not in the wave of 2026-10-20.
+Draft. `dependency-blocker:harness-llm-release` cleared 2026-10-20: harness 0.14.0, tag `58cc4623`
+on `c50f4fd5`, builds on llm 0.8.0 with its four wire crates deleted. The release to pin is
+**0.14.1**, tag `9a3735d1079930577fd7afc92dab460c9a463f48` on `f109612eb184f34ce6f7cf72f25b89a928320c39`,
+reachable from harness main (verified from the checkout 2026-10-20; `adr-changes` relays it as a
+Substrate 0.7.17 security fix, not verified here). Candidate for wave 3 (`adr-changes`, 2026-10-20,
+hold lifted); still depends on `story:metaharness-tools-on-tools-crates`, which is blocked by
+`decision-blocker:tools-implementation-licence`, so wave 3 can take it only if that edge is
+re-pointed to the contract story or the licence question is answered. Not in wave 2.
 
 ## Outcome
 

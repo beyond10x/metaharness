@@ -1,0 +1,13 @@
+{
+  "at": "2026-10-20T08:35:00Z",
+  "actor": "human:timo",
+  "artifact": "story:strict-hermetic-with-embedder-scratch-cwd",
+  "kind": "story",
+  "revision": 43,
+  "change": {
+    "change": "evidence",
+    "kind": "test_result",
+    "source": "task check, one step at a time, on integration/adr-0096-wave-2 at 7076ac9b: 6 steps exit 0, 61 test binaries, 836 passed, 0 failed, 31 ignored, conformance 87/87",
+    "reference": "gate-5-test.log in the wave's cache directory metaharness-wave-adr0096/w2-closing"
+  }
+}

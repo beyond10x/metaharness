@@ -2,7 +2,7 @@
 format: aep.planning-md/3
 id: dependency-blocker:tools-first-release
 kind: dependency-blocker
-status: open
+status: cleared
 title: tools has published no crate holding the harness tool layer under tool-contract/1
 owner: metaharness
 refs:
@@ -11,7 +11,9 @@ refs:
 relations:
 - blocks: story:metaharness-tools-on-tools-crates
 withholds: test_result
-revision: 1
+revision: 3
+transitions:
+- {from: "open", to: "cleared", at: "2026-10-20T05:15:50Z", actor: "human:timo", revision: 3}
 ---
 ## Upstream requirement
 
@@ -35,3 +37,14 @@ Record here the `tools` tag, its git revision and the toolset versions it declar
 `aep plan artifact move dependency-blocker:tools-first-release --to cleared`. A tag that holds the
 contracts but not the crates does not clear it. Cross-store edges are not admitted by `aep`; the
 reference stays in prose.
+
+## Cleared, 2026-10-20
+
+tools 0.1.0 is released: annotated tag object `a9bf6eb6d32ab0a569586afe3a2dfc5000c26af6` peeling to
+`046dfb14c36773b557d76de0de92e04ce23a388d`, https://github.com/beyond10x/tools/releases/tag/0.1.0,
+published by b10x-bot[bot] at 2026-10-20T05:13:07Z (read from the tools checkout and `gh release
+view`; relayed by session `adr-changes`). At that tag `crates/` holds `b10x-tool-contract`
+(Apache-2.0), `b10x-tool-fs`, `b10x-tool-code-editor` and `b10x-tool-toolchain` (all three
+`LicenseRef-B10x-Proprietary`), and `contracts/` holds the `code-editor/v1alpha1` contract with its
+scenarios and fixtures. The release exists, so this blocker clears; what metaharness (Apache-2.0,
+`Cargo.toml:21`) may depend on is `decision-blocker:tools-implementation-licence`.

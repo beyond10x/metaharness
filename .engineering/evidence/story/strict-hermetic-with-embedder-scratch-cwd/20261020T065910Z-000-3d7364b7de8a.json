@@ -1,0 +1,14 @@
+{
+  "at": "2026-10-20T06:59:10Z",
+  "actor": "human:timo",
+  "artifact": "story:strict-hermetic-with-embedder-scratch-cwd",
+  "kind": "story",
+  "revision": 43,
+  "change": {
+    "change": "evidence",
+    "kind": "review_outcome",
+    "source": "review-result:adr0096-w2-strict-cwd-adversary-2",
+    "review": "review-result:adr0096-w2-strict-cwd-adversary-2",
+    "outcome": "no-op"
+  }
+}

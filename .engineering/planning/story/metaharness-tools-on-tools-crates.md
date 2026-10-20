@@ -16,6 +16,7 @@ refs:
 relations:
 - decomposes: epic:layer-pins-follow-their-owners
 - depends_on: story:trace-ir-domain
+- depends_on: story:metaharness-tools-adopts-tool-contract
 scope:
 - confidence: inferred
   path: CHANGELOG.md
@@ -33,13 +34,19 @@ scope:
   path: crates/metaharness-tools/src/lib.rs
 - confidence: inferred
   path: crates/metaharness-tools/src/resolve.rs
-revision: 9
+revision: 11
 ---
 # Story: `metaharness-tools` builds on the `tools` crates
 
 ## Scheduling
 
-Draft. Blocked by `dependency-blocker:tools-first-release`. Not in the wave of 2026-10-20.
+Draft. `dependency-blocker:tools-first-release` cleared on 2026-10-20 (tools 0.1.0, tag `a9bf6eb6`
+on `046dfb14`). `decision-blocker:tools-implementation-licence` cleared the same day with option A:
+Timo decided (about 10:10, relayed by `adr-changes`) that the implementation crates moved from
+harness (`b10x-tool-fs`, `b10x-tool-code-editor`, `b10x-tool-toolchain`) become Apache-2.0 in tools
+0.2.0. This story therefore pins tools 0.2.0 and is held by `dependency-blocker:tools-0-2-0-release`
+until that tag exists; it goes into wave 3 beside `story:metaharness-tools-adopts-tool-contract`
+(`depends_on`), both at the same tag. Not in wave 2.
 
 ## Outcome
 

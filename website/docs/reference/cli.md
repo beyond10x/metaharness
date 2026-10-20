@@ -18,7 +18,7 @@ Six verbs. Three of them need no model, no network and no credential.
 | `capabilities <KIND>` | What an adapter says it can do: declared tiers, pinned versions, operation rendering. |
 | `conformance <KIND>` | The free conformance vectors: no model, no network, no credential. |
 | `doctor <KIND>` | The installed vendor version against the adapter's pin. |
-| `project --events <FILE>` | Project an event stream into `trace-ir/1`. **Refuses with exit 2** — see [Status](../status.md). |
+| `project <EVENTS>...` | Project an event stream into `trace-ir/1`, byte-stable, or render one or two runs as one static page (`--html`); `--from <FORMAT>` reads a vendor record through its adapter's production reader instead (design amendment a28). |
 | `audit --transcript <FILE>` | Judge a transcript offline. **Refuses with exit 2**. |
 
 `<KIND>` is `claude`, `codex` or `b10x`. The first two are vendors metaharness drives; the third is
@@ -178,13 +178,17 @@ published here.
 
 | Flag | Verb | Meaning |
 |---|---|---|
-| `--events <FILE>` | both | The event stream. Required for `project`, optional for `audit`. |
+| `<EVENTS>...` | `project` | The event stream(s), positional: one, or two under `--html`. |
+| `--from <FORMAT>` | `project` | Read every record given as a vendor record of this format through the adapter's production reader: `claude-code-stream-json`, `codex-rollout` or `harness-json`. Any other name is refused by name; a record that is not the declared format is refused with exit 2 (design amendment a28). |
+| `--out <FILE>` | `project` | Write the `trace-ir/1` document here instead of to stdout. |
+| `--html <FILE>` | `project` | Render one or two runs as a static two-column page at this path. |
+| `--events <FILE>` | `audit` | The event stream that went with the transcript. |
 | `--to <FORM>` | `project` | The target form. Default `trace-ir`. |
 | `--transcript <FILE>` | `audit` | The raw vendor transcript to judge. |
 | `--spec <FILE>` | `audit` | The expectation document. |
 | `--auditor <PREFIX>` | `audit` | The external auditor, as an argv prefix. |
 
-Both currently **refuse with exit 2, naming what they wait for**.
+`audit` currently **refuses with exit 2, naming what it waits for**. `project` writes the document (design amendment a15); under `--from` the document names the vendor format as its source and its digest is over the record's bytes (a28).
 
 ## Exit codes
 
