@@ -95,7 +95,7 @@ Each is a claim that can be checked. Breaking one is a design change, not a refa
    `decision_required: false` and `Seam::None`. Giving it a seam would put the driven arm's
    treatment on top of the observed arm and make the two differ in name only.
 10. **harness is taken by git revision, never by `path`.** `metaharness-tools` and `metaharness-b10x`
-   depend on `b10x-harness-tools`, `b10x-harness-wire` and `b10x-harness-loop` with
+   depend on `b10x-harness-catalogue`, `b10x-harness-wire` and `b10x-harness-loop` with
    `git = "https://github.com/beyond10x/harness"` and a `rev` (`.cargo/config.toml` makes cargo
    fetch it with the system git). A `path` into the sibling checkout builds against whatever is
    checked out there, `--locked` cannot lock it, and the gate is green against a tree nobody named —

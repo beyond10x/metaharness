@@ -2389,3 +2389,54 @@ an operator's real transcript is evidence and may contain anything the vendor wr
 seam, no decision census, and `--audit`'s floor is not consulted. `aep observe trace check` still
 reads event streams (a15 point 3); a record projected with `--from` has no stream file beside it,
 and writing one is not this amendment. No event or frame wire changes.
+
+### Amendment a29 — the b10x pair moves to harness 0.15.0 (2026-10-20)
+
+Atlas ADR 0097 point 2: the in-house harness builds on `llm`, and the adapter observes it at the
+release where it does. The b10x source/version pair advances together from 0.13.3
+(`798325f03cf5a18df8fadb346d31b314826136ec`) to **0.15.0**
+(`dd5c2a66218a5f2555c4a9fdab6fdfac8515cc6d`, the commit the annotated tag points at, reachable
+from harness `main`), on a25's rule: both manifests, the lock and the runtime provenance constants
+move in one change, and qualification is the golden record re-recorded from that binary plus the
+credential-free native fixture, never a paid run. 0.15.0 deletes `crates/harness-tools`; both
+manifests take `b10x-harness-catalogue` under its own lib name, and with it the `tools` crates at
+tag 0.2.0 that harness pins, so the lock holds one harness revision and one tools revision.
+
+What a24 named as the process-write source contract moves with the pair and is unchanged in
+substance: `process_workspace_access` is the same function at 0.15.0, and Substrate 0.7.17
+(`00fa634cb24eb307946bfe3bbe40142f4b7a469a`) carries `validate_workspace_access`,
+`validate_relative_path` and both 64 bounds byte-identical to 0.7.8. a26's parenthesis — the
+golden record *captured from `b10x-harness 0.9.1`* — is superseded: it is a 0.15.0 capture, and as
+a26 said it would, the re-recording moved no trace scenario. The record-writing code
+(`harness-loop` `event.rs`, `price.rs`) is byte-identical from 0.13.3 to 0.15.0; the replayed
+stream differs from the 0.9.1 one in `harness_version` and in `credential_source`, because the
+recording named no credential. The `started` record names no working directory, so `cwd` on
+`session.started` stays the launch's.
+
+The replies `metaharness mcp-serve` gives a model move with the pin, because the `tools` crates now
+perform its file operations. Harness's `[0.15.0]` entry names two moves and says a capped `find`
+leaves `truncated` unchanged; the same 70 calls on both releases moved 17 replies, 0.13.3 → 0.15.0:
+
+- `dir_list` of a FIFO, socket or device: `kind: "file"` (`bytes: 0` for a FIFO) → `kind:
+  "other"`, `bytes: null`.
+- `find` capped by `max_results`: `depth_bound_reached` `true` → `false` when the cap falls before
+  a directory past the depth bound; `truncated` `true` → `false` when only non-matching files
+  follow the cap (0.13.3 tested the cap on every visit, `b10x-tool-fs` on matches).
+- `find` with an empty `glob`: *a find has to name* → *a glob has to name*.
+- `file_read` with `limit: 0`: an empty window (`"text": ""`, `truncated: true`) → refused, *`limit`
+  is how many lines to read and 0 names none*.
+- `file_read` whose `max_bytes` equals a last line without a trailing newline: the line cut,
+  `truncated: true` → the whole line, `truncated: false`.
+- `file_write` onto a directory or with an empty `path`: *`sub`: Is a directory (os error 21)* →
+  *`sub` is not a regular file*; a new name spelled `new.txt/`: written as `new.txt` → refused in
+  those words.
+- `file_edit` whose `old` overlaps itself (`aa` in `aaa`): applied, the file `ba` → refused, *that
+  text appears 2 times … (edit 0)*; the empty-`old`, no-match and several-matches refusals gain
+  ` (edit 0)`; a non-UTF-8 file: *stream did not contain valid UTF-8* → *is not UTF-8 text; an
+  edit needs text to find `old` in*; a directory: *Is a directory (os error 21)* → *is not a regular
+  file*.
+
+The catalogue the model is offered — names, descriptions, argument schemas — is unchanged. None of
+these crosses `metaharness.event/1`, where every b10x `tool.result` carries `content: null`. The
+list is bounded by those 70 calls, not by every input. Per-call replies and per-claim evidence:
+`docs/research/2026-10-20-b10x-harness-0.15.0-adapter-surface.md`. No event or frame wire changes.

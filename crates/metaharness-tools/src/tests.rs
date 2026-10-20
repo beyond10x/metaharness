@@ -111,7 +111,7 @@ fn a_search_reaches_the_catalogue_and_a_describe_reaches_one_entry() {
     // which is the same comparison `metaharness-b10x`'s seam already makes.
     // As sets, not as sequences: `entry_names` is keyed by operation, so the order it yields is
     // the operation ids' and not the catalogue's, and asserting on it would pin the wrong thing.
-    let mut published: Vec<&str> = b10x_harness_tools::entry_names().into_values().collect();
+    let mut published: Vec<&str> = harness_catalogue::entry_names().into_values().collect();
     published.sort_unstable();
     let mut answered = names.clone();
     answered.sort_unstable();

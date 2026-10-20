@@ -26,7 +26,7 @@
 
 use serde_json::Value;
 
-pub use b10x_harness_tools::operation_of;
+pub use harness_catalogue::operation_of;
 
 use crate::{DESCRIBE_VERB, INVOKE_VERB, SEARCH_VERB};
 
@@ -110,7 +110,7 @@ pub fn subjects_of_verb(tool: &str, input: &Value) -> Vec<String> {
         return Vec::new();
     };
     let arguments = input.get("arguments").cloned().unwrap_or(Value::Null);
-    b10x_harness_tools::subjects_of(entry, &arguments)
+    harness_catalogue::subjects_of(entry, &arguments)
         .into_iter()
         .map(|subject| subject.as_str().to_owned())
         .collect()
@@ -132,6 +132,6 @@ pub fn subjects_of_vendor_call(input: &Value) -> Vec<String> {
     PATH_ARGUMENTS
         .iter()
         .filter_map(|key| input.get(*key).and_then(Value::as_str))
-        .map(|path| b10x_harness_tools::Subject::file(path).as_str().to_owned())
+        .map(|path| harness_catalogue::Subject::file(path).as_str().to_owned())
         .collect()
 }

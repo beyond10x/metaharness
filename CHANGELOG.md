@@ -3,6 +3,72 @@
 What changed. The design document carries *why*; where code and design disagreed, the design
 was amended and the amendment is named here.
 
+## [Unreleased]
+
+### Changed
+
+- `metaharness-b10x` pins harness **0.15.0** (design amendment a29; Atlas ADR 0097 point 2,
+  `story:b10x-adapter-on-harness-over-llm`): `PINNED_VERSIONS` `0.13.3` → `0.15.0` and
+  `HARNESS_REVISION` `798325f03cf5a18df8fadb346d31b314826136ec` →
+  `dd5c2a66218a5f2555c4a9fdab6fdfac8515cc6d`, the commit the annotated tag `0.15.0` points at
+  (reachable from harness `main`), never the tag object, because the AEP eval compares it with
+  `git rev-parse HEAD`. Every harness git pin in `crates/metaharness-b10x/Cargo.toml` and
+  `crates/metaharness-tools/Cargo.toml` moves to that commit together, so `Cargo.lock` holds one
+  harness revision (`b10x-harness-catalogue`, `-loop`, `-wire` at 0.15.0) and one tools revision
+  (`b10x-tool-contract`, `-fs`, `-code-editor`, `-toolchain` at tag 0.2.0, `60d4d0e3`, Apache-2.0,
+  which harness 0.15.0 pins); `b10x-harness-toolchain` leaves the lock. A unit test now holds the
+  constants, both manifests and the lock to that one revision and that release version.
+- `b10x-harness-tools`, which harness 0.15.0 deleted, is replaced by `b10x-harness-catalogue` in
+  both manifests, imported under its own lib name `harness_catalogue::` with no `package =`
+  rename; `entry_names` and the re-exported `Catalogue`, `Verbs`, `LocalOperations`,
+  `Operations`, the three verb names, `operation_of`, `subjects_of` and `Subject` are the same
+  symbols there. The two manifest comments that described the old crate are deleted.
+- What `metaharness mcp-serve` answers a model moves with the pin, because at 0.15.0 the files it
+  serves are read and written by the `tools` crates through harness's adapter. Harness's own
+  `[0.15.0]` entry names two reply changes and says a capped `find` leaves `paths` and `truncated`
+  unchanged; the same calls on both releases (70 calls, 17 moved; table and inputs in the research
+  page) show these moves, 0.13.3 → 0.15.0. None crosses the `metaharness.event/1` wire, where b10x
+  writes `content: null` on every `tool.result`.
+  - `dir_list`: a socket, FIFO or device was `kind: "file"` with the entry's length (`bytes: 0`
+    for a FIFO) and is `kind: "other"`, `bytes: null`.
+  - `find` capped by `max_results`: `depth_bound_reached` was `true` and is `false` when the cap
+    is reached before the walk would have gone on into a directory past the depth bound; and
+    `truncated` was `true` and is `false` when only files the glob does not match follow the cap
+    (0.13.3 set it on any file visited past the cap, 0.15.0 only on a further match).
+  - `find` with an empty `glob`: the refusal's *a find has to name* reads *a glob has to name*.
+  - `file_read` with `limit: 0` was an empty window (`"text": ""`, `truncated: true`) and is
+    refused: *`limit` is how many lines to read and 0 names none. `<path>` was not read.*
+  - `file_read` whose `max_bytes` equals a last line without a trailing newline cut that line and
+    answered `truncated: true`, and now returns it whole, `truncated: false`.
+  - `file_write` onto a directory or with an empty `path`: *`<path>`: Is a directory (os error 21)*
+    reads *`<path>` is not a regular file*. A new name spelled with a trailing `/` (`new.txt/`) was
+    written as `new.txt` and is refused with the same words.
+  - `file_edit` whose `old` overlaps itself (`aa` in `aaa`) was applied and is refused as
+    appearing 2 times; every `file_edit` refusal for an empty `old`, no match or several matches
+    gains ` (edit 0)`; a non-UTF-8 file's *`<path>`: stream did not contain valid UTF-8* reads
+    *`<path>` is not UTF-8 text; an edit needs text to find `old` in*; a directory's
+    *`<path>`: Is a directory (os error 21)* reads *`<path>` is not a regular file*.
+- The b10x golden loop record (`crates/metaharness-b10x/fixtures/golden/`) is re-recorded from
+  `b10x-harness 0.15.0` against harness's own `fake_responses.py` `flat-tool` scenario, on
+  loopback only and with no credential; `golden-version-pair` passes without its warning for the
+  first time since 0.10.2. The replayed stream changes in two fields of `session.started`
+  (`harness_version` `0.9.1` → `0.15.0`, `credential_source` `api-key:environment` → `none`);
+  `contract-result-b10x.json` reads `provider: "b10x 0.15.0"`; the native fixture expects
+  `0.15.0`. The four enforcement excerpts stay 0.9.1 captures.
+
+### Added
+
+- `docs/research/2026-10-20-b10x-harness-0.15.0-adapter-surface.md`: every adapter claim about
+  the binary, verified or labelled unverified against 0.15.0, from the golden recording, the
+  credential-free native fixture, a two-release probe of the served replies and a source read at
+  `dd5c2a66`; among them that the `started` record names no working directory, and the 0.13.3
+  and 0.15.0 reply of every served call that moved.
+- Found after the 70 calls (research page, second table): a missing path outside the workspace is
+  now refused with the same text as an existing one, where 0.13.3 said *No such file or directory*
+  and so told a model whether it exists; `file_edit` of `plain.txt/` and `file_edit` or
+  `file_write` of a link spelled with a trailing `/` are now applied to the file, through the link,
+  where 0.13.3 refused them. Every target stays inside the workspace.
+
 ## [0.10.1] — 2026-10-20
 
 ### Changed

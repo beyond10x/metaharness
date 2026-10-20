@@ -180,7 +180,7 @@ pub struct McpServeArgs {
     /// Let the served tools change the tree.
     ///
     /// Off by default and asked for by name, because nothing under this confines the process: the
-    /// bound on an effect is `b10x-harness-tools`' own path arithmetic. A run that wants the
+    /// bound on an effect is the `tools` crates' own path arithmetic. A run that wants the
     /// effects actually confined is a b10x run against substrate, not this.
     #[arg(long)]
     pub writable: bool,

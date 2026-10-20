@@ -184,16 +184,17 @@ impl HarnessSeam for B10xSeam {
                     // both of them exactly as an unwanted one is.
                     //
                     // Absent on the line reads as `None`, *the record did not say*, and never as
-                    // an empty list. The loop skips this field when nothing was withheld, so on
-                    // the wire "no key" is either *nothing was withheld* or *a build that predates
-                    // the field*, and nothing here can tell those apart: the observed version
-                    // cannot decide it. `b10x-harness` reports `0.1.0` and the field is under that
-                    // repository's `[Unreleased]`, so the same string answers for a build that
-                    // writes it and one that does not — the failure [`crate::launch::emitted_flags`]
-                    // was written for, where `--substrate-embedded` changed shape under an
-                    // unmoved version. Reading the silence as `[]` would make this adapter assert
-                    // *the machine admitted everything it was asked for* about a run it observed
-                    // and never probed, which is invariant 3 in one line.
+                    // an empty list. 0.15.0 writes the field on every run, empty included
+                    // (`LoopEvent::Started`, harness `crates/harness-loop/src/event.rs`; the golden
+                    // record carries `"withheld":[]`), so on the pinned binary "no key" means a
+                    // build older than the field. Builds that skipped it when nothing was withheld
+                    // also reported `0.1.0` whether or not they wrote it, so for a record from
+                    // another binary the observed version cannot decide which silence it is — the
+                    // failure [`crate::launch::emitted_flags`] was written for, where
+                    // `--substrate-embedded` changed shape under an unmoved version. Reading the
+                    // silence as `[]` would make this adapter assert *the machine admitted
+                    // everything it was asked for* about a run it observed and never probed, which
+                    // is invariant 3 in one line.
                     withheld: value
                         .get("withheld")
                         .and_then(Value::as_array)
@@ -227,12 +228,13 @@ impl HarnessSeam for B10xSeam {
                     // standing claim behind the hardcoded `[]` was that `b10x-harness` has no MCP
                     // client at all; 0.12.1 has one — `--mcp-profile` and `--mcp-registry`
                     // (`b10x-harness run --help`, read 2026-09-15) — and its `started` record
-                    // carries an `mcp` field, which the 0.9.1 capture in `fixtures/golden/` does
-                    // not. So the harness can now report servers and this asserts it reported
+                    // carries an `mcp` field, which the 0.15.0 capture in `fixtures/golden/` holds
+                    // as `[]`. So the harness can now report servers and this asserts it reported
                     // none.
                     //
-                    // It is deliberately **not** read here yet: the 2026-09-15 run observed the
-                    // field only as `[]`, so the shape of an element is unestablished, and
+                    // It is deliberately **not** read here yet: the 2026-09-15 run on 0.12.1 and
+                    // the 2026-10-20 runs on 0.15.0 observed the field only as `[]`, so the shape
+                    // of an element is unestablished, and
                     // inventing one would be the guess this adapter refuses to make elsewhere.
                     // What closes it is a run that publishes a profile, recorded the way the
                     // `skills` move was — `docs/research/2026-09-15-b10x-harness-0.12.1-adapter-surface.md`.
@@ -326,8 +328,10 @@ impl HarnessSeam for B10xSeam {
                     output_tokens: number("output_tokens"),
                     cache_read_input_tokens: number("cached_input_tokens"),
                     // **Read from the record since the 0.12.1 observation.** It was a hardcoded
-                    // `None` because the 0.9.1 capture the golden fixture holds carries no such
-                    // field; the paid run on 2026-09-15 saw `cache_creation_input_tokens` 2183 and
+                    // `None` because the golden fixture, then a 0.9.1 recording, carried no such
+                    // field — and the 0.15.0 capture there carries none either, because harness's
+                    // Responses emulator reports no cache-write counter. The paid run on
+                    // 2026-09-15 saw `cache_creation_input_tokens` 2183 and
                     // 132 on the two `usage` lines of a two-turn run, so `None` here stopped being
                     // "nobody looked" and became a figure the adapter dropped on the floor. Absent
                     // still reads `None`, which is the older loop's silence stated as silence.
@@ -931,11 +935,11 @@ mod tests {
 /// it named `workspace_read`, `workspace_write`, `workspace_edit`, `workspace_list` and
 /// `workspace_grep`, none of which had existed since. Nothing failed, because a rendering table
 /// nobody cross-checks is a document that can only be wrong. It now comes from
-/// [`b10x_harness_tools::entry_names`], which is the same function the catalogue builds itself
+/// [`harness_catalogue::entry_names`], which is the same function the catalogue builds itself
 /// from, so the two cannot disagree.
 fn rendering() -> std::collections::BTreeMap<String, Option<String>> {
     use metaharness_protocol::Operation;
-    let entries = b10x_harness_tools::entry_names();
+    let entries = harness_catalogue::entry_names();
     let mut table: std::collections::BTreeMap<String, Option<String>> = Operation::PARAMETERLESS
         .iter()
         .map(|operation| {
@@ -1113,7 +1117,7 @@ mod rendering_tests {
         // The check the literals above cannot make on their own: whatever this table says, it must
         // be a name the tool surface answers to. This is the assertion whose absence let five dead
         // names sit in a published capability document.
-        let published: Vec<&str> = b10x_harness_tools::entry_names().into_values().collect();
+        let published: Vec<&str> = harness_catalogue::entry_names().into_values().collect();
         for (operation, entry) in super::rendering() {
             let Some(entry) = entry else { continue };
             assert!(

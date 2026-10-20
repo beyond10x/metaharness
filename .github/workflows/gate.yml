@@ -8,10 +8,6 @@
 # builds on the declared `rust-version` (`Cargo.toml`, 1.98), because nothing else in the
 # repository would notice that promise breaking.
 #
-# No credential step: every git dependency this workspace pins — `beyond10x/harness`,
-# `beyond10x/aep`, and `beyond10x/entity-runtime` behind it — is a public repository, so the
-# anonymous HTTPS fetch the runner's git performs is enough (`.cargo/config.toml`).
-#
 # Nothing paid runs here. `task check` validates ESS, then runs `cargo fmt --check`, `cargo clippy --workspace
 # --all-targets -- -D warnings` and `cargo test --workspace`; the live runs sit behind
 # `METAHARNESS_LIVE=1` and are never part of it (invariant 5).

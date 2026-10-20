@@ -40,12 +40,13 @@
 //! and those absences are standing facts; fields this adapter has not established remain `null`
 //! rather than being guessed empty.
 //!
-//! **MCP has stopped being one of those absences.** 0.12.1 publishes `--mcp-profile` and
-//! `--mcp-registry` and writes an `mcp` field in its opening record, which the 0.9.1 capture in
-//! `fixtures/golden/` does not carry. `mcp_servers` is still the hardcoded `[]` the old standing
-//! fact justified, because the 2026-09-15 observation saw that field only as `[]` and the shape of
-//! an element is unestablished — see `B10xSeam`'s own note and
-//! `docs/research/2026-09-15-b10x-harness-0.12.1-adapter-surface.md`.
+//! **MCP has stopped being one of those absences.** Since 0.12.1 the loop publishes
+//! `--mcp-profile` and `--mcp-registry` and writes an `mcp` field in its opening record; the 0.15.0
+//! capture in `fixtures/golden/` carries it as `"mcp":[]`. `mcp_servers` is still the hardcoded
+//! `[]` the old standing fact justified, because every observation so far — 2026-09-15 on 0.12.1,
+//! 2026-10-20 on 0.15.0 — saw that field only as `[]` and the shape of an element is unestablished
+//! — see `B10xSeam`'s own note and
+//! `docs/research/2026-10-20-b10x-harness-0.15.0-adapter-surface.md`.
 
 #![allow(missing_docs)]
 
@@ -77,14 +78,14 @@ pub const ADAPTER_CLASS: &str = "direct_provider";
 /// Pinned for the reason the other adapters pin: every version-specific claim in here — the field
 /// names of the loop record, the shape of its terminal event — was observed against these, and a
 /// run against another is unverified rather than wrong.
-pub const PINNED_VERSIONS: [&str; 1] = ["0.13.3"];
+pub const PINNED_VERSIONS: [&str; 1] = ["0.15.0"];
 
 /// The immutable harness source revision this adapter is built against.
 ///
 /// The version identifies the released CLI; the revision identifies the Rust crates Cargo
 /// resolves. Both are checked by the AEP eval before it trusts an installed
 /// binary, so a filesystem timestamp is never mistaken for provenance.
-pub const HARNESS_REVISION: &str = "798325f03cf5a18df8fadb346d31b314826136ec";
+pub const HARNESS_REVISION: &str = "dd5c2a66218a5f2555c4a9fdab6fdfac8515cc6d";
 
 /// Whether a directory component satisfies the pinned substrate adoption syntax.
 ///
@@ -101,8 +102,8 @@ pub fn workspace_component_is_adoptable(name: &str) -> bool {
 
 /// Validate exact workspace-relative process write directories before native launch.
 ///
-/// Harness 0.13.3 (`798325f0`) canonicalizes the set before Substrate 0.7.8
-/// (`05695970`) validates workspace access. This adapter mirrors those syntax bounds
+/// Harness 0.15.0 (`dd5c2a66`) canonicalizes the set before Substrate 0.7.17
+/// (`00fa634c`) validates workspace access. This adapter mirrors those syntax bounds
 /// without importing a different native dependency. Glob spelling is additionally
 /// refused: this declaration never expands a file-tool pattern into a mount.
 /// Existence, symlink safety and actual mount admission remain the host's job.
@@ -143,4 +144,214 @@ pub fn validate_process_write_subtrees(paths: &[String]) -> Result<(), String> {
         }
     }
     Ok(())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::{HARNESS_REVISION, PINNED_VERSIONS};
+
+    const HARNESS: &str = "beyond10x/harness";
+    const TOOLS: &str = "beyond10x/tools";
+
+    fn workspace_file(relative: &str) -> String {
+        let path = format!("{}/../../{relative}", env!("CARGO_MANIFEST_DIR"));
+        std::fs::read_to_string(&path).unwrap_or_else(|error| panic!("{path}: {error}"))
+    }
+
+    /// The `owner/name` a git URL names, lower-cased, whatever its spelling: `https://` or
+    /// `ssh://git@`, the scp-like `git@host:owner/name`, with or without `.git`, a trailing `/`, a
+    /// `?rev=`/`?tag=` query or a `#revision` fragment. A check keyed on one spelling would let a
+    /// second spelling of the same repository through unexamined, at another revision.
+    fn repository_of(url: &str) -> Option<String> {
+        let url = url.split(['?', '#']).next()?;
+        let path = url.split_once("://").map_or_else(
+            || url.split_once(':').map(|(_, path)| path),
+            |(_, rest)| rest.split_once('/').map(|(_, path)| path),
+        )?;
+        let path = path.trim_end_matches('/');
+        let path = path.strip_suffix(".git").unwrap_or(path);
+        let (owner, name) = path.rsplit_once('/')?;
+        let owner = owner.rsplit('/').next()?;
+        (!owner.is_empty() && !name.is_empty()).then(|| format!("{owner}/{name}").to_lowercase())
+    }
+
+    /// The repository and revision of one `Cargo.lock` `source = "git+…#revision"` value, or
+    /// `None` for any source that is not git.
+    fn git_source(source: &str) -> Option<(String, String)> {
+        let url = source.strip_prefix("git+")?;
+        let (_, revision) = url.rsplit_once('#')?;
+        Some((repository_of(url)?, revision.to_owned()))
+    }
+
+    /// Every `[[package]]` in `Cargo.lock` whose git source is `repository` (`owner/name`), as
+    /// `(name, version, revision)`.
+    fn locked_from(lock: &str, repository: &str) -> Vec<(String, String, String)> {
+        lock.split("[[package]]")
+            .filter_map(|block| {
+                let field = |key: &str| {
+                    block.lines().find_map(|line| {
+                        line.strip_prefix(&format!("{key} = \""))
+                            .and_then(|rest| rest.strip_suffix('"'))
+                    })
+                };
+                let (source, revision) = git_source(field("source")?)?;
+                (source == repository).then(|| {
+                    Some((
+                        field("name")?.to_owned(),
+                        field("version")?.to_owned(),
+                        revision,
+                    ))
+                })?
+            })
+            .collect()
+    }
+
+    /// The value of a `key = "…"` entry inside one manifest dependency line.
+    fn manifest_value<'a>(line: &'a str, key: &str) -> Option<&'a str> {
+        let start = line.find(&format!("{key} = \""))? + key.len() + 4;
+        line[start..].split('"').next()
+    }
+
+    #[test]
+    fn every_spelling_of_a_git_source_names_its_repository() {
+        for (source, repository, revision) in [
+            (
+                "git+https://github.com/beyond10x/harness?rev=abc#abc",
+                HARNESS,
+                "abc",
+            ),
+            (
+                "git+https://github.com/beyond10x/harness#abc",
+                HARNESS,
+                "abc",
+            ),
+            (
+                "git+https://github.com/beyond10x/harness.git?tag=0.15.0#abc",
+                HARNESS,
+                "abc",
+            ),
+            (
+                "git+https://github.com/beyond10x/harness/#abc",
+                HARNESS,
+                "abc",
+            ),
+            (
+                "git+ssh://git@github.com/beyond10x/harness.git?rev=abc#abc",
+                HARNESS,
+                "abc",
+            ),
+            ("git+git@github.com:beyond10x/tools.git#def", TOOLS, "def"),
+            (
+                "git+ssh://git@github.com/Beyond10x/Tools?tag=0.2.0#def",
+                TOOLS,
+                "def",
+            ),
+            (
+                "git+https://github.com/beyond10x/tools?tag=0.2.0#def",
+                TOOLS,
+                "def",
+            ),
+        ] {
+            assert_eq!(
+                git_source(source),
+                Some((repository.to_owned(), revision.to_owned())),
+                "{source}"
+            );
+        }
+        assert_eq!(
+            git_source("git+https://github.com/beyond10x/harness-extras#abc"),
+            Some(("beyond10x/harness-extras".to_owned(), "abc".to_owned()))
+        );
+        assert_eq!(
+            git_source("registry+https://github.com/rust-lang/crates.io-index"),
+            None
+        );
+        assert_eq!(
+            repository_of("git@github.com:beyond10x/harness"),
+            Some(HARNESS.to_owned())
+        );
+        assert_eq!(
+            manifest_value(
+                r#"x = { git = "ssh://git@github.com/beyond10x/harness.git", rev = "abc" }"#,
+                "rev"
+            ),
+            Some("abc")
+        );
+    }
+
+    /// **The one deliberate literal pair.** Every other reader of the pin goes through these two
+    /// constants, so a move that forgot one of them would agree with itself everywhere else. Moved
+    /// 0.13.3 / `798325f0` → 0.15.0 / `dd5c2a66` on 2026-10-20: the commit the annotated tag
+    /// `0.15.0` points at, never the tag object, because the eval compares this with
+    /// `git rev-parse HEAD` in the harness checkout.
+    #[test]
+    fn the_pin_names_the_harness_0_15_0_release_commit() {
+        assert_eq!(PINNED_VERSIONS, ["0.15.0"]);
+        assert_eq!(HARNESS_REVISION, "dd5c2a66218a5f2555c4a9fdab6fdfac8515cc6d");
+    }
+
+    /// The constants, both manifests and the lock name one harness: one revision, the released
+    /// version at it, and no crate that release deleted; and one revision of the `tools` crates
+    /// harness pins. A pin pair that moved without the Cargo pin — or the reverse, as on
+    /// 2026-09-15 — is a claim about a binary this workspace does not compile against.
+    #[test]
+    fn cargo_resolves_exactly_the_pinned_harness() {
+        let lock = workspace_file("Cargo.lock");
+        let harness = locked_from(&lock, HARNESS);
+        assert!(!harness.is_empty(), "the lock names no harness crate");
+        for (name, version, revision) in &harness {
+            assert_eq!(revision, HARNESS_REVISION, "{name} is locked off the pin");
+            assert_eq!(
+                version, PINNED_VERSIONS[0],
+                "{name} is not the pinned release"
+            );
+        }
+        // Exactly the three crates this workspace takes, and through them nothing else of harness's:
+        // the catalogue layer, the record's crate and the wire values both of those speak.
+        let mut names: Vec<&str> = harness.iter().map(|(name, ..)| name.as_str()).collect();
+        names.sort_unstable();
+        assert_eq!(
+            names,
+            [
+                "b10x-harness-catalogue",
+                "b10x-harness-loop",
+                "b10x-harness-wire"
+            ]
+        );
+
+        let mut tools: Vec<String> = locked_from(&lock, TOOLS)
+            .into_iter()
+            .map(|(.., revision)| revision)
+            .collect();
+        tools.sort_unstable();
+        tools.dedup();
+        assert_eq!(
+            tools.len(),
+            1,
+            "the lock holds one tools revision, the one harness pins: {tools:?}"
+        );
+
+        for manifest in [
+            "crates/metaharness-b10x/Cargo.toml",
+            "crates/metaharness-tools/Cargo.toml",
+        ] {
+            let text = workspace_file(manifest);
+            let pins: Vec<&str> = text
+                .lines()
+                .filter(|line| {
+                    manifest_value(line, "git")
+                        .and_then(repository_of)
+                        .is_some_and(|repository| repository == HARNESS)
+                })
+                .collect();
+            assert!(!pins.is_empty(), "{manifest} takes no harness crate");
+            for pin in pins {
+                assert_eq!(
+                    manifest_value(pin, "rev"),
+                    Some(HARNESS_REVISION),
+                    "{manifest}: {pin}"
+                );
+            }
+        }
+    }
 }

@@ -502,7 +502,7 @@ fn assert_closed(events: &[Value], code: i32) {
     assert_eq!(events.last(), Some(closed));
     assert_eq!(closed["process"], json!({"kind":"exited","code":code}));
     let start = one(events, "session.started");
-    assert_eq!(start["harness_version"], "0.13.3");
+    assert_eq!(start["harness_version"], "0.15.0");
     assert_eq!(start["model"], MODEL);
     assert_eq!(start["credential_source"], "none");
     assert_eq!(start["hermetic"]["decisions"], "observe");
