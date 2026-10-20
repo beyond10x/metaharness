@@ -2593,3 +2593,79 @@ audited confined-by-socket b10x run still exits 3; no run here exercises it.
 `"/scratch/run/work"`, the recording's workspace, which the README places at that neutral path so
 the committed bytes name no machine path). `checked` stays 7; `contract-result-b10x.json` names
 `b10x 0.15.1`. No event or frame wire change: `cwd` was already optional on `session.started`.
+
+### Amendment a32 — a verb may name its entry by the contract name harness maps (2026-10-20)
+
+Atlas ADR 0095 point 2: the names a caller will supply for owned-surface tools
+(`story:caller-supplied-catalogue-on-every-kind`) can be the organization's `tool-contract/1`
+commands. `story:metaharness-tools-adopts-tool-contract` accepts them now, on the reading side
+and the serving side, without putting a second vocabulary in front of the model. It gives the
+operation and subject resolution of § 7's decision path one more input, so it is written here
+first (invariant 8). Five decisions.
+
+**1. The input is harness's mapping, never a copy.** Beside `entry_names`, a verb's entry is
+resolved through `harness_catalogue::harness_operation` at the pinned 0.15.1 (`f0870131`,
+`crates/harness-catalogue/src/local.rs:118-143`): `fs.read` → `file_read`, `fs.list` → `dir_list`,
+`fs.glob` → `find`, `code.write` → `file_write`, `code.edit` → `file_edit`. metaharness keeps no
+table and takes no `tools` dependency, so a re-pin that moves the mapping moves what resolves;
+`metaharness-tools`' suite pins the five and compares them with the set harness maps. Contract
+names are dotted and entry names (`catalogue.rs:931-941`) are not, so neither shadows the other. A
+dotted name harness does not map (`code.delete`, `process.run`, the operation id `file.read`) stays
+unknown.
+
+**2. Only metaharness's own surface translates, and operation and subjects translate together.**
+`resolve_verb` and `subjects_of_verb` take a `VerbSurface`: `Served` for metaharness's own server
+(`--tool-surface owned`), `HarnessLoop` for a b10x record. The run computes it once
+(`Run::verb_surface`) and hands the same value to both, and the MCP server's `call` translates
+through the same function (`entry_of`). Both halves matter. `out_of_scope` admits a call that
+names no subject, so a contract name resolved to `file.read` while naming nothing would pass a
+scope with any path it carried. Measured once, with the translation taken out of
+`subjects_of_verb` alone: `tool_invoke {"name": "fs.read", "arguments": {"path":
+"../../etc/passwd"}}` was not refused under a scope whose catch-all rule admits nothing. With both
+translated it is refused, naming that path, exactly as `file_read` is.
+
+**3. What a frame decides moves for these calls, on the owned surface.** Under `--tool-surface
+owned` with a frame, a `tool_invoke` naming a contract name was denied as outside the operation
+vocabulary (`UNCOVERED_TOOL`) with empty `operations`. It is now admitted or refused as its entry,
+and its `tool.requested` carries the entry's operation and subject. `metaharness mcp-serve`
+performs a `tool_invoke` and answers a `tool_describe` that names one as that entry, and the answer
+names the entry (`"name": "file_read"`).
+
+**4. What is served does not move, and a b10x record reads a contract name as unknown.**
+`tools/list` and `tool_search` keep harness's names: the b10x run uses the same catalogue and
+harness keeps its names model-facing (`local.rs:32-33`), so publishing contract
+names here would show the model two vocabularies. A later story may publish them once harness does.
+The loop metaharness launches publishes its entries flat by default (`--surface flat`, harness
+`crates/harness-cli/src/lib.rs:744`; the b10x launch passes no `--surface`), and its own verbs
+under `--surface verbs` look an entry up by harness name only (`verbs.rs:110-124,138-149`).
+Before the translation this server answered *`fs.read` is not a tool this run has* through the same
+verbs. So on a b10x record a contract name reached no tool, and it resolves to no operation and no
+subject, as before this amendment: a call that never reached a tool puts no effect in the record.
+`run_loop.rs` pins both readings of one `fs.read` call (owned: `file.read`, `file:src/lib.rs`;
+b10x: neither). That the b10x loop refuses the name was read at source and through this server,
+not driven through the b10x binary. Found by the adversary's second pass and left to its own story
+(`story:b10x-record-keeps-the-loops-subjects`, pre-existing): `Run` reads every b10x call as a call
+through `tool_invoke`, so a flat `file_read` on a b10x record loses the subject the loop itself
+recorded; its acceptance case is `crates/metaharness/tests/adversary_contract_names_b10x_pass2.rs`,
+ignored until that story lands.
+
+**5. A contract name that asks for the digest guard is refused, because nothing runs it.**
+tool-contract/1 (tools 0.2.0, `60d4d0e3`, `contracts/code-editor/v1alpha1/contract.yaml:52,78,97,119,143`)
+gives `code.write` and `code.edit` an optional `expected_sha256` precondition. When it fails, the
+outcome is `precondition-failed` and nothing changes. Harness 0.15.1 builds both requests with
+`expected_sha256: None` (`local.rs:520,543`), and its catalogue never reads the field
+(`catalogue.rs:476-483`). Performing such a call would drop the guard and change a file the
+contract says stays as it was. So the server refuses a contract-named `tool_invoke` whose arguments
+carry `expected_sha256`, whatever the value, `null` included. The refusal is `isError: true`,
+names `precondition-failed`, says the served implementation does not run that check yet, and
+nothing runs. It is keyed on a translated name and the field, not on a list of commands. Of the
+five mapped commands only `code.write` and `code.edit` declare the field, and it is the only
+contract input harness drops: `fs.read`'s `path`, `offset`, `limit`, `max_bytes`, `fs.list`'s
+`path` and `fs.glob`'s `glob`, `path`, `max_results` are all read (`catalogue.rs:465-514`). An
+`fs` command carrying the field is not a valid contract call either way. Harness names are
+unchanged. Their schemas declare `additionalProperties: false` (`catalogue.rs:855,879`), but
+nothing on the served path enforces it: measured once, a `file_write` carrying a stale
+`expected_sha256` was performed and replaced the file. That is harness's schema and is outside this
+amendment. The refusal ends with the re-pin on which harness runs the guard.
+
+No event or frame wire change.

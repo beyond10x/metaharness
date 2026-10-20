@@ -879,9 +879,23 @@ impl Run {
     /// is a write* is the rendering's question and has an owner already.
     fn subjects(&self, tool: &str, input: &Value) -> Vec<String> {
         if self.publishes_verbs() {
-            return metaharness_tools::subjects_of_verb(tool, input);
+            return metaharness_tools::subjects_of_verb(tool, input, self.verb_surface());
         }
         metaharness_tools::subjects_of_vendor_call(input)
+    }
+
+    /// Whose verbs this run's calls went through, when it publishes them.
+    ///
+    /// `--tool-surface owned` is metaharness's own server, which performs a `tool-contract/1`
+    /// name as the entry harness maps it to; otherwise it is the b10x loop's in-process binding,
+    /// which at the pinned release answers harness names only. Resolution and subjects both read
+    /// this one answer, so a call never resolves to an operation while naming no subject.
+    fn verb_surface(&self) -> metaharness_tools::VerbSurface {
+        if self.spec.tool_surface == ToolSurface::Owned {
+            metaharness_tools::VerbSurface::Served
+        } else {
+            metaharness_tools::VerbSurface::HarnessLoop
+        }
     }
 
     /// Whether this run offered the model the three verbs.
@@ -895,7 +909,8 @@ impl Run {
 
     fn resolve(&self, tool: &str, input: &Value) -> Vec<String> {
         if self.publishes_verbs()
-            && let Some(resolved) = metaharness_tools::resolve_verb(tool, input)
+            && let Some(resolved) =
+                metaharness_tools::resolve_verb(tool, input, self.verb_surface())
         {
             return match resolved {
                 metaharness_tools::Resolved::Operations(operations) => operations,
@@ -937,7 +952,7 @@ impl Run {
         // permission to read the list of things it may do — a refusal with no subject — and the
         // model would then guess arguments instead of asking for them.
         if self.spec.tool_surface == ToolSurface::Owned
-            && metaharness_tools::resolve_verb(tool, input)
+            && metaharness_tools::resolve_verb(tool, input, self.verb_surface())
                 == Some(metaharness_tools::Resolved::Catalogue)
         {
             return (Decision::Allow, DecidedBy::Frame, self.seam);
