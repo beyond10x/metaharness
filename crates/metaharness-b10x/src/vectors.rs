@@ -150,7 +150,7 @@ fn reader() -> Box<dyn HarnessSeam> {
     let mut attestation = HermeticAttestation::none(HermeticMode::Strict);
     attestation.decisions = DecisionMode::Observe;
     B10xSeams::new(
-        Some("0.9.1".to_owned()),
+        Some("0.15.0".to_owned()),
         Some("b10x-emulated".to_owned()),
         Some("/scratch/run/work".to_owned()),
     )
@@ -247,6 +247,27 @@ mod tests {
             .filter(|outcome| !outcome.passed)
             .collect();
         assert!(failed.is_empty(), "{failed:#?}");
+    }
+
+    /// The golden loop is the pinned binary's own record, and the replay says so. A pin that moved
+    /// without a re-recording leaves `golden-version-pair` passing with a warning — which it did
+    /// from 0.10.2 to 0.13.3 over a 0.9.1 capture — and a reader that stamps another version than
+    /// the banner beside the record attributes those bytes to a binary that did not write them.
+    #[test]
+    fn the_golden_loop_was_recorded_by_the_pinned_binary() {
+        let pair = golden_version_pair_vector(GOLDEN_VERSION);
+        assert!(pair.passed && pair.detail.is_empty(), "{pair:#?}");
+        let opening: Value = serde_json::from_str(
+            GOLDEN_LOOP_EXPECTED
+                .lines()
+                .next()
+                .expect("the expected stream opens"),
+        )
+        .expect("the opening line is JSON");
+        assert_eq!(
+            Some(opening["harness_version"].as_str().unwrap_or_default()),
+            GOLDEN_VERSION.trim().strip_prefix("b10x-harness ")
+        );
     }
 
     #[test]

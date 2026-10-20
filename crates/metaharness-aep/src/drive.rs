@@ -1647,7 +1647,7 @@ fn b10x_operations(config: &ToolConfig) -> Vec<String> {
 /// function reads the same [`ToolConfig`] [`allowed_tools`] reads and renames its answer. Nothing
 /// here consults a capability the shared decision did not already admit.
 ///
-/// The names are `b10x-harness-tools`' own catalogue entries — `file_read`, `file_write`,
+/// The names are `b10x-harness-catalogue`'s own catalogue entries — `file_read`, `file_write`,
 /// `file_edit`, `dir_list`, `search`, `run` — read from `entry_names()` there rather than invented
 /// here. Three neutral operations the Claude Code table renders have **no entry at all** in that
 /// catalogue and are therefore rendered by nothing:
@@ -2461,7 +2461,7 @@ fn b10x_argv(
     }
     // **`run` is published only to a session that was told which programs it may start.** The loop
     // withholds it outright when no allowlist was given — `programs.is_none()` in
-    // `harness-tools`' local operations — which is the same rule as everywhere else on that arm: a
+    // `harness-catalogue`'s local operations — the same rule as everywhere else on that arm: a
     // tool outside the surface does not exist rather than being refused. Run `b10x-2991520` spent
     // 30 `tool_search` calls, 28 of them distinct, hunting for `run`, `exec`, `shell`, `spawn` and
     // `execute` because the step it was given needs the `aep` CLI and nothing could start one.

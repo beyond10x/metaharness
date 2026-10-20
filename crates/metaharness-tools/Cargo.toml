@@ -11,18 +11,8 @@ publish = false
 workspace = true
 
 [dependencies]
-# The first dependency this workspace has on another repository, and it is deliberate. The
-# alternative was a second implementation of read, write, edit, list, search and a bounded `run` —
-# and with it a second path-containment check, which is the one thing in either tree that must not
-# exist twice. `b10x-harness-tools` depends on `b10x-harness-wire`, serde and nothing else: no
-# substrate, no async runtime, no filesystem beyond `std`. That is what makes it importable here.
-#
-# Pinned by git revision, never by `path`: a path into a sibling checkout builds against whatever
-# is checked out there, and `--locked` cannot lock it (AGENTS.md invariant 10; the same rule
-# harness holds for substrate). The revision is the released harness 0.13.3 commit `798325f`,
-# 2026-10-03 — qualified with the current native fixture and prompted role.
-b10x-harness-tools = { git = "https://github.com/beyond10x/harness", rev = "798325f03cf5a18df8fadb346d31b314826136ec" }
-b10x-harness-wire = { git = "https://github.com/beyond10x/harness", rev = "798325f03cf5a18df8fadb346d31b314826136ec" }
+b10x-harness-catalogue = { git = "https://github.com/beyond10x/harness", rev = "dd5c2a66218a5f2555c4a9fdab6fdfac8515cc6d" }
+b10x-harness-wire = { git = "https://github.com/beyond10x/harness", rev = "dd5c2a66218a5f2555c4a9fdab6fdfac8515cc6d" }
 serde_json = { workspace = true }
 
 [dev-dependencies]

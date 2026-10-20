@@ -2,8 +2,8 @@
 
 use std::io::{BufRead, Write};
 
-use b10x_harness_tools::Verbs;
 use b10x_harness_wire::{CallId, ToolCall, ToolName, ToolPort};
+use harness_catalogue::Verbs;
 use serde_json::{Value, json};
 
 /// The name the vendor prefixes its tools with, so the model sees `mcp__metaharness__tool_search`.

@@ -311,7 +311,7 @@ fn b10x_step() -> LlmStep {
     /// exist in its catalogue — which is exactly the class of waste this executor was added to
     /// remove, reintroduced by the driver itself.
     ///
-    /// The b10x names are `b10x_harness_tools::entry_names`', read from the loop's own catalogue:
+    /// The b10x names are `harness_catalogue::entry_names`', read from the loop's own catalogue:
     /// `file_read`, `file_write`, `file_edit`, `dir_list`, `search`, `run`.
     #[test]
     fn a_b10x_step_is_told_the_b10x_catalogues_names_and_never_claude_codes() {
@@ -1294,8 +1294,8 @@ fn b10x_step() -> LlmStep {
     /// **Run `b10x-2991520`, 2026-08-29: 30 `tool_search` calls, 28 of them distinct**, hunting for
     /// `run`, `exec`, `shell`, `spawn`, `execute`, `argv` and `program`. The step it was given
     /// records something in the planning store, whose only route is the `aep` CLI, and nothing
-    /// in its catalogue could start a process — `harness-tools` withholds `run` outright when no
-    /// allowlist was supplied (`programs.is_none()`). The loop was right and the driver had not
+    /// in its catalogue could start a process — `harness-catalogue` withholds `run` outright when
+    /// no allowlist was supplied (`programs.is_none()`). The loop was right and the driver had not
     /// told it anything.
     ///
     /// The list is the same decision `driven_surface` enforces on the vendor arm, rendered rather

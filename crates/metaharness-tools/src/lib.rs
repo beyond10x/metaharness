@@ -44,7 +44,7 @@
 mod resolve;
 mod server;
 
-pub use b10x_harness_tools::{
+pub use harness_catalogue::{
     Catalogue, DESCRIBE_VERB, INVOKE_VERB, LocalOperations, Operations, SEARCH_VERB, Verbs,
 };
 pub use resolve::{
