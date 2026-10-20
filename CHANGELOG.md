@@ -113,6 +113,18 @@ was amended and the amendment is named here.
   opening node. The directory comparison applies on every kind; no vendor-kind vector or fixture
   moves. The `golden-loop-record` vector now fails a replay whose opening record does not state the
   recorded `cwd`, where it failed a recording that named one.
+- The specification and the gate move to ESS **0.66.0** (`story:ess-pin-0-66-0`): both manifests
+  declare `requires: ess 0.66.0`, CI installs `ess-cli` at `145a1b9d5567a7601b95ee86e3a88f44dbdc0dd5`
+  (tag `0.66.0`), and `spec/conformance.json` is regenerated with `--scenarios spec`: 90 scenarios,
+  87 generated and 3 authored (`spec/scenarios/`). Two guards change because 0.66.0's per-child
+  witnessing (`ESS-SYNTH-022`) showed them wrong: `positive-terminal-record` reads
+  `is_error == false`, since under ESS's three-valued logic its `subtype == "success"` disjunct
+  could never select it, and `valid-finite-terms` drops the `cap_micro_usd > 0` its other two
+  conjuncts imply. The authored scenarios hold a budget word beside `is_error: false`,
+  `is_error: true` beside subtype `success`, and a charge above a positive cap. A terminal record
+  without `is_error` is outside what the specification decides; two tests beside
+  `Run::reason_from_record` pin production's answer for it (`error`, or `completed` for the legacy
+  subtype `success`) (`spec/coverage.md`).
 
 ### Added
 

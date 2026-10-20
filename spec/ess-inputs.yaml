@@ -1,5 +1,5 @@
 format: ess-inputs/2
-requires: ess 0.56.0
+requires: ess 0.66.0
 specification:
   - system.yaml
   - domains/session.yaml
@@ -8,4 +8,7 @@ specification:
   - domains/boundaries.yaml
   - domains/observations.yaml
   - domains/trace.yaml
-scenarios: []
+scenarios:
+  - scenarios/close-unsteered-budget-word-outranks-positive-verdict.yaml
+  - scenarios/close-unsteered-explicit-error-outranks-success.yaml
+  - scenarios/finite-charge-above-positive-cap.yaml

@@ -18,7 +18,7 @@ types:
       - {name: stop_reason, type: Optional<String>, presence: null_when_absent}
       - {name: terminal_reason, type: Optional<String>, presence: null_when_absent}
     # UNMAPPED: the source's total_cost_usd: Option<f64> remains exact in the
-    # separately validated monetary contract. ESS 0.56.0 refuses Binary64 in
+    # separately validated monetary contract. ESS 0.66.0 refuses Binary64 in
     # conformance codecs and Rust synthesis; this projection excludes its value.
   - name: metaharness.session.CodexCompletion
     kind: struct
@@ -139,11 +139,16 @@ commands:
         payload:
           metaharness.session.StreamClassified: {reason: budget}
       - name: positive-terminal-record
+        # A record without is_error is outside what this outcome decides: ESS reads
+        # is_error == false over an absent value as unknown. Production's handling
+        # (budget for a budget word, otherwise error for any other subtype and
+        # completed for the legacy subtype success) is
+        # pinned by the a_terminal_record_without_is_error_* tests in
+        # crates/metaharness/src/run.rs.
         when:
           all:
             - terminal_present == true
-            - not: is_error == true
-            - any: [is_error == false, subtype == "success"]
+            - is_error == false
             - none: [subtype == "budget-exhausted", stop_reason == "budget-exhausted", terminal_reason == "budget-exhausted"]
         emits: [metaharness.session.StreamClassified]
         payload:
@@ -152,9 +157,10 @@ commands:
         emits: [metaharness.session.StreamClassified]
         payload:
           metaharness.session.StreamClassified: {reason: error}
-    # Source: crates/metaharness/src/run.rs:1140-1164, clarified with issue-11's
-    # repair before integration: budget precedence, then explicit is_error=true,
-    # then is_error=false OR legacy subtype=success, otherwise unknown/error.
+    # Source: crates/metaharness/src/run.rs:1210-1237 (Run::reason_from_record),
+    # clarified with issue-11's repair before integration: budget precedence, then
+    # explicit is_error=true, then is_error=false, otherwise unknown/error. A record
+    # without is_error is pinned by the run.rs tests named at positive-terminal-record.
     # The unknown branch is the a18 repair, not a claim baseline code conforms.
     # UNMAPPED: steering precedence, final-line order/count, process exit status
     # and CLI audited/unaudited agreement need real Run/CLI scenarios. The entity

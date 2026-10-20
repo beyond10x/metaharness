@@ -4,20 +4,22 @@ This is a bounded retrofit of Metaharness's observable boundaries. It preserves
 frame/1 and adapter ownership. It does not claim to specify every event,
 credential rule, process-isolation mechanism or vendor version.
 
-ESS 0.56.0 validates both manifests. The core model uses ess/15;
+ESS 0.66.0 validates both manifests. The core model uses ess/15;
 conformance.json is a declared-coverage ess-conformance/35 suite. Regenerate it:
 
 ```console
-ess verify conform synthesize --path spec --suite-format 5 --strict-requires --out spec/conformance.json
+ess verify conform synthesize --path spec --scenarios spec --suite-format 5 --strict-requires --out spec/conformance.json
 ```
 
+`--scenarios spec` selects the authored scenarios `spec/ess-inputs.yaml` lists;
+without it ESS selects none and writes the 87 generated ones only.
 `task check` validates both manifests, checks suite drift, and executes the
 production target in `crates/metaharness-aep/src/drive/ess_conformance.rs`.
-CI installs ESS 0.56.0 from commit
-`84ee8d38eb69e3a4507de801fdcb248232ed6e6e`. Use that compiler locally.
+CI installs ESS 0.66.0 from commit
+`145a1b9d5567a7601b95ee86e3a88f44dbdc0dd5`. Use that compiler locally.
 
-The committed count is **87 selected scenarios**: 87 passed, zero failed,
-skipped, unsupported or synthesis refusals. Unknown suite versions, steps,
+The committed count is **90 selected scenarios** (87 generated, 3 authored):
+90 passed, zero failed, skipped, unsupported or synthesis refusals. Unknown suite versions, steps,
 bindings, shapes and predicates fail closed. The target handles only the
 constructs this suite uses; extending the specification may require extending it.
 
@@ -101,7 +103,7 @@ freshness check is not a breaking-change classifier.
 ## Exact types and remaining boundaries
 
 The separate monetary manifest preserves Optional<Binary64> for the source's
-Option<f64>. ESS 0.56.0 declines its conformance codecs and Rust synthesis; no
+Option<f64>. ESS 0.66.0 declines its conformance codecs and Rust synthesis; no
 surrogate type or zero default is substituted. Production Rust tests cover unknown
 and observed costs, failed persistence, crash/resume, corrupt ledgers, finite
 narrowing and preservation of mode and authorization.
@@ -304,3 +306,82 @@ a record that does not is refused by the verb (a28 point 4), and
 is not its own, the recorded event stream included. The verb's exit code (0, or 2
 on the refusal) is pinned there too, not here: the target calls the library entry
 and reads the refusal, never the binary.
+
+## ESS 0.66.0 move — two guards and three authored scenarios
+
+Since 0.57.0, ESS witnesses every child of an `all`/`any` at any depth and
+refuses a child it finds no input for (`ESS-SYNTH-022`) where it used to skip it
+silently. On the 0.56.0 specification, 0.66.0
+refused three children: `CloseUnsteeredStream/failed-or-unknown-terminal` (the
+`any: [is_error == false, subtype == "success"]` child failing alone) and
+`CheckFiniteTerms/invalid-finite-terms` twice (`cap_micro_usd > 0` failing alone,
+and `assumed_micro_usd_per_run <= cap_micro_usd` failing alone with both positive).
+An authored scenario does not clear the refusal: with the refusals standing and
+authored scenarios selected, 0.66.0 still wrote `refused: 3` and exited 1.
+
+Two guards change, each because the specification was wrong:
+
+- `positive-terminal-record` is `terminal_present == true`, `is_error == false`
+  and no budget word. ESS evaluates guards in three-valued logic, and an absent
+  `Optional` makes a comparison unknown, so `not: is_error == true` was unknown
+  whenever `is_error` was absent and the `subtype == "success"` disjunct could
+  never select the branch; the child ESS refused cannot fail alone under that
+  logic. ESS's reference model (`ess verify conform run --target interpreted`)
+  reported "the guard ... is Unknown over this input" for terminal records
+  without `is_error` and without a budget word (probed with subtype `success` and
+  with another subtype), where production (`Run::reason_from_record`) decides
+  them. The new guard has the same truth table under ESS's logic as the old one.
+- `valid-finite-terms` drops `terms.cap_micro_usd > 0`: a positive charge that
+  does not exceed the cap implies it, so no input lets it decide alone. The
+  accepted inputs are unchanged.
+
+A guard over an absent `Optional` stays unknown in 0.66.0, and a presence test
+beside a comparison over the same field (`all: [defined(x), x == …]`) is refused in
+turn: ESS cannot show that `defined(x)` fails alone only where the comparison is
+unknown. A terminal record without `is_error` is therefore outside what
+`positive-terminal-record` decides, as the guard says. Production's handling of it
+(`error` for any other subtype, `completed` for the legacy subtype `success`,
+`budget` for a budget word beside it) is pinned beside `Run::reason_from_record` by
+`a_terminal_record_without_is_error_closes_error_for_any_other_subtype` and
+`a_terminal_record_without_is_error_closes_completed_for_the_legacy_success_subtype`
+in `crates/metaharness/src/run.rs`, not by the suite.
+
+Three authored scenarios (`spec/scenarios/`, listed in `spec/ess-inputs.yaml`) send
+inputs the guards decide and no generated scenario sends. ESS's reference model
+passes all three.
+
+| Authored scenario | Input | Expected | Production defect it alone fails on |
+|---|---|---|---|
+| `close-unsteered-budget-word-outranks-positive-verdict` | `is_error: false`, `terminal_reason: budget-exhausted` | `observed-budget-stop` | `is_error == Some(false)` read before the budget word |
+| `close-unsteered-explicit-error-outranks-success` | `is_error: true`, subtype `success` | `failed-or-unknown-terminal` | the success reading tried before `is_error == Some(true)` |
+| `finite-charge-above-positive-cap` | cap 5000000, charge 6000000 | `invalid-finite-terms` | the charge-above-cap check removed from `spend_terms_with_live` |
+
+Every generated budget input sends `is_error: true`, so only the first scenario
+holds budget precedence over a positive verdict. The second replaces a generated
+input the old guard produced and the new one does not. The third holds the
+comparison that the generated input (cap 0, charge 1) leaves to the zero-cap check.
+Each defect was planted in production, run and restored, and no generated scenario
+failed on any of them: the first against this suite (89 of 90 passed, the named
+one failed), the second and third together against the earlier 91-scenario
+revision (89 passed, two failed). Planting the a18 regression (an absent verdict
+closing `completed`) fails the first `run.rs` test, and removing the legacy reading
+fails the second; neither fails a scenario. Apart from the two outcome scenarios
+the guard changes touch, every generated scenario is the one 0.56.0 wrote.
+
+Mutation audit, 2026-10-20, against ESS's reference model rather than production:
+`ess verify conform mutate --path spec --scenarios spec --target interpreted
+--class guard-boundary --class guard-negate --class guard-connective` reports 93
+mutants, 91 killed, one survived, one inconclusive, none stillborn, unwitnessed or
+equivalent (baseline: 90 scenarios, zero refusals, ten not scored because the
+reference model cannot observe their views). The survivor is the or-to-and mutant
+of `positive-terminal-record`'s `none:` clause. On a record carrying a budget word
+it changes nothing `observed-budget-stop`, declared first, does not already take;
+under ESS's three-valued logic it also turns the branch from unknown to true on the
+success record with absent `stop_reason` and `terminal_reason`, which is hidden only
+because `observed-budget-stop` is unknown there too
+(`story:session-close-decides-absent-fields`). So it stays equivalent only while the
+declaration order and that gap stay as they are; the first authored scenario does
+not kill it, and that story must revisit the clause. Dropping the clause would remove the site: on a scratch copy without it,
+89 mutants, 88 killed, none survived. The inconclusive mutant negates
+`ProjectRecordedRun/decomposer-clean-recorded`, whose scenarios the reference
+model cannot run.

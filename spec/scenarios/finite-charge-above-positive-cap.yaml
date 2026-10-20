@@ -1,0 +1,14 @@
+type: ess-scenario/1
+domain: metaharness.spending
+scenario: finite-charge-above-positive-cap
+summary: >-
+  A positive assumed charge above a positive cap is refused as invalid finite terms, so the
+  charge-against-cap comparison is held without a zero cap deciding the refusal first.
+
+timeline:
+  - at: 2026-10-20T00:00:00Z
+    command: metaharness.spending.CheckFiniteTerms
+    input:
+      terms: {cap_micro_usd: 5000000, assumed_micro_usd_per_run: 6000000}
+    outcome: invalid-finite-terms
+    error: {name: metaharness.spending.InvalidFiniteTerms}
