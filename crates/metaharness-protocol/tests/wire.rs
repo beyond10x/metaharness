@@ -175,6 +175,7 @@ fn session_events() -> Vec<Event> {
                     how: "--strict-mcp-config".into(),
                 }],
                 unavailable: vec![],
+                declared: vec![],
                 ambient_inputs: vec!["git status is in the system prompt".into()],
                 installed_plugins: vec![metaharness_protocol::InstalledPlugin {
                     name: "claude-code".into(),

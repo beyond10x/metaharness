@@ -34,6 +34,103 @@ fn checked(ok: bool, accepted: &str, refused: &str, error: &str) -> Observed {
     }
 }
 
+/// Amendment a27: a real `--hermetic strict` Claude run over the scripted runner in a directory
+/// this target made, with the H7 state and H11 verdict read off `session.started`'s attestation and
+/// the exit code off the production floor. The outcome is derived from what was observed, never
+/// from the probe, so a shape the domain does not declare fails by scenario name.
+fn scratch_cwd_plan(input: &Value) -> Observed {
+    use metaharness::protocol::{CredentialSource, Event, HermeticMode, HermeticRow, Kind};
+    use metaharness::{
+        FakeAuditor, Input, Metaharness, ScriptedLog, ScriptedRunner, ScriptedSeams,
+    };
+    let probe = input["probe"].as_str().unwrap();
+    let root = tempfile::tempdir().unwrap();
+    let copy = root.path().join("copy");
+    fs::create_dir(&copy).unwrap();
+    let builder = Metaharness::new(Kind::Claude)
+        .with_hermetic(HermeticMode::Strict)
+        .with_credentials(CredentialSource::None);
+    let builder = match probe {
+        "undirected" => builder.with_scratch_cwd(),
+        "declared" => builder.with_cwd(&copy).with_scratch_cwd(),
+        "declared-under-memory" => {
+            fs::write(root.path().join("AGENTS.md"), "above the copy").unwrap();
+            builder.with_cwd(&copy).with_scratch_cwd()
+        }
+        "named-only" => builder.with_cwd(&copy),
+        other => panic!("unsupported scratch cwd probe {other}"),
+    };
+    let canonical = fs::canonicalize(&copy).unwrap();
+    // The record must sit on the adapter's pin or H9 fails the strict run for a reason this
+    // command does not test; the pin is read off the adapter's own capabilities, never spelled.
+    let pinned = metaharness::capabilities(Kind::Claude)
+        .unwrap()
+        .versions_pinned;
+    let opening = format!(
+        r#"{{"emit":"session.started","harness_version":"{}","output_style":"default","plugins":[],"mcp_servers":[],"credential_source":"none","cwd":"{}"}}"#,
+        pinned[0],
+        canonical.display()
+    );
+    let closing = r#"{"emit":"session.ended","is_error":false,"subtype":"success"}"#.to_owned();
+    let log = ScriptedLog::new();
+    let mut runner = ScriptedRunner::of_lines([opening, closing], log.clone());
+    let mut seams = ScriptedSeams;
+    let mut run =
+        match builder.start_with(Input::Prompt("fixture".to_owned()), &mut runner, &mut seams) {
+            Ok(run) => run,
+            Err(refusal) => {
+                assert_eq!(log.spawns(), 0, "a refused declaration must spawn nothing");
+                assert!(refusal.to_string().contains("--scratch-cwd"), "{refusal}");
+                return checked(
+                    false,
+                    "",
+                    "declaration-without-directory",
+                    "metaharness.workspace.DeclarationWithoutDirectory",
+                );
+            }
+        };
+    run.drain().unwrap();
+    // The directory the child ran in, read off the launch plan the runner was handed (the argv
+    // carries no cwd), so the scenario rests on the plan and not on the scripted record alone.
+    assert_eq!(log.launched_cwds(), vec![canonical]);
+    let attestation = run
+        .events()
+        .iter()
+        .find_map(|event| {
+            if let Event::SessionStarted { hermetic, .. } = event {
+                Some(hermetic.clone())
+            } else {
+                None
+            }
+        })
+        .unwrap();
+    let h7 = if attestation.declares(HermeticRow::H7) {
+        "declared"
+    } else if attestation
+        .unavailable
+        .iter()
+        .any(|control| control.row == HermeticRow::H7)
+    {
+        "unavailable"
+    } else {
+        "imposed"
+    };
+    let h11_imposed = attestation.claims(HermeticRow::H11);
+    let report = run.audit(&mut FakeAuditor::missing()).unwrap();
+    let exit_code = run.exit(Some(&report)).code();
+    let outcome = match (h7, h11_imposed, exit_code) {
+        ("declared", true, 0) => "strict-admits-the-declared-copy".to_owned(),
+        ("declared", false, 1) => "memory-above-the-copy-fails-strict".to_owned(),
+        ("unavailable", false, 1) => "named-without-declaration-keeps-a6".to_owned(),
+        other => format!("undeclared-shape:{other:?}"),
+    };
+    event(
+        &outcome,
+        "metaharness.workspace.ScratchCwdAttested",
+        json!({"h7":h7,"h11_imposed":h11_imposed,"exit_code":exit_code}),
+    )
+}
+
 fn process_write_plan(input: &Value) -> Observed {
     use metaharness::protocol::{CredentialSource, DecisionMode, Kind};
     use metaharness::{Input, Metaharness, ScriptedLog, ScriptedRunner};
@@ -1286,6 +1383,7 @@ fn execute(command: &str, input: &Value) -> Observed {
         "metaharness.session.FinishCodexCompletion" => completion(input),
         "metaharness.session.CloseUnsteeredStream" => closure(input),
         "metaharness.workspace.DeclareProcessWrites" => process_write_plan(input),
+        "metaharness.workspace.DeclareScratchWorkingDirectory" => scratch_cwd_plan(input),
         "metaharness.workspace.CheckSelectedName" => checked(
             metaharness_b10x::workspace_component_is_adoptable(input["name"].as_str().unwrap()),
             "eligible-component",
@@ -1593,7 +1691,7 @@ fn ess_generated_scenarios_drive_production_targets() {
     if external.is_none() {
         assert_eq!(
             scenarios.len(),
-            79,
+            83,
             "review and update coverage deliberately"
         );
         assert_eq!(
@@ -1606,6 +1704,7 @@ fn ess_generated_scenarios_drive_production_targets() {
             "CloseUnsteeredStream",
             "CheckSelectedName",
             "DeclareProcessWrites",
+            "DeclareScratchWorkingDirectory",
             "CheckFiniteTerms",
             "CheckUncappedAuthorization",
             "ReadSealedFrame",

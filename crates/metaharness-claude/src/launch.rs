@@ -1511,8 +1511,42 @@ fn attest(
     // H7 and H11 are impositions only over a scratch cwd. An operator-named directory
     // (amendment a6) is real work in a real tree: the rows are attested unavailable with the
     // declaration named, which is what makes `--hermetic strict` refuse such a run instead of
-    // this attestation quietly claiming a directory it never made.
-    if spec.cwd.is_some() {
+    // this attestation quietly claiming a directory it never made. An embedder's **declared
+    // scratch copy** (amendment a27) is neither: H7 is `declared` — stated by the party that made
+    // the directory, never claimed by this attestation — and H11 is measured by the same walk a
+    // scratch cwd gets, because a declaration covers the copy and nothing above it.
+    let mut declared = Vec::new();
+    if spec.scratch_cwd && spec.cwd.is_some() {
+        declared.push(metaharness_protocol::DeclaredControl {
+            row: HermeticRow::H7,
+            declaration: format!(
+                "the embedder declared {} as its disposable scratch copy (--cwd --scratch-cwd); \
+                 metaharness did not create it and --add-dir is never passed; the child can write \
+                 to the copy, which is the proposal the embedder rechecks",
+                context.cwd.display()
+            ),
+        });
+        if context.memory_ancestors.is_empty() {
+            imposed.push(control_imposed(
+                HermeticRow::H11,
+                format!(
+                    "the ancestor walk from the declared scratch copy {} found no CLAUDE.md and no \
+                     AGENTS.md above it; a memory file at the copy's root is the copy's own",
+                    context.cwd.display()
+                ),
+            ));
+        } else {
+            unavailable.push(control_unavailable(
+                HermeticRow::H11,
+                format!(
+                    "the ancestor walk from the declared scratch copy found {} memory file(s) \
+                     above it, which the declaration does not cover: the copy is the embedder's, \
+                     the directories above it are not",
+                    context.memory_ancestors.len()
+                ),
+            ));
+        }
+    } else if spec.cwd.is_some() {
         unavailable.push(control_unavailable(
             HermeticRow::H7,
             format!(
@@ -1580,6 +1614,7 @@ fn attest(
         decisions: spec.decisions,
         imposed,
         unavailable,
+        declared,
         ambient_inputs: ambient_inputs(spec),
         installed_plugins: all_installed_plugins(
             spec,
@@ -2710,6 +2745,86 @@ mod tests {
             .find(|control| control.row == HermeticRow::H11)
             .expect("H11 unavailable");
         assert!(h11.why.contains("1 memory file"), "{}", h11.why);
+    }
+
+    // ------------------------------------------------------- the declared scratch copy (a27)
+
+    /// The embedder's declared copy: H7 is `declared` and neither imposed nor unavailable, and
+    /// H11 is imposed by the same walk a scratch cwd gets — a declaration covers the copy and
+    /// nothing above it.
+    #[test]
+    fn a_declared_scratch_copy_declares_h7_and_measures_h11() {
+        let mut spec = spec();
+        spec.cwd = Some(PathBuf::from("/embedder/copy"));
+        spec.scratch_cwd = true;
+        let mut context = context();
+        context.cwd = PathBuf::from("/embedder/copy");
+        let plan = plan_launch(&spec, &context).expect("a declared copy plans");
+        let declared = plan
+            .attestation
+            .declaration(HermeticRow::H7)
+            .expect("H7 is declared");
+        assert!(
+            declared.declaration.contains("embedder")
+                && declared.declaration.contains("/embedder/copy"),
+            "{}",
+            declared.declaration
+        );
+        assert!(!plan.attestation.claims(HermeticRow::H7));
+        assert!(
+            plan.attestation
+                .unavailable
+                .iter()
+                .all(|control| control.row != HermeticRow::H7)
+        );
+        assert!(plan.attestation.claims(HermeticRow::H11));
+        assert!(
+            plan.attestation
+                .declared
+                .iter()
+                .all(|control| control.row.admits_declaration()),
+            "only H7 may be declared: {:?}",
+            plan.attestation.declared
+        );
+        assert_eq!(plan.cwd, PathBuf::from("/embedder/copy"));
+    }
+
+    /// A memory file above the declared copy is measured, not declared away: H11 goes unavailable
+    /// with the count named, H7 stays declared, and the launch is not refused — the ancestors are
+    /// the embedder's placement, and the floor exits 1 after the run.
+    #[test]
+    fn a_memory_file_above_the_declared_copy_is_attested_unavailable_not_refused() {
+        let mut spec = spec();
+        spec.cwd = Some(PathBuf::from("/embedder/copy"));
+        spec.scratch_cwd = true;
+        let mut context = context();
+        context.cwd = PathBuf::from("/embedder/copy");
+        context.memory_ancestors = vec![PathBuf::from("/embedder/AGENTS.md")];
+        let plan = plan_launch(&spec, &context).expect("the declared copy plans");
+        assert!(plan.attestation.declares(HermeticRow::H7));
+        assert!(!plan.attestation.claims(HermeticRow::H11));
+        let h11 = plan
+            .attestation
+            .unavailable
+            .iter()
+            .find(|control| control.row == HermeticRow::H11)
+            .expect("H11 unavailable");
+        assert!(h11.why.contains("1 memory file"), "{}", h11.why);
+    }
+
+    /// The declaration without `--cwd` is the library's refusal (`check_spec`), not this plan's:
+    /// over a scratch cwd the flag changes nothing here, and nothing is declared.
+    #[test]
+    fn a_declaration_without_a_directory_changes_nothing_in_the_plan() {
+        let mut spec = spec();
+        spec.scratch_cwd = true;
+        let plan = plan_launch(&spec, &context()).expect("a scratch cwd plans");
+        assert_eq!(
+            plan.attestation.declared,
+            Vec::<metaharness_protocol::DeclaredControl>::new()
+        );
+        assert!(plan.attestation.claims(HermeticRow::H7));
+        assert!(plan.attestation.claims(HermeticRow::H11));
     }
 
     #[test]

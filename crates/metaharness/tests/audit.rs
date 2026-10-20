@@ -66,6 +66,7 @@ fn attestation_imposing(rows: &[HermeticRow]) -> HermeticAttestation {
             })
             .collect(),
         unavailable: Vec::new(),
+        declared: Vec::new(),
         ambient_inputs: vec!["git status is in the system prompt".to_string()],
         installed_plugins: Vec::new(),
     }

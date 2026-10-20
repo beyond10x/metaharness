@@ -22,8 +22,8 @@ use std::path::PathBuf;
 
 use metaharness_protocol::{
     ConformanceTier, ContractObligations, CredentialSource, Digest, Emission, Event, EventStream,
-    HermeticAttestation, HermeticMode, Kind, Obligation, RunId, RunSpec, TranscriptRef,
-    VectorOutcome,
+    HermeticAttestation, HermeticMode, HermeticRow, Kind, Obligation, RunId, RunSpec,
+    TranscriptRef, VectorOutcome,
 };
 use serde_json::{Value, json};
 
@@ -47,6 +47,7 @@ pub const CONTRACT_OBLIGATIONS: ContractObligations = ContractObligations {
         "c1-loopback-subscription-refusal",
         "c1-unsupported-option-refusal",
         "c1-memory-ancestor-refusal",
+        "c1-scratch-cwd-declaration",
     ]),
     recorded_wire: Obligation::Filled(&["golden-rollout"]),
     recorded_hook_input: Obligation::Filled(&["golden-hook-input"]),
@@ -66,6 +67,7 @@ const APRIL_SHAPE: &str = r#"{"timestamp":"2026-04-01T10:00:02.000Z","type":"res
 #[must_use]
 pub fn conformance_vectors() -> Vec<VectorOutcome> {
     let mut outcomes = launch_vectors();
+    outcomes.push(scratch_cwd_vector());
     outcomes.extend([
         vector_full_session(),
         vector_version_gate(),
@@ -183,6 +185,128 @@ fn launch_case(id: &str) -> Option<(RunSpec, LaunchContext)> {
         _ => return None,
     }
     Some((spec, context))
+}
+
+/// C1 — **the declared scratch copy** (amendment a27), read off the plan rather than off a
+/// fixture: under `--cwd <dir> --scratch-cwd` H7 is `declared` (naming the copy and the
+/// `workspace-write` grant, a6.1's rule) and neither imposed nor unavailable, H11 is imposed when
+/// the walk above the copy finds nothing and unavailable with the count named when it does, the
+/// scratch config still grants the tree, and the same directory without the declaration keeps a6's
+/// two unavailable rows and declares nothing.
+#[allow(
+    clippy::too_many_lines,
+    reason = "three launches of one synthetic world, read top to bottom as the three shapes a27 \
+              names; splitting it would put one vector in three places"
+)]
+fn scratch_cwd_vector() -> VectorOutcome {
+    let id = "c1-scratch-cwd-declaration";
+    let mut differences = Vec::new();
+    let copy = PathBuf::from("/embedder/copy");
+
+    let mut spec = base_spec();
+    spec.cwd = Some(copy.clone());
+    spec.scratch_cwd = true;
+    let mut context = base_context();
+    context.cwd.clone_from(&copy);
+    match plan_launch(&spec, &context) {
+        Err(refusal) => differences.push(format!("the declared copy was refused: {refusal}")),
+        Ok(plan) => {
+            let attestation = &plan.attestation;
+            match attestation.declaration(HermeticRow::H7) {
+                None => differences.push("H7 is not declared".to_string()),
+                Some(declared)
+                    if !declared.declaration.contains("/embedder/copy")
+                        || !declared.declaration.contains("workspace-write") =>
+                {
+                    differences.push(format!(
+                        "H7's declaration does not name the copy and the grant: {}",
+                        declared.declaration
+                    ));
+                }
+                Some(_) => {}
+            }
+            if attestation.claims(HermeticRow::H7) {
+                differences.push("H7 is claimed as imposed under a declaration".to_string());
+            }
+            if attestation
+                .unavailable
+                .iter()
+                .any(|control| control.row == HermeticRow::H7)
+            {
+                differences.push("H7 is attested unavailable under a declaration".to_string());
+            }
+            if !attestation.claims(HermeticRow::H11) {
+                differences.push(
+                    "H11 is not imposed although the walk above the copy found nothing".to_string(),
+                );
+            }
+            if !plan.config.contains(r#"sandbox_mode = "workspace-write""#) {
+                differences.push("the declared copy is not writable by the child".to_string());
+            }
+            if plan.cwd != copy {
+                differences.push(format!("the plan's cwd is {}", plan.cwd.display()));
+            }
+        }
+    }
+
+    // A memory file above the copy is measured, not declared away.
+    let mut polluted = base_context();
+    polluted.cwd.clone_from(&copy);
+    polluted.memory_ancestors = vec![PathBuf::from("/embedder/AGENTS.md")];
+    match plan_launch(&spec, &polluted) {
+        Err(refusal) => differences.push(format!(
+            "a memory file above the declared copy refused the launch instead of being \
+             attested: {refusal}"
+        )),
+        Ok(plan) => {
+            if !plan.attestation.declares(HermeticRow::H7) {
+                differences.push("H7 is not declared when a memory file is above".to_string());
+            }
+            if plan.attestation.claims(HermeticRow::H11) {
+                differences.push("H11 is imposed over a memory file above the copy".to_string());
+            }
+            let measured = plan.attestation.unavailable.iter().any(|control| {
+                control.row == HermeticRow::H11 && control.why.contains("1 memory file")
+            });
+            if !measured {
+                differences
+                    .push("H11 is not attested unavailable with the count named".to_string());
+            }
+        }
+    }
+
+    // Without the declaration, a6 as written.
+    let mut named = base_spec();
+    named.cwd = Some(copy.clone());
+    let mut context = base_context();
+    context.cwd = copy;
+    match plan_launch(&named, &context) {
+        Err(refusal) => differences.push(format!("the a6 directory was refused: {refusal}")),
+        Ok(plan) => {
+            if !plan.attestation.declared.is_empty() {
+                differences.push(format!(
+                    "a directory nobody declared carries a declaration: {:?}",
+                    plan.attestation.declared
+                ));
+            }
+            for row in [HermeticRow::H7, HermeticRow::H11] {
+                if !plan
+                    .attestation
+                    .unavailable
+                    .iter()
+                    .any(|control| control.row == row)
+                {
+                    differences.push(format!("{} is not unavailable under a6", row.id()));
+                }
+            }
+        }
+    }
+
+    if differences.is_empty() {
+        VectorOutcome::passed(id, ConformanceTier::C1)
+    } else {
+        VectorOutcome::failed(id, ConformanceTier::C1, differences.join("; "))
+    }
 }
 
 /// A proxy that never bound anything: the port is fixed here so the fixture is stable, which is
@@ -667,7 +791,9 @@ mod tests {
             assert_eq!(outcome.tier, ConformanceTier::C1, "{id}");
             assert!(outcome.passed, "{id}: {}", outcome.detail);
         }
-        assert_eq!(ids.len(), LAUNCH_FIXTURES.len());
+        // The six recorded expectations, and the one computed vector (a27's declared scratch
+        // copy) that reads the plan's attestation instead of comparing against a fixture.
+        assert_eq!(ids.len(), LAUNCH_FIXTURES.len() + 1);
     }
 
     /// A launch fixture must be able to go red. The mutation is in the **config document**,

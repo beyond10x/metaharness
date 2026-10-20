@@ -182,6 +182,31 @@ impl HermeticRow {
             HermeticRow::H6 => Assertion::Effect,
         }
     }
+
+    /// Whether this row may be attested `declared` (design amendment a27).
+    ///
+    /// H7 and only H7: its control *is* who owns the working directory, which is a fact only the
+    /// party that made the directory can state. Every other row is imposed or it is not, and a
+    /// declaration on one of them is read by the floor as a `gap` — a build that tried to declare
+    /// H11 away would fail its own strict run.
+    #[must_use]
+    pub fn admits_declaration(&self) -> bool {
+        matches!(self, HermeticRow::H7)
+    }
+}
+
+/// One control the embedder declared and metaharness did not impose (design amendment a27).
+///
+/// The third state beside imposed and unavailable: an embedder's disposable scratch copy, named
+/// with `--cwd <dir> --scratch-cwd`, is a directory metaharness did not create and does not treat
+/// as the operator's. The declaration says so; it does not make the row `ok` by itself — the floor
+/// still compares the record's cwd against the planned one (invariant 3).
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct DeclaredControl {
+    /// Which row. Only a row whose [`HermeticRow::admits_declaration`] is true belongs here.
+    pub row: HermeticRow,
+    /// Who declared what, and what metaharness measured about it, in words a reader can act on.
+    pub declaration: String,
 }
 
 /// One control metaharness imposed, and how.
@@ -224,6 +249,14 @@ pub struct HermeticAttestation {
     pub imposed: Vec<ImposedControl>,
     /// What could not be.
     pub unavailable: Vec<UnavailableControl>,
+    /// What the embedder declared instead (design amendment a27): H7 under `--scratch-cwd`.
+    ///
+    /// **Absent on the wire when empty**, unlike `installed_plugins`, and the difference is the
+    /// direction of the claim: a vanished plugin list could hide an installation, whereas a
+    /// declaration is additive — its absence claims nothing and can conceal nothing. Every stream
+    /// written before a27 reads as *nothing was declared*, which is what was true of it.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub declared: Vec<DeclaredControl>,
     /// Inputs metaharness reports and does **not** claim to have removed — git status is the
     /// named one, because the vendor's own flag description says it is in the system prompt
     /// (design § 8.1, H11's second half).
@@ -253,6 +286,7 @@ impl HermeticAttestation {
             decisions: DecisionMode::Frame,
             imposed: Vec::new(),
             unavailable: Vec::new(),
+            declared: Vec::new(),
             ambient_inputs: Vec::new(),
             installed_plugins: Vec::new(),
         }
@@ -262,6 +296,18 @@ impl HermeticAttestation {
     #[must_use]
     pub fn claims(&self, row: HermeticRow) -> bool {
         self.imposed.iter().any(|control| control.row == row)
+    }
+
+    /// The embedder's declaration for this row, if the attestation carries one (amendment a27).
+    #[must_use]
+    pub fn declaration(&self, row: HermeticRow) -> Option<&DeclaredControl> {
+        self.declared.iter().find(|control| control.row == row)
+    }
+
+    /// Whether this row was attested as declared rather than imposed (amendment a27).
+    #[must_use]
+    pub fn declares(&self, row: HermeticRow) -> bool {
+        self.declaration(row).is_some()
     }
 
     /// Whether this run allowed every call and adjudicated none of them.
@@ -345,5 +391,43 @@ mod tests {
             detail: "no MCP list in the opening record".into(),
         };
         assert!(gating.gates());
+    }
+
+    /// A declaration is admitted for H7 and nothing else (amendment a27). A second row here would
+    /// be a row whose `ok` can be bought with a flag.
+    #[test]
+    fn only_h7_admits_a_declaration() {
+        let admitted: Vec<&str> = HermeticRow::ALL
+            .iter()
+            .filter(|row| row.admits_declaration())
+            .map(HermeticRow::id)
+            .collect();
+        assert_eq!(admitted, ["H7"]);
+    }
+
+    /// The wire shape a27 chose: an empty `declared` list writes no key, so every stream written
+    /// before it keeps its bytes, and a stream without the key reads as *nothing was declared*.
+    #[test]
+    fn an_empty_declared_list_is_absent_on_the_wire_and_absent_reads_as_empty() {
+        let none = HermeticAttestation::none(HermeticMode::Strict);
+        let json = serde_json::to_string(&none).unwrap();
+        assert!(!json.contains("declared"), "{json}");
+        let parsed: HermeticAttestation = serde_json::from_str(&json).unwrap();
+        assert_eq!(parsed, none);
+
+        let mut declared = none;
+        declared.declared.push(DeclaredControl {
+            row: HermeticRow::H7,
+            declaration: "the embedder's copy".into(),
+        });
+        let json = serde_json::to_string(&declared).unwrap();
+        assert!(json.contains("\"declared\""), "{json}");
+        let parsed: HermeticAttestation = serde_json::from_str(&json).unwrap();
+        assert!(parsed.declares(HermeticRow::H7));
+        assert!(!parsed.declares(HermeticRow::H11));
+        assert_eq!(
+            parsed.declaration(HermeticRow::H7).unwrap().declaration,
+            "the embedder's copy"
+        );
     }
 }

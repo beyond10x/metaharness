@@ -617,11 +617,42 @@ pub fn hermetic_floor(events: &[Event], inputs: &FloorInputs<'_>) -> Vec<RowVerd
             "metaharness did not record the directory it planned, so the record has nothing to \
              be compared against",
         ),
-        (Some(observed), Some(planned)) if observed == planned => row(
-            HermeticRow::H7,
-            Verdict::Ok,
-            format!("the session ran in {observed}, which metaharness created"),
-        ),
+        // The record is the evidence and the attestation says what the directory was (a27): a
+        // declared copy is `ok` in the embedder's words, an a6 directory metaharness could not
+        // impose is a gap in metaharness's own words, and only a directory nobody named is the one
+        // metaharness created. Before a27 this arm read no attestation and printed "which
+        // metaharness created" over an operator's tree.
+        (Some(observed), Some(planned)) if observed == planned => {
+            if let Some(declared) = hermetic.declaration(HermeticRow::H7) {
+                row(
+                    HermeticRow::H7,
+                    Verdict::Ok,
+                    format!(
+                        "the session ran in {observed}, which was declared, not created: {}",
+                        declared.declaration
+                    ),
+                )
+            } else if let Some(unavailable) = hermetic
+                .unavailable
+                .iter()
+                .find(|control| control.row == HermeticRow::H7)
+            {
+                row(
+                    HermeticRow::H7,
+                    Verdict::Gap,
+                    format!(
+                        "the session ran in {observed}, and metaharness could not impose it: {}",
+                        unavailable.why
+                    ),
+                )
+            } else {
+                row(
+                    HermeticRow::H7,
+                    Verdict::Ok,
+                    format!("the session ran in {observed}, which metaharness created"),
+                )
+            }
+        }
         (Some(observed), Some(planned)) => row(
             HermeticRow::H7,
             Verdict::Gap,
@@ -690,6 +721,23 @@ pub fn hermetic_floor(events: &[Event], inputs: &FloorInputs<'_>) -> Vec<RowVerd
 /// spawning, which is strong about the argv and the child environment and silent about what the
 /// harness then did with them.
 fn attested(which: HermeticRow, attestation: &HermeticAttestation) -> RowVerdict {
+    // A declaration is admitted for H7 alone (amendment a27), and H7 is a record row that never
+    // reaches this function. A launch row that arrives here declared is a build claiming what it
+    // cannot know, and the claim is read as the gap it is — before `imposed`, so it cannot be
+    // laundered by also being listed there.
+    if let Some(declared) = attestation.declaration(which)
+        && !which.admits_declaration()
+    {
+        return row(
+            which,
+            Verdict::Gap,
+            format!(
+                "the attestation declared {}, a row the design admits no declaration for: {}",
+                which.id(),
+                declared.declaration
+            ),
+        );
+    }
     if let Some(imposed) = attestation
         .imposed
         .iter()
@@ -817,5 +865,45 @@ impl crate::run::Run {
                     ),
             ),
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    //! The one arm of the floor no run reaches on its own: a declaration on a row the design
+    //! admits none for (amendment a27, H7 only).
+
+    use metaharness_protocol::{
+        DeclaredControl, HermeticAttestation, HermeticMode, HermeticRow, ImposedControl, Verdict,
+    };
+
+    use super::attested;
+
+    /// A build that declared H11 away is read as a gap, and listing the row as imposed beside
+    /// the declaration does not launder it: the guard runs before `imposed` is consulted.
+    #[test]
+    fn a_declaration_on_a_row_other_than_h7_is_a_gap_even_when_also_imposed() {
+        let mut attestation = HermeticAttestation::none(HermeticMode::Strict);
+        attestation.declared.push(DeclaredControl {
+            row: HermeticRow::H11,
+            declaration: "the embedder declared the walk clean".into(),
+        });
+        let verdict = attested(HermeticRow::H11, &attestation);
+        assert_eq!(verdict.verdict, Verdict::Gap, "{}", verdict.detail);
+        assert!(
+            verdict.detail.contains("admits no declaration") && verdict.detail.contains("H11"),
+            "{}",
+            verdict.detail
+        );
+
+        attestation.imposed.push(ImposedControl {
+            row: HermeticRow::H11,
+            how: "the ancestor walk found nothing".into(),
+        });
+        let laundered = attested(HermeticRow::H11, &attestation);
+        assert_eq!(laundered.verdict, Verdict::Gap, "{}", laundered.detail);
+
+        let honest = HermeticAttestation::none(HermeticMode::Strict);
+        assert_eq!(attested(HermeticRow::H11, &honest).verdict, Verdict::Unk);
     }
 }

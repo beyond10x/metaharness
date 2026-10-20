@@ -44,6 +44,14 @@
 > refuses — the grant changes what the child may **do**, never what the attestation **claims**.
 > A trade whose consideration is undeliverable is not a trade, which is why this is an amendment
 > and not a bug fix.
+> **Amendment a27, 2026-10-20**, from takt's gap G15 (Atlas ADR 0098 point 2): a6 treats every
+> named `--cwd` as the operator's real tree, and an embedder's **disposable scratch copy** is not
+> one. `--cwd <dir> --scratch-cwd` declares the copy; H7 takes a third attestation state,
+> **`declared`** (never `ok` by flag — the record's cwd is still compared), H11 stays **measured**
+> by the ancestor walk from `<dir>`, and `--hermetic strict` passes on exactly that pair. Without
+> the declaration a6 stands as written. The floor's H7 row now reads the attestation, which it never
+> did: under a6 it printed `ok` *"which metaharness created"* over a directory metaharness did not
+> create. § a27, and the H7 and H11 rows of § 8.1.
 > **Amendment a7, 2026-08-22**, from the **first driven Codex run** (CX-M2): the § 7.4 matrix's
 > `PreToolUse` row moves from documented to **driven** — a real `codex exec` was refused one shell
 > call at metaharness's own hook and the vendor's record shows the command blocked with empty
@@ -1215,11 +1223,11 @@ when its unobservability is a property of the mechanism rather than of the run.
 | H4 | no API key unless declared | `ANTHROPIC_API_KEY` is not in the allowlist unless the run declares `credentials: api_key` | record: credential source in the opening record | absent ⇒ `unk` | **gating** |
 | H5 | MCP surface is exactly what the launch gave | `--strict-mcp-config`, always | record: the MCP server **list** — length and names | list absent ⇒ `unk`, **never zero** | **gating** |
 | H6 | credential carriage is exactly declared | vendor adapters: one file into the scratch home, nothing else, **re-copied immediately before every spawn** (amendment a1); direct-provider adapters: no operator login is copied and the only source is the caller-named source or none (**amendment a14**) | **not directly assertable in any record.** The evidence is the effect: H1a, H4, H5 | — | **advisory**, and § 8.3 says why an attestation is not evidence |
-| H7 | the working directory is ours | a directory metaharness created; `--add-dir` never passed. **a6: under an operator-named `--cwd` this row is attested unavailable, never claimed** — and **a6.1: its reason states that the vendor sandbox was widened to that tree** (codex: `sandbox_mode = "workspace-write"`), because a run that may change the operator's repository must say so in its own record and not only in a scratch config file | record: `cwd` in the opening record | absent ⇒ `unk` | **gating** |
+| H7 | the working directory is ours | a directory metaharness created; `--add-dir` never passed. **a6: under an operator-named `--cwd` this row is attested unavailable, never claimed** — and **a6.1: its reason states that the vendor sandbox was widened to that tree** (codex: `sandbox_mode = "workspace-write"`), because a run that may change the operator's repository must say so in its own record and not only in a scratch config file. **a27: under `--cwd <dir> --scratch-cwd` this row is `declared` — the embedder declared `<dir>` as its disposable scratch copy, metaharness did not create it, `--add-dir` is never passed, and the sandbox grant is stated as under a6.1. The floor reads `declared` as `ok` only when the record's `cwd` is the planned one; a declaration on any other row is `gap`; an a6 `unavailable` H7 is `gap`, which the floor never said before a27** | record: `cwd` in the opening record, read beside the attestation's H7 state (a27) | absent ⇒ `unk` | **gating** |
 | H8 | hooks and customizations are not skipped | an argv **denylist**: neither `--bare` nor **`--safe-mode`**, and neither `CLAUDE_CODE_SAFE_MODE` nor `CLAUDE_CODE_SIMPLE` in the child environment | launch: the argv and environment as values | n/a — launch assertion | **gating** |
 | H9 | the vendor version is the pinned one | `doctor` before the run | record: the harness version in the opening record | absent ⇒ `unk` | **gating** |
 | H10 | governing documents cannot move under the run | inputs are copied into the run directory, not referenced | record: the digest of the copied tree, in `session.started` | n/a | **gating** |
-| H11 | **no memory file outside the copied tree is discoverable** | the scratch root has no `CLAUDE.md` / `AGENTS.md` ancestor above it, or an explicit `--system-prompt` replaces discovery. **a6: under an operator-named `--cwd` the walk's findings go into the attested-unavailable reason instead of refusing — the operator declared the tree, memory files and all** | launch: the ancestor walk from the scratch cwd, as a value | n/a — launch assertion | **gating** |
+| H11 | **no memory file outside the copied tree is discoverable** | the scratch root has no `CLAUDE.md` / `AGENTS.md` ancestor above it, or an explicit `--system-prompt` replaces discovery. **a6: under an operator-named `--cwd` the walk's findings go into the attested-unavailable reason instead of refusing — the operator declared the tree, memory files and all.** **a27: under `--cwd <dir> --scratch-cwd` this row is never declared: the same walk runs from `<dir>`, nothing above it is `imposed`, a memory file above it is `unavailable` (so strict exits 1 after the run), and a `CLAUDE.md`/`AGENTS.md` at the copy's root is the copy's own, listed in `ambient_inputs`** | launch: the ancestor walk from the scratch cwd — or from the declared copy (a27) — as a value | n/a — launch assertion | **gating** |
 
 Three rows deserve their reasons in full.
 
@@ -2173,3 +2181,87 @@ disagreement is a finding, never a fix inside the specification. One boundary is
 The b10x golden record is read as it stands (captured from `b10x-harness 0.9.1`,
 `crates/metaharness-b10x/fixtures/golden/version.txt`) and no count of its nodes is declared, so
 a later re-recording moves no scenario. No event or frame wire changes.
+
+### Amendment a27 — strict hermetic over an embedder-declared scratch working directory (2026-10-20)
+
+takt's gap G15 (Atlas ADR 0098 point 2, ADR 0099 point 3): Loom's session executor makes a
+disposable copy of the workspace, runs `metaharness run <kind>` inside it, and rechecks the copy's
+changes as the proposed change before anything reaches the repository. It wants `--hermetic strict`
+over that copy. a6 refuses it, because a6 knows one kind of named directory — the operator's real
+tree, whose writes land in the repository and whose memory files are the operator's — and an
+embedder's scratch copy is not that: its writes are the proposal, its memory files are copies. The
+rows a6 trades away for a real tree are rows a copy can keep, **provided the run says what was
+declared and what was measured, and never lets the declaration stand in for the measurement**
+(invariant 3, § 8.3). Five decisions, in the order a reader meets them.
+
+**1. The flag is `--scratch-cwd`, a declaration on `--cwd`.** Boolean, no value; builder
+`with_scratch_cwd()`. It means *"the directory `--cwd` names is my disposable scratch copy: I made
+it, I will recheck it, nothing in it is the operator's working state."* Without `--cwd` it declares
+nothing, and `check_spec` refuses it by name on every kind, so the binary face and the library face
+refuse identically (D11) — not a `clap` `requires`, which would give the two faces two different
+refusals. A declaration is not a confinement: nothing here fences the copy
+(`story:confinement-of-vendor-kinds`), and nothing here makes it (Loom does).
+
+**2. H7 takes a third attestation state, `declared`, and only H7 does.** `HermeticAttestation`
+gains `declared: Vec<DeclaredControl { row, declaration }>` beside `imposed` and `unavailable`.
+Under `--cwd <dir> --scratch-cwd` the adapter puts H7 there: *the embedder declared `<dir>` as its
+scratch copy; metaharness did not create it; `--add-dir` is never passed; the vendor sandbox is
+widened over it* (a6.1's grant, stated in the same row for the same reason — codex names
+`sandbox_mode = "workspace-write"`). A declaration is admitted for H7 alone
+(`HermeticRow::admits_declaration`): H7 is the one row whose control *is* who owns the directory,
+which is a fact only the party that made the directory can state. The floor reads a `declared`
+entry on any other row as `gap`, so a build that tried to declare H11 away would fail its own
+strict run.
+
+**3. H11 is measured, never declared.** The ancestor walk runs from `<dir>` exactly as it runs from
+a scratch cwd. Nothing above `<dir>` is `imposed` — the walk is the evidence, the declaration adds
+nothing to it. A `CLAUDE.md` or `AGENTS.md` above `<dir>` is `unavailable` with the count named, the
+floor reads it `gap`, and strict exits 1 **after** the run. Not a pre-spawn refusal, deliberately:
+the scratch-cwd refusal `MemoryAncestorsFound` says metaharness's own scratch root is polluted and
+metaharness cannot do its job (exit 2); a memory file above the embedder's copy is the embedder's
+placement, metaharness measured it and reports the verdict (exit 1). A memory file **at the copy's
+root** is the copy's own and is in context by the declaration; it is listed in `ambient_inputs`
+(*"memory file inside the declared scratch copy, the copy's own: …"*) so the record names it, and it
+never enters H11's verdict. Refusing a declared copy under strict before the spawn, to save the
+paid run that a gap would cost, is a possible later tightening and is not taken here.
+
+**4. What strict does with the pair.** The floor's H7 row now reads the attestation beside the
+record, which it never did: `declared` is `ok` only when the record's `cwd` equals the planned one
+(the record is still the evidence; the declaration only changes what `ok` says), `unavailable` is
+`gap`, and neither state alone moves anything else. Strict passes when every gating row is `ok`, so
+a declared H7 beside a measured-clean H11 passes and a declared H7 beside an `unavailable` H11 exits
+1. Without the declaration a6 holds as written — with one correction production needed: under a6 the
+floor printed H7 `ok` *"the session ran in `<dir>`, which metaharness created"* over a directory
+metaharness did not create, because the arm compared two paths and read no attestation. a6's
+sentence *"attested unavailable, never claimed"* is now true of the floor too: an `unavailable` H7 is
+`gap`. The exit code of a `--cwd` strict run does not move (H11 already made it 1); the row's words
+do.
+
+**5. The wire shape is optional and absent when empty.** `declared` carries
+`#[serde(default, skip_serializing_if = "Vec::is_empty")]`: every committed stream and expected
+document keeps its bytes, every old reader parses a new stream, and an absent key means *nothing was
+declared*. § 8.3 refuses that reading for `installed_plugins`, and the difference is the direction of
+the claim: a vanished plugin list could hide an installation, whereas a declaration is additive — its
+absence claims nothing and can conceal nothing, so an old build's stream and a declaration-free run
+reading as the same bytes is the safe direction. The agent-visible execution context reads
+`workspace=embedder-scratch` under the declaration, beside the existing `operator-named` and
+`metaharness-scratch`.
+
+**The b10x kind.** Its attestation is assembled in the core builder, not in the adapter, and the
+same rule applies there: H7 `declared` (and, under a6, H7 `unavailable` in the vendor launches'
+words), H11 measured from `<dir>`, root memory files listed. The adapter decides nothing
+(invariant 9) and its seam is untouched — which bounds what H7 can say on this kind: the loop's
+`started` line names no working directory and the seam writes metaharness's own planned cwd into
+the opening record (`crates/metaharness-b10x/src/seam.rs`, `cwd: self.cwd`), so until
+`story:b10x-record-carries-the-loops-cwd` lands a declared H7 reads `ok` on b10x on the flag plus
+the echoed plan, never on a directory the loop itself reported; the record-versus-plan comparison
+of § 4 is real on the vendor kinds only.
+
+**Conformance.** `spec/domains/workspace.yaml` gains `DeclareScratchWorkingDirectory` with four
+outcomes, each a real `metaharness` run over `ScriptedRunner` and no vendor process: the declaration
+without a directory is refused; a declared copy under strict is admitted (H7 `declared`, H11
+`imposed`, exit 0); a declared copy with a memory file above it is reported (H7 `declared`, H11
+`unavailable`, exit 1); a named directory without the declaration keeps a6 (H7 `unavailable`, exit
+1). The vendor adapters each carry a C1 vector reading the plan's attestation, and the scripted
+runner records the plan's cwd so the vector does not rest on argv alone. No event or frame wire
+changes beyond the optional field.

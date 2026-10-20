@@ -34,7 +34,8 @@ the beyond10x loop, which it observes — see [the b10x adapter](../harnesses/b1
 | `-p, --prompt <TEXT>` | — | The prompt to start with. |
 | `--model <NAME>` | — | The model to ask for. Passed through to the vendor, which resolves it. |
 | `--max-turns <N>` | — | A ceiling on turns. |
-| `--cwd <DIR>` | scratch | An operator-named working directory for the child, **which it can write to**. Trades two hermetic rows for real work — see below. |
+| `--cwd <DIR>` | scratch | A named working directory for the child, **which it can write to**. Alone, the operator's real tree: trades two hermetic rows for real work — see below. |
+| `--scratch-cwd` | off | Declares the `--cwd` directory as the embedder's **disposable scratch copy**. H7 is attested `declared`, H11 is measured from the copy, and `--hermetic strict` passes on the pair — see below. Refused without `--cwd`. |
 
 ### Hermeticity
 
@@ -131,7 +132,7 @@ The child runs **in this tree**, and **can write to it**. So:
   scratch config carries `sandbox_mode = "workspace-write"`, which permits editing files in the
   cwd. The H7 attestation row **says so in words**: a reader sees that the run could write to the
   operator's tree without diffing a scratch config that no longer exists.
-- `--hermetic strict` therefore **refuses** such a run.
+- `--hermetic strict` therefore **exits 1** on such a run: the floor reads both rows as gaps.
 - Plain `--hermetic` reports it honestly.
 - `--add-dir` stays denied either way, and no `writable_roots` widens the grant past this tree.
 
@@ -143,6 +144,26 @@ Until 2026-08-23 it was not, and the trade bought nothing: a paid codex run with
 repository it could only read, and the vendor's own stream said *"the workspace is read-only, so the
 planning-store patch was rejected."* Design amendment **a6.1**.
 :::
+
+## `--scratch-cwd`: the embedder's disposable copy
+
+An embedder that made its own scratch copy of the workspace, runs the child in it, and rechecks
+the copy's changes before anything reaches the repository is not pointing the run at the operator's
+tree, and `--cwd <DIR> --scratch-cwd` says so. The run is otherwise a `--cwd` run — same directory,
+same sandbox grant — and the attestation changes:
+
+- **H7** is attested **`declared`**, a third state beside imposed and unavailable: the embedder
+  declared the directory as its scratch copy, metaharness did not create it, `--add-dir` is never
+  passed. The floor reads it `ok` only when the record's cwd is the planned one; the declaration
+  never stands in for the record.
+- **H11** is **measured**, exactly as for a scratch cwd: the ancestor walk runs from the copy. Nothing
+  above it is `ok`; a `CLAUDE.md` or `AGENTS.md` above it is a gap, and `--hermetic strict` exits 1
+  after the run. A memory file at the copy's root is the copy's own and is listed in the
+  attestation's `ambient_inputs`.
+- `--hermetic strict` **passes** on a declared copy with nothing above it.
+- Without `--cwd` the flag is refused by name on every kind.
+
+Design amendment **a27**. The declaration confines nothing; making the copy is the embedder's job.
 
 ## `metaharness capabilities`
 

@@ -68,6 +68,7 @@ struct LogInner {
     credential_copies: Vec<(PathBuf, PathBuf)>,
     killed: bool,
     launched: Vec<Vec<String>>,
+    cwds: Vec<PathBuf>,
 }
 
 /// What the fake saw, readable after the run took ownership of the process.
@@ -111,6 +112,16 @@ impl ScriptedLog {
     #[must_use]
     pub fn launched(&self) -> Vec<Vec<String>> {
         self.inner.borrow().launched.clone()
+    }
+
+    /// The working directory of each spawn, read off the launch plan the runner was handed.
+    ///
+    /// Recorded beside the argv because a `--cwd` reaches the child through the plan's `cwd` and
+    /// not through any argument, so a test that read argv alone could not tell a run in the
+    /// embedder's declared copy from one in metaharness's own scratch directory (amendment a27).
+    #[must_use]
+    pub fn launched_cwds(&self) -> Vec<PathBuf> {
+        self.inner.borrow().cwds.clone()
     }
 }
 
@@ -174,6 +185,7 @@ impl ProcessRunner for ScriptedRunner {
             let mut argv = vec![plan.program.to_string()];
             argv.extend(plan.args.iter().cloned());
             inner.launched.push(argv);
+            inner.cwds.push(plan.cwd.to_path_buf());
         }
         Ok(Box::new(ScriptedProcess {
             steps: self.script.iter().cloned().collect(),
