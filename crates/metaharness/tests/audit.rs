@@ -81,6 +81,8 @@ fn inputs<'a>(spec: &'a RunSpec, pins: &'a [String], plugins: &'a [String]) -> F
         builtin_plugins: &[],
         endpoint_key_posture: None,
         planned_mcp_servers: &[],
+        planned_output_style: None,
+        record_silences: &[],
     }
 }
 
@@ -289,6 +291,254 @@ fn a_missing_output_style_is_unk_and_a_foreign_one_is_a_gap() {
         ),
         Verdict::Gap
     );
+}
+
+// ---------------------------------------------------------------- Codex's record rows (a34)
+
+/// A Codex opening record as the rollout reader completes it at 0.153.4: no plugin list, no
+/// credential source and no MCP server list, and `output_style` holding the personality the first
+/// `turn_context` recorded.
+fn codex_record(output_style: Option<&str>) -> Event {
+    with_record(good_record(), |record| {
+        if let Event::SessionStarted {
+            adapter,
+            harness_version,
+            credential_source,
+            output_style: style,
+            plugins,
+            mcp_servers,
+            ..
+        } = record
+        {
+            *adapter = "codex".to_string();
+            *harness_version = Some(metaharness_codex::PINNED_VERSIONS[0].to_string());
+            *credential_source = None;
+            *style = output_style.map(ToString::to_string);
+            *plugins = None;
+            *mcp_servers = None;
+        }
+    })
+}
+
+fn codex_pins() -> Vec<String> {
+    metaharness_codex::PINNED_VERSIONS
+        .iter()
+        .map(ToString::to_string)
+        .collect()
+}
+
+/// What `start_codex` hands the floor: the personality the launch wrote, and why the record is
+/// silent on H1a, H4 and H5.
+fn codex_inputs<'a>(spec: &'a RunSpec, pins: &'a [String]) -> FloorInputs<'a> {
+    FloorInputs {
+        planned_output_style: Some(metaharness_codex::PERSONALITY),
+        record_silences: &metaharness_codex::RECORD_SILENCES,
+        ..inputs(spec, pins, &[])
+    }
+}
+
+fn row_of(
+    rows: &[metaharness::protocol::RowVerdict],
+    which: HermeticRow,
+) -> metaharness::protocol::RowVerdict {
+    rows.iter()
+        .find(|row| row.row == which)
+        .cloned()
+        .expect("every row is evaluated")
+}
+
+/// Amendment a34, one shape per verdict: H1b reads `ok` when the record names the personality the
+/// launch wrote, `gap` when it names another, and `unk` when it names none — and the launch's
+/// value is never read as the record's (invariant 3).
+#[test]
+fn codex_h1b_compares_the_recorded_personality_with_the_one_the_launch_wrote() {
+    let spec = RunSpec::new(Kind::Codex);
+    let pins = codex_pins();
+    let floor = |style: Option<&str>| {
+        row_of(
+            &hermetic_floor(&[codex_record(style)], &codex_inputs(&spec, &pins)),
+            HermeticRow::H1b,
+        )
+    };
+
+    let recorded = floor(Some(metaharness_codex::PERSONALITY));
+    assert_eq!(recorded.verdict, Verdict::Ok, "{}", recorded.detail);
+    assert!(
+        recorded.detail.contains(metaharness_codex::PERSONALITY),
+        "{}",
+        recorded.detail
+    );
+
+    let foreign = floor(Some("friendly"));
+    assert_eq!(foreign.verdict, Verdict::Gap, "{}", foreign.detail);
+    assert!(
+        foreign.detail.contains("friendly")
+            && foreign.detail.contains(metaharness_codex::PERSONALITY),
+        "the gap names both values: {}",
+        foreign.detail
+    );
+
+    // `default` is the word another kind's record uses for its own default. Under a launch that
+    // wrote a value it is just another value, and never the one written.
+    let default = floor(Some("default"));
+    assert_eq!(default.verdict, Verdict::Gap, "{}", default.detail);
+
+    let silent = floor(None);
+    assert_eq!(silent.verdict, Verdict::Unk, "{}", silent.detail);
+    assert!(
+        silent.detail.contains(metaharness_codex::PERSONALITY),
+        "the unk says what the launch wrote and the record did not confirm: {}",
+        silent.detail
+    );
+}
+
+/// A config layer the launch does not control can change what the model is told while the record
+/// still names the personality the launch wrote (amendment a34: a managed
+/// `features.personality = false` still recorded `"pragmatic"`). When the launch attests H1b
+/// unavailable for such a layer, a matching record reads `unk` with that reason, never `ok`; a
+/// record naming another value is still a `gap`.
+#[test]
+fn codex_h1b_is_unk_when_the_launch_attests_a_layer_it_does_not_control() {
+    let spec = RunSpec::new(Kind::Codex);
+    let pins = codex_pins();
+    let why =
+        "the binary also reads /etc/codex/managed_config.toml, which this launch does not control";
+    let layered = |style: &str| {
+        with_record(codex_record(Some(style)), |record| {
+            if let Event::SessionStarted { hermetic, .. } = record {
+                hermetic
+                    .imposed
+                    .retain(|control| control.row != HermeticRow::H1b);
+                hermetic.unavailable.push(UnavailableControl {
+                    row: HermeticRow::H1b,
+                    why: why.to_string(),
+                });
+            }
+        })
+    };
+    let matching = row_of(
+        &hermetic_floor(
+            &[layered(metaharness_codex::PERSONALITY)],
+            &codex_inputs(&spec, &pins),
+        ),
+        HermeticRow::H1b,
+    );
+    assert_eq!(matching.verdict, Verdict::Unk, "{}", matching.detail);
+    assert!(matching.detail.contains(why), "{}", matching.detail);
+    let foreign = row_of(
+        &hermetic_floor(&[layered("friendly")], &codex_inputs(&spec, &pins)),
+        HermeticRow::H1b,
+    );
+    assert_eq!(foreign.verdict, Verdict::Gap, "{}", foreign.detail);
+}
+
+/// A kind whose launch writes no output style keeps the reading it had: the record must name the
+/// default, whatever the value (amendment a34 changes nothing for Claude).
+#[test]
+fn a_launch_that_wrote_no_output_style_still_needs_the_default() {
+    let spec = RunSpec::new(Kind::Claude);
+    let pragmatic = with_record(good_record(), |record| {
+        if let Event::SessionStarted { output_style, .. } = record {
+            *output_style = Some("pragmatic".to_string());
+        }
+    });
+    assert_eq!(
+        verdict_of(
+            &hermetic_floor(&[pragmatic], &inputs(&spec, &pins(), &[])),
+            HermeticRow::H1b
+        ),
+        Verdict::Gap
+    );
+}
+
+/// Amendment a34 (decision D1 = B): H1a, H4 and H5 stay `unk` on Codex, and each row says why — the
+/// pinned binary's rollout carries no such field, and deciding the row from the launch is open
+/// under invariant 3. The adapter's sentence is appended to the floor's own, never substituted.
+#[test]
+fn codex_h1a_h4_and_h5_stay_unk_and_each_says_why() {
+    let spec = RunSpec::new(Kind::Codex);
+    let pins = codex_pins();
+    let rows = hermetic_floor(
+        &[codex_record(Some(metaharness_codex::PERSONALITY))],
+        &codex_inputs(&spec, &pins),
+    );
+    for (which, base) in [
+        (
+            HermeticRow::H1a,
+            "the opening record carries no plugin list",
+        ),
+        (
+            HermeticRow::H4,
+            "the opening record does not say where the credential came from",
+        ),
+        (
+            HermeticRow::H5,
+            "the opening record carries no MCP server list",
+        ),
+    ] {
+        let found = row_of(&rows, which);
+        assert_eq!(
+            found.verdict,
+            Verdict::Unk,
+            "{}: {}",
+            which.id(),
+            found.detail
+        );
+        assert!(
+            found.detail.contains(base),
+            "{}: {}",
+            which.id(),
+            found.detail
+        );
+        let why = metaharness_codex::RECORD_SILENCES
+            .iter()
+            .find(|(row, _)| *row == which)
+            .map(|(_, why)| *why)
+            .expect("the adapter states why");
+        assert!(
+            found.detail.contains(why),
+            "{}: {}",
+            which.id(),
+            found.detail
+        );
+        assert!(found.detail.contains("invariant 3"), "{}", found.detail);
+    }
+    // A strict run on this record is still nobody-found-out, now with H1b decided.
+    assert_eq!(row_of(&rows, HermeticRow::H1b).verdict, Verdict::Ok);
+    assert_eq!(report_with(rows).exit(), RunExit::NoVerdict);
+}
+
+/// A silence is the adapter's statement about a field its record lacks. A record that carries the
+/// field is decided from it, and the sentence is not printed over a verdict it did not reach.
+#[test]
+fn a_silence_is_never_printed_over_a_record_that_carries_the_field() {
+    let spec = RunSpec::new(Kind::Codex);
+    let pins = codex_pins();
+    let carried = with_record(codex_record(Some("pragmatic")), |record| {
+        if let Event::SessionStarted {
+            plugins,
+            mcp_servers,
+            credential_source,
+            ..
+        } = record
+        {
+            *plugins = Some(Vec::new());
+            *mcp_servers = Some(Vec::new());
+            *credential_source = Some("none".to_string());
+        }
+    });
+    let rows = hermetic_floor(&[carried], &codex_inputs(&spec, &pins));
+    for which in [HermeticRow::H1a, HermeticRow::H4, HermeticRow::H5] {
+        let found = row_of(&rows, which);
+        assert_eq!(
+            found.verdict,
+            Verdict::Ok,
+            "{}: {}",
+            which.id(),
+            found.detail
+        );
+        assert!(!found.detail.contains("invariant 3"), "{}", found.detail);
+    }
 }
 
 #[test]

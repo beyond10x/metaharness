@@ -6,11 +6,11 @@ sidebar_position: 2
 
 # The `codex` adapter
 
-Pinned to **0.145.0**. Adapter class: `harness`.
+Pinned to **0.153.4**. Adapter class: `harness`.
 
 ```bash
 metaharness run codex --hermetic -p "…"
-metaharness conformance codex     # 17 vectors, 4 of which run a real process and the real hook
+metaharness conformance codex     # 21 vectors, 4 of which run a real process and the real hook
 metaharness doctor codex
 ```
 
@@ -25,6 +25,31 @@ metaharness doctor codex
 
 `capabilities codex`, `conformance codex` and `doctor codex` all work with **no model and no
 credential**.
+
+`--strict-version` resolves `codex` on the `PATH` the child gets, reads its `--version` before
+anything is written for the child, and refuses one off the pin by name, exit 2 (design amendment
+a34; a run without the flag warns, and H9 reads the version the rollout records).
+
+## The hermetic floor on Codex
+
+`--hermetic strict` on a clean Codex run exits **3**: nobody found out. The rows that read the
+opening record stand like this at 0.153.4 (design amendment a34):
+
+| Row | Verdict | Why |
+|---|---|---|
+| H1b, output style | **`ok`**, when no config layer outside the scratch home exists | The scratch `config.toml` sets `personality = "pragmatic"`, the binary's own default, and the rollout's first `turn_context` records a personality. The row compares the two: another value is `gap`, none is `unk`. The recorded value is the session's record of the setting, not proof of what the model was told — with a managed `features.personality = false` the session still recorded `"pragmatic"` — so when `/etc/codex/config.toml`, `/etc/codex/managed_config.toml`, `/etc/codex/requirements.toml` or, under `--cwd`, a project `.codex/config.toml` exists, the row reads `unk` and names them, and H2 is attested unavailable. |
+| H1a, plugins | `unk` | The rollout lists no plugins, and the scratch home is not shown to be the whole plugin surface: `apps` and `remote_plugin` are on by default. |
+| H4, credential source | `unk` | The rollout does not record which credential the session used. |
+| H5, MCP servers | `unk` | The rollout lists no MCP servers. |
+
+H1a, H4 and H5 are not read from what the launch imposed: that is metaharness's own claim, and a
+row is decided from the vendor's record. Each row prints its reason. Use `--hermetic on` for Codex
+trials.
+
+The personality arrives one record after the opening one, so the adapter holds `session.started`
+until that record and completes it from it. The event order and the timestamps do not change. A
+hook call never waits for it: a hook request that arrives first releases the opening record as it
+stands, and H1b reads `unk` on that run.
 
 ## Declared capabilities
 

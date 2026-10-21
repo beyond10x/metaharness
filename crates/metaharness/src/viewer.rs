@@ -206,12 +206,15 @@ pub fn project_vendor_record(
             )
         }
         VendorSource::CodexRollout => {
+            // The reader holds the opening record until the first turn_context completes it
+            // (amendment a34), so a released event's line is the one the reader names, not the
+            // line that released it.
             let mut reader = metaharness_codex::RolloutReader::new(transcript, attestation);
-            replay(
+            replay_sourced(
                 &mut reader,
                 text,
-                metaharness_codex::RolloutReader::push_line,
-                metaharness_codex::RolloutReader::finish,
+                metaharness_codex::RolloutReader::push_line_sourced,
+                metaharness_codex::RolloutReader::finish_sourced,
             )
         }
         VendorSource::HarnessJson => {
@@ -342,6 +345,29 @@ fn replay<R>(
     let owed = finish(reader);
     record_lines.extend(std::iter::repeat_n(last, owed.len()));
     emissions.extend(owed);
+    (emissions, record_lines)
+}
+
+/// [`replay`] for a reader that says which record line each emission was read from, because it
+/// can release an emission on a later line than the one it read it from (the Codex reader's held
+/// opening record, amendment a34).
+fn replay_sourced<R>(
+    reader: &mut R,
+    text: &str,
+    push: impl Fn(&mut R, &str) -> Vec<(u64, Emission)>,
+    finish: impl Fn(&mut R) -> Vec<(u64, Emission)>,
+) -> (Vec<Emission>, Vec<usize>) {
+    let mut emissions = Vec::new();
+    let mut record_lines = Vec::new();
+    let mut sourced = Vec::new();
+    for line in text.lines() {
+        sourced.extend(push(reader, line));
+    }
+    sourced.extend(finish(reader));
+    for (line, emission) in sourced {
+        record_lines.push(usize::try_from(line).unwrap_or(usize::MAX));
+        emissions.push(emission);
+    }
     (emissions, record_lines)
 }
 

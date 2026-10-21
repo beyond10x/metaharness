@@ -3,8 +3,8 @@
 #![cfg(unix)]
 
 use metaharness_codex::{
-    HookChannelPaths, LaunchContext, LaunchPlan, RolloutReader, config_path, hook_program,
-    hook_program_path, plan_launch, render_hook_response,
+    HookChannelPaths, LaunchContext, LaunchPlan, PERSONALITY, RolloutReader, config_path,
+    hook_program, hook_program_path, plan_launch, render_hook_response,
 };
 use metaharness_protocol::{
     CredentialSource, Decision, DecisionMode, Event, Kind, RunSpec, TranscriptRef,
@@ -232,6 +232,8 @@ fn launch(root: &Path, endpoint: &str, mode: Mode) -> LaunchPlan {
         inputs_digest: None,
         plugins: Vec::new(),
         loopback: None,
+        // A fresh namespace on this machine, where no `/etc/codex` layer exists (a34).
+        config_layers: Vec::new(),
     };
     let plan = plan_launch(&spec, &context).unwrap();
     assert_eq!(plan.credential_copies, []);
@@ -456,6 +458,22 @@ fn driver_case(mode: Mode, prefix: &str, decisions: &str) -> (PathBuf, Provider,
     let vendor = PathBuf::from(
         std::env::var_os("METAHARNESS_NATIVE_CODEX").expect("explicit vendor binary"),
     );
+    let (root, provider, mut command) = driver_world(&vendor, mode, prefix, decisions);
+    let cwd = root.join("work");
+    command.arg("--cwd").arg(&cwd).current_dir(&cwd);
+    (root, provider, command)
+}
+
+/// A fresh evidence root whose `HOME/.local/bin/codex` is `vendor`, a fixture provider, and the
+/// built driver's `run codex` over it with the arguments every driver case shares. The child's
+/// `PATH` is built from that `HOME`, so `vendor` is the binary the spawn and `--strict-version`
+/// both resolve.
+fn driver_world(
+    vendor: &Path,
+    mode: Mode,
+    prefix: &str,
+    decisions: &str,
+) -> (PathBuf, Provider, Command) {
     let driver = PathBuf::from(
         std::env::var_os("METAHARNESS_NATIVE_DRIVER").expect("explicit built metaharness binary"),
     );
@@ -474,7 +492,7 @@ fn driver_case(mode: Mode, prefix: &str, decisions: &str) -> (PathBuf, Provider,
     fs::create_dir_all(home.join(".local/bin")).unwrap();
     fs::create_dir_all(&cwd).unwrap();
     fs::create_dir_all(root.join("tmp")).unwrap();
-    std::os::unix::fs::symlink(&vendor, home.join(".local/bin/codex")).unwrap();
+    std::os::unix::fs::symlink(vendor, home.join(".local/bin/codex")).unwrap();
     let provider = Provider::start(mode);
     let mut command = Command::new(&driver);
     command
@@ -491,12 +509,10 @@ fn driver_case(mode: Mode, prefix: &str, decisions: &str) -> (PathBuf, Provider,
             &provider.endpoint,
             "--prompt",
             "Return the fixture terminal answer without tools.",
-            "--cwd",
         ])
-        .arg(&cwd)
         .arg("--retain-dir")
         .arg(root.join("retained"))
-        .current_dir(&cwd)
+        .current_dir(&root)
         .env_clear()
         .env("HOME", &home)
         .env("PATH", "/usr/local/bin:/usr/bin:/bin")
@@ -504,6 +520,96 @@ fn driver_case(mode: Mode, prefix: &str, decisions: &str) -> (PathBuf, Provider,
         .env("TMPDIR", root.join("tmp"));
 
     (root, provider, command)
+}
+
+/// The verdict line the floor printed for `row`, from the run's retained stderr.
+fn verdict_line(root: &Path, row: &str) -> String {
+    let stderr = fs::read_to_string(root.join("stderr.log")).unwrap();
+    stderr
+        .lines()
+        .find(|line| line.trim_start().starts_with(&format!("{row} ")))
+        .unwrap_or_else(|| panic!("no {row} verdict line in stderr:\n{stderr}"))
+        .to_owned()
+}
+
+/// Amendment a34, end to end through the built driver: a scratch-cwd `--hermetic strict` run on the
+/// pinned binary, with `--strict-version`, reads H1b `ok` from the record — the personality the
+/// launch wrote is the one the first `turn_context` recorded — and still exits 3, because H1a, H4 and
+/// H5 stay `unk` and say why. H2 names only the file the launch wrote.
+#[test]
+#[ignore = "requires explicit vendor and built driver paths; local fixture provider only"]
+fn actual_binary_strict_run_reads_h1b_from_the_record_and_still_exits_three() {
+    let _lease = NATIVE_RUN.lock().unwrap();
+    let vendor = PathBuf::from(
+        std::env::var_os("METAHARNESS_NATIVE_CODEX").expect("explicit vendor binary"),
+    );
+    let (root, provider, mut command) =
+        driver_world(&vendor, Mode::Text, "driver-strict-", "observe");
+    command.args(["--hermetic", "strict", "--strict-version"]);
+    let exit = run_command(command, &root, Mode::Text);
+    let requests = provider.requests.lock().unwrap().clone();
+    fs::write(
+        root.join("requests.json"),
+        serde_json::to_vec_pretty(&requests).unwrap(),
+    )
+    .unwrap();
+    assert_eq!(
+        requests.len(),
+        1,
+        "the pinned binary passed --strict-version"
+    );
+    assert!(requests.iter().all(|r| r["authorization_present"] == false));
+    let events: Vec<Value> = fs::read_to_string(root.join("stdout.jsonl"))
+        .unwrap()
+        .lines()
+        .map(|line| serde_json::from_str(line).unwrap())
+        .collect();
+    assert_eq!(events[0]["event"], "session.started");
+    assert_eq!(events[0]["harness_version"], "0.153.4");
+    assert_eq!(events[0]["output_style"], PERSONALITY);
+    let h1b = verdict_line(&root, "H1b");
+    assert!(h1b.contains(" ok ") && h1b.contains(PERSONALITY), "{h1b}");
+    for row in ["H1a", "H4", "H5"] {
+        let line = verdict_line(&root, row);
+        assert!(line.contains(" unk "), "{line}");
+        assert!(
+            line.contains("0.153.4") && line.contains("invariant 3"),
+            "{row} does not say why it is unk: {line}"
+        );
+    }
+    assert!(verdict_line(&root, "H9").contains(" ok "));
+    assert!(!verdict_line(&root, "H2").contains("hooks.json"));
+    assert_eq!(exit, 3, "strict stays exit 3 on Codex (decision D1 = B)");
+}
+
+/// Amendment a34: `--strict-version` resolves `codex` on the child's own `PATH`, reads its
+/// `--version`, and refuses an off-pin binary by name before anything is written for it or spawned:
+/// the fixture provider is never reached and no event is emitted.
+#[test]
+#[ignore = "requires explicit METAHARNESS_NATIVE_CODEX_OFF_PIN and built driver paths; local fixture provider only"]
+fn actual_binary_strict_version_refuses_an_off_pin_codex_before_the_spawn() {
+    let _lease = NATIVE_RUN.lock().unwrap();
+    let off_pin = PathBuf::from(
+        std::env::var_os("METAHARNESS_NATIVE_CODEX_OFF_PIN").expect("an off-pin codex binary"),
+    );
+    let (root, provider, mut command) =
+        driver_world(&off_pin, Mode::Text, "driver-off-pin-", "observe");
+    command.args(["--hermetic", "strict", "--strict-version"]);
+    let exit = run_command(command, &root, Mode::Text);
+    assert_eq!(
+        exit, 2,
+        "a refusal before the run is metaharness's own exit 2"
+    );
+    assert!(provider.requests.lock().unwrap().is_empty());
+    assert_eq!(fs::read_to_string(root.join("stdout.jsonl")).unwrap(), "");
+    let stderr = fs::read_to_string(root.join("stderr.log")).unwrap();
+    assert!(
+        stderr.contains("--strict-version")
+            && stderr.contains("0.153.4")
+            && stderr.contains("refused before the spawn")
+            && stderr.contains(&root.join("home/.local/bin/codex").display().to_string()),
+        "{stderr}"
+    );
 }
 
 fn assert_driver_events(root: &Path, failed: bool, exit: i32) {
@@ -739,6 +845,21 @@ fn actual_codex_reports_terminal_answer_model_and_failure_from_fixture_provider(
         );
         assert!(requests.iter().all(|r| r["authorization_present"] == false));
         let events = observe(&root, &plan);
+        // Amendment a34: the launch wrote `personality`, the native record's first turn_context
+        // recorded it, and the opening record carries it, on success and on refusal alike — the
+        // turn_context is written before the first provider request.
+        assert!(
+            plan.config
+                .contains(&format!("personality = \"{PERSONALITY}\""))
+        );
+        assert!(
+            matches!(
+                events.first(),
+                Some(Event::SessionStarted { output_style: Some(style), .. }) if style == PERSONALITY
+            ),
+            "the opening record carries the recorded personality: {:?}",
+            events.first()
+        );
         let terminal = events
             .iter()
             .find_map(|e| {

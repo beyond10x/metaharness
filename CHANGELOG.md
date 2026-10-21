@@ -173,8 +173,61 @@ was amended and the amendment is named here.
   ancestor; the walk does not look for those (a33), and `story:claude-h11-memory-walk-shapes`
   (decided: option C) covers them, because looking for them refused every scratch run whose
   `TMPDIR` sits under a `HOME` holding `~/.claude/CLAUDE.md`.
+- `metaharness run codex --hermetic strict` still exits 3, now with **H1b `ok`** (design amendment
+  a34, `story:codex-strict-record-rows`, decision D1 = B: invariant 3 and amendment a13 stand, so no
+  record row is decided from the launch). The scratch `config.toml` sets `personality = "pragmatic"`,
+  the 0.153.4 binary's own default (`metaharness_codex::PERSONALITY`), and H1b compares the
+  personality the rollout's first `turn_context` records with it: `ok` when equal, `gap` when the
+  record names another, `unk` when it names none (`FloorInputs::planned_output_style`). The recorded
+  value is the session's record of the setting, not proof of what the model was told: with a managed
+  `features.personality = false` the session still recorded `"pragmatic"`. A launch that writes no
+  output style (Claude, b10x) reads H1b as before. Native, credential-free, through the built driver:
+  H1b `ok`, H1a, H4 and H5 `unk`, exit 3.
+- The Codex launch looks for the config layers a scratch `CODEX_HOME` does not reach, as the Claude
+  launch looks for managed settings: `/etc/codex/config.toml`, `/etc/codex/managed_config.toml`,
+  `/etc/codex/requirements.toml` (`metaharness_codex::CONFIG_LAYER_PATHS`) and, under `--cwd`, a
+  project `.codex/config.toml` in the cwd and each directory above it up to the nearest `.git`
+  (`LaunchContext::config_layers`). When any exists, H2 and H1b are attested unavailable naming them,
+  and H1b reads `unk` with that reason even when the record names the launch's personality. None
+  exists on the machine this was built on. The check covers file layers: the cloud layer sources the
+  binary names, `cloud_requirements` and `cloud_managed_config`, are not checked, and what they set
+  under a ChatGPT login is unverified; the H1b and H2 claims say so.
+- The Codex opening record is completed from the first `turn_context`. The rollout reader holds
+  `session.started`, and every event after it, from `session_meta` until that record and sets
+  `output_style` from its `personality`; any record other than the preamble ones 0.153.4 writes in
+  between (`task_started`, context messages, `world_state`) releases it unchanged, as does the end of
+  the record. Event order and every timestamp are unchanged; `session.started` arrives a few records
+  later. A hook request never waits for it: one that arrives during the hold releases the opening
+  record at once, without the personality (H1b `unk` on that run), and the call goes the run loop's
+  ordinary way — admitted, decided or deadlined, abandoned on a halt. The hold keeps only
+  `turn.started` and `opaque` events, so the reader's `finish` never returns a call (`Run::wind_up`
+  does not admit what `finish` returns). `metaharness project --from codex-rollout` cites each
+  held event's own record line (`RolloutReader::push_line_sourced`).
+  `fixtures/golden/rollout.expected.jsonl` moves on one line (`output_style` `null` →
+  `"pragmatic"`); three replay vectors are added, so
+  `conformance codex` checks 21 (`contract-result-codex.json`, 18 → 21).
+- H1a, H4 and H5 stay `unk` on Codex and now say why: the 0.153.4 rollout carries no plugin list,
+  credential source or MCP server list, and deciding them from what the launch imposed is open under
+  invariant 3 (`metaharness_codex::RECORD_SILENCES`, appended by the floor through
+  `FloorInputs::record_silences`; it decides nothing).
+- The Codex H2 attestation names only the file the launch writes, `{home}/config.toml`. It named
+  `{home}/hooks.json` as a source the launch wrote, and no launch writes one.
+- `--strict-version` refuses an off-pin Codex binary **before anything is written or spawned**. The
+  Codex launch never read the flag; it now runs the guard built for Claude, made generic
+  (`guard_strict_version`): `codex` resolved on the child's `PATH`, its `--version` read with the
+  plan's environment within 5 seconds, exit 2 when unpinned, unreadable or late. Observed: 0.153.4
+  admitted, codex-cli 0.160.0 refused with nothing reaching the fixture provider.
 
 ### Added
+
+- `docs/research/2026-10-21-codex-0.153.4-record-surface.md`: what the 0.153.4 record carries for
+  the floor, observed credential-free where a run can observe it and labelled unverified otherwise —
+  the default `personality` (`pragmatic`), the record order around the first `turn_context`, the
+  `apps`, `remote_plugin` and `plugins` features on by default in a scratch home, and which config
+  layers decide the recorded personality (`/etc/codex/config.toml` below the scratch file;
+  `/etc/codex/managed_config.toml` and a project's `.codex/config.toml` above it — under `read-only`
+  only a trusted project's, under the `workspace-write` sandbox every `--cwd` launch uses an
+  untrusted one's too).
 
 - metaharness's own tool surface accepts the `tool-contract/1` command names harness maps
   wherever a verb names an entry. `fs.read`, `fs.list`, `fs.glob`, `code.write` and `code.edit`

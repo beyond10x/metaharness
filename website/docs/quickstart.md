@@ -80,8 +80,8 @@ is absent.
 ## 3. Does the seam actually hold?
 
 ```bash
-metaharness conformance claude    # 24 vectors
-metaharness conformance codex     # 17 vectors, 4 of which run a real process and the real hook
+metaharness conformance claude    # 28 vectors
+metaharness conformance codex     # 21 vectors, 4 of which run a real process and the real hook
 ```
 
 Free conformance vectors: no model, no network, no credential.

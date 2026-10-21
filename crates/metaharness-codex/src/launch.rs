@@ -55,6 +55,25 @@ use crate::{ADAPTER_ID, PINNED_VERSIONS};
 /// counterpart of Q10; metaharness closes the window from its own side regardless.
 pub const HOOK_TIMEOUT_SECONDS: u64 = 60;
 
+/// The `personality` the scratch `config.toml` sets, and the value H1b expects the rollout's first
+/// `turn_context.personality` to record (amendment a34).
+///
+/// It is the 0.153.4 binary's own default: a scratch home whose config names none records
+/// `"pragmatic"`, so writing it changes no recorded setting and makes the row comparable with the
+/// record. **The recorded value is the session's record of the setting, not proof of what the
+/// model was told**: a managed `features.personality = false` still recorded `"pragmatic"`, and
+/// the fixture provider's requests carried none of the binary's pragmatic template. Observed
+/// credential-free in `docs/research/2026-10-21-codex-0.153.4-record-surface.md`, with the layers
+/// that change the recorded value: an explicit key here wins over `/etc/codex/config.toml`, and
+/// `/etc/codex/managed_config.toml` or a project's `.codex/config.toml` wins over it — a trusted
+/// project's under `read-only`, and under the `workspace-write` sandbox every `--cwd` launch uses,
+/// an untrusted one's too, with no trust entry. Because a layer can change the instructions without
+/// changing the record, the launch claims H1b only when no such file layer exists
+/// ([`CONFIG_LAYER_PATHS`], `LaunchContext::config_layers`); the cloud layer sources the binary
+/// names (`cloud_requirements`, `cloud_managed_config`) are no file, are not checked, and what they
+/// set under a ChatGPT-plan login is unverified.
+pub const PERSONALITY: &str = "pragmatic";
+
 /// The directory under the scratch root that becomes `CODEX_HOME`.
 const CONFIG_HOME: &str = "codex-home";
 
@@ -225,7 +244,30 @@ pub struct LaunchContext {
     /// caller does the walk and the per-file digests; this function only decides where the copy
     /// goes and whether the run may proceed.
     pub plugins: Vec<PluginTree>,
+    /// The config layers the binary reads outside the scratch `CODEX_HOME` that exist for this
+    /// run, as the caller found them (amendment a34): the machine paths in [`CONFIG_LAYER_PATHS`]
+    /// and a project `.codex/config.toml` in a named cwd's tree. Read there, decided here — the
+    /// same split as the Claude launch's managed settings (a33). Non-empty attests H2 and H1b
+    /// unavailable, naming them.
+    pub config_layers: Vec<PathBuf>,
 }
+
+/// The machine-level config layers codex-cli 0.153.4 names on Linux, read from the binary's
+/// strings (amendment a34). The scratch `CODEX_HOME` reaches none of them: the first is read
+/// beneath the scratch `config.toml`, the second above it — both observed for `personality` — and
+/// the third constrains what the others may set (not driven here).
+pub const CONFIG_LAYER_PATHS: [&str; 3] = [
+    "/etc/codex/config.toml",
+    "/etc/codex/managed_config.toml",
+    "/etc/codex/requirements.toml",
+];
+
+/// What the H1b and H2 claims say about the layers no file check sees (amendment a34): the binary
+/// names the layer sources `cloud_requirements` and `cloud_managed_config`, which are not files.
+const CLOUD_LAYERS_UNCHECKED: &str = "the file layers are what this launch checks: the cloud \
+                                      layer sources the binary names, cloud_requirements and \
+                                      cloud_managed_config, are no file, are not checked, and what \
+                                      they set under a ChatGPT login is unverified";
 
 /// What a started loopback proxy tells the launch, and the whole of it.
 ///
@@ -1061,7 +1103,10 @@ fn build_config(spec: &RunSpec, context: &LaunchContext, hook: &Value) -> String
         sandbox_reason(spec),
         quote(sandbox_mode(spec))
     );
-    // Top-level keys must precede the first table header, or TOML files them under it.
+    // Top-level keys must precede the first table header, or TOML files them under it. The
+    // personality is H1b's: written so the record's turn_context can be compared with it
+    // (amendment a34, [`PERSONALITY`]).
+    let _ = writeln!(document, "personality = {}", quote(PERSONALITY));
     if let Some(effort) = &spec.effort {
         let _ = writeln!(document, "\nmodel_reasoning_effort = {}", quote(effort));
     }
@@ -1222,15 +1267,6 @@ fn attest(
             HermeticRow::H1a,
             plugin_posture(&home.to_string(), plugin_installs),
         ),
-        control_imposed(HermeticRow::H1b, format!("CODEX_HOME={home}")),
-        control_imposed(
-            HermeticRow::H2,
-            format!(
-                "the only config sources are {home}/config.toml and {home}/hooks.json, both \
-                 written by this launch; --ignore-user-config is never passed, because it would \
-                 switch off the file the seam is declared in"
-            ),
-        ),
         control_imposed(
             HermeticRow::H3,
             format!(
@@ -1262,6 +1298,12 @@ fn attest(
             PINNED_VERSIONS.join(", ")
         ),
     )];
+    attest_config_sources(
+        &home.to_string(),
+        &context.config_layers,
+        &mut imposed,
+        &mut unavailable,
+    );
 
     let mut declared = Vec::new();
     attest_cwd(spec, context, &mut imposed, &mut unavailable, &mut declared);
@@ -1307,6 +1349,72 @@ fn attest(
         ambient_inputs: ambient_inputs(spec),
         installed_plugins: installed_plugins(plugin_installs),
     }
+}
+
+/// H1b and H2, which this launch can claim only while no config file layer outside the scratch home
+/// exists for the run (amendment a34, the precedent of a33's managed settings).
+///
+/// The launch writes one config source and the binary reads more: `/etc/codex/config.toml`
+/// beneath it, `/etc/codex/managed_config.toml` above it, `/etc/codex/requirements.toml` over
+/// what either may set, and a project's `.codex/config.toml` above it — trusted, or under the
+/// `workspace-write` sandbox every `--cwd` launch uses, untrusted too. When none exists the
+/// scratch file is the whole of the *file* layers and both rows are claimed. When any exists
+/// neither is: H2 was not excluded, and H1b cannot be read from the record, because such a layer
+/// can change what the model is told while the recorded personality stays the one the launch
+/// wrote — a managed `features.personality = false` still recorded `"pragmatic"` (observed,
+/// 0.153.4). The binary also names the layer sources `cloud_requirements` and
+/// `cloud_managed_config`, which are no file: no check here sees them, and what they set under a
+/// ChatGPT-plan login is unverified. Both claims say so.
+fn attest_config_sources(
+    home: &str,
+    layers: &[PathBuf],
+    imposed: &mut Vec<ImposedControl>,
+    unavailable: &mut Vec<UnavailableControl>,
+) {
+    if layers.is_empty() {
+        imposed.push(control_imposed(
+            HermeticRow::H1b,
+            format!(
+                "CODEX_HOME={home}, and its config.toml sets personality = \"{PERSONALITY}\", the \
+                 pinned binary's own default; the row compares that with the personality the \
+                 rollout's first turn_context records, which is the session's record of the \
+                 setting and not proof of what the model was told; no config file layer outside \
+                 the scratch home exists for this run ({CLOUD_LAYERS_UNCHECKED})"
+            ),
+        ));
+        imposed.push(control_imposed(
+            HermeticRow::H2,
+            format!(
+                "the one config source this launch writes is {home}/config.toml, in a scratch \
+                 CODEX_HOME that holds no operator config, and none of the file layers \
+                 {CONFIG_LAYER_PATHS:?} or a project .codex/config.toml exists for this run \
+                 ({CLOUD_LAYERS_UNCHECKED}); --ignore-user-config is never passed, because it \
+                 would switch off the file the seam is declared in"
+            ),
+        ));
+        return;
+    }
+    let named: Vec<String> = layers
+        .iter()
+        .map(|layer| layer.display().to_string())
+        .collect();
+    unavailable.push(control_unavailable(
+        HermeticRow::H1b,
+        format!(
+            "the scratch config.toml sets personality = \"{PERSONALITY}\", and the binary also \
+             reads {named:?}, which this launch neither writes nor switches off: such a layer can \
+             change what the model is told while the recorded personality stays \"{PERSONALITY}\" \
+             (a managed features.personality = false still recorded it), so the record cannot \
+             show this row"
+        ),
+    ));
+    unavailable.push(control_unavailable(
+        HermeticRow::H2,
+        format!(
+            "this launch writes {home}/config.toml, and the binary also reads {named:?}, which a \
+             scratch CODEX_HOME does not reach and this launch does not switch off"
+        ),
+    ));
 }
 
 /// H1a's `how`: the home is scratch, and what was put in it — with this vendor's caveat attached.
@@ -1519,6 +1627,7 @@ mod tests {
             // No proxy: every case below is a pure plan against a synthetic world, and a loopback
             // endpoint is by construction a port something really bound.
             loopback: None,
+            config_layers: Vec::new(),
         }
     }
 
@@ -1851,6 +1960,131 @@ mod tests {
     #[test]
     fn the_scratch_config_declares_an_empty_mcp_surface() {
         assert!(plan().config.contains("[mcp_servers]"));
+    }
+
+    /// H1b is read from the record against what the launch wrote (amendment a34), so the launch
+    /// writes it: a top-level `personality` key — before the first table header, or TOML files it
+    /// under that table and the vendor never sees it — carrying exactly [`PERSONALITY`], on every
+    /// credential door.
+    #[test]
+    fn the_scratch_config_writes_the_personality_the_floor_compares_the_record_with() {
+        let line = format!("personality = \"{PERSONALITY}\"");
+        let (loopback_spec, loopback_context) = loopback_world();
+        let loopback = plan_launch(&loopback_spec, &loopback_context).expect("plans");
+        for config in [plan().config, named_cwd_plan().config, loopback.config] {
+            let at = config
+                .lines()
+                .position(|candidate| candidate == line)
+                .unwrap_or_else(|| panic!("no {line:?} in\n{config}"));
+            let first_table = config
+                .lines()
+                .position(|candidate| candidate.starts_with('['))
+                .expect("the config has tables");
+            assert!(
+                at < first_table,
+                "{line:?} is filed under a table:\n{config}"
+            );
+            assert_eq!(config.matches("personality").count(), 1, "{config}");
+        }
+    }
+
+    /// The H1b imposition says what the launch wrote and where the row reads it, so the
+    /// attestation and the record can be put side by side (design § 8.3).
+    #[test]
+    fn the_h1b_attestation_names_the_personality_it_wrote() {
+        let plan = plan();
+        let h1b = plan
+            .attestation
+            .imposed
+            .iter()
+            .find(|control| control.row == HermeticRow::H1b)
+            .expect("H1b is imposed");
+        assert!(
+            h1b.how
+                .contains(&format!("personality = \"{PERSONALITY}\"")),
+            "{}",
+            h1b.how
+        );
+        assert!(h1b.how.contains("turn_context"), "{}", h1b.how);
+    }
+
+    /// H2 names only what this launch writes. It once named `{home}/hooks.json` as a source
+    /// "written by this launch", and no launch writes one: the seam is in `config.toml`, and a
+    /// `hooks.json` is a plugin manifest's file (see [`CONFIG_FILE`]).
+    #[test]
+    fn the_h2_attestation_names_only_the_source_this_launch_writes() {
+        let plan = plan();
+        let h2 = plan
+            .attestation
+            .imposed
+            .iter()
+            .find(|control| control.row == HermeticRow::H2)
+            .expect("H2 is imposed");
+        assert!(!h2.how.contains("hooks.json"), "{}", h2.how);
+        assert!(
+            h2.how.contains(
+                &config_path(Path::new("/scratch/run-1"))
+                    .display()
+                    .to_string()
+            ),
+            "{}",
+            h2.how
+        );
+    }
+
+    /// A config layer the binary reads and the scratch home does not reach is a source the launch
+    /// did not exclude and a value it does not control (amendment a34): H2 and H1b are attested
+    /// unavailable, each naming every layer found, and neither is claimed. The paths are handed
+    /// in, so no test reads a real `/etc`.
+    #[test]
+    fn a_config_layer_outside_the_scratch_home_makes_h1b_and_h2_unavailable_by_name() {
+        let layers = vec![
+            PathBuf::from("/etc/codex/managed_config.toml"),
+            PathBuf::from("/work/repo/.codex/config.toml"),
+        ];
+        let mut layered = context();
+        layered.config_layers.clone_from(&layers);
+        let plan = plan_launch(&spec(), &layered).expect("a layer is attested, not refused");
+        for row in [HermeticRow::H1b, HermeticRow::H2] {
+            assert!(
+                !plan.attestation.claims(row),
+                "{} is still claimed",
+                row.id()
+            );
+            let Some(why) = plan
+                .attestation
+                .unavailable
+                .iter()
+                .find(|control| control.row == row)
+                .map(|control| control.why.clone())
+            else {
+                panic!("{} is not attested unavailable", row.id());
+            };
+            for layer in &layers {
+                assert!(
+                    why.contains(&layer.display().to_string()),
+                    "{}: {why}",
+                    row.id()
+                );
+            }
+        }
+        // The launch still writes its personality: the comparison is unchanged, only what the
+        // record can show is.
+        assert!(
+            plan.config
+                .contains(&format!("personality = \"{PERSONALITY}\""))
+        );
+        // With no layer, both rows are claimed as before.
+        let clean = plan_launch(&spec(), &context()).expect("plans");
+        assert!(clean.attestation.claims(HermeticRow::H1b));
+        assert!(clean.attestation.claims(HermeticRow::H2));
+        assert!(
+            clean
+                .attestation
+                .unavailable
+                .iter()
+                .all(|control| control.row != HermeticRow::H1b && control.row != HermeticRow::H2)
+        );
     }
 
     #[test]

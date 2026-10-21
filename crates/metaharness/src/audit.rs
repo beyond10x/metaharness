@@ -53,6 +53,14 @@ pub struct FloorInputs<'a> {
     /// The MCP servers this launch configured, for H5's comparison. Empty on every surface but
     /// `owned`, where it is metaharness's own tool server.
     pub planned_mcp_servers: &'a [String],
+    /// The output style this kind's launch wrote, for H1b's comparison (amendment a34). `Some`
+    /// where the launch writes one — the Codex launch writes `personality` — and the record must
+    /// then name exactly it; `None` where it writes none, and the record must name the default.
+    pub planned_output_style: Option<&'a str>,
+    /// Why this kind's opening record carries no field for a record-asserted row, as the adapter
+    /// states it for its pinned binary (amendment a34). Appended to that row's `unk` detail so the
+    /// row says why it is unknown; it never decides a verdict. Empty for a kind that states none.
+    pub record_silences: &'a [(HermeticRow, &'a str)],
 }
 
 /// One plugin compiled into a pinned vendor binary, as the adapter says that binary's opening
@@ -322,6 +330,16 @@ fn verdict_word(verdict: Verdict) -> &'static str {
     }
 }
 
+/// An `unk` row's detail, with the adapter's statement of why its record is silent on the row
+/// appended when it made one (amendment a34). Appended, never substituted: the floor's own
+/// sentence says what is missing, and the adapter's says why this kind's record lacks it.
+fn silent(base: &str, which: HermeticRow, silences: &[(HermeticRow, &str)]) -> String {
+    match silences.iter().find(|(row, _)| *row == which) {
+        Some((_, why)) => format!("{base}: {why}"),
+        None => base.to_owned(),
+    }
+}
+
 fn row(row: HermeticRow, verdict: Verdict, detail: impl Into<String>) -> RowVerdict {
     RowVerdict {
         row,
@@ -465,7 +483,11 @@ pub fn hermetic_floor(events: &[Event], inputs: &FloorInputs<'_>) -> Vec<RowVerd
         (_, None) => row(
             HermeticRow::H1a,
             Verdict::Unk,
-            "the opening record carries no plugin list, and a missing list is not an empty one",
+            silent(
+                "the opening record carries no plugin list, and a missing list is not an empty one",
+                HermeticRow::H1a,
+                inputs.record_silences,
+            ),
         ),
         (_, Some(loaded)) => plugin_row(
             loaded,
@@ -475,29 +497,83 @@ pub fn hermetic_floor(events: &[Event], inputs: &FloorInputs<'_>) -> Vec<RowVerd
         ),
     });
 
-    // H1b — the output style is the default.
-    rows.push(match (adapter_class.as_str(), output_style.as_deref()) {
-        ("direct_provider", None) => row(
-            HermeticRow::H1b,
-            Verdict::Ok,
-            "the direct-provider loop exposes no output-style setting, so there is no operator style to inherit",
-        ),
-        (_, None) => row(
-            HermeticRow::H1b,
-            Verdict::Unk,
-            "the opening record carries no output style",
-        ),
-        (_, Some("default" | "null" | "")) => row(
-            HermeticRow::H1b,
-            Verdict::Ok,
-            "the output style is the default",
-        ),
-        (_, Some(other)) => row(
-            HermeticRow::H1b,
-            Verdict::Gap,
-            format!("the output style is {other:?}, which is the operator's and not the default"),
-        ),
-    });
+    // H1b — the output style is the default, or exactly what the launch wrote (amendment a34).
+    //
+    // Where the launch writes one — Codex's `personality` — the record has to name that value:
+    // what the launch wrote is metaharness's own claim, so it decides nothing by itself, and a
+    // record that names nothing stays `unk` (invariant 3). Where it writes none, the record has
+    // to name the default, as before.
+    rows.push(
+        match (
+            adapter_class.as_str(),
+            output_style.as_deref(),
+            inputs.planned_output_style,
+        ) {
+            ("direct_provider", None, _) => row(
+                HermeticRow::H1b,
+                Verdict::Ok,
+                "the direct-provider loop exposes no output-style setting, so there is no operator style to inherit",
+            ),
+            (_, None, Some(planned)) => row(
+                HermeticRow::H1b,
+                Verdict::Unk,
+                format!(
+                    "the opening record carries no output style, and {planned:?}, which the launch \
+                     wrote, is not evidence of one"
+                ),
+            ),
+            (_, None, None) => row(
+                HermeticRow::H1b,
+                Verdict::Unk,
+                "the opening record carries no output style",
+            ),
+            // The record names what the launch wrote, but the launch attested a layer it does not
+            // control: such a layer can change what the model is told while the recorded value
+            // stays the launch's (a34), so the match shows nothing and the row is `unk`.
+            (_, Some(observed), Some(planned)) if observed == planned => match hermetic
+                .unavailable
+                .iter()
+                .find(|control| control.row == HermeticRow::H1b)
+            {
+                Some(unavailable) => row(
+                    HermeticRow::H1b,
+                    Verdict::Unk,
+                    format!(
+                        "the record's output style is {observed:?}, which is what the launch \
+                         wrote, and the launch attested H1b unavailable: {}",
+                        unavailable.why
+                    ),
+                ),
+                None => row(
+                    HermeticRow::H1b,
+                    Verdict::Ok,
+                    format!(
+                        "the record's output style is {observed:?}, which is what the launch wrote"
+                    ),
+                ),
+            },
+            (_, Some(observed), Some(planned)) => row(
+                HermeticRow::H1b,
+                Verdict::Gap,
+                format!(
+                    "the launch wrote {planned:?} and the record's output style is {observed:?}, \
+                     which is not what the launch wrote"
+                ),
+            ),
+            (_, Some("default" | "null" | ""), None) => row(
+                HermeticRow::H1b,
+                Verdict::Ok,
+                "the output style is the default",
+            ),
+            (_, Some(other), None) => row(
+                HermeticRow::H1b,
+                Verdict::Gap,
+                format!(
+                    "the output style is {other:?}, which is the operator's and not the default"
+                ),
+            ),
+        },
+    );
 
     // H2 — settings sources excluded. Launch, and advisory.
     rows.push(attested(HermeticRow::H2, hermetic));
@@ -510,7 +586,11 @@ pub fn hermetic_floor(events: &[Event], inputs: &FloorInputs<'_>) -> Vec<RowVerd
         None => row(
             HermeticRow::H4,
             Verdict::Unk,
-            "the opening record does not say where the credential came from",
+            silent(
+                "the opening record does not say where the credential came from",
+                HermeticRow::H4,
+                inputs.record_silences,
+            ),
         ),
         // H4 asks one question — **was an API key in use, and was one declared?** — and it is
         // deliberately not "does the record name the credential source the spec named".
@@ -599,8 +679,12 @@ pub fn hermetic_floor(events: &[Event], inputs: &FloorInputs<'_>) -> Vec<RowVerd
         None => row(
             HermeticRow::H5,
             Verdict::Unk,
-            "the opening record carries no MCP server list, which is unk and never zero: a \
-             server the session cannot authenticate to still exists and is still named",
+            silent(
+                "the opening record carries no MCP server list, which is unk and never zero: a \
+                 server the session cannot authenticate to still exists and is still named",
+                HermeticRow::H5,
+                inputs.record_silences,
+            ),
         ),
         Some(servers) => {
             let mut observed: Vec<&str> = servers
@@ -1052,6 +1136,8 @@ impl crate::run::Run {
                 builtin_plugins: &launch.builtin_plugins,
                 endpoint_key_posture: launch.endpoint_key_posture,
                 planned_mcp_servers: &launch.planned_mcp_servers,
+                planned_output_style: launch.planned_output_style,
+                record_silences: launch.record_silences,
             },
         )
     }

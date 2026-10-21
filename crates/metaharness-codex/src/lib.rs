@@ -65,10 +65,11 @@ pub mod conformance;
 pub use bridge::{CodexSeam, CodexSeams, hook_request_line};
 pub use hook::{HOOK_WAIT_SECONDS, HookChannelPaths, hook_program};
 pub use launch::{
-    CodexLogin, CredentialCopy, HOOK_TIMEOUT_SECONDS, LOOPBACK_ENV_KEY, LaunchContext, LaunchPlan,
-    LaunchRefusal, LoopbackParams, child_path, config_path, hook_program_path, plan_launch,
+    CONFIG_LAYER_PATHS, CodexLogin, CredentialCopy, HOOK_TIMEOUT_SECONDS, LOOPBACK_ENV_KEY,
+    LaunchContext, LaunchPlan, LaunchRefusal, LoopbackParams, PERSONALITY, child_path, config_path,
+    hook_program_path, plan_launch,
 };
-pub use rollout::RolloutReader;
+pub use rollout::{RECORD_SILENCES, RolloutReader};
 pub use seam::{
     HookInput, capabilities, governed_shell_command, parse_hook_input, render_hook_response,
     render_operation,
