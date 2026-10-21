@@ -52,10 +52,10 @@ pub use envelope::{
     StagedExecutable, assess_envelope,
 };
 pub use event::{
-    CloseReason, DecidedBy, DecisionCensus, Emission, Event, FinalAnswer, McpServerRef,
-    ModelObservationScope, ObservedModel, PermissionDenial, PluginRef, ProcessTermination,
-    RateLimitInfo, Seam, StepOutcome, StreamCompleteness, TranscriptRef, Usage, WithheldTool,
-    stream_completeness, warning_code,
+    CloseReason, ContextChannel, ContextFile, DecidedBy, DecisionCensus, Emission, Event,
+    FinalAnswer, McpServerRef, ModelObservationScope, ObservedModel, PermissionDenial, PluginRef,
+    ProcessTermination, RateLimitInfo, Seam, StepOutcome, StreamCompleteness, TranscriptRef, Usage,
+    WithheldTool, stream_completeness, warning_code,
 };
 pub use frame::{
     Digest, EntityList, EvidenceLine, FRAME_FORMAT, Frame, FrameDocError, Handoff, Line, NodeRef,
@@ -77,7 +77,13 @@ pub use projection::{
     CONTROL_PLANE_EVENTS, IrFamily, ProjectionReport, ir_family, project, required_ir_fields,
 };
 pub use seam::{HarnessSeam, SeamFactory};
-pub use spec::{CredentialSource, DecisionMode, Kind, RunSpec, ScopeAnnounce, ToolSurface};
+pub use spec::{
+    ARGUMENT_BYTES_MAX, CONTEXT_BYTES_MAX, CONTEXT_FILES_MAX, CONTEXT_FRAMING_MAX,
+    ContextContentError, ContextPathError, CredentialSource, DecisionMode, DeclaredContextFile,
+    Kind, RunSpec, ScopeAnnounce, ToolSurface, argument_fits, argument_too_long, context_cost,
+    context_matches_declaration, context_path, oversized_argument, render_context_files,
+    with_context_files,
+};
 pub use trace_ir::{
     AdapterRef, AssistantRequest, CLOSED_FAMILY, IR_ADAPTER, IR_FORMAT, MetaharnessBlock,
     StreamClose, TraceIrDocument, TraceIrEvent, UNK_FAMILY, UNK_REASON, parse_timestamp_ms,

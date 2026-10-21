@@ -77,6 +77,7 @@ an expectation kind that becomes undecidable.**
 | `harness_version` | H9 — the version *observed*, against which the pin is checked. |
 | `inputs_digest` | H10 |
 | `hermetic` | metaharness's own attestation. **Not evidence** — it sits beside the vendor's record so a reader can notice when the two disagree. |
+| `context_files` | Every file handed over with `--context`: `path`, `sha256` and `bytes` of the bytes rendered, and the `channel` it reached the harness through — `system-prompt` (Claude Code, through `--append-system-prompt`; b10x, whose loop renders the file into its standing instruction under `trust="operator"`), `user-prompt` (codex) — in the declared order. metaharness's own record of what it read, never the vendor's; the channel shows which text gained system-prompt authority. **Absent when none was declared** — additive, so absence conceals nothing (design amendment a35). |
 
 ## `session.ended` keeps two denial counts apart
 

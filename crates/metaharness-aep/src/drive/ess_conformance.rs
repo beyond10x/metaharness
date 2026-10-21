@@ -131,6 +131,240 @@ fn scratch_cwd_plan(input: &Value) -> Observed {
     )
 }
 
+/// Run git for the fixture tree with no operator configuration.
+fn fixture_git(directory: &Path, args: &[&str]) {
+    let status = Process::new("git")
+        .current_dir(directory)
+        .env("GIT_CONFIG_NOSYSTEM", "1")
+        .env("GIT_CONFIG_GLOBAL", "/dev/null")
+        .args(args)
+        .status()
+        .expect("git is a gate prerequisite");
+    assert!(status.success(), "git {args:?}");
+}
+
+/// The two tracked files amendment a35's accepted probe hands over.
+const CONTEXT_FIXTURE_FILES: [(&str, &str); 2] = [
+    ("todo.py", "def add(items, item):\n    items.append(item)\n"),
+    (
+        "tests/test_todo.py",
+        "from todo import add\n\n\ndef test_add():\n    add([], 1)\n",
+    ),
+];
+
+/// The tree amendment a35's probes run in, and what the probe declares: `work/`, whose `.git` is a
+/// gitfile naming the sibling `gitdir/` — the shape an embedder's scratch copy has — holding the
+/// two tracked files, a tracked symbolic link, an untracked file, and whatever the probe adds.
+fn context_fixture(probe: &str) -> (tempfile::TempDir, PathBuf, Vec<PathBuf>) {
+    use std::os::unix::ffi::OsStrExt as _;
+    let root = tempfile::tempdir().unwrap();
+    let work = root.path().join("work");
+    let gitdir = root.path().join("gitdir");
+    fixture_git(
+        root.path(),
+        &[
+            "init",
+            "--quiet",
+            "--separate-git-dir",
+            gitdir.to_str().unwrap(),
+            work.to_str().unwrap(),
+        ],
+    );
+    assert!(work.join(".git").is_file(), "the copy's .git is a gitfile");
+    fs::create_dir(work.join("tests")).unwrap();
+    for (path, text) in CONTEXT_FIXTURE_FILES {
+        fs::write(work.join(path), text).unwrap();
+    }
+    std::os::unix::fs::symlink("todo.py", work.join("link.py")).unwrap();
+    fs::write(work.join("untracked.txt"), "not in the index\n").unwrap();
+    let mut tracked: Vec<String> = vec![
+        "todo.py".into(),
+        "tests/test_todo.py".into(),
+        "link.py".into(),
+    ];
+    let declared: Vec<PathBuf> = match probe {
+        "tracked" | "undirected" => CONTEXT_FIXTURE_FILES
+            .iter()
+            .map(|(path, _)| PathBuf::from(path))
+            .collect(),
+        "empty-path" => vec![PathBuf::new()],
+        "absolute" => vec![work.join("todo.py")],
+        "climbing" => vec!["tests/../todo.py".into()],
+        "non-utf8-path" => vec![PathBuf::from(std::ffi::OsStr::from_bytes(b"bad-\xff.txt"))],
+        "symlink" => vec!["link.py".into()],
+        "irregular" => vec!["tests".into()],
+        "absent" => vec!["absent.py".into()],
+        "not-text" => {
+            fs::write(work.join("blob.bin"), [0xff_u8, 0xfe, 0x00, 0x41]).unwrap();
+            tracked.push("blob.bin".into());
+            vec!["blob.bin".into()]
+        }
+        "untracked" => vec!["untracked.txt".into()],
+        "over-count" => {
+            let names: Vec<String> = (0..=metaharness::protocol::CONTEXT_FILES_MAX)
+                .map(|index| format!("f{index:02}.txt"))
+                .collect();
+            for name in &names {
+                fs::write(work.join(name), "x\n").unwrap();
+            }
+            tracked.extend(names.iter().cloned());
+            names.into_iter().map(PathBuf::from).collect()
+        }
+        "over-bytes" => {
+            let big = "y".repeat(metaharness::protocol::CONTEXT_BYTES_MAX);
+            fs::write(work.join("big.txt"), big).unwrap();
+            tracked.push("big.txt".into());
+            vec!["big.txt".into()]
+        }
+        other => panic!("unsupported context file probe {other}"),
+    };
+    let mut add = vec!["add".to_owned(), "--".to_owned()];
+    add.extend(tracked);
+    fixture_git(&work, &add.iter().map(String::as_str).collect::<Vec<_>>());
+    (root, work, declared)
+}
+
+/// One kind's start over the fixture: the opening record's `context_files`, or the outcome name of
+/// the refusal. A refusal must spawn nothing and name a declared path.
+fn context_start(
+    kind: metaharness::protocol::Kind,
+    work: Option<&Path>,
+    declared: &[PathBuf],
+) -> Result<Vec<metaharness::protocol::ContextFile>, &'static str> {
+    use metaharness::protocol::{CredentialSource, DecisionMode, Event, Kind};
+    use metaharness::{
+        ContextRefusal, Input, Metaharness, Refusal, ScriptedLog, ScriptedRunner, ScriptedSeams,
+    };
+    let mut builder = Metaharness::new(kind).with_credentials(CredentialSource::None);
+    if kind == Kind::B10x {
+        builder = builder
+            .with_decisions(DecisionMode::Observe)
+            .with_model_endpoint("http://127.0.0.1:1")
+            .with_model("ess-fixture");
+    }
+    if let Some(work) = work {
+        builder = builder.with_cwd(work).with_scratch_cwd();
+    }
+    for path in declared {
+        builder = builder.with_context(path);
+    }
+    let opening = r#"{"emit":"session.started","harness_version":"0.0.0"}"#;
+    let closing = r#"{"emit":"session.ended","is_error":false,"subtype":"success"}"#;
+    let log = ScriptedLog::new();
+    let mut runner = ScriptedRunner::of_lines([opening, closing], log.clone());
+    match builder.start_with(
+        Input::Prompt("ess".to_owned()),
+        &mut runner,
+        &mut ScriptedSeams,
+    ) {
+        Ok(mut run) => {
+            run.drain().unwrap();
+            assert_eq!(log.spawns(), 1, "{kind:?}");
+            Ok(run
+                .events()
+                .iter()
+                .find_map(|event| match event {
+                    Event::SessionStarted { context_files, .. } => Some(context_files.clone()),
+                    _ => None,
+                })
+                .unwrap_or_default())
+        }
+        Err(refusal) => {
+            assert_eq!(log.spawns(), 0, "{kind:?}: a refusal spawns nothing");
+            let text = refusal.to_string();
+            let Refusal::ContextFile { path, why } = refusal else {
+                panic!("{kind:?}: not a context refusal: {text}");
+            };
+            assert!(
+                declared.contains(&path),
+                "{kind:?} names a path that was not declared: {text}"
+            );
+            // Exhaustive and without a wildcard: a refusal production adds without an outcome in
+            // the domain fails to compile here (correction round 2).
+            Err(match why {
+                ContextRefusal::WithoutCwd => "context-without-cwd",
+                ContextRefusal::Empty => "empty-path-refused",
+                ContextRefusal::Absolute => "absolute-path-refused",
+                ContextRefusal::Escapes => "climbing-path-refused",
+                ContextRefusal::PathNotUtf8 => "non-utf8-path-refused",
+                ContextRefusal::Symlink => "symlink-refused",
+                ContextRefusal::NotRegularFile => "irregular-file-refused",
+                ContextRefusal::Unreadable { .. } => "unreadable-file-refused",
+                ContextRefusal::NotText { .. } => "not-text-refused",
+                ContextRefusal::Untracked { .. } => "untracked-file-refused",
+                ContextRefusal::CountCap { .. } => "count-cap-refused",
+                ContextRefusal::ByteCap { .. } => "byte-cap-refused",
+            })
+        }
+    }
+}
+
+/// Amendment a35: one declaration per probe, started on **all three kinds** over the scripted
+/// runner in the tree [`context_fixture`] made. A refusal must reach every kind before the spawn
+/// with the same reason; an accepted declaration is read off each run's
+/// `session.started.context_files`, every digest compared with the tree's own bytes. The outcome is
+/// derived from what was observed, never from the probe, so a kind that disagrees fails by name.
+fn context_files_plan(input: &Value) -> Observed {
+    use metaharness::protocol::{Digest, Kind};
+    let probe = input["probe"].as_str().unwrap();
+    let (_root, work, declared) = context_fixture(probe);
+    let work = (probe != "undirected").then_some(work.as_path());
+    let mut outcomes = Vec::new();
+    let mut recorded = Vec::new();
+    for kind in [Kind::Claude, Kind::Codex, Kind::B10x] {
+        match context_start(kind, work, &declared) {
+            Ok(listed) => {
+                outcomes.push("tracked-files-recorded");
+                recorded.push(listed);
+            }
+            Err(outcome) => outcomes.push(outcome),
+        }
+    }
+    outcomes.dedup();
+    let [outcome] = outcomes.as_slice() else {
+        return checked(false, "", &format!("kinds-disagree:{outcomes:?}"), "");
+    };
+    let error = match *outcome {
+        "tracked-files-recorded" => {
+            let digests_match = recorded.iter().all(|listed| {
+                listed.len() == CONTEXT_FIXTURE_FILES.len()
+                    && listed
+                        .iter()
+                        .zip(CONTEXT_FIXTURE_FILES)
+                        .all(|(entry, (path, text))| {
+                            entry.path == path
+                                && entry.sha256 == Digest::of(text.as_bytes())
+                                && entry.bytes == text.len() as u64
+                        })
+            });
+            let files = recorded
+                .iter()
+                .map(Vec::len)
+                .reduce(|left, right| if left == right { left } else { 0 })
+                .unwrap_or(0);
+            return event(
+                outcome,
+                "metaharness.workspace.ContextFilesRecorded",
+                json!({"files": files, "kinds": recorded.len(), "digests_match": digests_match}),
+            );
+        }
+        "context-without-cwd" => "metaharness.workspace.ContextWithoutDirectory",
+        "empty-path-refused" => "metaharness.workspace.ContextPathEmpty",
+        "absolute-path-refused" => "metaharness.workspace.ContextPathAbsolute",
+        "climbing-path-refused" => "metaharness.workspace.ContextPathEscapes",
+        "non-utf8-path-refused" => "metaharness.workspace.ContextPathNotUtf8",
+        "symlink-refused" => "metaharness.workspace.ContextSymlink",
+        "irregular-file-refused" => "metaharness.workspace.ContextNotRegularFile",
+        "unreadable-file-refused" => "metaharness.workspace.ContextUnreadable",
+        "not-text-refused" => "metaharness.workspace.ContextNotText",
+        "untracked-file-refused" => "metaharness.workspace.ContextUntracked",
+        "count-cap-refused" => "metaharness.workspace.ContextCountCap",
+        "byte-cap-refused" => "metaharness.workspace.ContextByteCap",
+        other => unreachable!("{other}"),
+    };
+    checked(false, "", outcome, error)
+}
+
 fn process_write_plan(input: &Value) -> Observed {
     use metaharness::protocol::{CredentialSource, DecisionMode, Kind};
     use metaharness::{Input, Metaharness, ScriptedLog, ScriptedRunner};
@@ -780,6 +1014,7 @@ fn sample_event(wire: &str) -> Event {
             offered_tools: None,
             available_operations: None,
             withheld: None,
+            context_files: Vec::new(),
             slash_commands: None,
             skills: None,
             agents: None,
@@ -1463,6 +1698,7 @@ fn execute(command: &str, input: &Value) -> Observed {
         "metaharness.session.CloseUnsteeredStream" => closure(input),
         "metaharness.workspace.DeclareProcessWrites" => process_write_plan(input),
         "metaharness.workspace.DeclareScratchWorkingDirectory" => scratch_cwd_plan(input),
+        "metaharness.workspace.DeclareContextFiles" => context_files_plan(input),
         "metaharness.workspace.CheckSelectedName" => checked(
             metaharness_b10x::workspace_component_is_adoptable(input["name"].as_str().unwrap()),
             "eligible-component",
@@ -1770,7 +2006,7 @@ fn ess_generated_scenarios_drive_production_targets() {
     if external.is_none() {
         assert_eq!(
             scenarios.len(),
-            90,
+            103,
             "review and update coverage deliberately"
         );
         assert_eq!(
@@ -1784,6 +2020,7 @@ fn ess_generated_scenarios_drive_production_targets() {
             "CheckSelectedName",
             "DeclareProcessWrites",
             "DeclareScratchWorkingDirectory",
+            "DeclareContextFiles",
             "CheckFiniteTerms",
             "CheckUncappedAuthorization",
             "ReadSealedFrame",

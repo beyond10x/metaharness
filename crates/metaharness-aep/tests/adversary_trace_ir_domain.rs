@@ -106,6 +106,7 @@ fn sample_event(wire: &str) -> Event {
             offered_tools: None,
             available_operations: None,
             withheld: None,
+            context_files: Vec::new(),
             slash_commands: None,
             skills: None,
             agents: None,

@@ -68,6 +68,17 @@ pub use vectors::{CONTRACT_OBLIGATIONS, conformance_vectors};
 /// What this adapter calls itself on the wire.
 pub const ADAPTER_ID: &str = "b10x";
 
+/// The channel `--context` files reach the loop through: the system prompt (design amendment a35,
+/// correction round 2).
+///
+/// The adapter hands each file to the loop's own `--context`, and the loop at [`HARNESS_REVISION`]
+/// renders it into its standing instruction — the instruction its wire codecs send as the system
+/// prompt — as a `<context kind="provided_context" trust="operator" source="…">` layer it wraps
+/// itself, with none of metaharness's reference-data preamble. So the file gains system-prompt
+/// authority, as on Claude Code, and the record says so.
+pub const CONTEXT_CHANNEL: metaharness_protocol::ContextChannel =
+    metaharness_protocol::ContextChannel::SystemPrompt;
+
 /// Not `harness`, and **the protocol already had the word**.
 ///
 /// `AdapterClass::DirectProvider` is documented as *"the embedder holds the conversation and calls

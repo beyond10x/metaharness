@@ -79,6 +79,12 @@ pub use vectors::{CONTRACT_OBLIGATIONS, conformance_vectors};
 /// This adapter's id, as it appears in `session.started` and on the command line.
 pub const ADAPTER_ID: &str = "codex";
 
+/// The channel `--context` files reach codex through: inline in the prompt, ahead of the task
+/// (design amendment a35). `codex exec` 0.153.4 expands no `@path` mention there (relayed
+/// measurement, 2026-10-20).
+pub const CONTEXT_CHANNEL: metaharness_protocol::ContextChannel =
+    metaharness_protocol::ContextChannel::UserPrompt;
+
 /// The vendor versions this adapter was written against (design § 8.4 O1).
 ///
 /// One entry, because the rollout format is not a stable public schema: a verdict that changed

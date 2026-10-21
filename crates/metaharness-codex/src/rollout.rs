@@ -357,6 +357,7 @@ impl RolloutReader {
             // A rollout's `session_meta` names no tool the run wanted and did not get; the vendor
             // has no such record. `None` is *it did not say*, never *nothing was withheld*.
             withheld: None,
+            context_files: Vec::new(),
             adapter: ADAPTER_ID.to_string(),
             adapter_class: "harness".to_string(),
             harness_version: version.clone(),

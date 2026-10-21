@@ -312,8 +312,8 @@ impl Metaharness {
         self
     }
 
-    /// One more file this run is given rather than has to find. `b10x` only — see
-    /// [`RunSpec::context`].
+    /// One more file this run is given rather than has to find, relative to the `--cwd` tree.
+    /// Every kind — see [`RunSpec::context`].
     #[must_use]
     pub fn with_context(mut self, file: impl Into<PathBuf>) -> Self {
         self.spec.context.push(file.into());
@@ -535,6 +535,11 @@ fn start_b10x(
             ),
         });
     }
+    // Read beneath the tree before anything is planned (amendment a35), and handed to the loop as
+    // metaharness's copy of the digested bytes: the loop's own `--context` reads a path, and the
+    // tree's file could change between this read and that one.
+    let context_files = crate::context::read_declared(&spec, &cwd)?;
+    let handed = crate::context::write_copies(scratch.path(), &context_files)?;
     let transcript_path = scratch.path().join("transcript.jsonl");
     let run_id = run_id(&spec);
 
@@ -551,7 +556,7 @@ fn start_b10x(
     let mut attestation = metaharness_protocol::HermeticAttestation::none(spec.hermetic);
     attestation.decisions = DecisionMode::Observe;
 
-    let mut argv = metaharness_b10x::argv(&b10x_launch(&spec, &cwd)?);
+    let mut argv = metaharness_b10x::argv(&b10x_launch(&spec, &cwd, &handed)?);
     let home = std::env::var("HOME").ok();
     let config_home = scratch.path().join("config");
     let mut env = metaharness_b10x::base_environment(home.as_deref(), &config_home);
@@ -743,6 +748,10 @@ fn start_b10x(
             .map(ToString::to_string)
             .collect(),
         transcript,
+        context_files: context_files
+            .iter()
+            .map(|file| file.record(metaharness_b10x::CONTEXT_CHANNEL))
+            .collect(),
     };
 
     Ok(Run::new(RunParts {
@@ -819,6 +828,7 @@ fn guard_b10x_decision_mode(capabilities: &Capabilities, spec: &RunSpec) -> Resu
     })
 }
 
+#[allow(clippy::too_many_lines)]
 fn start_claude(
     spec: RunSpec,
     credentials: Option<PathBuf>,
@@ -836,6 +846,13 @@ fn start_claude(
 
         let scratch = tempfile::TempDir::new()?;
         let cwd = resolve_cwd(&spec, scratch.path())?;
+        // Read once, beneath the tree, before the proxy starts (amendment a35); the plan renders
+        // these bytes and the record digests the same ones.
+        let context_files = crate::context::read_declared(&spec, &cwd)?;
+        let context_records: Vec<_> = context_files
+            .iter()
+            .map(|file| file.record(metaharness_claude::CONTEXT_CHANNEL))
+            .collect();
         let transcript_path = scratch.path().join("transcript.jsonl");
         let run_id = run_id(&spec);
 
@@ -845,6 +862,7 @@ fn start_claude(
         let loopback = loopback_for(&spec, credentials.as_deref(), &run_id)?;
 
         let context = metaharness_claude::LaunchContext {
+            context_files,
             scratch_root: scratch.path().to_path_buf(),
             cwd: cwd.clone(),
             credentials_file: credentials,
@@ -936,6 +954,7 @@ fn start_claude(
                 .map(ToString::to_string)
                 .collect(),
             transcript,
+            context_files: context_records,
         };
 
         Ok(Run::new(RunParts {
@@ -1091,6 +1110,7 @@ fn start_loopback(
 /// base URL from its environment, codex takes a `model_providers` entry from the scratch
 /// `config.toml` — and **which logins are routed**: a ChatGPT-plan custody is refused by the codex
 /// launch plan by name, because V-LP6 is unanswered (see `docs/design/loopback-provider-v0.1.md`).
+#[allow(clippy::too_many_lines)]
 fn start_codex(
     spec: RunSpec,
     credentials: Option<PathBuf>,
@@ -1107,6 +1127,12 @@ fn start_codex(
 
     let scratch = tempfile::TempDir::new()?;
     let cwd = resolve_cwd(&spec, scratch.path())?;
+    // As on the claude path (amendment a35): read once, rendered and digested from these bytes.
+    let context_files = crate::context::read_declared(&spec, &cwd)?;
+    let context_records: Vec<_> = context_files
+        .iter()
+        .map(|file| file.record(metaharness_codex::CONTEXT_CHANNEL))
+        .collect();
     let transcript_path = scratch.path().join("rollout.jsonl");
     let run_id = run_id(&spec);
 
@@ -1117,6 +1143,7 @@ fn start_codex(
     let loopback = loopback_for(&spec, credentials.as_deref(), &run_id)?;
 
     let context = metaharness_codex::LaunchContext {
+        context_files,
         scratch_root: scratch.path().to_path_buf(),
         cwd: cwd.clone(),
         credentials_file: credentials,
@@ -1204,6 +1231,7 @@ fn start_codex(
             .map(ToString::to_string)
             .collect(),
         transcript,
+        context_files: context_records,
     };
 
     Ok(Run::new(RunParts {
@@ -1678,6 +1706,9 @@ pub fn check_spec(spec: &RunSpec) -> Result<(), Refusal> {
                 .to_owned(),
         });
     }
+    // `--context` on every kind (amendment a35): what a declaration can be refused for before
+    // anything is read. The read itself, beneath the resolved tree, is each start's.
+    crate::context::check_declared(spec)?;
     if !spec.process_write_subtree.is_empty() {
         if spec.kind != Kind::B10x {
             return Err(Refusal::Launch {
@@ -1738,11 +1769,9 @@ pub fn check_spec(spec: &RunSpec) -> Result<(), Refusal> {
             ),
         });
     }
-    // A scope and a preloaded context reach a vendor arm through the frame it is already sealed
-    // into. See the variant.
-    if (!spec.write_scope.is_empty()
-        || !spec.context.is_empty()
-        || spec.scope_announce == ScopeAnnounce::Silent)
+    // A scope reaches a vendor arm through the frame it is already sealed into. See the variant.
+    // `--context` is no longer here: amendment a35 gave it every kind.
+    if (!spec.write_scope.is_empty() || spec.scope_announce == ScopeAnnounce::Silent)
         && spec.kind != Kind::B10x
     {
         return Err(Refusal::ScopeUnsupported { kind: spec.kind });
@@ -1843,9 +1872,13 @@ fn b10x_credential(
 /// all here. Refusing it makes the arm say so once; accepting it would launch a run with no
 /// credential under a flag that claims one, which is the failure this whole codebase is built to
 /// avoid. `none` and `api-key` are the two that mean something.
+///
+/// `context` is where metaharness wrote its copy of each declared file (amendment a35), never the
+/// spec's own paths: the loop is handed the bytes that were digested.
 fn b10x_launch(
     spec: &RunSpec,
     cwd: &std::path::Path,
+    context: &[PathBuf],
 ) -> Result<metaharness_b10x::B10xLaunch, Refusal> {
     let refuse = |detail: &str| Refusal::Launch {
         detail: detail.to_owned(),
@@ -1928,7 +1961,7 @@ fn b10x_launch(
     if spec.scope_announce == ScopeAnnounce::Silent {
         launch = launch.with_scope_silent();
     }
-    for file in &spec.context {
+    for file in context {
         launch = launch.with_context(file);
     }
     if let Some(turns) = spec.max_turns {
@@ -3306,7 +3339,7 @@ mod b10x_launch_tests {
         spec.model_wire = Some("anthropic-messages".to_owned());
 
         let argv = metaharness_b10x::argv(
-            &b10x_launch(&spec, std::path::Path::new("/work")).expect("planned"),
+            &b10x_launch(&spec, std::path::Path::new("/work"), &[]).expect("planned"),
         );
         let after = |flag: &str| {
             argv.iter()
@@ -3342,7 +3375,7 @@ mod b10x_launch_tests {
             spec.credentials = CredentialSource::None;
             spec
         };
-        let said = |spec: &RunSpec| match b10x_launch(spec, std::path::Path::new("/work")) {
+        let said = |spec: &RunSpec| match b10x_launch(spec, std::path::Path::new("/work"), &[]) {
             Err(Refusal::Launch { detail }) => detail,
             other => panic!("expected a refusal, got {other:?}"),
         };
@@ -3424,7 +3457,9 @@ mod b10x_launch_tests {
     }
 
     fn argv_of(spec: &RunSpec) -> Vec<String> {
-        metaharness_b10x::argv(&b10x_launch(spec, std::path::Path::new("/work")).expect("planned"))
+        metaharness_b10x::argv(
+            &b10x_launch(spec, std::path::Path::new("/work"), &[]).expect("planned"),
+        )
     }
 
     fn value_after(argv: &[String], flag: &str) -> Option<String> {
@@ -3493,7 +3528,7 @@ mod b10x_launch_tests {
         // copy. Accepting it would start a run with no credential under a flag claiming one.
         let mut spec = spec();
         spec.credentials = CredentialSource::OperatorLogin;
-        let refusal = b10x_launch(&spec, std::path::Path::new("/work")).expect_err("refused");
+        let refusal = b10x_launch(&spec, std::path::Path::new("/work"), &[]).expect_err("refused");
         let said = refusal.to_string();
         assert!(said.contains("--credentials none"), "{said}");
         assert!(said.contains("--credentials api-key"), "{said}");
@@ -3505,14 +3540,14 @@ mod b10x_launch_tests {
         // time the flag was forgotten.
         let mut without_endpoint = spec();
         without_endpoint.model_endpoint = None;
-        let said = b10x_launch(&without_endpoint, std::path::Path::new("/work"))
+        let said = b10x_launch(&without_endpoint, std::path::Path::new("/work"), &[])
             .expect_err("refused")
             .to_string();
         assert!(said.contains("--model-endpoint"), "{said}");
 
         let mut without_model = spec();
         without_model.model = None;
-        let said = b10x_launch(&without_model, std::path::Path::new("/work"))
+        let said = b10x_launch(&without_model, std::path::Path::new("/work"), &[])
             .expect_err("refused")
             .to_string();
         assert!(said.contains("--model"), "{said}");
@@ -3554,7 +3589,8 @@ mod b10x_launch_tests {
         // one warning and nothing else.
         let mut spec = spec();
         spec.substrate_embedded = true;
-        let launch = b10x_launch(&spec, std::path::Path::new("/scratch/ws_run")).expect("planned");
+        let launch =
+            b10x_launch(&spec, std::path::Path::new("/scratch/ws_run"), &[]).expect("planned");
         let argv = metaharness_b10x::argv(&launch);
         let at = argv
             .iter()
@@ -3667,18 +3703,16 @@ mod b10x_launch_tests {
             );
             assert!(refusal.to_string().contains("Frame.subjects"));
 
+            // `--context` is no scope and travels on every kind since amendment a35; what a
+            // declaration can still be refused for is the context's own, never ScopeUnsupported.
             let mut seeded = RunSpec::new(kind);
+            seeded.cwd = Some("/operator/repo".into());
             seeded.context = vec!["SKILL.md".into()];
-            assert!(
-                matches!(
-                    check_spec(&seeded).expect_err("refused"),
-                    Refusal::ScopeUnsupported { .. }
-                ),
-                "{kind:?}"
-            );
+            assert!(check_spec(&seeded).is_ok(), "{kind:?}");
         }
         let mut scoped = RunSpec::new(Kind::B10x);
         scoped.write_scope = vec!["**=allowed".to_owned()];
+        scoped.cwd = Some("/operator/repo".into());
         scoped.context = vec!["SKILL.md".into()];
         assert!(
             check_spec(&scoped).is_ok(),

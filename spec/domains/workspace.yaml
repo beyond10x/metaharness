@@ -48,11 +48,38 @@ types:
     variants: [declared, unavailable]
     # The H7 state read off session.started's attestation: declared (a27) or
     # unavailable (a6). imposed is the scratch-cwd case this command never runs.
+  - name: metaharness.workspace.ContextFileProbe
+    kind: enum
+    variants: [tracked, undirected, empty-path, absolute, climbing, non-utf8-path, symlink, irregular, absent, not-text, untracked, over-count, over-bytes]
 
 errors:
   - name: metaharness.workspace.InvalidName
     fields: []
   - name: metaharness.workspace.DeclarationWithoutDirectory
+    fields: []
+  - name: metaharness.workspace.ContextWithoutDirectory
+    fields: []
+  - name: metaharness.workspace.ContextPathAbsolute
+    fields: []
+  - name: metaharness.workspace.ContextPathEscapes
+    fields: []
+  - name: metaharness.workspace.ContextSymlink
+    fields: []
+  - name: metaharness.workspace.ContextNotRegularFile
+    fields: []
+  - name: metaharness.workspace.ContextUntracked
+    fields: []
+  - name: metaharness.workspace.ContextCountCap
+    fields: []
+  - name: metaharness.workspace.ContextByteCap
+    fields: []
+  - name: metaharness.workspace.ContextPathEmpty
+    fields: []
+  - name: metaharness.workspace.ContextPathNotUtf8
+    fields: []
+  - name: metaharness.workspace.ContextUnreadable
+    fields: []
+  - name: metaharness.workspace.ContextNotText
     fields: []
 
 commands:
@@ -126,6 +153,58 @@ commands:
     # UNMAPPED: the declaration confines nothing; the copy's fences are
     # story:confinement-of-vendor-kinds. Making the copy is the embedder's.
 
+  - name: metaharness.workspace.DeclareContextFiles
+    input: [{name: probe, type: metaharness.workspace.ContextFileProbe}]
+    outcomes:
+      - name: context-without-cwd
+        when: probe == undirected
+        error: metaharness.workspace.ContextWithoutDirectory
+        summary: A context file is read from the --cwd tree, so a run naming none is refused before the spawn on every kind (a35).
+      - name: absolute-path-refused
+        when: probe == absolute
+        error: metaharness.workspace.ContextPathAbsolute
+      - name: climbing-path-refused
+        when: probe == climbing
+        error: metaharness.workspace.ContextPathEscapes
+      - name: symlink-refused
+        when: probe == symlink
+        error: metaharness.workspace.ContextSymlink
+        summary: A tracked symbolic link is refused by openat2 with RESOLVE_BENEATH and RESOLVE_NO_SYMLINKS.
+      - name: irregular-file-refused
+        when: probe == irregular
+        error: metaharness.workspace.ContextNotRegularFile
+      - name: untracked-file-refused
+        when: probe == untracked
+        error: metaharness.workspace.ContextUntracked
+      - name: count-cap-refused
+        when: probe == over-count
+        error: metaharness.workspace.ContextCountCap
+        summary: Seventeen tracked files pass the count cap of sixteen.
+      - name: byte-cap-refused
+        when: probe == over-bytes
+        error: metaharness.workspace.ContextByteCap
+        summary: One tracked file of 65,536 bytes passes the byte cap once its rendered path is counted.
+      - name: empty-path-refused
+        when: probe == empty-path
+        error: metaharness.workspace.ContextPathEmpty
+        summary: An empty path names no file and is refused before anything is read.
+      - name: non-utf8-path-refused
+        when: probe == non-utf8-path
+        error: metaharness.workspace.ContextPathNotUtf8
+        summary: A path that is not UTF-8 cannot be carried by the record or the prompt as text.
+      - name: unreadable-file-refused
+        when: probe == absent
+        error: metaharness.workspace.ContextUnreadable
+        summary: A file that is not there is refused, never dropped from the list.
+      - name: not-text-refused
+        when: probe == not-text
+        error: metaharness.workspace.ContextNotText
+        summary: A tracked file whose bytes are not UTF-8 text without a NUL cannot travel as prompt text.
+      - name: tracked-files-recorded
+        emits: [metaharness.workspace.ContextFilesRecorded]
+        payload: {metaharness.workspace.ContextFilesRecorded: {files: 2, kinds: 3, digests_match: true}}
+        summary: Two tracked files in a --scratch-cwd copy whose .git is a gitfile are handed over by all three kinds, and session.started lists each with the digest of the tree's bytes.
+
 events:
   - name: metaharness.workspace.ProcessWritePlanned
     fields:
@@ -136,3 +215,8 @@ events:
       - {name: h7, type: metaharness.workspace.CwdAttestation}
       - {name: h11_imposed, type: Boolean}
       - {name: exit_code, type: Integer}
+  - name: metaharness.workspace.ContextFilesRecorded
+    fields:
+      - {name: files, type: Integer}
+      - {name: kinds, type: Integer}
+      - {name: digests_match, type: Boolean}

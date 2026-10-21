@@ -17,6 +17,17 @@
 //! invent evidence rather than move a pin. What is recorded from 2.1.240 says so at its own point
 //! of use — the golden fixtures under `fixtures/golden/` are 2.1.240's own bytes.
 //!
+//! # The pinned binaries read files a prompt mentions, and nothing records it
+//!
+//! Claude Code 2.1.304 and 2.1.305 expand an `@path` in prompt text — the `-p` argument, stdin,
+//! a stream-json user message — into a synthesised Read result in the request they send: no tool
+//! call, no `PreToolUse` hook, no `tool.requested`, no line in the transcript. Paths outside the
+//! working tree, through symbolic links, untracked files and directories expand alike
+//! ([`MENTION_CANARIES`], design amendment a35). So the `--context` block never enters the user
+//! turn: it goes to `--append-system-prompt`, which neither binary scans ([`CONTEXT_CHANNEL`]).
+//! The task text is the user turn and stays exposed; no route the canary measured carries it
+//! unexpanded.
+//!
 //! # Three things this crate deliberately does not do
 //!
 //! * **It spawns nothing.** [`plan_launch`] returns the command line, the child environment, the
@@ -57,6 +68,17 @@ pub use vectors::{CONTRACT_OBLIGATIONS, conformance_vectors};
 
 /// This adapter's id, as it appears in `session.started` and on the command line.
 pub const ADAPTER_ID: &str = "claude";
+
+/// The channel `--context` files reach Claude Code through: the appended system prompt
+/// (`--append-system-prompt`), recorded on each `session.started.context_files` entry (design
+/// amendment a35, correction round 1).
+///
+/// Not the user turn, because the pinned binaries expand an `@path` anywhere in it — `-p`, stdin
+/// and stream-json input alike — into a synthesised file read that passes no tool seam and leaves
+/// no record ([`MENTION_CANARIES`]). The cost is stated where it is paid: the files' text carries
+/// system-prompt authority, which the block's preamble answers by calling it reference data.
+pub const CONTEXT_CHANNEL: metaharness_protocol::ContextChannel =
+    metaharness_protocol::ContextChannel::SystemPrompt;
 
 /// The vendor versions this adapter was written against (design § 8.4 O1).
 ///
@@ -203,6 +225,80 @@ pub const BUILTIN_PLUGINS: [(&str, &[&str]); 2] = [
     ("2.1.304", &COMPILED_IN_2_1_304_AND_2_1_305),
     ("2.1.305", &COMPILED_IN_2_1_304_AND_2_1_305),
 ];
+
+/// What one pinned binary does with an `@path` mention, per route (design amendment a35,
+/// correction round 1). `true` means the binary turned `@marker.txt` into a synthesised *"Result of
+/// calling the Read tool"* block in the request it sent, holding the file's bytes.
+///
+/// **That read is invisible.** No tool call is made, so no `PreToolUse` hook fires and no
+/// `tool.requested` reaches the stream; the transcript does not name the file. Measured by the
+/// adversary of correction round 1 on both pins: any `@` token at the start of a line or after
+/// whitespace expands, inside a code fence too, and `@../f`, `@/abs`, `@~/f`, directories,
+/// untracked files and links out of the tree all reach the request, under every hermetic mode.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct MentionCanary {
+    /// The binary measured.
+    pub version: &'static str,
+    /// The text as the `-p` argument: the user turn.
+    pub prompt_argument: Mention,
+    /// The text on stdin, with `-p` and no argument: the user turn.
+    pub stdin_text: Mention,
+    /// The text in a user message on stdin under `--input-format stream-json`: the user turn.
+    pub stdin_stream_json: Mention,
+    /// The text as the value of `--append-system-prompt`, where the `--context` block goes.
+    pub append_system_prompt: Mention,
+    /// The text as the value of `--system-prompt`.
+    pub system_prompt: Mention,
+}
+
+/// What a binary did with one `@path` mention on one route.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum Mention {
+    /// The mentioned file's bytes reached the request as a synthesised Read result.
+    Expanded,
+    /// The mention reached the request as the text it is.
+    Text,
+}
+
+/// The `@`-mention canary of every pinned binary, one row per entry of [`PINNED_VERSIONS`] in
+/// the same order (design amendment a35, correction round 1).
+///
+/// Measured on 2026-10-21 against the native fixture's stub endpoint in a loopback-only namespace,
+/// no model reached: on 2.1.304 and on 2.1.305 every user-turn route expands and neither system
+/// prompt route does, and the text arrives byte-exact in the request's `system` field. A test holds
+/// the rows to the pin, so a pin without a row fails — the coupling [`BUILTIN_PLUGINS`] has; it
+/// cannot tell a measured row from a copied one. The native fixture's canary case re-measures the
+/// binary under test against its row; it is ignored in `task check`, which does not run it, so it
+/// is a step of every pin move. [`CONTEXT_CHANNEL`] rests on `append_system_prompt` being
+/// [`Mention::Text`]; the task text, which is the user turn, has no route the rows show as text.
+pub const MENTION_CANARIES: [MentionCanary; 2] = [
+    MentionCanary {
+        version: "2.1.304",
+        prompt_argument: Mention::Expanded,
+        stdin_text: Mention::Expanded,
+        stdin_stream_json: Mention::Expanded,
+        append_system_prompt: Mention::Text,
+        system_prompt: Mention::Text,
+    },
+    MentionCanary {
+        version: "2.1.305",
+        prompt_argument: Mention::Expanded,
+        stdin_text: Mention::Expanded,
+        stdin_stream_json: Mention::Expanded,
+        append_system_prompt: Mention::Text,
+        system_prompt: Mention::Text,
+    },
+];
+
+/// The `@`-mention canary of the pinned binary of `version`, or `None` for a version this adapter
+/// does not pin.
+#[must_use]
+pub fn mention_canary(version: &str) -> Option<MentionCanary> {
+    MENTION_CANARIES
+        .iter()
+        .find(|row| row.version == version)
+        .copied()
+}
 
 /// The plugins the pinned binary of `version` compiles in, or `None` for a version this adapter
 /// does not pin.

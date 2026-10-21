@@ -199,6 +199,37 @@ pub struct WithheldTool {
     pub reason: String,
 }
 
+/// One file the run was handed with `--context`, as metaharness read it (design amendment a35).
+///
+/// metaharness's own record of what it put in front of the child, never the vendor's: the bytes
+/// were read beneath the run's tree by this process, digested, and the same bytes were rendered.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct ContextFile {
+    /// The path as declared, relative to the `--cwd` tree, `/`-separated and without `.`.
+    pub path: String,
+    /// The SHA-256 of the bytes read, which are the bytes rendered.
+    pub sha256: Digest,
+    /// How many bytes were read.
+    pub bytes: u64,
+    /// Which channel the file reached the harness through, so a reviewer can see what text
+    /// gained system-prompt authority (design amendment a35, correction round 1).
+    pub channel: ContextChannel,
+}
+
+/// The channel a context file reached the harness through (design amendment a35).
+///
+/// Named in the neutral vocabulary; which surface each word is lives in the adapter that chose it
+/// (on Claude Code, `system-prompt` is `--append-system-prompt`; on b10x it is the loop's standing
+/// instruction, which the loop's own `--context` renders into).
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "kebab-case")]
+pub enum ContextChannel {
+    /// In the harness's system prompt: the file's text carries system-prompt authority.
+    SystemPrompt,
+    /// Inline in the user prompt, ahead of the task.
+    UserPrompt,
+}
+
 /// The raw vendor transcript this run was read from.
 ///
 /// Required by design § 8.4 O8: the projection's `transcript_digest` and `source_line`, the
@@ -430,6 +461,17 @@ pub enum Event {
         /// metaharness's own claim about its own actions, and it sits beside the vendor's record
         /// so a reader can notice when the two disagree (design § 8.3).
         hermetic: HermeticAttestation,
+        /// Every file the run was handed with `--context`: path, sha256 and byte count, in the
+        /// declared order (design amendment a35).
+        ///
+        /// **Absent on the wire when none was declared**, an exception to § 2.1's explicit-`null`
+        /// rule argued the way `HermeticAttestation::declared` argues it: the list is additive —
+        /// metaharness's own record of what it handed the child, which it always knows — so its
+        /// absence claims nothing and can conceal nothing. A run that declared no file and a
+        /// stream written before a35 read as the same bytes, and both mean *nothing was handed
+        /// over*. The run fills it from the launch, never the adapter's record reader.
+        #[serde(default, skip_serializing_if = "Vec::is_empty")]
+        context_files: Vec<ContextFile>,
     },
 
     /// The terminal record: the source of every resource fact.

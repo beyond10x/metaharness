@@ -48,6 +48,7 @@ mod audit;
 mod auditor;
 mod builder;
 mod clock;
+mod context;
 mod custody;
 mod doctor;
 mod loopback;
@@ -86,7 +87,7 @@ pub use process::{
     LaunchPlanView, ProcessEnvelope, ProcessPoll, ProcessRunner, copy_credentials,
     start_in_envelope,
 };
-pub use refusal::Refusal;
+pub use refusal::{ContextRefusal, Refusal};
 pub use run::{
     DEADLINE_MARGIN_MS, DEFAULT_VENDOR_HOOK_TIMEOUT_MS, EventPoll, PendingCall, Run,
     deadline_reason, decider_name, metaharness_deadline_ms, request_digest, seam_name,
