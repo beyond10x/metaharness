@@ -247,6 +247,8 @@ pub struct Run {
     clock: Box<dyn Clock>,
     capabilities: Capabilities,
     operation_of_tool: BTreeMap<String, Vec<String>>,
+    /// The caller's catalogue this run serves, when it named one (design amendment a40).
+    catalogue: Option<metaharness_tools::CallerCatalogue>,
     frame: Option<Frame>,
     seam: Seam,
     vendor_timeout_ms: u64,
@@ -321,6 +323,8 @@ pub(crate) struct RunParts {
     pub(crate) wire: Vec<std::path::PathBuf>,
     /// The started loopback proxy, or `None` for every other credential source.
     pub(crate) loopback: Option<crate::loopback::LoopbackHandle>,
+    /// The caller's catalogue, read and checked at start, or `None` when the run named none.
+    pub(crate) catalogue: Option<metaharness_tools::CallerCatalogue>,
 }
 
 impl Run {
@@ -353,6 +357,7 @@ impl Run {
             clock: parts.clock,
             capabilities: parts.capabilities,
             operation_of_tool,
+            catalogue: parts.catalogue,
             frame: parts.frame,
             seam: parts.seam,
             vendor_timeout_ms: parts.vendor_timeout_ms,
@@ -908,6 +913,11 @@ impl Run {
     /// a path*, which is the same three names on every harness that records one, where *which tool
     /// is a write* is the rendering's question and has an owner already.
     fn subjects(&self, tool: &str, input: &Value) -> Vec<String> {
+        // A caller's catalogue is flat (amendment a40): each entry is its own tool, so the subject
+        // is the entry's, read from the call's own arguments by the catalogue that published it.
+        if let Some(catalogue) = &self.catalogue {
+            return catalogue.subjects_of(tool, input);
+        }
         if self.publishes_verbs() {
             return metaharness_tools::subjects_of_verb(tool, input, self.verb_surface());
         }
@@ -933,11 +943,25 @@ impl Run {
     /// `--tool-surface owned` is metaharness serving the catalogue over MCP; `b10x` is the same
     /// catalogue bound in-process, which is why `owned` is refused for that kind as meaningless
     /// rather than unsupported.
+    ///
+    /// A run serving a caller's catalogue publishes no verbs (amendment a40): its server offers
+    /// the catalogue's entries and nothing else, so a call named `tool_invoke` there is a tool
+    /// nobody offered and must not be read as whatever entry it names.
     fn publishes_verbs(&self) -> bool {
-        self.spec.tool_surface == ToolSurface::Owned || self.spec.kind == Kind::B10x
+        (self.spec.tool_surface == ToolSurface::Owned && self.catalogue.is_none())
+            || self.spec.kind == Kind::B10x
     }
 
     fn resolve(&self, tool: &str, input: &Value) -> Vec<String> {
+        // Only an entry the catalogue published resolves; everything else is uncovered.
+        if let Some(catalogue) = &self.catalogue {
+            return match catalogue.resolve(tool) {
+                metaharness_tools::Resolved::Operations(operations) => operations,
+                metaharness_tools::Resolved::Catalogue | metaharness_tools::Resolved::Unknown => {
+                    Vec::new()
+                }
+            };
+        }
         if self.publishes_verbs()
             && let Some(resolved) =
                 metaharness_tools::resolve_verb(tool, input, self.verb_surface())
@@ -981,7 +1005,9 @@ impl Run {
         // no process, and outlives nothing. A frame that denied it would be refusing the model
         // permission to read the list of things it may do — a refusal with no subject — and the
         // model would then guess arguments instead of asking for them.
-        if self.spec.tool_surface == ToolSurface::Owned
+        // A caller's catalogue publishes no such question, so no call is admitted for being one.
+        if self.publishes_verbs()
+            && self.spec.tool_surface == ToolSurface::Owned
             && metaharness_tools::resolve_verb(tool, input, self.verb_surface())
                 == Some(metaharness_tools::Resolved::Catalogue)
         {

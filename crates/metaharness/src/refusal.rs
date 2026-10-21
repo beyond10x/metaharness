@@ -239,12 +239,88 @@ pub enum Refusal {
         /// The literal the `command` contains.
         variable: &'static str,
     },
+    /// `--catalogue <file>` could not be used as a catalogue (design amendment a40): unreadable,
+    /// not a `tool-contract/1` document, or one that format's checks refuse.
+    ///
+    /// Read once, before the frame is resolved and before anything is spawned, so a run never
+    /// starts on a catalogue nobody could read. The code string leads the message: one of
+    /// [`CATALOGUE_UNREADABLE`], [`CATALOGUE_NOT_TOOL_CONTRACT`] or [`CATALOGUE_MALFORMED`].
+    Catalogue {
+        /// What the reader said, by name.
+        error: metaharness_tools::CatalogueError,
+    },
+    /// `--catalogue` was given for a kind that cannot carry it (design amendment a40).
+    ///
+    /// In this build only Claude Code offers a catalogue **instead of** its own tools. This build
+    /// has not driven the codex exec switches that take its built-in tools away (a40 § 2 cites
+    /// them at rust-v0.153.4) and a codex rollout lists no tools; the b10x loop
+    /// publishes its own toolset in-process. Refused by name, with the code
+    /// [`CATALOGUE_NOT_CARRIED`], rather than accepted and ignored.
+    CatalogueNotCarried {
+        /// The kind that cannot carry it.
+        kind: Kind,
+    },
+    /// `--catalogue` was given with `--tool-surface native` (design amendment a40).
+    ///
+    /// The catalogue is served by this binary's tool server, which only the owned surface starts.
+    /// Code [`CATALOGUE_NEEDS_OWNED_SURFACE`].
+    CatalogueNeedsOwnedSurface,
+    /// `--allow-program` was given with `--catalogue` (design amendment a40).
+    ///
+    /// The programs are what the served `run` may start, and a server handed a catalogue
+    /// publishes that catalogue's entries and nothing else. No entry is performed as `run`, so the
+    /// programs would be accepted and do nothing. Code [`CATALOGUE_WITH_ALLOW_PROGRAM`].
+    CatalogueWithAllowProgram {
+        /// The programs the run named.
+        programs: Vec<String>,
+    },
+    /// The scratch copy of the catalogue, read back after it was written and before the spawn, is
+    /// not the catalogue that was checked (design amendment a40).
+    ///
+    /// The server reads that copy and never the caller's file, so a copy that reads back as
+    /// another catalogue, or not at all, would serve something nobody checked. Code
+    /// [`CATALOGUE_COPY_DIFFERS`].
+    ///
+    /// The copy is named as `catalogue.json` in the run's scratch tree and never by its path,
+    /// which lies under the operator's `TMPDIR`. The check runs after the scratch files are
+    /// written, so the message says what had started rather than that nothing had.
+    CatalogueCopyDiffers {
+        /// How it differs: the reader's code and problems, or that it reads back as another
+        /// catalogue. Never a path.
+        detail: String,
+        /// A credential proxy had been started for the run; it stops as the refusal returns.
+        proxy_started: bool,
+        /// The vendor binary had been run with `--version`, for `--strict-version`.
+        version_probed: bool,
+    },
     /// Something the platform refused.
     Io {
         /// What it said.
         detail: String,
     },
 }
+
+/// The stable code string [`Refusal::CatalogueNotCarried`] carries in its message (design
+/// amendment a40). A launch-condition code, like [`SCRATCH_PATH_NOT_UTF8`].
+pub const CATALOGUE_NOT_CARRIED: &str = "catalogue-not-carried";
+
+/// The stable code string [`Refusal::CatalogueNeedsOwnedSurface`] carries in its message (design
+/// amendment a40).
+pub const CATALOGUE_NEEDS_OWNED_SURFACE: &str = "catalogue-needs-owned-surface";
+
+/// The stable code string [`Refusal::CatalogueWithAllowProgram`] carries in its message (design
+/// amendment a40).
+pub const CATALOGUE_WITH_ALLOW_PROGRAM: &str = "catalogue-with-allow-program";
+
+/// The stable code string [`Refusal::CatalogueCopyDiffers`] carries in its message (design
+/// amendment a40).
+pub const CATALOGUE_COPY_DIFFERS: &str = "catalogue-copy-differs";
+
+/// The stable code strings [`Refusal::Catalogue`] carries, one per way a file is not a catalogue
+/// (design amendment a40). Defined by `metaharness-tools`, whose reader raises them.
+pub use metaharness_tools::{
+    CATALOGUE_MALFORMED, CATALOGUE_NOT_TOOL_CONTRACT, CATALOGUE_UNREADABLE,
+};
 
 /// The stable code string [`Refusal::ScratchPathNotUtf8`] carries in its message (design
 /// amendment a37).
@@ -599,6 +675,65 @@ impl fmt::Display for Refusal {
                  does not contain it",
                 path.display()
             ),
+            Refusal::Catalogue { error } => write!(f, "{error}"),
+            Refusal::CatalogueNotCarried { kind } => write!(
+                f,
+                "{CATALOGUE_NOT_CARRIED}: --catalogue is refused for {}: in this build only Claude Code \
+                 offers a catalogue instead of its own tools (`--tools \"\"` plus this binary's \
+                 tool server). This build launches codex exec, whose switches that take its built-in \
+                 tools away have not been driven here, and \
+                 its rollout lists no tools, so its record could not show what was offered; the \
+                 b10x loop publishes its own toolset in-process and takes no catalogue file. Refused by name rather than ignored: a run that offered something \
+                 other than the catalogue it was handed is not the run that was asked for \
+                 (design amendment a40). Nothing was started",
+                kind.as_str(),
+            ),
+            Refusal::CatalogueNeedsOwnedSurface => write!(
+                f,
+                "{CATALOGUE_NEEDS_OWNED_SURFACE}: --catalogue was given with --tool-surface \
+                 native: the catalogue is served by metaharness's own tool server, which only the \
+                 owned surface starts, so under the native surface it would be read and never \
+                 offered (design amendment a40). Drop --tool-surface native; --catalogue implies \
+                 owned. Nothing was started"
+            ),
+            Refusal::CatalogueWithAllowProgram { programs } => write!(
+                f,
+                "{CATALOGUE_WITH_ALLOW_PROGRAM}: --allow-program {} was given with --catalogue: \
+                 the programs are what the served `run` may start, and a server handed a \
+                 catalogue publishes that catalogue's entries and nothing else, none of which is \
+                 performed as `run`, so they would be accepted and do nothing (design amendment \
+                 a40). Drop --allow-program. Nothing was started",
+                programs.join(", ")
+            ),
+            Refusal::CatalogueCopyDiffers {
+                detail,
+                proxy_started,
+                version_probed,
+            } => {
+                write!(
+                    f,
+                    "{CATALOGUE_COPY_DIFFERS}: the scratch copy of the --catalogue document \
+                     (catalogue.json in the run's scratch tree), read back before the spawn, is \
+                     not the catalogue that was checked: {detail}. The server reads that copy, so \
+                     the run would serve something nobody checked (design amendment a40). No \
+                     vendor session was started. The run's scratch files had been written, and \
+                     its scratch tree is removed as this refusal returns"
+                )?;
+                if *version_probed {
+                    write!(
+                        f,
+                        "; the vendor binary had been run with --version for --strict-version"
+                    )?;
+                }
+                if *proxy_started {
+                    write!(
+                        f,
+                        "; a credential proxy had been started, and it stops as this refusal \
+                         returns"
+                    )?;
+                }
+                Ok(())
+            }
             Refusal::Io { detail } => write!(f, "the platform refused: {detail}"),
         }
     }

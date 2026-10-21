@@ -12,7 +12,7 @@ surface.
 
 ```bash
 metaharness run claude --hermetic -p "…"
-metaharness conformance claude    # 29 vectors, no model / no network / no credential
+metaharness conformance claude    # 30 vectors, no model / no network / no credential
 metaharness doctor claude
 ```
 

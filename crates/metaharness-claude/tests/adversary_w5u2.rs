@@ -18,6 +18,7 @@ use metaharness_protocol::{Digest, HermeticMode, Kind, RunSpec};
 fn context(root: &Path) -> LaunchContext {
     LaunchContext {
         context_files: Vec::new(),
+        catalogue: None,
         scratch_root: root.to_path_buf(),
         cwd: root.join("work"),
         credentials_file: Some(PathBuf::from("/operator/.claude/.credentials.json")),

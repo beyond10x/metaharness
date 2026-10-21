@@ -70,6 +70,10 @@ const HOOK_FILE: &str = "hooks/pretooluse";
 /// exists precisely to say that this file is the only one.
 const MCP_CONFIG_FILE: &str = "mcp-config.json";
 
+/// Where the scratch copy of a caller's catalogue goes, beside the MCP configuration that names
+/// it (design amendment a40).
+const CATALOGUE_FILE: &str = "catalogue.json";
+
 /// The server name the tools are published under, and the string `--allowedTools` grants.
 ///
 /// One constant because the two must agree: a grant naming a server the config does not define
@@ -111,6 +115,16 @@ pub fn settings_path(scratch_root: &Path) -> PathBuf {
 #[must_use]
 pub fn mcp_config_path(scratch_root: &Path) -> PathBuf {
     scratch_root.join(MCP_CONFIG_FILE)
+}
+
+/// Where the scratch copy of a caller's catalogue goes, which the `mcp-serve` arguments name
+/// (design amendment a40).
+///
+/// Published for the same reason as [`settings_path`]: one place decides where it lives. The
+/// server reads this copy and never the caller's file, so what is served is what was checked.
+#[must_use]
+pub fn catalogue_path(scratch_root: &Path) -> PathBuf {
+    scratch_root.join(CATALOGUE_FILE)
 }
 
 /// Where the caller must place the `PreToolUse` executable, which is the path the hook
@@ -255,6 +269,15 @@ pub struct LaunchContext {
     /// declared one is [`LaunchRefusal::ContextFilesUnread`], never a smaller context than the run
     /// declared.
     pub context_files: Vec<DeclaredContextFile>,
+    /// The caller's catalogue, **as the caller read and checked it**, as JSON (design amendment
+    /// a40).
+    ///
+    /// The same division as [`LaunchContext::context_files`]: the caller reads the file the run
+    /// named and refuses it by name when it is not a catalogue, and this function decides where
+    /// the copy goes and tells the server to serve it. `None` when the run named no catalogue; a
+    /// run that named one and arrives without it, or the reverse, is
+    /// [`LaunchRefusal::CatalogueUnread`].
+    pub catalogue: Option<Value>,
 }
 
 /// One document the caller writes into the scratch tree before the child starts.
@@ -353,7 +376,8 @@ pub struct LaunchPlan {
     /// Documents the caller writes into the scratch tree before the child starts.
     ///
     /// Empty unless the run declared a `--plugin`, in which case it is the two registry documents
-    /// Claude Code reads under the config home and the marketplace manifest beside them.
+    /// Claude Code reads under the config home and the marketplace manifest beside them, or a
+    /// `--catalogue`, in which case it carries the catalogue's copy at [`catalogue_path`].
     pub scratch_files: Vec<ScratchFile>,
     /// The settings document the argv's `--settings` names. The caller writes it; this crate
     /// only decides what is in it.
@@ -547,6 +571,25 @@ pub enum LaunchRefusal {
         /// The first literal of [`HOOK_COMMAND_PLUGIN_VARIABLES`] the `command` contains.
         variable: &'static str,
     },
+    /// The run named a catalogue and the caller handed this plan none, or handed one to a run
+    /// that named none (design amendment a40).
+    ///
+    /// Refused rather than planned either way: the first would serve the three verbs to a run
+    /// that asked for a catalogue, and the second a catalogue nobody declared.
+    CatalogueUnread {
+        /// Whether the run named one. `false` is the reverse: a catalogue handed over undeclared.
+        declared: bool,
+    },
+    /// The run named a catalogue under `--tool-surface native` (design amendment a40). Only the
+    /// owned surface's server can serve one, so the vendor's own tools would be offered instead.
+    CatalogueWithoutOwnedSurface,
+    /// The run named a catalogue and programs for `--allow-program` (design amendment a40). The
+    /// programs are what the served `run` may start, and a server handed a catalogue publishes
+    /// that catalogue's entries and no `run`, so they would be named to it and do nothing.
+    CatalogueWithAllowProgram {
+        /// The programs the run named.
+        programs: Vec<String>,
+    },
 }
 
 /// The code a [`LaunchRefusal::ScratchPathNamesPluginVariable`] message begins with (design
@@ -679,21 +722,57 @@ impl fmt::Display for LaunchRefusal {
                  {}; an embedder that requires a mechanism nobody drove is refused rather than \
                  quietly served (design § 8.4 O4)",
                 mode.as_str(),
-                match status {
-                    TierStatus::Unverified =>
-                        "unverified — the mechanism is on the vendor's surface and no run here has \
-                         driven it",
-                    TierStatus::Absent => "absent — this vendor has no such mechanism",
-                    TierStatus::Delivered =>
-                        "delivered, which is not a refusal and is a defect here",
-                }
+                tier_words(*status)
             ),
             LaunchRefusal::ContextFilesUnread { .. } | LaunchRefusal::ArgumentTooLong { .. } => {
                 context_words(self, f)
             }
             LaunchRefusal::PathNotUtf8 { .. }
             | LaunchRefusal::ScratchPathNamesPluginVariable { .. } => path_words(self, f),
+            LaunchRefusal::CatalogueUnread { .. }
+            | LaunchRefusal::CatalogueWithoutOwnedSurface
+            | LaunchRefusal::CatalogueWithAllowProgram { .. } => catalogue_words(self, f),
         }
+    }
+}
+
+/// How the adapter declares a decision mode, in the words of the refusal that names it.
+fn tier_words(status: TierStatus) -> &'static str {
+    match status {
+        TierStatus::Unverified => {
+            "unverified — the mechanism is on the vendor's surface and no run here has driven it"
+        }
+        TierStatus::Absent => "absent — this vendor has no such mechanism",
+        TierStatus::Delivered => "delivered, which is not a refusal and is a defect here",
+    }
+}
+
+/// The caller's-catalogue refusals in words (design amendment a40).
+fn catalogue_words(refusal: &LaunchRefusal, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+    match refusal {
+        LaunchRefusal::CatalogueUnread { declared: true } => f.write_str(
+            "the run named a --catalogue and the caller handed this plan no catalogue; the \
+                 caller reads and checks the file and fills LaunchContext.catalogue before \
+                 planning, or the run would be served the three verbs instead (design amendment \
+                 a40)",
+        ),
+        LaunchRefusal::CatalogueUnread { declared: false } => f.write_str(
+            "the caller handed this plan a catalogue and the run named no --catalogue; a \
+                 catalogue nobody declared is refused rather than served (design amendment a40)",
+        ),
+        LaunchRefusal::CatalogueWithoutOwnedSurface => f.write_str(
+            "the run named a --catalogue under --tool-surface native; only the owned surface's \
+                 server can serve it, so the vendor's own tools would be offered instead (design \
+                 amendment a40)",
+        ),
+        LaunchRefusal::CatalogueWithAllowProgram { programs } => write!(
+            f,
+            "the run named --allow-program {} with a --catalogue; the programs are what the \
+             served `run` may start, and a server handed a catalogue publishes its entries and \
+             no `run`, so they would be named to the server and do nothing (design amendment a40)",
+            programs.join(", ")
+        ),
+        _ => unreachable!("only the catalogue refusals are worded here"),
     }
 }
 
@@ -802,7 +881,10 @@ pub fn plan_launch(spec: &RunSpec, context: &LaunchContext) -> Result<LaunchPlan
     let credential_copies = credential_copies(spec, context, &config_home)?;
     let plugin_installs = plugin_installs(spec, context)?;
     let marketplace_installs = marketplace_installs(spec, context, &config_home)?;
-    let scratch_files = scratch_registry_files(spec, context, &config_home)?;
+    let mut scratch_files = scratch_registry_files(spec, context, &config_home)?;
+    if let Some(copy) = catalogue_copy(spec, context)? {
+        scratch_files.push(copy);
+    }
     let mcp_config = build_mcp_config(spec, context)?;
     if !context_matches_declaration(&spec.context, &context.context_files) {
         return Err(LaunchRefusal::ContextFilesUnread {
@@ -1266,6 +1348,35 @@ fn build_args(
     args
 }
 
+/// The scratch copy of the caller's catalogue, when the run named one (design amendment a40).
+///
+/// Refused when the run named one under the native surface, where nothing would serve it, when it
+/// also named programs the served `run` may start, which a catalogue-serving server never
+/// publishes, and when the declaration and what the caller handed over disagree.
+fn catalogue_copy(
+    spec: &RunSpec,
+    context: &LaunchContext,
+) -> Result<Option<ScratchFile>, LaunchRefusal> {
+    if spec.catalogue.is_some() && spec.tool_surface != ToolSurface::Owned {
+        return Err(LaunchRefusal::CatalogueWithoutOwnedSurface);
+    }
+    if spec.catalogue.is_some() && !spec.allow_program.is_empty() {
+        return Err(LaunchRefusal::CatalogueWithAllowProgram {
+            programs: spec.allow_program.clone(),
+        });
+    }
+    match (&spec.catalogue, &context.catalogue) {
+        (Some(_), Some(document)) => Ok(Some(ScratchFile {
+            path: catalogue_path(&context.scratch_root),
+            document: document.clone(),
+        })),
+        (None, None) => Ok(None),
+        (declared, _) => Err(LaunchRefusal::CatalogueUnread {
+            declared: declared.is_some(),
+        }),
+    }
+}
+
 /// The MCP configuration under `--tool-surface owned`, and `None` under every other surface.
 ///
 /// One stdio server, which is **this binary** under its own `mcp-serve` subcommand: the program
@@ -1294,6 +1405,10 @@ fn build_mcp_config(
     for program in &spec.allow_program {
         args.push("--allow-program".to_string());
         args.push(program.clone());
+    }
+    if context.catalogue.is_some() {
+        args.push("--catalogue".to_string());
+        args.push(catalogue_path(&context.scratch_root).display().to_string());
     }
 
     Ok(Some(json!({
@@ -2032,6 +2147,7 @@ mod tests {
     fn context() -> LaunchContext {
         LaunchContext {
             context_files: Vec::new(),
+            catalogue: None,
             scratch_root: PathBuf::from("/scratch/run-1"),
             cwd: PathBuf::from("/scratch/run-1/work"),
             credentials_file: Some(PathBuf::from("/operator/.claude/.credentials.json")),
@@ -2983,6 +3099,118 @@ mod tests {
         let refusal = plan_launch(&spec, &context).expect_err("no server, no run");
         assert_eq!(refusal, LaunchRefusal::ToolServerMissing);
         assert!(refusal.to_string().contains("--tool-surface owned"));
+    }
+
+    /// A caller catalogue the core read and checked (design amendment a40): its JSON copy goes
+    /// into the scratch tree, and the server is told to serve that copy. The document is the
+    /// complete one the C1 vector pins, so no test here plans around a copy `mcp-serve` refuses.
+    fn catalogue_world() -> (RunSpec, LaunchContext, Value) {
+        let mut spec = spec();
+        spec.tool_surface = ToolSurface::Owned;
+        spec.catalogue = Some(PathBuf::from("/operator/session-catalogue.yaml"));
+        let document = crate::vectors::synthetic_catalogue();
+        let mut context = context();
+        context.catalogue = Some(document.clone());
+        (spec, context, document)
+    }
+
+    #[test]
+    fn a_caller_catalogue_is_copied_into_scratch_and_named_to_the_server() {
+        let (spec, context, document) = catalogue_world();
+        let plan = plan_launch(&spec, &context).expect("plans");
+        assert_eq!(
+            catalogue_path(Path::new("/scratch/run-1")),
+            PathBuf::from("/scratch/run-1/catalogue.json")
+        );
+        assert!(
+            plan.scratch_files.contains(&ScratchFile {
+                path: PathBuf::from("/scratch/run-1/catalogue.json"),
+                document,
+            }),
+            "{:?}",
+            plan.scratch_files
+        );
+        let server = &plan.mcp_config.as_ref().expect("a config")["mcpServers"]["metaharness"];
+        assert_eq!(
+            server["args"],
+            json!([
+                "mcp-serve",
+                "--workspace",
+                "/scratch/run-1/work",
+                "--writable",
+                "--catalogue",
+                "/scratch/run-1/catalogue.json"
+            ]),
+            "the server serves the scratch copy, never the caller's file"
+        );
+        assert!(
+            !plan
+                .args
+                .iter()
+                .any(|arg| arg.contains("session-catalogue")),
+            "the caller's file reaches no argv: {:?}",
+            plan.args
+        );
+    }
+
+    #[test]
+    fn a_catalogue_declared_and_not_handed_over_or_handed_over_and_not_declared_is_refused() {
+        let (spec, mut context, document) = catalogue_world();
+        context.catalogue = None;
+        let refusal = plan_launch(&spec, &context).expect_err("declared and not read");
+        assert_eq!(refusal, LaunchRefusal::CatalogueUnread { declared: true });
+        assert!(refusal.to_string().contains("--catalogue"), "{refusal}");
+
+        let mut spec = spec;
+        spec.catalogue = None;
+        context.catalogue = Some(document);
+        let refusal = plan_launch(&spec, &context).expect_err("read and not declared");
+        assert_eq!(refusal, LaunchRefusal::CatalogueUnread { declared: false });
+        assert!(refusal.to_string().contains("--catalogue"), "{refusal}");
+    }
+
+    #[test]
+    fn a_catalogue_without_the_owned_surface_is_refused() {
+        let (mut spec, context, _) = catalogue_world();
+        spec.tool_surface = ToolSurface::Native;
+        let refusal = plan_launch(&spec, &context).expect_err("nothing would serve it");
+        assert_eq!(refusal, LaunchRefusal::CatalogueWithoutOwnedSurface);
+        assert!(refusal.to_string().contains("--catalogue"), "{refusal}");
+        assert_eq!(refusal.code(), None);
+    }
+
+    /// `--allow-program` beside a catalogue (design amendment a40): the programs are what the
+    /// served `run` may start, and a server handed a catalogue publishes no `run`, so naming them
+    /// to it plans a flag that does nothing.
+    #[test]
+    fn allow_program_beside_a_catalogue_is_refused() {
+        let (mut spec, context, _) = catalogue_world();
+        spec.allow_program = vec!["/usr/bin/cargo".to_string()];
+        let refusal = plan_launch(&spec, &context).expect_err("the programs would do nothing");
+        assert_eq!(
+            refusal,
+            LaunchRefusal::CatalogueWithAllowProgram {
+                programs: vec!["/usr/bin/cargo".to_string()]
+            }
+        );
+        let words = refusal.to_string();
+        assert!(words.contains("--allow-program /usr/bin/cargo"), "{words}");
+        assert!(words.contains("--catalogue"), "{words}");
+        assert_eq!(refusal.code(), None);
+
+        let mut context = context;
+        spec.catalogue = None;
+        context.catalogue = None;
+        let plan = plan_launch(&spec, &context).expect("the programs alone still plan");
+        let server = &plan.mcp_config.as_ref().expect("a config")["mcpServers"]["metaharness"];
+        assert!(
+            server["args"]
+                .as_array()
+                .expect("args")
+                .iter()
+                .any(|arg| arg == "/usr/bin/cargo"),
+            "{server}"
+        );
     }
 
     /// A `native` run carries no MCP configuration at all, so nothing is written claiming servers

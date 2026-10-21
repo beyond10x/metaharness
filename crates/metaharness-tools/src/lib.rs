@@ -19,6 +19,13 @@
 //! three harnesses that each name their tools differently, so everything downstream — the corpus
 //! above all — had to learn one vendor's vocabulary or be blind to the rest.
 //!
+//! # Or the caller's catalogue, flat
+//!
+//! A run may name one `tool-contract/1` document instead ([`CallerCatalogue`], design amendment
+//! a40). Then [`Server::with_catalogue`] publishes that document's operations, one tool each by
+//! its `mcp` rendering, and nothing else: not the three verbs, which reach the whole local
+//! catalogue behind `tool_invoke`.
+//!
 //! # The protocol, and why there is no MCP crate under this
 //!
 //! MCP over stdio is JSON-RPC 2.0, one object per line. This server answers four methods:
@@ -41,9 +48,14 @@
 //! record and says what it *was*, in the same neutral vocabulary, so a consumer selects on
 //! `file.write` whichever harness produced the run. See [`resolve`] for what that fixes.
 
+mod caller;
 mod resolve;
 mod server;
 
+pub use caller::{
+    CATALOGUE_BYTES_MAX, CATALOGUE_MALFORMED, CATALOGUE_NOT_TOOL_CONTRACT, CATALOGUE_UNREADABLE,
+    CallerCatalogue, CatalogueEntry, CatalogueError, render_scratch_copy,
+};
 pub use harness_catalogue::{
     Catalogue, DESCRIBE_VERB, INVOKE_VERB, LocalOperations, Operations, SEARCH_VERB, Verbs,
 };

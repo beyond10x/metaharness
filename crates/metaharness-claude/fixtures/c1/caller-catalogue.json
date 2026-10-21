@@ -1,0 +1,209 @@
+{
+  "args": [
+    "-p",
+    "<execution-context>\nexecution_path=metaharness-driven\ninner_harness=claude\nworkspace=metaharness-scratch\nhermetic=strict\nconfinement=inner-harness\nsubstrate=not-used-by-metaharness\ndecision_mode=frame\nimplication=metaharness applies the sealed frame before each mediated call\n</execution-context>\n\nstate the workflow you are in",
+    "--output-format",
+    "stream-json",
+    "--verbose",
+    "--strict-mcp-config",
+    "--setting-sources",
+    "",
+    "--settings",
+    "/scratch/run-1/claude-settings.json",
+    "--model",
+    "a-model",
+    "--max-turns",
+    "8",
+    "--tools",
+    "",
+    "--mcp-config",
+    "/scratch/run-1/mcp-config.json",
+    "--allowedTools",
+    "mcp__metaharness"
+  ],
+  "mcp_config": {
+    "mcpServers": {
+      "metaharness": {
+        "args": [
+          "mcp-serve",
+          "--workspace",
+          "/scratch/run-1/work",
+          "--writable",
+          "--catalogue",
+          "/scratch/run-1/catalogue.json"
+        ],
+        "command": "/usr/local/bin/metaharness",
+        "type": "stdio"
+      }
+    }
+  },
+  "offered_tools": [
+    "mcp__metaharness__fs_read",
+    "mcp__metaharness__fs_stat"
+  ],
+  "scratch_files": [
+    {
+      "document": {
+        "errors": [
+          {
+            "fields": [
+              {
+                "name": "path",
+                "type": "String"
+              }
+            ],
+            "name": "fs.NotFound",
+            "summary": "Nothing exists at the path."
+          }
+        ],
+        "format": "tool-contract/1",
+        "operations": [
+          {
+            "guidance": "Page with offset, the first line, numbered from 1.",
+            "input": [
+              {
+                "description": "The file, relative to the workspace root.",
+                "name": "path",
+                "type": "String"
+              },
+              {
+                "description": "The first line to read, numbered from 1.",
+                "name": "offset",
+                "type": "Optional<Integer>"
+              }
+            ],
+            "name": "fs.read",
+            "outcomes": [
+              {
+                "name": "read",
+                "summary": "The window is answered."
+              },
+              {
+                "error": "fs.NotFound",
+                "name": "not-found"
+              }
+            ],
+            "output": [
+              {
+                "description": "The window as numbered lines.",
+                "name": "text",
+                "type": "String"
+              }
+            ],
+            "profile": {
+              "bounds": {
+                "timeout_ms": {
+                  "default": 10000,
+                  "max": 60000
+                }
+              },
+              "capability": "workspace.read",
+              "consequences": [],
+              "determinism": "deterministic",
+              "effects": [
+                "read"
+              ],
+              "idempotency": "idempotent",
+              "output": {
+                "failure_as_result": true,
+                "untrusted": true
+              },
+              "placement": "local",
+              "preconditions": [],
+              "requires": {
+                "binaries": [],
+                "env": [],
+                "secrets": [],
+                "settings": []
+              },
+              "risk": "low",
+              "subjects": [
+                {
+                  "field": "path",
+                  "kind": "path",
+                  "pattern": "fs.read({path})"
+                }
+              ]
+            },
+            "renderings": {
+              "claude": "Read",
+              "codex": "read_file",
+              "mcp": "fs_read"
+            },
+            "summary": "Read a window of a file as numbered lines."
+          },
+          {
+            "input": [
+              {
+                "description": "The entry, relative to the workspace root.",
+                "name": "path",
+                "type": "String"
+              }
+            ],
+            "name": "fs.stat",
+            "outcomes": [
+              {
+                "name": "stated",
+                "summary": "The entry is described."
+              },
+              {
+                "error": "fs.NotFound",
+                "name": "not-found"
+              }
+            ],
+            "output": [
+              {
+                "description": "What the entry is.",
+                "name": "kind",
+                "type": "String"
+              }
+            ],
+            "profile": {
+              "bounds": {
+                "timeout_ms": {
+                  "default": 10000,
+                  "max": 60000
+                }
+              },
+              "capability": "workspace.read",
+              "consequences": [],
+              "determinism": "deterministic",
+              "effects": [
+                "read"
+              ],
+              "idempotency": "idempotent",
+              "output": {
+                "failure_as_result": true,
+                "untrusted": true
+              },
+              "placement": "local",
+              "preconditions": [],
+              "requires": {
+                "binaries": [],
+                "env": [],
+                "secrets": [],
+                "settings": []
+              },
+              "risk": "low",
+              "subjects": [
+                {
+                  "field": "path",
+                  "kind": "path",
+                  "pattern": "fs.stat({path})"
+                }
+              ]
+            },
+            "renderings": {
+              "mcp": "fs_stat"
+            },
+            "summary": "Say what one entry is."
+          }
+        ],
+        "summary": "A session's catalogue: read a window of one file, and say what one entry is. Synthetic, written for metaharness's caller-catalogue tests; no tool in it is offered for anything else.",
+        "toolset": "fs",
+        "version": "v1alpha1"
+      },
+      "path": "/scratch/run-1/catalogue.json"
+    }
+  ]
+}

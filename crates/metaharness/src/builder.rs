@@ -31,6 +31,7 @@ use crate::process::{CredentialCopyView, LaunchPlanView, ProcessRunner};
 use crate::refusal::Refusal;
 use crate::run::{LaunchFacts, Run, RunParts, vendor_hook_timeout_ms};
 use metaharness_protocol::SeamFactory;
+use metaharness_tools::CallerCatalogue;
 
 /// Where a loopback proxy forwards when the run named no gateway of its own.
 ///
@@ -144,6 +145,21 @@ impl Metaharness {
     #[must_use]
     pub fn with_tool_surface(mut self, surface: ToolSurface) -> Self {
         self.spec.tool_surface = surface;
+        self
+    }
+
+    /// A caller's catalogue: a `tool-contract/1` document whose entries are the run's whole tool
+    /// set (design amendment a40).
+    ///
+    /// The same field the CLI's `--catalogue` sets, and it implies the owned surface the same way
+    /// the CLI's default does; a later [`Metaharness::with_tool_surface`] still wins, and naming
+    /// `native` after this is refused at start rather than resolved. The file is read and checked
+    /// at start, before the frame and before anything is spawned, and every way it is not a
+    /// catalogue is a refusal by name. Only Claude Code carries one; codex and b10x refuse it.
+    #[must_use]
+    pub fn with_catalogue(mut self, path: impl Into<PathBuf>) -> Self {
+        self.spec.catalogue = Some(path.into());
+        self.spec.tool_surface = ToolSurface::Owned;
         self
     }
 
@@ -439,6 +455,15 @@ impl Metaharness {
         let frame = self.frame.clone();
         let spec = self.applied(input);
         check_spec(&spec)?;
+        // Read and checked once, here, before the frame (amendment a40): every way the file is not
+        // a catalogue is a refusal by name before anything is resolved or spawned, and the scratch
+        // copy the server reads is written from this value, never from the caller's file again.
+        let catalogue = spec
+            .catalogue
+            .as_deref()
+            .map(CallerCatalogue::read)
+            .transpose()
+            .map_err(|error| Refusal::Catalogue { error })?;
         let frame = resolve_frame(frame, &spec)?;
         // After the resolution and not before it, because there are two spellings of a frame —
         // an in-memory value and a document path — and the combination has to be refused in both.
@@ -453,7 +478,7 @@ impl Metaharness {
         // shared is what is genuinely neutral and already factored: the spec check, the frame
         // resolution, the scratch root, the cwd, the ancestor walk and the control refusals.
         match spec.kind {
-            Kind::Claude => start_claude(spec, credentials, frame, runner, seams, clock),
+            Kind::Claude => start_claude(spec, credentials, frame, catalogue, runner, seams, clock),
             Kind::Codex => start_codex(spec, credentials, frame, runner, seams, clock),
             Kind::B10x => start_b10x(spec, frame, runner, seams, clock),
         }
@@ -772,6 +797,7 @@ fn start_b10x(
         wire: vec![transcript_path],
         scratch: Some(scratch),
         loopback: None,
+        catalogue: None,
     }))
 }
 
@@ -835,6 +861,7 @@ fn start_claude(
     spec: RunSpec,
     credentials: Option<PathBuf>,
     frame: Option<Frame>,
+    catalogue: Option<CallerCatalogue>,
     runner: &mut dyn ProcessRunner,
     seams: &mut dyn SeamFactory,
     clock: Box<dyn Clock>,
@@ -879,6 +906,9 @@ fn start_claude(
             // The managed settings the H4 placeholder claim depends on (a33): read here, decided
             // in the plan.
             managed_settings: claude_managed_settings(),
+            // The document read and checked at start (amendment a40); the plan copies it into the
+            // scratch tree and names that copy to the server.
+            catalogue: catalogue.as_ref().map(CallerCatalogue::document_value),
         };
         let mut plan = metaharness_claude::plan_launch(&spec, &context)
             .map_err(Refusal::from_claude_launch)?;
@@ -899,6 +929,18 @@ fn start_claude(
         // one are handed a world that was built the same way.
         let channel = crate::spawn::HookChannel::create(scratch.path())?;
         materialise(&plan, scratch.path(), &channel)?;
+        // The server reads the copy and never the caller's file, so the copy is read back here,
+        // as the server reads it, before the vendor is spawned (amendment a40). By now the
+        // scratch files are written, a loopback proxy is running, and under `--strict-version`
+        // the vendor's `--version` has run; a refusal says which.
+        if let Some(checked) = &catalogue {
+            verify_catalogue_copy(
+                &metaharness_claude::catalogue_path(scratch.path()),
+                checked,
+                loopback.is_some(),
+                spec.strict_version,
+            )?;
+        }
 
         let transcript = TranscriptRef {
             path: Some(transcript_path.display().to_string()),
@@ -979,6 +1021,7 @@ fn start_claude(
             // Handed over rather than kept here: the run is what the port is scoped to, so the
             // thing that ends the run closes it.
             loopback: loopback.map(|started| started.handle),
+            catalogue,
         }))
     }
 }
@@ -1260,6 +1303,7 @@ fn start_codex(
         // Handed over rather than kept here: the run is what the port is scoped to, so the thing
         // that ends the run closes it (LP-4).
         loopback: loopback.map(|started| started.handle),
+        catalogue: None,
     }))
 }
 
@@ -1349,7 +1393,7 @@ fn materialise(
     // The marketplace copies land **inside** the config home, so the home has to exist first —
     // which is why this is here rather than beside the `--plugin-dir` copies above.
     install_plugins(&plan.marketplace_installs)?;
-    write_scratch_files(&plan.scratch_files)?;
+    write_scratch_files(&plan.scratch_files, scratch_root)?;
     std::fs::create_dir_all(scratch_root.join("tmp"))?;
 
     std::fs::write(
@@ -1476,18 +1520,62 @@ fn install_plugins(installs: &[PluginInstall]) -> Result<(), Refusal> {
 /// The same division as the settings document: the adapter says what is in the file and where it
 /// goes, and this performs the I/O. Pretty-printed, because a scratch home is a thing somebody
 /// opens when a run did not behave.
-fn write_scratch_files(files: &[metaharness_claude::ScratchFile]) -> Result<(), Refusal> {
+///
+/// The catalogue's copy is the one file a YAML reader reads (amendment a40), so it is rendered as
+/// the tool server reads it, with the characters that reader refuses escaped; every other file is
+/// JSON the vendor reads and is rendered as before.
+fn write_scratch_files(
+    files: &[metaharness_claude::ScratchFile],
+    scratch_root: &std::path::Path,
+) -> Result<(), Refusal> {
+    let catalogue = metaharness_claude::catalogue_path(scratch_root);
     for file in files {
         if let Some(parent) = file.path.parent() {
             std::fs::create_dir_all(parent)?;
         }
-        let rendered =
+        let rendered = if file.path == catalogue {
+            metaharness_tools::render_scratch_copy(&file.document)
+        } else {
             serde_json::to_string_pretty(&file.document).map_err(|error| Refusal::Io {
                 detail: format!("{} could not be rendered: {error}", file.path.display()),
-            })?;
+            })?
+        };
         std::fs::write(&file.path, rendered)?;
     }
     Ok(())
+}
+
+/// Whether the scratch copy of a caller's catalogue, read as the server reads it, is the catalogue
+/// that was checked (design amendment a40).
+///
+/// `proxy_started` and `version_probed` are what had already happened when the copy was read: a
+/// credential proxy started for the run, and the vendor's `--version` run under
+/// `--strict-version`. The refusal says so rather than that nothing was started, and carries the
+/// reader's code and problems without the copy's path, which lies under the operator's `TMPDIR`.
+///
+/// # Errors
+///
+/// [`Refusal::CatalogueCopyDiffers`] when the copy is refused, or reads back as another catalogue.
+fn verify_catalogue_copy(
+    copy: &std::path::Path,
+    checked: &CallerCatalogue,
+    proxy_started: bool,
+    version_probed: bool,
+) -> Result<(), Refusal> {
+    let differs = |detail: String| Refusal::CatalogueCopyDiffers {
+        detail,
+        proxy_started,
+        version_probed,
+    };
+    match CallerCatalogue::read(copy) {
+        Ok(served) if served == *checked => Ok(()),
+        Ok(_) => Err(differs("it reads back as another catalogue".to_owned())),
+        Err(error) => Err(differs(format!(
+            "{}: {}",
+            error.code(),
+            error.problems().join("; ")
+        ))),
+    }
 }
 
 /// The operator's own Claude config home, which is where an already-fetched marketplace lives.
@@ -1714,7 +1802,9 @@ fn resolve_frame(in_memory: Option<Frame>, spec: &RunSpec) -> Result<Option<Fram
 ///
 /// # Errors
 ///
-/// [`Refusal::NoAdapter`] or [`Refusal::ToolSurfaceOwned`].
+/// [`Refusal::NoAdapter`], [`Refusal::ToolSurfaceOwned`], [`Refusal::CatalogueNotCarried`],
+/// [`Refusal::CatalogueNeedsOwnedSurface`] or [`Refusal::CatalogueWithAllowProgram`], among the
+/// others below.
 pub fn check_spec(spec: &RunSpec) -> Result<(), Refusal> {
     // A declaration about a directory nobody named (amendment a27). Refused on every kind rather
     // than ignored: a flag that is read nowhere is a run that differs from what was asked for and
@@ -1750,6 +1840,28 @@ pub fn check_spec(spec: &RunSpec) -> Result<(), Refusal> {
     // (`--tools ""` plus `--mcp-config`). Codex cannot — `dynamicTools` is an app-server surface
     // `codex exec` does not expose, which its own launch already explains. And b10x publishes this
     // very catalogue in-process, so there is nothing to replace and the flag would mean nothing.
+    //
+    // A caller's catalogue rides on that surface (amendment a40), so it is refused first and by its
+    // own name: the caller declared a catalogue, not a surface, and the sentence says which.
+    //
+    // `--allow-program` names what the served `run` may start, and a server handed a catalogue
+    // publishes that catalogue's entries and nothing else. No entry is performed as `run`: the
+    // pinned harness maps contract names onto `file_read`, `dir_list`, `find`, `file_write` and
+    // `file_edit` only (harness `f087013`, `crates/harness-catalogue/src/local.rs:118-124`). The
+    // programs would be accepted and do nothing, so the pair is refused before the file is read.
+    if spec.catalogue.is_some() {
+        if spec.kind != Kind::Claude {
+            return Err(Refusal::CatalogueNotCarried { kind: spec.kind });
+        }
+        if spec.tool_surface != ToolSurface::Owned {
+            return Err(Refusal::CatalogueNeedsOwnedSurface);
+        }
+        if !spec.allow_program.is_empty() {
+            return Err(Refusal::CatalogueWithAllowProgram {
+                programs: spec.allow_program.clone(),
+            });
+        }
+    }
     if spec.tool_surface == ToolSurface::Owned && spec.kind != Kind::Claude {
         return Err(Refusal::ToolSurfaceOwned { kind: spec.kind });
     }
@@ -4544,5 +4656,157 @@ mod codex_record_rows_tests {
         assert_eq!(h2, Verdict::Gap, "{detail}");
         assert!(detail.contains(".codex/config.toml"), "{detail}");
         assert_eq!(exit(&run), RunExit::NoVerdict);
+    }
+}
+
+#[cfg(test)]
+mod catalogue_copy_tests {
+    //! The read-back of the catalogue's scratch copy (amendment a40): the copy the server reads is
+    //! the catalogue that was checked, or the run is refused before the spawn.
+
+    use std::path::{Path, PathBuf};
+
+    use super::{CallerCatalogue, Refusal, verify_catalogue_copy};
+    use crate::refusal::{CATALOGUE_COPY_DIFFERS, CATALOGUE_MALFORMED, CATALOGUE_UNREADABLE};
+
+    fn fixture() -> PathBuf {
+        Path::new(env!("CARGO_MANIFEST_DIR"))
+            .join("../metaharness-tools/tests/fixtures/caller-catalogue.yaml")
+    }
+
+    fn differs(refusal: &Refusal) -> String {
+        let Refusal::CatalogueCopyDiffers { detail, .. } = refusal else {
+            panic!("another refusal: {refusal}");
+        };
+        assert!(
+            refusal
+                .to_string()
+                .starts_with(&format!("{CATALOGUE_COPY_DIFFERS}: ")),
+            "{refusal}"
+        );
+        detail.clone()
+    }
+
+    #[test]
+    fn a_copy_that_reads_back_as_the_checked_catalogue_passes() {
+        let checked = CallerCatalogue::read(&fixture()).expect("the fixture reads");
+        let dir = tempfile::tempdir().expect("a directory");
+        let copy = dir.path().join("catalogue.json");
+        std::fs::write(
+            &copy,
+            serde_json::to_string_pretty(&checked.document()).expect("renders"),
+        )
+        .expect("the copy");
+        assert_eq!(verify_catalogue_copy(&copy, &checked, false, false), Ok(()));
+    }
+
+    #[test]
+    fn a_copy_of_another_catalogue_is_refused_by_name() {
+        let checked = CallerCatalogue::read(&fixture()).expect("the fixture reads");
+        let other = CallerCatalogue::from_text(
+            Path::new("other.yaml"),
+            &std::fs::read_to_string(fixture())
+                .expect("the fixture reads")
+                .replace("mcp: fs_stat}", "mcp: fs_stat_again}"),
+        )
+        .expect("another catalogue");
+        let dir = tempfile::tempdir().expect("a directory");
+        let copy = dir.path().join("catalogue.json");
+        std::fs::write(
+            &copy,
+            serde_json::to_string_pretty(&other.document()).expect("renders"),
+        )
+        .expect("the copy");
+        let detail = differs(
+            &verify_catalogue_copy(&copy, &checked, false, false).expect_err("another one"),
+        );
+        assert_eq!(detail, "it reads back as another catalogue");
+    }
+
+    #[test]
+    fn a_copy_the_server_would_refuse_or_could_not_read_is_refused_by_name() {
+        let checked = CallerCatalogue::read(&fixture()).expect("the fixture reads");
+        let dir = tempfile::tempdir().expect("a directory");
+        let copy = dir.path().join("catalogue.json");
+        std::fs::write(&copy, "{\"format\": \"tool-contract/1\", \"x\u{7f}\": 1}")
+            .expect("the copy");
+        let detail =
+            differs(&verify_catalogue_copy(&copy, &checked, false, false).expect_err("refused"));
+        assert!(detail.starts_with(CATALOGUE_MALFORMED), "{detail}");
+
+        let absent = dir.path().join("absent.json");
+        let detail =
+            differs(&verify_catalogue_copy(&absent, &checked, false, false).expect_err("absent"));
+        assert!(detail.starts_with(CATALOGUE_UNREADABLE), "{detail}");
+    }
+
+    /// The copy lives in the run's temporary scratch tree, under the operator's `TMPDIR`; the
+    /// refusal names it without that path. It fires after the scratch write, so it does not say
+    /// that nothing was started.
+    #[test]
+    fn the_refusal_names_the_copy_without_its_path_and_says_what_had_started() {
+        let checked = CallerCatalogue::read(&fixture()).expect("the fixture reads");
+        let dir = tempfile::tempdir().expect("a directory");
+        let absent = dir.path().join("catalogue.json");
+        let root = dir.path().display().to_string();
+        for (proxy_started, version_probed) in [(false, false), (true, false), (false, true)] {
+            let refusal = verify_catalogue_copy(&absent, &checked, proxy_started, version_probed)
+                .expect_err("absent");
+            let message = refusal.to_string();
+            assert!(!message.contains(&root), "{message}");
+            assert!(!message.contains("Nothing was started"), "{message}");
+            assert!(
+                message.contains("No vendor session was started"),
+                "{message}"
+            );
+            assert!(
+                message.contains("catalogue.json in the run's scratch tree"),
+                "{message}"
+            );
+            assert!(
+                message.contains("scratch files had been written"),
+                "{message}"
+            );
+            assert!(message.contains(CATALOGUE_UNREADABLE), "{message}");
+            assert_eq!(
+                message.contains("a credential proxy had been started"),
+                proxy_started,
+                "{message}"
+            );
+            assert_eq!(
+                message.contains("run with --version for --strict-version"),
+                version_probed,
+                "{message}"
+            );
+        }
+    }
+
+    /// Constructed directly, with both facts set: the message carries the detail once and says
+    /// both, and no line of it says that nothing was started.
+    #[test]
+    fn the_refusal_constructed_with_both_facts_says_both() {
+        let refusal = Refusal::CatalogueCopyDiffers {
+            detail: "it reads back as another catalogue".to_owned(),
+            proxy_started: true,
+            version_probed: true,
+        };
+        let message = refusal.to_string();
+        assert!(
+            message.starts_with(&format!("{CATALOGUE_COPY_DIFFERS}: ")),
+            "{message}"
+        );
+        assert_eq!(
+            message
+                .matches("it reads back as another catalogue")
+                .count(),
+            1,
+            "{message}"
+        );
+        assert!(!message.contains("Nothing was started"), "{message}");
+        assert!(!message.contains('/'), "{message}");
+        assert!(message.ends_with(
+            "the vendor binary had been run with --version for --strict-version; a credential \
+             proxy had been started, and it stops as this refusal returns"
+        ));
     }
 }

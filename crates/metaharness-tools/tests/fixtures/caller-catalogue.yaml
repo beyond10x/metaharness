@@ -1,0 +1,73 @@
+format: tool-contract/1
+toolset: fs
+version: v1alpha1
+summary: >-
+  A session's catalogue: read a window of one file, and say what one entry is. Synthetic, written
+  for metaharness's caller-catalogue tests; no tool in it is offered for anything else.
+errors:
+  - name: fs.NotFound
+    summary: Nothing exists at the path.
+    fields: [{name: path, type: String}]
+operations:
+  - name: fs.read
+    summary: Read a window of a file as numbered lines.
+    guidance: Page with offset, the first line, numbered from 1.
+    renderings: {claude: Read, codex: read_file, mcp: fs_read}
+    input:
+      - name: path
+        type: String
+        description: The file, relative to the workspace root.
+      - name: offset
+        type: Optional<Integer>
+        description: The first line to read, numbered from 1.
+    output:
+      - name: text
+        type: String
+        description: The window as numbered lines.
+    outcomes:
+      - {name: read, summary: The window is answered.}
+      - {name: not-found, error: fs.NotFound}
+    profile:
+      effects: [read]
+      consequences: []
+      risk: low
+      idempotency: idempotent
+      preconditions: []
+      determinism: deterministic
+      bounds:
+        timeout_ms: {default: 10000, max: 60000}
+      requires: {binaries: [], env: [], settings: [], secrets: []}
+      subjects:
+        - {field: path, kind: path, pattern: "fs.read({path})"}
+      placement: local
+      capability: workspace.read
+      output: {untrusted: true, failure_as_result: true}
+  - name: fs.stat
+    summary: Say what one entry is.
+    renderings: {mcp: fs_stat}
+    input:
+      - name: path
+        type: String
+        description: The entry, relative to the workspace root.
+    output:
+      - name: kind
+        type: String
+        description: What the entry is.
+    outcomes:
+      - {name: stated, summary: The entry is described.}
+      - {name: not-found, error: fs.NotFound}
+    profile:
+      effects: [read]
+      consequences: []
+      risk: low
+      idempotency: idempotent
+      preconditions: []
+      determinism: deterministic
+      bounds:
+        timeout_ms: {default: 10000, max: 60000}
+      requires: {binaries: [], env: [], settings: [], secrets: []}
+      subjects:
+        - {field: path, kind: path, pattern: "fs.stat({path})"}
+      placement: local
+      capability: workspace.read
+      output: {untrusted: true, failure_as_result: true}

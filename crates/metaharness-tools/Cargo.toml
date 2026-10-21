@@ -13,7 +13,9 @@ workspace = true
 [dependencies]
 b10x-harness-catalogue = { git = "https://github.com/beyond10x/harness", rev = "f0870131e58df3e1119860d0a255f46589026d62" }
 b10x-harness-wire = { git = "https://github.com/beyond10x/harness", rev = "f0870131e58df3e1119860d0a255f46589026d62" }
-serde_json = { workspace = true }
+b10x-tool-contract = { git = "https://github.com/beyond10x/tools", tag = "0.2.0" }
+serde_json = { workspace = true, features = ["raw_value"] }
+serde_yaml_ng = "0.10"
 
 [dev-dependencies]
 tempfile = { workspace = true }
