@@ -116,7 +116,8 @@ pub use vectors::{
     contract_result, control_vectors,
 };
 pub use viewer::{
-    AlignmentRule, TRACE_IR_FORM, VendorSource, project_file, project_vendor_record, render_page,
+    AlignmentRule, ProjectionForm, TRACE_IR_FORM, TRACE_IR_SUMMARY_FORM, VendorSource,
+    project_file, project_vendor_record, render_page,
 };
 
 /// The adapter ids this build carries, in the order the CLI lists them.

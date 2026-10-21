@@ -24,7 +24,7 @@
     },
     "counts": {
       "authored": 3,
-      "generated": 100,
+      "generated": 104,
       "outside": 0,
       "refused": 0
     },
@@ -101,6 +101,10 @@
       "metaharness.trace.ProjectVendorRecord/outcome/event-stream-is-not-a-from",
       "metaharness.trace.ProjectVendorRecord/outcome/harness-record-projected",
       "metaharness.trace.RetainedDocument/invariant/at/metaharness.trace.RetainedProjection/projection",
+      "metaharness.trace.SummarizeRecord/outcome/claude-transcript-summarized",
+      "metaharness.trace.SummarizeRecord/outcome/codex-rollout-summarized",
+      "metaharness.trace.SummarizeRecord/outcome/event-stream-summarized",
+      "metaharness.trace.SummarizeRecord/outcome/harness-record-summarized",
       "metaharness.trace.VerifyStreamCompleteness/outcome/complete",
       "metaharness.trace.VerifyStreamCompleteness/outcome/inconsistent-duplicated",
       "metaharness.trace.VerifyStreamCompleteness/outcome/inconsistent-miscounting",
@@ -144,9 +148,9 @@
     }
   },
   "provenance": {
-    "contract_digest": "419007f71a6a0c97f38c3591c79e4573685bd9a6f4757dbda6b4e8ed10ba278e",
+    "contract_digest": "e3fe34944868b6c1c9034d58a6bbfbbfb4dbaeef6da541402f22b776b6754e1d",
     "scenario_initial_state": "empty",
-    "spec_digest": "bebf0b1da38ad7806fb63ec0045fe6c0aabc5bf09f092710373e4b4cfbff401a",
+    "spec_digest": "2a362c0e71311afb19c96dbcc56749ec113e97256553f7a71f4774405d0cd83c",
     "specification_version": "v1",
     "suite_version": "ess-conformance/35",
     "system": "metaharness"
@@ -237,6 +241,10 @@
         {
           "kind": "event",
           "name": "metaharness.trace.RecordNormalized"
+        },
+        {
+          "kind": "event",
+          "name": "metaharness.trace.SessionSummarized"
         },
         {
           "kind": "event",
@@ -363,6 +371,10 @@
           "step": "expect_no_event"
         },
         {
+          "event": "metaharness.trace.SessionSummarized",
+          "step": "expect_no_event"
+        },
+        {
           "event": "metaharness.trace.UnkClassified",
           "step": "expect_no_event"
         },
@@ -473,6 +485,10 @@
         {
           "kind": "event",
           "name": "metaharness.trace.RecordNormalized"
+        },
+        {
+          "kind": "event",
+          "name": "metaharness.trace.SessionSummarized"
         },
         {
           "kind": "event",
@@ -596,6 +612,10 @@
         },
         {
           "event": "metaharness.trace.RecordNormalized",
+          "step": "expect_no_event"
+        },
+        {
+          "event": "metaharness.trace.SessionSummarized",
           "step": "expect_no_event"
         },
         {
@@ -733,6 +753,10 @@
         },
         {
           "kind": "event",
+          "name": "metaharness.trace.SessionSummarized"
+        },
+        {
+          "kind": "event",
           "name": "metaharness.trace.UnkClassified"
         },
         {
@@ -852,6 +876,10 @@
           "step": "expect_no_event"
         },
         {
+          "event": "metaharness.trace.SessionSummarized",
+          "step": "expect_no_event"
+        },
+        {
           "event": "metaharness.trace.UnkClassified",
           "step": "expect_no_event"
         },
@@ -962,6 +990,10 @@
         {
           "kind": "event",
           "name": "metaharness.trace.RecordNormalized"
+        },
+        {
+          "kind": "event",
+          "name": "metaharness.trace.SessionSummarized"
         },
         {
           "kind": "event",
@@ -1084,6 +1116,10 @@
           "step": "expect_no_event"
         },
         {
+          "event": "metaharness.trace.SessionSummarized",
+          "step": "expect_no_event"
+        },
+        {
           "event": "metaharness.trace.UnkClassified",
           "step": "expect_no_event"
         },
@@ -1194,6 +1230,10 @@
         {
           "kind": "event",
           "name": "metaharness.trace.RecordNormalized"
+        },
+        {
+          "kind": "event",
+          "name": "metaharness.trace.SessionSummarized"
         },
         {
           "kind": "event",
@@ -1316,6 +1356,10 @@
           "step": "expect_no_event"
         },
         {
+          "event": "metaharness.trace.SessionSummarized",
+          "step": "expect_no_event"
+        },
+        {
           "event": "metaharness.trace.UnkClassified",
           "step": "expect_no_event"
         },
@@ -1426,6 +1470,10 @@
         {
           "kind": "event",
           "name": "metaharness.trace.RecordNormalized"
+        },
+        {
+          "kind": "event",
+          "name": "metaharness.trace.SessionSummarized"
         },
         {
           "kind": "event",
@@ -1548,6 +1596,10 @@
           "step": "expect_no_event"
         },
         {
+          "event": "metaharness.trace.SessionSummarized",
+          "step": "expect_no_event"
+        },
+        {
           "event": "metaharness.trace.UnkClassified",
           "step": "expect_no_event"
         },
@@ -1658,6 +1710,10 @@
         {
           "kind": "event",
           "name": "metaharness.trace.RecordNormalized"
+        },
+        {
+          "kind": "event",
+          "name": "metaharness.trace.SessionSummarized"
         },
         {
           "kind": "event",
@@ -1780,6 +1836,10 @@
           "step": "expect_no_event"
         },
         {
+          "event": "metaharness.trace.SessionSummarized",
+          "step": "expect_no_event"
+        },
+        {
           "event": "metaharness.trace.UnkClassified",
           "step": "expect_no_event"
         },
@@ -1890,6 +1950,10 @@
         {
           "kind": "event",
           "name": "metaharness.trace.RecordNormalized"
+        },
+        {
+          "kind": "event",
+          "name": "metaharness.trace.SessionSummarized"
         },
         {
           "kind": "event",
@@ -2012,6 +2076,10 @@
           "step": "expect_no_event"
         },
         {
+          "event": "metaharness.trace.SessionSummarized",
+          "step": "expect_no_event"
+        },
+        {
           "event": "metaharness.trace.UnkClassified",
           "step": "expect_no_event"
         },
@@ -2122,6 +2190,10 @@
         {
           "kind": "event",
           "name": "metaharness.trace.RecordNormalized"
+        },
+        {
+          "kind": "event",
+          "name": "metaharness.trace.SessionSummarized"
         },
         {
           "kind": "event",
@@ -2246,6 +2318,10 @@
         },
         {
           "event": "metaharness.trace.RecordNormalized",
+          "step": "expect_no_event"
+        },
+        {
+          "event": "metaharness.trace.SessionSummarized",
           "step": "expect_no_event"
         },
         {
@@ -2379,6 +2455,10 @@
         },
         {
           "kind": "event",
+          "name": "metaharness.trace.SessionSummarized"
+        },
+        {
+          "kind": "event",
           "name": "metaharness.trace.UnkClassified"
         },
         {
@@ -2503,6 +2583,10 @@
           "step": "expect_no_event"
         },
         {
+          "event": "metaharness.trace.SessionSummarized",
+          "step": "expect_no_event"
+        },
+        {
           "event": "metaharness.trace.UnkClassified",
           "step": "expect_no_event"
         },
@@ -2613,6 +2697,10 @@
         {
           "kind": "event",
           "name": "metaharness.trace.RecordNormalized"
+        },
+        {
+          "kind": "event",
+          "name": "metaharness.trace.SessionSummarized"
         },
         {
           "kind": "event",
@@ -2740,6 +2828,10 @@
           "step": "expect_no_event"
         },
         {
+          "event": "metaharness.trace.SessionSummarized",
+          "step": "expect_no_event"
+        },
+        {
           "event": "metaharness.trace.UnkClassified",
           "step": "expect_no_event"
         },
@@ -2850,6 +2942,10 @@
         {
           "kind": "event",
           "name": "metaharness.trace.RecordNormalized"
+        },
+        {
+          "kind": "event",
+          "name": "metaharness.trace.SessionSummarized"
         },
         {
           "kind": "event",
@@ -2972,6 +3068,10 @@
           "step": "expect_no_event"
         },
         {
+          "event": "metaharness.trace.SessionSummarized",
+          "step": "expect_no_event"
+        },
+        {
           "event": "metaharness.trace.UnkClassified",
           "step": "expect_no_event"
         },
@@ -3082,6 +3182,10 @@
         {
           "kind": "event",
           "name": "metaharness.trace.RecordNormalized"
+        },
+        {
+          "kind": "event",
+          "name": "metaharness.trace.SessionSummarized"
         },
         {
           "kind": "event",
@@ -3204,6 +3308,10 @@
           "step": "expect_no_event"
         },
         {
+          "event": "metaharness.trace.SessionSummarized",
+          "step": "expect_no_event"
+        },
+        {
           "event": "metaharness.trace.UnkClassified",
           "step": "expect_no_event"
         },
@@ -3314,6 +3422,10 @@
         {
           "kind": "event",
           "name": "metaharness.trace.RecordNormalized"
+        },
+        {
+          "kind": "event",
+          "name": "metaharness.trace.SessionSummarized"
         },
         {
           "kind": "event",
@@ -3446,6 +3558,10 @@
           "step": "expect_no_event"
         },
         {
+          "event": "metaharness.trace.SessionSummarized",
+          "step": "expect_no_event"
+        },
+        {
           "event": "metaharness.trace.UnkClassified",
           "step": "expect_no_event"
         },
@@ -3556,6 +3672,10 @@
         {
           "kind": "event",
           "name": "metaharness.trace.RecordNormalized"
+        },
+        {
+          "kind": "event",
+          "name": "metaharness.trace.SessionSummarized"
         },
         {
           "kind": "event",
@@ -3688,6 +3808,10 @@
           "step": "expect_no_event"
         },
         {
+          "event": "metaharness.trace.SessionSummarized",
+          "step": "expect_no_event"
+        },
+        {
           "event": "metaharness.trace.UnkClassified",
           "step": "expect_no_event"
         },
@@ -3798,6 +3922,10 @@
         {
           "kind": "event",
           "name": "metaharness.trace.RecordNormalized"
+        },
+        {
+          "kind": "event",
+          "name": "metaharness.trace.SessionSummarized"
         },
         {
           "kind": "event",
@@ -3930,6 +4058,10 @@
           "step": "expect_no_event"
         },
         {
+          "event": "metaharness.trace.SessionSummarized",
+          "step": "expect_no_event"
+        },
+        {
           "event": "metaharness.trace.UnkClassified",
           "step": "expect_no_event"
         },
@@ -4040,6 +4172,10 @@
         {
           "kind": "event",
           "name": "metaharness.trace.RecordNormalized"
+        },
+        {
+          "kind": "event",
+          "name": "metaharness.trace.SessionSummarized"
         },
         {
           "kind": "event",
@@ -4172,6 +4308,10 @@
           "step": "expect_no_event"
         },
         {
+          "event": "metaharness.trace.SessionSummarized",
+          "step": "expect_no_event"
+        },
+        {
           "event": "metaharness.trace.UnkClassified",
           "step": "expect_no_event"
         },
@@ -4282,6 +4422,10 @@
         {
           "kind": "event",
           "name": "metaharness.trace.RecordNormalized"
+        },
+        {
+          "kind": "event",
+          "name": "metaharness.trace.SessionSummarized"
         },
         {
           "kind": "event",
@@ -4414,6 +4558,10 @@
           "step": "expect_no_event"
         },
         {
+          "event": "metaharness.trace.SessionSummarized",
+          "step": "expect_no_event"
+        },
+        {
           "event": "metaharness.trace.UnkClassified",
           "step": "expect_no_event"
         },
@@ -4524,6 +4672,10 @@
         {
           "kind": "event",
           "name": "metaharness.trace.RecordNormalized"
+        },
+        {
+          "kind": "event",
+          "name": "metaharness.trace.SessionSummarized"
         },
         {
           "kind": "event",
@@ -4661,6 +4813,10 @@
         },
         {
           "event": "metaharness.trace.RecordNormalized",
+          "step": "expect_no_event"
+        },
+        {
+          "event": "metaharness.trace.SessionSummarized",
           "step": "expect_no_event"
         },
         {
@@ -4864,6 +5020,10 @@
         },
         {
           "kind": "event",
+          "name": "metaharness.trace.SessionSummarized"
+        },
+        {
+          "kind": "event",
           "name": "metaharness.trace.UnkClassified"
         },
         {
@@ -4994,6 +5154,10 @@
         },
         {
           "event": "metaharness.trace.RecordNormalized",
+          "step": "expect_no_event"
+        },
+        {
+          "event": "metaharness.trace.SessionSummarized",
           "step": "expect_no_event"
         },
         {
@@ -5185,6 +5349,10 @@
         },
         {
           "kind": "event",
+          "name": "metaharness.trace.SessionSummarized"
+        },
+        {
+          "kind": "event",
           "name": "metaharness.trace.UnkClassified"
         },
         {
@@ -5319,6 +5487,10 @@
         },
         {
           "event": "metaharness.trace.RecordNormalized",
+          "step": "expect_no_event"
+        },
+        {
+          "event": "metaharness.trace.SessionSummarized",
           "step": "expect_no_event"
         },
         {
@@ -5472,6 +5644,10 @@
         },
         {
           "kind": "event",
+          "name": "metaharness.trace.SessionSummarized"
+        },
+        {
+          "kind": "event",
           "name": "metaharness.trace.UnkClassified"
         },
         {
@@ -5599,6 +5775,10 @@
           "step": "expect_no_event"
         },
         {
+          "event": "metaharness.trace.SessionSummarized",
+          "step": "expect_no_event"
+        },
+        {
           "event": "metaharness.trace.UnkClassified",
           "step": "expect_no_event"
         },
@@ -5717,6 +5897,10 @@
         {
           "kind": "event",
           "name": "metaharness.trace.RecordNormalized"
+        },
+        {
+          "kind": "event",
+          "name": "metaharness.trace.SessionSummarized"
         },
         {
           "kind": "event",
@@ -5847,6 +6031,10 @@
           "step": "expect_no_event"
         },
         {
+          "event": "metaharness.trace.SessionSummarized",
+          "step": "expect_no_event"
+        },
+        {
           "event": "metaharness.trace.UnkClassified",
           "step": "expect_no_event"
         },
@@ -5965,6 +6153,10 @@
         {
           "kind": "event",
           "name": "metaharness.trace.RecordNormalized"
+        },
+        {
+          "kind": "event",
+          "name": "metaharness.trace.SessionSummarized"
         },
         {
           "kind": "event",
@@ -6092,6 +6284,10 @@
         },
         {
           "event": "metaharness.trace.RecordNormalized",
+          "step": "expect_no_event"
+        },
+        {
+          "event": "metaharness.trace.SessionSummarized",
           "step": "expect_no_event"
         },
         {
@@ -6226,6 +6422,10 @@
         {
           "kind": "event",
           "name": "metaharness.trace.RecordNormalized"
+        },
+        {
+          "kind": "event",
+          "name": "metaharness.trace.SessionSummarized"
         },
         {
           "kind": "event",
@@ -6368,6 +6568,10 @@
           "step": "expect_no_event"
         },
         {
+          "event": "metaharness.trace.SessionSummarized",
+          "step": "expect_no_event"
+        },
+        {
           "event": "metaharness.trace.UnkClassified",
           "step": "expect_no_event"
         },
@@ -6478,6 +6682,10 @@
         {
           "kind": "event",
           "name": "metaharness.trace.RecordNormalized"
+        },
+        {
+          "kind": "event",
+          "name": "metaharness.trace.SessionSummarized"
         },
         {
           "kind": "event",
@@ -6620,6 +6828,10 @@
           "step": "expect_no_event"
         },
         {
+          "event": "metaharness.trace.SessionSummarized",
+          "step": "expect_no_event"
+        },
+        {
           "event": "metaharness.trace.UnkClassified",
           "step": "expect_no_event"
         },
@@ -6730,6 +6942,10 @@
         {
           "kind": "event",
           "name": "metaharness.trace.RecordNormalized"
+        },
+        {
+          "kind": "event",
+          "name": "metaharness.trace.SessionSummarized"
         },
         {
           "kind": "event",
@@ -6872,6 +7088,10 @@
           "step": "expect_no_event"
         },
         {
+          "event": "metaharness.trace.SessionSummarized",
+          "step": "expect_no_event"
+        },
+        {
           "event": "metaharness.trace.UnkClassified",
           "step": "expect_no_event"
         },
@@ -6982,6 +7202,10 @@
         {
           "kind": "event",
           "name": "metaharness.trace.RecordNormalized"
+        },
+        {
+          "kind": "event",
+          "name": "metaharness.trace.SessionSummarized"
         },
         {
           "kind": "event",
@@ -7124,6 +7348,10 @@
           "step": "expect_no_event"
         },
         {
+          "event": "metaharness.trace.SessionSummarized",
+          "step": "expect_no_event"
+        },
+        {
           "event": "metaharness.trace.UnkClassified",
           "step": "expect_no_event"
         },
@@ -7234,6 +7462,10 @@
         {
           "kind": "event",
           "name": "metaharness.trace.RecordNormalized"
+        },
+        {
+          "kind": "event",
+          "name": "metaharness.trace.SessionSummarized"
         },
         {
           "kind": "event",
@@ -7376,6 +7608,10 @@
           "step": "expect_no_event"
         },
         {
+          "event": "metaharness.trace.SessionSummarized",
+          "step": "expect_no_event"
+        },
+        {
           "event": "metaharness.trace.UnkClassified",
           "step": "expect_no_event"
         },
@@ -7486,6 +7722,10 @@
         {
           "kind": "event",
           "name": "metaharness.trace.RecordNormalized"
+        },
+        {
+          "kind": "event",
+          "name": "metaharness.trace.SessionSummarized"
         },
         {
           "kind": "event",
@@ -7600,6 +7840,10 @@
         },
         {
           "event": "metaharness.trace.RecordNormalized",
+          "step": "expect_no_event"
+        },
+        {
+          "event": "metaharness.trace.SessionSummarized",
           "step": "expect_no_event"
         },
         {
@@ -7949,6 +8193,10 @@
         },
         {
           "kind": "event",
+          "name": "metaharness.trace.SessionSummarized"
+        },
+        {
+          "kind": "event",
           "name": "metaharness.trace.UnkClassified"
         },
         {
@@ -8067,6 +8315,10 @@
         },
         {
           "event": "metaharness.trace.RecordNormalized",
+          "step": "expect_no_event"
+        },
+        {
+          "event": "metaharness.trace.SessionSummarized",
           "step": "expect_no_event"
         },
         {
@@ -8204,6 +8456,10 @@
         {
           "kind": "event",
           "name": "metaharness.trace.RecordNormalized"
+        },
+        {
+          "kind": "event",
+          "name": "metaharness.trace.SessionSummarized"
         },
         {
           "kind": "event",
@@ -8374,6 +8630,10 @@
           "step": "expect_no_event"
         },
         {
+          "event": "metaharness.trace.SessionSummarized",
+          "step": "expect_no_event"
+        },
+        {
           "event": "metaharness.trace.UnkClassified",
           "step": "expect_no_event"
         },
@@ -8516,6 +8776,10 @@
         {
           "kind": "event",
           "name": "metaharness.trace.RecordNormalized"
+        },
+        {
+          "kind": "event",
+          "name": "metaharness.trace.SessionSummarized"
         },
         {
           "kind": "event",
@@ -8687,6 +8951,10 @@
           "step": "expect_no_event"
         },
         {
+          "event": "metaharness.trace.SessionSummarized",
+          "step": "expect_no_event"
+        },
+        {
           "event": "metaharness.trace.UnkClassified",
           "step": "expect_no_event"
         },
@@ -8832,6 +9100,10 @@
         },
         {
           "kind": "event",
+          "name": "metaharness.trace.SessionSummarized"
+        },
+        {
+          "kind": "event",
           "name": "metaharness.trace.UnkClassified"
         },
         {
@@ -8951,6 +9223,10 @@
         },
         {
           "event": "metaharness.trace.RecordNormalized",
+          "step": "expect_no_event"
+        },
+        {
+          "event": "metaharness.trace.SessionSummarized",
           "step": "expect_no_event"
         },
         {
@@ -9145,6 +9421,10 @@
         },
         {
           "kind": "event",
+          "name": "metaharness.trace.SessionSummarized"
+        },
+        {
+          "kind": "event",
           "name": "metaharness.trace.UnkClassified"
         },
         {
@@ -9256,6 +9536,10 @@
         },
         {
           "event": "metaharness.trace.RecordNormalized",
+          "step": "expect_no_event"
+        },
+        {
+          "event": "metaharness.trace.SessionSummarized",
           "step": "expect_no_event"
         },
         {
@@ -9384,6 +9668,10 @@
         },
         {
           "kind": "event",
+          "name": "metaharness.trace.SessionSummarized"
+        },
+        {
+          "kind": "event",
           "name": "metaharness.trace.UnkClassified"
         },
         {
@@ -9495,6 +9783,10 @@
         },
         {
           "event": "metaharness.trace.RecordNormalized",
+          "step": "expect_no_event"
+        },
+        {
+          "event": "metaharness.trace.SessionSummarized",
           "step": "expect_no_event"
         },
         {
@@ -9746,6 +10038,10 @@
         },
         {
           "kind": "event",
+          "name": "metaharness.trace.SessionSummarized"
+        },
+        {
+          "kind": "event",
           "name": "metaharness.trace.UnkClassified"
         },
         {
@@ -9878,6 +10174,10 @@
           "step": "expect_no_event"
         },
         {
+          "event": "metaharness.trace.SessionSummarized",
+          "step": "expect_no_event"
+        },
+        {
           "event": "metaharness.trace.UnkClassified",
           "step": "expect_no_event"
         },
@@ -9992,6 +10292,10 @@
         {
           "kind": "event",
           "name": "metaharness.trace.RecordNormalized"
+        },
+        {
+          "kind": "event",
+          "name": "metaharness.trace.SessionSummarized"
         },
         {
           "kind": "event",
@@ -10127,6 +10431,10 @@
           "step": "expect_no_event"
         },
         {
+          "event": "metaharness.trace.SessionSummarized",
+          "step": "expect_no_event"
+        },
+        {
           "event": "metaharness.trace.UnkClassified",
           "step": "expect_no_event"
         },
@@ -10241,6 +10549,10 @@
         {
           "kind": "event",
           "name": "metaharness.trace.RecordNormalized"
+        },
+        {
+          "kind": "event",
+          "name": "metaharness.trace.SessionSummarized"
         },
         {
           "kind": "event",
@@ -10376,6 +10688,10 @@
           "step": "expect_no_event"
         },
         {
+          "event": "metaharness.trace.SessionSummarized",
+          "step": "expect_no_event"
+        },
+        {
           "event": "metaharness.trace.UnkClassified",
           "step": "expect_no_event"
         },
@@ -10490,6 +10806,10 @@
         {
           "kind": "event",
           "name": "metaharness.trace.RecordNormalized"
+        },
+        {
+          "kind": "event",
+          "name": "metaharness.trace.SessionSummarized"
         },
         {
           "kind": "event",
@@ -10625,6 +10945,10 @@
           "step": "expect_no_event"
         },
         {
+          "event": "metaharness.trace.SessionSummarized",
+          "step": "expect_no_event"
+        },
+        {
           "event": "metaharness.trace.UnkClassified",
           "step": "expect_no_event"
         },
@@ -10739,6 +11063,10 @@
         {
           "kind": "event",
           "name": "metaharness.trace.RecordNormalized"
+        },
+        {
+          "kind": "event",
+          "name": "metaharness.trace.SessionSummarized"
         },
         {
           "kind": "event",
@@ -10871,6 +11199,10 @@
         },
         {
           "event": "metaharness.trace.RecordNormalized",
+          "step": "expect_no_event"
+        },
+        {
+          "event": "metaharness.trace.SessionSummarized",
           "step": "expect_no_event"
         },
         {
@@ -11008,6 +11340,10 @@
         },
         {
           "kind": "event",
+          "name": "metaharness.trace.SessionSummarized"
+        },
+        {
+          "kind": "event",
           "name": "metaharness.trace.UnkClassified"
         },
         {
@@ -11140,6 +11476,10 @@
           "step": "expect_no_event"
         },
         {
+          "event": "metaharness.trace.SessionSummarized",
+          "step": "expect_no_event"
+        },
+        {
           "event": "metaharness.trace.UnkClassified",
           "step": "expect_no_event"
         },
@@ -11254,6 +11594,10 @@
         {
           "kind": "event",
           "name": "metaharness.trace.RecordNormalized"
+        },
+        {
+          "kind": "event",
+          "name": "metaharness.trace.SessionSummarized"
         },
         {
           "kind": "event",
@@ -11389,6 +11733,10 @@
           "step": "expect_no_event"
         },
         {
+          "event": "metaharness.trace.SessionSummarized",
+          "step": "expect_no_event"
+        },
+        {
           "event": "metaharness.trace.UnkClassified",
           "step": "expect_no_event"
         },
@@ -11503,6 +11851,10 @@
         {
           "kind": "event",
           "name": "metaharness.trace.RecordNormalized"
+        },
+        {
+          "kind": "event",
+          "name": "metaharness.trace.SessionSummarized"
         },
         {
           "kind": "event",
@@ -11638,6 +11990,10 @@
           "step": "expect_no_event"
         },
         {
+          "event": "metaharness.trace.SessionSummarized",
+          "step": "expect_no_event"
+        },
+        {
           "event": "metaharness.trace.UnkClassified",
           "step": "expect_no_event"
         },
@@ -11752,6 +12108,10 @@
         {
           "kind": "event",
           "name": "metaharness.trace.RecordNormalized"
+        },
+        {
+          "kind": "event",
+          "name": "metaharness.trace.SessionSummarized"
         },
         {
           "kind": "event",
@@ -11887,6 +12247,10 @@
           "step": "expect_no_event"
         },
         {
+          "event": "metaharness.trace.SessionSummarized",
+          "step": "expect_no_event"
+        },
+        {
           "event": "metaharness.trace.UnkClassified",
           "step": "expect_no_event"
         },
@@ -12001,6 +12365,10 @@
         {
           "kind": "event",
           "name": "metaharness.trace.RecordNormalized"
+        },
+        {
+          "kind": "event",
+          "name": "metaharness.trace.SessionSummarized"
         },
         {
           "kind": "event",
@@ -12136,6 +12504,10 @@
           "step": "expect_no_event"
         },
         {
+          "event": "metaharness.trace.SessionSummarized",
+          "step": "expect_no_event"
+        },
+        {
           "event": "metaharness.trace.UnkClassified",
           "step": "expect_no_event"
         },
@@ -12250,6 +12622,10 @@
         {
           "kind": "event",
           "name": "metaharness.trace.RecordNormalized"
+        },
+        {
+          "kind": "event",
+          "name": "metaharness.trace.SessionSummarized"
         },
         {
           "kind": "event",
@@ -12385,6 +12761,10 @@
           "step": "expect_no_event"
         },
         {
+          "event": "metaharness.trace.SessionSummarized",
+          "step": "expect_no_event"
+        },
+        {
           "event": "metaharness.trace.UnkClassified",
           "step": "expect_no_event"
         },
@@ -12499,6 +12879,10 @@
         {
           "kind": "event",
           "name": "metaharness.trace.RecordNormalized"
+        },
+        {
+          "kind": "event",
+          "name": "metaharness.trace.SessionSummarized"
         },
         {
           "kind": "event",
@@ -12643,6 +13027,10 @@
           "step": "expect_no_event"
         },
         {
+          "event": "metaharness.trace.SessionSummarized",
+          "step": "expect_no_event"
+        },
+        {
           "event": "metaharness.trace.VendorRecordProjected",
           "step": "expect_no_event"
         },
@@ -12753,6 +13141,10 @@
         {
           "kind": "event",
           "name": "metaharness.trace.RecordNormalized"
+        },
+        {
+          "kind": "event",
+          "name": "metaharness.trace.SessionSummarized"
         },
         {
           "kind": "event",
@@ -12897,6 +13289,10 @@
           "step": "expect_no_event"
         },
         {
+          "event": "metaharness.trace.SessionSummarized",
+          "step": "expect_no_event"
+        },
+        {
           "event": "metaharness.trace.VendorRecordProjected",
           "step": "expect_no_event"
         },
@@ -13007,6 +13403,10 @@
         {
           "kind": "event",
           "name": "metaharness.trace.RecordNormalized"
+        },
+        {
+          "kind": "event",
+          "name": "metaharness.trace.SessionSummarized"
         },
         {
           "kind": "event",
@@ -13151,6 +13551,10 @@
           "step": "expect_no_event"
         },
         {
+          "event": "metaharness.trace.SessionSummarized",
+          "step": "expect_no_event"
+        },
+        {
           "event": "metaharness.trace.VendorRecordProjected",
           "step": "expect_no_event"
         },
@@ -13261,6 +13665,10 @@
         {
           "kind": "event",
           "name": "metaharness.trace.RecordNormalized"
+        },
+        {
+          "kind": "event",
+          "name": "metaharness.trace.SessionSummarized"
         },
         {
           "kind": "event",
@@ -13405,6 +13813,10 @@
           "step": "expect_no_event"
         },
         {
+          "event": "metaharness.trace.SessionSummarized",
+          "step": "expect_no_event"
+        },
+        {
           "event": "metaharness.trace.VendorRecordProjected",
           "step": "expect_no_event"
         },
@@ -13515,6 +13927,10 @@
         {
           "kind": "event",
           "name": "metaharness.trace.RecordNormalized"
+        },
+        {
+          "kind": "event",
+          "name": "metaharness.trace.SessionSummarized"
         },
         {
           "kind": "event",
@@ -13659,6 +14075,10 @@
           "step": "expect_no_event"
         },
         {
+          "event": "metaharness.trace.SessionSummarized",
+          "step": "expect_no_event"
+        },
+        {
           "event": "metaharness.trace.VendorRecordProjected",
           "step": "expect_no_event"
         },
@@ -13769,6 +14189,10 @@
         {
           "kind": "event",
           "name": "metaharness.trace.RecordNormalized"
+        },
+        {
+          "kind": "event",
+          "name": "metaharness.trace.SessionSummarized"
         },
         {
           "kind": "event",
@@ -13913,6 +14337,10 @@
           "step": "expect_no_event"
         },
         {
+          "event": "metaharness.trace.SessionSummarized",
+          "step": "expect_no_event"
+        },
+        {
           "event": "metaharness.trace.VendorRecordProjected",
           "step": "expect_no_event"
         },
@@ -14023,6 +14451,10 @@
         {
           "kind": "event",
           "name": "metaharness.trace.RecordNormalized"
+        },
+        {
+          "kind": "event",
+          "name": "metaharness.trace.SessionSummarized"
         },
         {
           "kind": "event",
@@ -14167,6 +14599,10 @@
           "step": "expect_no_event"
         },
         {
+          "event": "metaharness.trace.SessionSummarized",
+          "step": "expect_no_event"
+        },
+        {
           "event": "metaharness.trace.VendorRecordProjected",
           "step": "expect_no_event"
         },
@@ -14277,6 +14713,10 @@
         {
           "kind": "event",
           "name": "metaharness.trace.RecordNormalized"
+        },
+        {
+          "kind": "event",
+          "name": "metaharness.trace.SessionSummarized"
         },
         {
           "kind": "event",
@@ -14421,6 +14861,10 @@
           "step": "expect_no_event"
         },
         {
+          "event": "metaharness.trace.SessionSummarized",
+          "step": "expect_no_event"
+        },
+        {
           "event": "metaharness.trace.VendorRecordProjected",
           "step": "expect_no_event"
         },
@@ -14527,6 +14971,10 @@
         {
           "kind": "event",
           "name": "metaharness.trace.RecordNormalized"
+        },
+        {
+          "kind": "event",
+          "name": "metaharness.trace.SessionSummarized"
         },
         {
           "kind": "event",
@@ -14659,6 +15107,10 @@
           "step": "expect_no_event"
         },
         {
+          "event": "metaharness.trace.SessionSummarized",
+          "step": "expect_no_event"
+        },
+        {
           "event": "metaharness.trace.UnkClassified",
           "step": "expect_no_event"
         },
@@ -14769,6 +15221,10 @@
         {
           "kind": "event",
           "name": "metaharness.trace.RecordNormalized"
+        },
+        {
+          "kind": "event",
+          "name": "metaharness.trace.SessionSummarized"
         },
         {
           "kind": "event",
@@ -14898,6 +15354,10 @@
         },
         {
           "event": "metaharness.trace.RecordNormalized",
+          "step": "expect_no_event"
+        },
+        {
+          "event": "metaharness.trace.SessionSummarized",
           "step": "expect_no_event"
         },
         {
@@ -15097,6 +15557,10 @@
         },
         {
           "kind": "event",
+          "name": "metaharness.trace.SessionSummarized"
+        },
+        {
+          "kind": "event",
           "name": "metaharness.trace.UnkClassified"
         },
         {
@@ -15243,6 +15707,10 @@
           "step": "expect_no_event"
         },
         {
+          "event": "metaharness.trace.SessionSummarized",
+          "step": "expect_no_event"
+        },
+        {
           "event": "metaharness.trace.UnkClassified",
           "step": "expect_no_event"
         },
@@ -15361,6 +15829,10 @@
         {
           "kind": "event",
           "name": "metaharness.trace.RecordNormalized"
+        },
+        {
+          "kind": "event",
+          "name": "metaharness.trace.SessionSummarized"
         },
         {
           "kind": "event",
@@ -15510,6 +15982,10 @@
           "step": "expect_no_event"
         },
         {
+          "event": "metaharness.trace.SessionSummarized",
+          "step": "expect_no_event"
+        },
+        {
           "event": "metaharness.trace.UnkClassified",
           "step": "expect_no_event"
         },
@@ -15628,6 +16104,10 @@
         {
           "kind": "event",
           "name": "metaharness.trace.RecordNormalized"
+        },
+        {
+          "kind": "event",
+          "name": "metaharness.trace.SessionSummarized"
         },
         {
           "kind": "event",
@@ -15777,6 +16257,10 @@
           "step": "expect_no_event"
         },
         {
+          "event": "metaharness.trace.SessionSummarized",
+          "step": "expect_no_event"
+        },
+        {
           "event": "metaharness.trace.UnkClassified",
           "step": "expect_no_event"
         },
@@ -15895,6 +16379,10 @@
         {
           "kind": "event",
           "name": "metaharness.trace.RecordNormalized"
+        },
+        {
+          "kind": "event",
+          "name": "metaharness.trace.SessionSummarized"
         },
         {
           "kind": "event",
@@ -16044,6 +16532,10 @@
           "step": "expect_no_event"
         },
         {
+          "event": "metaharness.trace.SessionSummarized",
+          "step": "expect_no_event"
+        },
+        {
           "event": "metaharness.trace.UnkClassified",
           "step": "expect_no_event"
         },
@@ -16158,6 +16650,10 @@
         {
           "kind": "event",
           "name": "metaharness.trace.RecordNormalized"
+        },
+        {
+          "kind": "event",
+          "name": "metaharness.trace.SessionSummarized"
         },
         {
           "kind": "event",
@@ -16308,6 +16804,10 @@
           "step": "expect_no_event"
         },
         {
+          "event": "metaharness.trace.SessionSummarized",
+          "step": "expect_no_event"
+        },
+        {
           "event": "metaharness.trace.UnkClassified",
           "step": "expect_no_event"
         },
@@ -16434,6 +16934,10 @@
         {
           "kind": "event",
           "name": "metaharness.trace.RecordNormalized"
+        },
+        {
+          "kind": "event",
+          "name": "metaharness.trace.SessionSummarized"
         },
         {
           "kind": "event",
@@ -16584,6 +17088,10 @@
           "step": "expect_no_event"
         },
         {
+          "event": "metaharness.trace.SessionSummarized",
+          "step": "expect_no_event"
+        },
+        {
           "event": "metaharness.trace.UnkClassified",
           "step": "expect_no_event"
         },
@@ -16714,6 +17222,10 @@
         {
           "kind": "event",
           "name": "metaharness.trace.RecordNormalized"
+        },
+        {
+          "kind": "event",
+          "name": "metaharness.trace.SessionSummarized"
         },
         {
           "kind": "event",
@@ -16897,6 +17409,10 @@
           "step": "expect_no_event"
         },
         {
+          "event": "metaharness.trace.SessionSummarized",
+          "step": "expect_no_event"
+        },
+        {
           "event": "metaharness.trace.UnkClassified",
           "step": "expect_no_event"
         },
@@ -17011,6 +17527,10 @@
         {
           "kind": "event",
           "name": "metaharness.trace.RecordNormalized"
+        },
+        {
+          "kind": "event",
+          "name": "metaharness.trace.SessionSummarized"
         },
         {
           "kind": "event",
@@ -17194,6 +17714,10 @@
           "step": "expect_no_event"
         },
         {
+          "event": "metaharness.trace.SessionSummarized",
+          "step": "expect_no_event"
+        },
+        {
           "event": "metaharness.trace.UnkClassified",
           "step": "expect_no_event"
         },
@@ -17300,6 +17824,10 @@
         {
           "kind": "event",
           "name": "metaharness.trace.RecordNormalized"
+        },
+        {
+          "kind": "event",
+          "name": "metaharness.trace.SessionSummarized"
         },
         {
           "kind": "event",
@@ -17431,6 +17959,10 @@
           "step": "expect_no_event"
         },
         {
+          "event": "metaharness.trace.SessionSummarized",
+          "step": "expect_no_event"
+        },
+        {
           "event": "metaharness.trace.UnkClassified",
           "step": "expect_no_event"
         },
@@ -17545,6 +18077,10 @@
         {
           "kind": "event",
           "name": "metaharness.trace.RecordNormalized"
+        },
+        {
+          "kind": "event",
+          "name": "metaharness.trace.SessionSummarized"
         },
         {
           "kind": "event",
@@ -17725,6 +18261,10 @@
         },
         {
           "event": "metaharness.trace.RecordNormalized",
+          "step": "expect_no_event"
+        },
+        {
+          "event": "metaharness.trace.SessionSummarized",
           "step": "expect_no_event"
         },
         {
@@ -17944,6 +18484,1386 @@
         }
       ]
     },
+    "metaharness.trace.SummarizeRecord/outcome/claude-transcript-summarized": {
+      "purpose": "`metaharness.trace.SummarizeRecord` answers `claude-transcript-summarized` for an input that satisfies that branch's guard",
+      "source": [
+        {
+          "kind": "type",
+          "name": "metaharness.trace.SourceKind"
+        },
+        {
+          "kind": "command",
+          "name": "metaharness.trace.SummarizeRecord"
+        },
+        {
+          "kind": "outcome",
+          "name": {
+            "command": "metaharness.trace.SummarizeRecord",
+            "outcome": "claude-transcript-summarized"
+          }
+        },
+        {
+          "kind": "event",
+          "name": "metaharness.boundaries.CallDecided"
+        },
+        {
+          "kind": "event",
+          "name": "metaharness.boundaries.FileRead"
+        },
+        {
+          "kind": "event",
+          "name": "metaharness.boundaries.FrameRead"
+        },
+        {
+          "kind": "event",
+          "name": "metaharness.observations.NativeStatusClassified"
+        },
+        {
+          "kind": "event",
+          "name": "metaharness.observations.PresenceRead"
+        },
+        {
+          "kind": "event",
+          "name": "metaharness.observations.ToolOutcomeRead"
+        },
+        {
+          "kind": "event",
+          "name": "metaharness.session.ClosureRecorded"
+        },
+        {
+          "kind": "event",
+          "name": "metaharness.session.CompletionClassified"
+        },
+        {
+          "kind": "event",
+          "name": "metaharness.session.PollingObserved"
+        },
+        {
+          "kind": "event",
+          "name": "metaharness.session.StreamClassified"
+        },
+        {
+          "kind": "event",
+          "name": "metaharness.spending.AdmissionRecorded"
+        },
+        {
+          "kind": "event",
+          "name": "metaharness.spending.FiniteLedgerRecorded"
+        },
+        {
+          "kind": "event",
+          "name": "metaharness.trace.CompletenessVerified"
+        },
+        {
+          "kind": "event",
+          "name": "metaharness.trace.DigestNamed"
+        },
+        {
+          "kind": "event",
+          "name": "metaharness.trace.FamilyClassified"
+        },
+        {
+          "kind": "event",
+          "name": "metaharness.trace.ProjectionRecorded"
+        },
+        {
+          "kind": "event",
+          "name": "metaharness.trace.RecordNormalized"
+        },
+        {
+          "kind": "event",
+          "name": "metaharness.trace.SessionSummarized"
+        },
+        {
+          "kind": "event",
+          "name": "metaharness.trace.UnkClassified"
+        },
+        {
+          "kind": "event",
+          "name": "metaharness.trace.VendorRecordProjected"
+        },
+        {
+          "kind": "event",
+          "name": "metaharness.trace.VendorSourceRefused"
+        },
+        {
+          "kind": "event",
+          "name": "metaharness.workspace.ContextFilesRecorded"
+        },
+        {
+          "kind": "event",
+          "name": "metaharness.workspace.ProcessWritePlanned"
+        },
+        {
+          "kind": "event",
+          "name": "metaharness.workspace.ScratchCwdAttested"
+        }
+      ],
+      "steps": [
+        {
+          "command": "metaharness.trace.SummarizeRecord",
+          "input": {
+            "source": {
+              "kind": "literal",
+              "value": "claude-code-stream-json"
+            }
+          },
+          "step": "execute_command"
+        },
+        {
+          "outcome": {
+            "command": "metaharness.trace.SummarizeRecord",
+            "outcome": "claude-transcript-summarized"
+          },
+          "step": "expect_outcome"
+        },
+        {
+          "event": "metaharness.trace.SessionSummarized",
+          "payload": {
+            "adapter": "\"claude\"",
+            "byte_stable": true,
+            "cache_creation_input_tokens": "22421",
+            "cache_read_input_tokens": "22308",
+            "cost_usd": "0.238876",
+            "duration_api_ms": "5372",
+            "duration_ms": "4784",
+            "first_timestamp_ms": "1787453878487",
+            "format": "\"trace-ir-summary/1\"",
+            "input_tokens": "4",
+            "is_error": "false",
+            "last_timestamp_ms": "1787453880172",
+            "model": "\"claude-opus-5[1m]\"",
+            "models": "[{\"cache_creation_input_tokens\":22421,\"cache_read_input_tokens\":22308,\"cost_usd\":0.237784,\"input_tokens\":4,\"name\":\"claude-opus-5[1m]\",\"output_tokens\":96},{\"cache_creation_input_tokens\":null,\"cache_read_input_tokens\":null,\"cost_usd\":null,\"input_tokens\":null,\"name\":\"claude-opus-5\",\"output_tokens\":null},{\"cache_creation_input_tokens\":0,\"cache_read_input_tokens\":0,\"cost_usd\":0.0010919999999999999,\"input_tokens\":1032,\"name\":\"claude-haiku-4-5-20251001\",\"output_tokens\":12}]",
+            "output_tokens": "96",
+            "source": "\"claude-code-stream-json\"",
+            "stop_reason": "\"end_turn\"",
+            "tokens_basis": "\"session\"",
+            "tool_calls": "[{\"answered\":true,\"call_id\":\"toolu_0126wZX9VgSsd4Hw7AbgMkc3\",\"error\":false,\"name\":\"Bash\"}]",
+            "transcript_digest": "\"ff0d5eebe13e1e1c3722688b17b071af62ba8adaddece4899a5c482ea881179a\"",
+            "turns": "2",
+            "unk": "0"
+          },
+          "shape": {
+            "adapter": {
+              "holds": "primitive",
+              "kind": "string"
+            },
+            "byte_stable": {
+              "holds": "primitive",
+              "kind": "boolean"
+            },
+            "cache_creation_input_tokens": {
+              "holds": "primitive",
+              "kind": "string"
+            },
+            "cache_read_input_tokens": {
+              "holds": "primitive",
+              "kind": "string"
+            },
+            "cost_usd": {
+              "holds": "primitive",
+              "kind": "string"
+            },
+            "duration_api_ms": {
+              "holds": "primitive",
+              "kind": "string"
+            },
+            "duration_ms": {
+              "holds": "primitive",
+              "kind": "string"
+            },
+            "first_timestamp_ms": {
+              "holds": "primitive",
+              "kind": "string"
+            },
+            "format": {
+              "holds": "primitive",
+              "kind": "string"
+            },
+            "input_tokens": {
+              "holds": "primitive",
+              "kind": "string"
+            },
+            "is_error": {
+              "holds": "primitive",
+              "kind": "string"
+            },
+            "last_timestamp_ms": {
+              "holds": "primitive",
+              "kind": "string"
+            },
+            "model": {
+              "holds": "primitive",
+              "kind": "string"
+            },
+            "models": {
+              "holds": "primitive",
+              "kind": "string"
+            },
+            "output_tokens": {
+              "holds": "primitive",
+              "kind": "string"
+            },
+            "source": {
+              "holds": "primitive",
+              "kind": "string"
+            },
+            "stop_reason": {
+              "holds": "primitive",
+              "kind": "string"
+            },
+            "tokens_basis": {
+              "holds": "primitive",
+              "kind": "string"
+            },
+            "tool_calls": {
+              "holds": "primitive",
+              "kind": "string"
+            },
+            "transcript_digest": {
+              "holds": "primitive",
+              "kind": "string"
+            },
+            "turns": {
+              "holds": "primitive",
+              "kind": "string"
+            },
+            "unk": {
+              "holds": "primitive",
+              "kind": "string"
+            }
+          },
+          "step": "expect_event"
+        },
+        {
+          "event": "metaharness.boundaries.CallDecided",
+          "step": "expect_no_event"
+        },
+        {
+          "event": "metaharness.boundaries.FileRead",
+          "step": "expect_no_event"
+        },
+        {
+          "event": "metaharness.boundaries.FrameRead",
+          "step": "expect_no_event"
+        },
+        {
+          "event": "metaharness.observations.NativeStatusClassified",
+          "step": "expect_no_event"
+        },
+        {
+          "event": "metaharness.observations.PresenceRead",
+          "step": "expect_no_event"
+        },
+        {
+          "event": "metaharness.observations.ToolOutcomeRead",
+          "step": "expect_no_event"
+        },
+        {
+          "event": "metaharness.session.ClosureRecorded",
+          "step": "expect_no_event"
+        },
+        {
+          "event": "metaharness.session.CompletionClassified",
+          "step": "expect_no_event"
+        },
+        {
+          "event": "metaharness.session.PollingObserved",
+          "step": "expect_no_event"
+        },
+        {
+          "event": "metaharness.session.StreamClassified",
+          "step": "expect_no_event"
+        },
+        {
+          "event": "metaharness.spending.AdmissionRecorded",
+          "step": "expect_no_event"
+        },
+        {
+          "event": "metaharness.spending.FiniteLedgerRecorded",
+          "step": "expect_no_event"
+        },
+        {
+          "event": "metaharness.trace.CompletenessVerified",
+          "step": "expect_no_event"
+        },
+        {
+          "event": "metaharness.trace.DigestNamed",
+          "step": "expect_no_event"
+        },
+        {
+          "event": "metaharness.trace.FamilyClassified",
+          "step": "expect_no_event"
+        },
+        {
+          "event": "metaharness.trace.ProjectionRecorded",
+          "step": "expect_no_event"
+        },
+        {
+          "event": "metaharness.trace.RecordNormalized",
+          "step": "expect_no_event"
+        },
+        {
+          "event": "metaharness.trace.UnkClassified",
+          "step": "expect_no_event"
+        },
+        {
+          "event": "metaharness.trace.VendorRecordProjected",
+          "step": "expect_no_event"
+        },
+        {
+          "event": "metaharness.trace.VendorSourceRefused",
+          "step": "expect_no_event"
+        },
+        {
+          "event": "metaharness.workspace.ContextFilesRecorded",
+          "step": "expect_no_event"
+        },
+        {
+          "event": "metaharness.workspace.ProcessWritePlanned",
+          "step": "expect_no_event"
+        },
+        {
+          "event": "metaharness.workspace.ScratchCwdAttested",
+          "step": "expect_no_event"
+        }
+      ]
+    },
+    "metaharness.trace.SummarizeRecord/outcome/codex-rollout-summarized": {
+      "purpose": "`metaharness.trace.SummarizeRecord` answers `codex-rollout-summarized` for an input that satisfies that branch's guard",
+      "source": [
+        {
+          "kind": "type",
+          "name": "metaharness.trace.SourceKind"
+        },
+        {
+          "kind": "command",
+          "name": "metaharness.trace.SummarizeRecord"
+        },
+        {
+          "kind": "outcome",
+          "name": {
+            "command": "metaharness.trace.SummarizeRecord",
+            "outcome": "codex-rollout-summarized"
+          }
+        },
+        {
+          "kind": "event",
+          "name": "metaharness.boundaries.CallDecided"
+        },
+        {
+          "kind": "event",
+          "name": "metaharness.boundaries.FileRead"
+        },
+        {
+          "kind": "event",
+          "name": "metaharness.boundaries.FrameRead"
+        },
+        {
+          "kind": "event",
+          "name": "metaharness.observations.NativeStatusClassified"
+        },
+        {
+          "kind": "event",
+          "name": "metaharness.observations.PresenceRead"
+        },
+        {
+          "kind": "event",
+          "name": "metaharness.observations.ToolOutcomeRead"
+        },
+        {
+          "kind": "event",
+          "name": "metaharness.session.ClosureRecorded"
+        },
+        {
+          "kind": "event",
+          "name": "metaharness.session.CompletionClassified"
+        },
+        {
+          "kind": "event",
+          "name": "metaharness.session.PollingObserved"
+        },
+        {
+          "kind": "event",
+          "name": "metaharness.session.StreamClassified"
+        },
+        {
+          "kind": "event",
+          "name": "metaharness.spending.AdmissionRecorded"
+        },
+        {
+          "kind": "event",
+          "name": "metaharness.spending.FiniteLedgerRecorded"
+        },
+        {
+          "kind": "event",
+          "name": "metaharness.trace.CompletenessVerified"
+        },
+        {
+          "kind": "event",
+          "name": "metaharness.trace.DigestNamed"
+        },
+        {
+          "kind": "event",
+          "name": "metaharness.trace.FamilyClassified"
+        },
+        {
+          "kind": "event",
+          "name": "metaharness.trace.ProjectionRecorded"
+        },
+        {
+          "kind": "event",
+          "name": "metaharness.trace.RecordNormalized"
+        },
+        {
+          "kind": "event",
+          "name": "metaharness.trace.SessionSummarized"
+        },
+        {
+          "kind": "event",
+          "name": "metaharness.trace.UnkClassified"
+        },
+        {
+          "kind": "event",
+          "name": "metaharness.trace.VendorRecordProjected"
+        },
+        {
+          "kind": "event",
+          "name": "metaharness.trace.VendorSourceRefused"
+        },
+        {
+          "kind": "event",
+          "name": "metaharness.workspace.ContextFilesRecorded"
+        },
+        {
+          "kind": "event",
+          "name": "metaharness.workspace.ProcessWritePlanned"
+        },
+        {
+          "kind": "event",
+          "name": "metaharness.workspace.ScratchCwdAttested"
+        }
+      ],
+      "steps": [
+        {
+          "command": "metaharness.trace.SummarizeRecord",
+          "input": {
+            "source": {
+              "kind": "literal",
+              "value": "codex-rollout"
+            }
+          },
+          "step": "execute_command"
+        },
+        {
+          "outcome": {
+            "command": "metaharness.trace.SummarizeRecord",
+            "outcome": "codex-rollout-summarized"
+          },
+          "step": "expect_outcome"
+        },
+        {
+          "event": "metaharness.trace.SessionSummarized",
+          "payload": {
+            "adapter": "\"codex\"",
+            "byte_stable": true,
+            "cache_creation_input_tokens": "null",
+            "cache_read_input_tokens": "23040",
+            "cost_usd": "null",
+            "duration_api_ms": "null",
+            "duration_ms": "7074",
+            "first_timestamp_ms": "1787453919893",
+            "format": "\"trace-ir-summary/1\"",
+            "input_tokens": "27570",
+            "is_error": "false",
+            "last_timestamp_ms": "1787453926967",
+            "model": "null",
+            "models": "[{\"cache_creation_input_tokens\":null,\"cache_read_input_tokens\":null,\"cost_usd\":null,\"input_tokens\":null,\"name\":\"gpt-5.6-sol\",\"output_tokens\":null}]",
+            "output_tokens": "94",
+            "source": "\"codex-rollout\"",
+            "stop_reason": "null",
+            "tokens_basis": "\"session\"",
+            "tool_calls": "[{\"answered\":true,\"call_id\":\"call_bnZWdUqhCidLSR2PelWxMxcK\",\"error\":null,\"name\":\"exec\"}]",
+            "transcript_digest": "\"b6ac934e09b71f95d24025d343ea4719b940a124cdef33d1bfb348daddae8900\"",
+            "turns": "1",
+            "unk": "3"
+          },
+          "shape": {
+            "adapter": {
+              "holds": "primitive",
+              "kind": "string"
+            },
+            "byte_stable": {
+              "holds": "primitive",
+              "kind": "boolean"
+            },
+            "cache_creation_input_tokens": {
+              "holds": "primitive",
+              "kind": "string"
+            },
+            "cache_read_input_tokens": {
+              "holds": "primitive",
+              "kind": "string"
+            },
+            "cost_usd": {
+              "holds": "primitive",
+              "kind": "string"
+            },
+            "duration_api_ms": {
+              "holds": "primitive",
+              "kind": "string"
+            },
+            "duration_ms": {
+              "holds": "primitive",
+              "kind": "string"
+            },
+            "first_timestamp_ms": {
+              "holds": "primitive",
+              "kind": "string"
+            },
+            "format": {
+              "holds": "primitive",
+              "kind": "string"
+            },
+            "input_tokens": {
+              "holds": "primitive",
+              "kind": "string"
+            },
+            "is_error": {
+              "holds": "primitive",
+              "kind": "string"
+            },
+            "last_timestamp_ms": {
+              "holds": "primitive",
+              "kind": "string"
+            },
+            "model": {
+              "holds": "primitive",
+              "kind": "string"
+            },
+            "models": {
+              "holds": "primitive",
+              "kind": "string"
+            },
+            "output_tokens": {
+              "holds": "primitive",
+              "kind": "string"
+            },
+            "source": {
+              "holds": "primitive",
+              "kind": "string"
+            },
+            "stop_reason": {
+              "holds": "primitive",
+              "kind": "string"
+            },
+            "tokens_basis": {
+              "holds": "primitive",
+              "kind": "string"
+            },
+            "tool_calls": {
+              "holds": "primitive",
+              "kind": "string"
+            },
+            "transcript_digest": {
+              "holds": "primitive",
+              "kind": "string"
+            },
+            "turns": {
+              "holds": "primitive",
+              "kind": "string"
+            },
+            "unk": {
+              "holds": "primitive",
+              "kind": "string"
+            }
+          },
+          "step": "expect_event"
+        },
+        {
+          "event": "metaharness.boundaries.CallDecided",
+          "step": "expect_no_event"
+        },
+        {
+          "event": "metaharness.boundaries.FileRead",
+          "step": "expect_no_event"
+        },
+        {
+          "event": "metaharness.boundaries.FrameRead",
+          "step": "expect_no_event"
+        },
+        {
+          "event": "metaharness.observations.NativeStatusClassified",
+          "step": "expect_no_event"
+        },
+        {
+          "event": "metaharness.observations.PresenceRead",
+          "step": "expect_no_event"
+        },
+        {
+          "event": "metaharness.observations.ToolOutcomeRead",
+          "step": "expect_no_event"
+        },
+        {
+          "event": "metaharness.session.ClosureRecorded",
+          "step": "expect_no_event"
+        },
+        {
+          "event": "metaharness.session.CompletionClassified",
+          "step": "expect_no_event"
+        },
+        {
+          "event": "metaharness.session.PollingObserved",
+          "step": "expect_no_event"
+        },
+        {
+          "event": "metaharness.session.StreamClassified",
+          "step": "expect_no_event"
+        },
+        {
+          "event": "metaharness.spending.AdmissionRecorded",
+          "step": "expect_no_event"
+        },
+        {
+          "event": "metaharness.spending.FiniteLedgerRecorded",
+          "step": "expect_no_event"
+        },
+        {
+          "event": "metaharness.trace.CompletenessVerified",
+          "step": "expect_no_event"
+        },
+        {
+          "event": "metaharness.trace.DigestNamed",
+          "step": "expect_no_event"
+        },
+        {
+          "event": "metaharness.trace.FamilyClassified",
+          "step": "expect_no_event"
+        },
+        {
+          "event": "metaharness.trace.ProjectionRecorded",
+          "step": "expect_no_event"
+        },
+        {
+          "event": "metaharness.trace.RecordNormalized",
+          "step": "expect_no_event"
+        },
+        {
+          "event": "metaharness.trace.UnkClassified",
+          "step": "expect_no_event"
+        },
+        {
+          "event": "metaharness.trace.VendorRecordProjected",
+          "step": "expect_no_event"
+        },
+        {
+          "event": "metaharness.trace.VendorSourceRefused",
+          "step": "expect_no_event"
+        },
+        {
+          "event": "metaharness.workspace.ContextFilesRecorded",
+          "step": "expect_no_event"
+        },
+        {
+          "event": "metaharness.workspace.ProcessWritePlanned",
+          "step": "expect_no_event"
+        },
+        {
+          "event": "metaharness.workspace.ScratchCwdAttested",
+          "step": "expect_no_event"
+        }
+      ]
+    },
+    "metaharness.trace.SummarizeRecord/outcome/event-stream-summarized": {
+      "purpose": "`metaharness.trace.SummarizeRecord` answers `event-stream-summarized` for an input no other branch's guard claims",
+      "source": [
+        {
+          "kind": "type",
+          "name": "metaharness.trace.SourceKind"
+        },
+        {
+          "kind": "command",
+          "name": "metaharness.trace.SummarizeRecord"
+        },
+        {
+          "kind": "outcome",
+          "name": {
+            "command": "metaharness.trace.SummarizeRecord",
+            "outcome": "event-stream-summarized"
+          }
+        },
+        {
+          "kind": "event",
+          "name": "metaharness.boundaries.CallDecided"
+        },
+        {
+          "kind": "event",
+          "name": "metaharness.boundaries.FileRead"
+        },
+        {
+          "kind": "event",
+          "name": "metaharness.boundaries.FrameRead"
+        },
+        {
+          "kind": "event",
+          "name": "metaharness.observations.NativeStatusClassified"
+        },
+        {
+          "kind": "event",
+          "name": "metaharness.observations.PresenceRead"
+        },
+        {
+          "kind": "event",
+          "name": "metaharness.observations.ToolOutcomeRead"
+        },
+        {
+          "kind": "event",
+          "name": "metaharness.session.ClosureRecorded"
+        },
+        {
+          "kind": "event",
+          "name": "metaharness.session.CompletionClassified"
+        },
+        {
+          "kind": "event",
+          "name": "metaharness.session.PollingObserved"
+        },
+        {
+          "kind": "event",
+          "name": "metaharness.session.StreamClassified"
+        },
+        {
+          "kind": "event",
+          "name": "metaharness.spending.AdmissionRecorded"
+        },
+        {
+          "kind": "event",
+          "name": "metaharness.spending.FiniteLedgerRecorded"
+        },
+        {
+          "kind": "event",
+          "name": "metaharness.trace.CompletenessVerified"
+        },
+        {
+          "kind": "event",
+          "name": "metaharness.trace.DigestNamed"
+        },
+        {
+          "kind": "event",
+          "name": "metaharness.trace.FamilyClassified"
+        },
+        {
+          "kind": "event",
+          "name": "metaharness.trace.ProjectionRecorded"
+        },
+        {
+          "kind": "event",
+          "name": "metaharness.trace.RecordNormalized"
+        },
+        {
+          "kind": "event",
+          "name": "metaharness.trace.SessionSummarized"
+        },
+        {
+          "kind": "event",
+          "name": "metaharness.trace.UnkClassified"
+        },
+        {
+          "kind": "event",
+          "name": "metaharness.trace.VendorRecordProjected"
+        },
+        {
+          "kind": "event",
+          "name": "metaharness.trace.VendorSourceRefused"
+        },
+        {
+          "kind": "event",
+          "name": "metaharness.workspace.ContextFilesRecorded"
+        },
+        {
+          "kind": "event",
+          "name": "metaharness.workspace.ProcessWritePlanned"
+        },
+        {
+          "kind": "event",
+          "name": "metaharness.workspace.ScratchCwdAttested"
+        }
+      ],
+      "steps": [
+        {
+          "command": "metaharness.trace.SummarizeRecord",
+          "input": {
+            "source": {
+              "kind": "literal",
+              "value": "metaharness-event-stream"
+            }
+          },
+          "step": "execute_command"
+        },
+        {
+          "outcome": {
+            "command": "metaharness.trace.SummarizeRecord",
+            "outcome": "event-stream-summarized"
+          },
+          "step": "expect_outcome"
+        },
+        {
+          "event": "metaharness.trace.SessionSummarized",
+          "payload": {
+            "adapter": "\"claude\"",
+            "byte_stable": true,
+            "cache_creation_input_tokens": "19400",
+            "cache_read_input_tokens": "181000",
+            "cost_usd": "0.21",
+            "duration_api_ms": "17100",
+            "duration_ms": "18200",
+            "first_timestamp_ms": "1787302800000",
+            "format": "\"trace-ir-summary/1\"",
+            "input_tokens": "42",
+            "is_error": "false",
+            "last_timestamp_ms": "1787302817300",
+            "model": "\"claude-sonnet-5\"",
+            "models": "[{\"cache_creation_input_tokens\":null,\"cache_read_input_tokens\":null,\"cost_usd\":null,\"input_tokens\":null,\"name\":\"claude-sonnet-5\",\"output_tokens\":null}]",
+            "output_tokens": "2100",
+            "source": "\"metaharness.event/1\"",
+            "stop_reason": "\"end_turn\"",
+            "tokens_basis": "\"session\"",
+            "tool_calls": "[{\"answered\":true,\"call_id\":\"toolu_1\",\"error\":null,\"name\":\"Task\"},{\"answered\":true,\"call_id\":\"toolu_2\",\"error\":null,\"name\":\"Bash\"},{\"answered\":true,\"call_id\":\"toolu_3\",\"error\":null,\"name\":\"Bash\"},{\"answered\":true,\"call_id\":\"toolu_4\",\"error\":null,\"name\":\"Bash\"},{\"answered\":true,\"call_id\":\"toolu_5\",\"error\":null,\"name\":\"Bash\"},{\"answered\":true,\"call_id\":\"toolu_6\",\"error\":null,\"name\":\"Bash\"}]",
+            "transcript_digest": "\"94bb32f1d4a5dbdcb4793021058a8d64d614449c22eee4bdeba29134b617596a\"",
+            "turns": "7",
+            "unk": "0"
+          },
+          "shape": {
+            "adapter": {
+              "holds": "primitive",
+              "kind": "string"
+            },
+            "byte_stable": {
+              "holds": "primitive",
+              "kind": "boolean"
+            },
+            "cache_creation_input_tokens": {
+              "holds": "primitive",
+              "kind": "string"
+            },
+            "cache_read_input_tokens": {
+              "holds": "primitive",
+              "kind": "string"
+            },
+            "cost_usd": {
+              "holds": "primitive",
+              "kind": "string"
+            },
+            "duration_api_ms": {
+              "holds": "primitive",
+              "kind": "string"
+            },
+            "duration_ms": {
+              "holds": "primitive",
+              "kind": "string"
+            },
+            "first_timestamp_ms": {
+              "holds": "primitive",
+              "kind": "string"
+            },
+            "format": {
+              "holds": "primitive",
+              "kind": "string"
+            },
+            "input_tokens": {
+              "holds": "primitive",
+              "kind": "string"
+            },
+            "is_error": {
+              "holds": "primitive",
+              "kind": "string"
+            },
+            "last_timestamp_ms": {
+              "holds": "primitive",
+              "kind": "string"
+            },
+            "model": {
+              "holds": "primitive",
+              "kind": "string"
+            },
+            "models": {
+              "holds": "primitive",
+              "kind": "string"
+            },
+            "output_tokens": {
+              "holds": "primitive",
+              "kind": "string"
+            },
+            "source": {
+              "holds": "primitive",
+              "kind": "string"
+            },
+            "stop_reason": {
+              "holds": "primitive",
+              "kind": "string"
+            },
+            "tokens_basis": {
+              "holds": "primitive",
+              "kind": "string"
+            },
+            "tool_calls": {
+              "holds": "primitive",
+              "kind": "string"
+            },
+            "transcript_digest": {
+              "holds": "primitive",
+              "kind": "string"
+            },
+            "turns": {
+              "holds": "primitive",
+              "kind": "string"
+            },
+            "unk": {
+              "holds": "primitive",
+              "kind": "string"
+            }
+          },
+          "step": "expect_event"
+        },
+        {
+          "event": "metaharness.boundaries.CallDecided",
+          "step": "expect_no_event"
+        },
+        {
+          "event": "metaharness.boundaries.FileRead",
+          "step": "expect_no_event"
+        },
+        {
+          "event": "metaharness.boundaries.FrameRead",
+          "step": "expect_no_event"
+        },
+        {
+          "event": "metaharness.observations.NativeStatusClassified",
+          "step": "expect_no_event"
+        },
+        {
+          "event": "metaharness.observations.PresenceRead",
+          "step": "expect_no_event"
+        },
+        {
+          "event": "metaharness.observations.ToolOutcomeRead",
+          "step": "expect_no_event"
+        },
+        {
+          "event": "metaharness.session.ClosureRecorded",
+          "step": "expect_no_event"
+        },
+        {
+          "event": "metaharness.session.CompletionClassified",
+          "step": "expect_no_event"
+        },
+        {
+          "event": "metaharness.session.PollingObserved",
+          "step": "expect_no_event"
+        },
+        {
+          "event": "metaharness.session.StreamClassified",
+          "step": "expect_no_event"
+        },
+        {
+          "event": "metaharness.spending.AdmissionRecorded",
+          "step": "expect_no_event"
+        },
+        {
+          "event": "metaharness.spending.FiniteLedgerRecorded",
+          "step": "expect_no_event"
+        },
+        {
+          "event": "metaharness.trace.CompletenessVerified",
+          "step": "expect_no_event"
+        },
+        {
+          "event": "metaharness.trace.DigestNamed",
+          "step": "expect_no_event"
+        },
+        {
+          "event": "metaharness.trace.FamilyClassified",
+          "step": "expect_no_event"
+        },
+        {
+          "event": "metaharness.trace.ProjectionRecorded",
+          "step": "expect_no_event"
+        },
+        {
+          "event": "metaharness.trace.RecordNormalized",
+          "step": "expect_no_event"
+        },
+        {
+          "event": "metaharness.trace.UnkClassified",
+          "step": "expect_no_event"
+        },
+        {
+          "event": "metaharness.trace.VendorRecordProjected",
+          "step": "expect_no_event"
+        },
+        {
+          "event": "metaharness.trace.VendorSourceRefused",
+          "step": "expect_no_event"
+        },
+        {
+          "event": "metaharness.workspace.ContextFilesRecorded",
+          "step": "expect_no_event"
+        },
+        {
+          "event": "metaharness.workspace.ProcessWritePlanned",
+          "step": "expect_no_event"
+        },
+        {
+          "event": "metaharness.workspace.ScratchCwdAttested",
+          "step": "expect_no_event"
+        }
+      ]
+    },
+    "metaharness.trace.SummarizeRecord/outcome/harness-record-summarized": {
+      "purpose": "`metaharness.trace.SummarizeRecord` answers `harness-record-summarized` for an input that satisfies that branch's guard",
+      "source": [
+        {
+          "kind": "type",
+          "name": "metaharness.trace.SourceKind"
+        },
+        {
+          "kind": "command",
+          "name": "metaharness.trace.SummarizeRecord"
+        },
+        {
+          "kind": "outcome",
+          "name": {
+            "command": "metaharness.trace.SummarizeRecord",
+            "outcome": "harness-record-summarized"
+          }
+        },
+        {
+          "kind": "event",
+          "name": "metaharness.boundaries.CallDecided"
+        },
+        {
+          "kind": "event",
+          "name": "metaharness.boundaries.FileRead"
+        },
+        {
+          "kind": "event",
+          "name": "metaharness.boundaries.FrameRead"
+        },
+        {
+          "kind": "event",
+          "name": "metaharness.observations.NativeStatusClassified"
+        },
+        {
+          "kind": "event",
+          "name": "metaharness.observations.PresenceRead"
+        },
+        {
+          "kind": "event",
+          "name": "metaharness.observations.ToolOutcomeRead"
+        },
+        {
+          "kind": "event",
+          "name": "metaharness.session.ClosureRecorded"
+        },
+        {
+          "kind": "event",
+          "name": "metaharness.session.CompletionClassified"
+        },
+        {
+          "kind": "event",
+          "name": "metaharness.session.PollingObserved"
+        },
+        {
+          "kind": "event",
+          "name": "metaharness.session.StreamClassified"
+        },
+        {
+          "kind": "event",
+          "name": "metaharness.spending.AdmissionRecorded"
+        },
+        {
+          "kind": "event",
+          "name": "metaharness.spending.FiniteLedgerRecorded"
+        },
+        {
+          "kind": "event",
+          "name": "metaharness.trace.CompletenessVerified"
+        },
+        {
+          "kind": "event",
+          "name": "metaharness.trace.DigestNamed"
+        },
+        {
+          "kind": "event",
+          "name": "metaharness.trace.FamilyClassified"
+        },
+        {
+          "kind": "event",
+          "name": "metaharness.trace.ProjectionRecorded"
+        },
+        {
+          "kind": "event",
+          "name": "metaharness.trace.RecordNormalized"
+        },
+        {
+          "kind": "event",
+          "name": "metaharness.trace.SessionSummarized"
+        },
+        {
+          "kind": "event",
+          "name": "metaharness.trace.UnkClassified"
+        },
+        {
+          "kind": "event",
+          "name": "metaharness.trace.VendorRecordProjected"
+        },
+        {
+          "kind": "event",
+          "name": "metaharness.trace.VendorSourceRefused"
+        },
+        {
+          "kind": "event",
+          "name": "metaharness.workspace.ContextFilesRecorded"
+        },
+        {
+          "kind": "event",
+          "name": "metaharness.workspace.ProcessWritePlanned"
+        },
+        {
+          "kind": "event",
+          "name": "metaharness.workspace.ScratchCwdAttested"
+        }
+      ],
+      "steps": [
+        {
+          "command": "metaharness.trace.SummarizeRecord",
+          "input": {
+            "source": {
+              "kind": "literal",
+              "value": "harness-json"
+            }
+          },
+          "step": "execute_command"
+        },
+        {
+          "outcome": {
+            "command": "metaharness.trace.SummarizeRecord",
+            "outcome": "harness-record-summarized"
+          },
+          "step": "expect_outcome"
+        },
+        {
+          "event": "metaharness.trace.SessionSummarized",
+          "payload": {
+            "adapter": "\"b10x\"",
+            "byte_stable": true,
+            "cache_creation_input_tokens": "null",
+            "cache_read_input_tokens": "14",
+            "cost_usd": "null",
+            "duration_api_ms": "null",
+            "duration_ms": "null",
+            "first_timestamp_ms": "null",
+            "format": "\"trace-ir-summary/1\"",
+            "input_tokens": "84",
+            "is_error": "false",
+            "last_timestamp_ms": "null",
+            "model": "\"b10x-emulated\"",
+            "models": "[{\"cache_creation_input_tokens\":null,\"cache_read_input_tokens\":null,\"cost_usd\":null,\"input_tokens\":null,\"name\":\"b10x-emulated\",\"output_tokens\":null}]",
+            "output_tokens": "12",
+            "source": "\"harness-json\"",
+            "stop_reason": "null",
+            "tokens_basis": "\"sum-of-requests\"",
+            "tool_calls": "[{\"answered\":true,\"call_id\":\"call_b10x_001\",\"error\":false,\"name\":\"file_read\"}]",
+            "transcript_digest": "\"eae41809f984ea2bf6b0a6e548263889a1fa8dcf640ad1e7ff5089b8ff45f15f\"",
+            "turns": "2",
+            "unk": "2"
+          },
+          "shape": {
+            "adapter": {
+              "holds": "primitive",
+              "kind": "string"
+            },
+            "byte_stable": {
+              "holds": "primitive",
+              "kind": "boolean"
+            },
+            "cache_creation_input_tokens": {
+              "holds": "primitive",
+              "kind": "string"
+            },
+            "cache_read_input_tokens": {
+              "holds": "primitive",
+              "kind": "string"
+            },
+            "cost_usd": {
+              "holds": "primitive",
+              "kind": "string"
+            },
+            "duration_api_ms": {
+              "holds": "primitive",
+              "kind": "string"
+            },
+            "duration_ms": {
+              "holds": "primitive",
+              "kind": "string"
+            },
+            "first_timestamp_ms": {
+              "holds": "primitive",
+              "kind": "string"
+            },
+            "format": {
+              "holds": "primitive",
+              "kind": "string"
+            },
+            "input_tokens": {
+              "holds": "primitive",
+              "kind": "string"
+            },
+            "is_error": {
+              "holds": "primitive",
+              "kind": "string"
+            },
+            "last_timestamp_ms": {
+              "holds": "primitive",
+              "kind": "string"
+            },
+            "model": {
+              "holds": "primitive",
+              "kind": "string"
+            },
+            "models": {
+              "holds": "primitive",
+              "kind": "string"
+            },
+            "output_tokens": {
+              "holds": "primitive",
+              "kind": "string"
+            },
+            "source": {
+              "holds": "primitive",
+              "kind": "string"
+            },
+            "stop_reason": {
+              "holds": "primitive",
+              "kind": "string"
+            },
+            "tokens_basis": {
+              "holds": "primitive",
+              "kind": "string"
+            },
+            "tool_calls": {
+              "holds": "primitive",
+              "kind": "string"
+            },
+            "transcript_digest": {
+              "holds": "primitive",
+              "kind": "string"
+            },
+            "turns": {
+              "holds": "primitive",
+              "kind": "string"
+            },
+            "unk": {
+              "holds": "primitive",
+              "kind": "string"
+            }
+          },
+          "step": "expect_event"
+        },
+        {
+          "event": "metaharness.boundaries.CallDecided",
+          "step": "expect_no_event"
+        },
+        {
+          "event": "metaharness.boundaries.FileRead",
+          "step": "expect_no_event"
+        },
+        {
+          "event": "metaharness.boundaries.FrameRead",
+          "step": "expect_no_event"
+        },
+        {
+          "event": "metaharness.observations.NativeStatusClassified",
+          "step": "expect_no_event"
+        },
+        {
+          "event": "metaharness.observations.PresenceRead",
+          "step": "expect_no_event"
+        },
+        {
+          "event": "metaharness.observations.ToolOutcomeRead",
+          "step": "expect_no_event"
+        },
+        {
+          "event": "metaharness.session.ClosureRecorded",
+          "step": "expect_no_event"
+        },
+        {
+          "event": "metaharness.session.CompletionClassified",
+          "step": "expect_no_event"
+        },
+        {
+          "event": "metaharness.session.PollingObserved",
+          "step": "expect_no_event"
+        },
+        {
+          "event": "metaharness.session.StreamClassified",
+          "step": "expect_no_event"
+        },
+        {
+          "event": "metaharness.spending.AdmissionRecorded",
+          "step": "expect_no_event"
+        },
+        {
+          "event": "metaharness.spending.FiniteLedgerRecorded",
+          "step": "expect_no_event"
+        },
+        {
+          "event": "metaharness.trace.CompletenessVerified",
+          "step": "expect_no_event"
+        },
+        {
+          "event": "metaharness.trace.DigestNamed",
+          "step": "expect_no_event"
+        },
+        {
+          "event": "metaharness.trace.FamilyClassified",
+          "step": "expect_no_event"
+        },
+        {
+          "event": "metaharness.trace.ProjectionRecorded",
+          "step": "expect_no_event"
+        },
+        {
+          "event": "metaharness.trace.RecordNormalized",
+          "step": "expect_no_event"
+        },
+        {
+          "event": "metaharness.trace.UnkClassified",
+          "step": "expect_no_event"
+        },
+        {
+          "event": "metaharness.trace.VendorRecordProjected",
+          "step": "expect_no_event"
+        },
+        {
+          "event": "metaharness.trace.VendorSourceRefused",
+          "step": "expect_no_event"
+        },
+        {
+          "event": "metaharness.workspace.ContextFilesRecorded",
+          "step": "expect_no_event"
+        },
+        {
+          "event": "metaharness.workspace.ProcessWritePlanned",
+          "step": "expect_no_event"
+        },
+        {
+          "event": "metaharness.workspace.ScratchCwdAttested",
+          "step": "expect_no_event"
+        }
+      ]
+    },
     "metaharness.trace.VerifyStreamCompleteness/outcome/complete": {
       "purpose": "`metaharness.trace.VerifyStreamCompleteness` answers `complete` for an input that satisfies that branch's guard",
       "source": [
@@ -18029,6 +19949,10 @@
         {
           "kind": "event",
           "name": "metaharness.trace.RecordNormalized"
+        },
+        {
+          "kind": "event",
+          "name": "metaharness.trace.SessionSummarized"
         },
         {
           "kind": "event",
@@ -18161,6 +20085,10 @@
           "step": "expect_no_event"
         },
         {
+          "event": "metaharness.trace.SessionSummarized",
+          "step": "expect_no_event"
+        },
+        {
           "event": "metaharness.trace.UnkClassified",
           "step": "expect_no_event"
         },
@@ -18271,6 +20199,10 @@
         {
           "kind": "event",
           "name": "metaharness.trace.RecordNormalized"
+        },
+        {
+          "kind": "event",
+          "name": "metaharness.trace.SessionSummarized"
         },
         {
           "kind": "event",
@@ -18403,6 +20335,10 @@
           "step": "expect_no_event"
         },
         {
+          "event": "metaharness.trace.SessionSummarized",
+          "step": "expect_no_event"
+        },
+        {
           "event": "metaharness.trace.UnkClassified",
           "step": "expect_no_event"
         },
@@ -18513,6 +20449,10 @@
         {
           "kind": "event",
           "name": "metaharness.trace.RecordNormalized"
+        },
+        {
+          "kind": "event",
+          "name": "metaharness.trace.SessionSummarized"
         },
         {
           "kind": "event",
@@ -18645,6 +20585,10 @@
           "step": "expect_no_event"
         },
         {
+          "event": "metaharness.trace.SessionSummarized",
+          "step": "expect_no_event"
+        },
+        {
           "event": "metaharness.trace.UnkClassified",
           "step": "expect_no_event"
         },
@@ -18755,6 +20699,10 @@
         {
           "kind": "event",
           "name": "metaharness.trace.RecordNormalized"
+        },
+        {
+          "kind": "event",
+          "name": "metaharness.trace.SessionSummarized"
         },
         {
           "kind": "event",
@@ -18887,6 +20835,10 @@
           "step": "expect_no_event"
         },
         {
+          "event": "metaharness.trace.SessionSummarized",
+          "step": "expect_no_event"
+        },
+        {
           "event": "metaharness.trace.UnkClassified",
           "step": "expect_no_event"
         },
@@ -18997,6 +20949,10 @@
         {
           "kind": "event",
           "name": "metaharness.trace.RecordNormalized"
+        },
+        {
+          "kind": "event",
+          "name": "metaharness.trace.SessionSummarized"
         },
         {
           "kind": "event",
@@ -19129,6 +21085,10 @@
           "step": "expect_no_event"
         },
         {
+          "event": "metaharness.trace.SessionSummarized",
+          "step": "expect_no_event"
+        },
+        {
           "event": "metaharness.trace.UnkClassified",
           "step": "expect_no_event"
         },
@@ -19239,6 +21199,10 @@
         {
           "kind": "event",
           "name": "metaharness.trace.RecordNormalized"
+        },
+        {
+          "kind": "event",
+          "name": "metaharness.trace.SessionSummarized"
         },
         {
           "kind": "event",
@@ -19406,6 +21370,10 @@
           "step": "expect_no_event"
         },
         {
+          "event": "metaharness.trace.SessionSummarized",
+          "step": "expect_no_event"
+        },
+        {
           "event": "metaharness.trace.UnkClassified",
           "step": "expect_no_event"
         },
@@ -19551,6 +21519,10 @@
         },
         {
           "kind": "event",
+          "name": "metaharness.trace.SessionSummarized"
+        },
+        {
+          "kind": "event",
           "name": "metaharness.trace.UnkClassified"
         },
         {
@@ -19666,6 +21638,10 @@
         },
         {
           "event": "metaharness.trace.RecordNormalized",
+          "step": "expect_no_event"
+        },
+        {
+          "event": "metaharness.trace.SessionSummarized",
           "step": "expect_no_event"
         },
         {
@@ -19803,6 +21779,10 @@
         },
         {
           "kind": "event",
+          "name": "metaharness.trace.SessionSummarized"
+        },
+        {
+          "kind": "event",
           "name": "metaharness.trace.UnkClassified"
         },
         {
@@ -19921,6 +21901,10 @@
           "step": "expect_no_event"
         },
         {
+          "event": "metaharness.trace.SessionSummarized",
+          "step": "expect_no_event"
+        },
+        {
           "event": "metaharness.trace.UnkClassified",
           "step": "expect_no_event"
         },
@@ -20031,6 +22015,10 @@
         {
           "kind": "event",
           "name": "metaharness.trace.RecordNormalized"
+        },
+        {
+          "kind": "event",
+          "name": "metaharness.trace.SessionSummarized"
         },
         {
           "kind": "event",
@@ -20152,6 +22140,10 @@
           "step": "expect_no_event"
         },
         {
+          "event": "metaharness.trace.SessionSummarized",
+          "step": "expect_no_event"
+        },
+        {
           "event": "metaharness.trace.UnkClassified",
           "step": "expect_no_event"
         },
@@ -20262,6 +22254,10 @@
         {
           "kind": "event",
           "name": "metaharness.trace.RecordNormalized"
+        },
+        {
+          "kind": "event",
+          "name": "metaharness.trace.SessionSummarized"
         },
         {
           "kind": "event",
@@ -20383,6 +22379,10 @@
           "step": "expect_no_event"
         },
         {
+          "event": "metaharness.trace.SessionSummarized",
+          "step": "expect_no_event"
+        },
+        {
           "event": "metaharness.trace.UnkClassified",
           "step": "expect_no_event"
         },
@@ -20493,6 +22493,10 @@
         {
           "kind": "event",
           "name": "metaharness.trace.RecordNormalized"
+        },
+        {
+          "kind": "event",
+          "name": "metaharness.trace.SessionSummarized"
         },
         {
           "kind": "event",
@@ -20614,6 +22618,10 @@
           "step": "expect_no_event"
         },
         {
+          "event": "metaharness.trace.SessionSummarized",
+          "step": "expect_no_event"
+        },
+        {
           "event": "metaharness.trace.UnkClassified",
           "step": "expect_no_event"
         },
@@ -20724,6 +22732,10 @@
         {
           "kind": "event",
           "name": "metaharness.trace.RecordNormalized"
+        },
+        {
+          "kind": "event",
+          "name": "metaharness.trace.SessionSummarized"
         },
         {
           "kind": "event",
@@ -20845,6 +22857,10 @@
           "step": "expect_no_event"
         },
         {
+          "event": "metaharness.trace.SessionSummarized",
+          "step": "expect_no_event"
+        },
+        {
           "event": "metaharness.trace.UnkClassified",
           "step": "expect_no_event"
         },
@@ -20955,6 +22971,10 @@
         {
           "kind": "event",
           "name": "metaharness.trace.RecordNormalized"
+        },
+        {
+          "kind": "event",
+          "name": "metaharness.trace.SessionSummarized"
         },
         {
           "kind": "event",
@@ -21076,6 +23096,10 @@
           "step": "expect_no_event"
         },
         {
+          "event": "metaharness.trace.SessionSummarized",
+          "step": "expect_no_event"
+        },
+        {
           "event": "metaharness.trace.UnkClassified",
           "step": "expect_no_event"
         },
@@ -21186,6 +23210,10 @@
         {
           "kind": "event",
           "name": "metaharness.trace.RecordNormalized"
+        },
+        {
+          "kind": "event",
+          "name": "metaharness.trace.SessionSummarized"
         },
         {
           "kind": "event",
@@ -21307,6 +23335,10 @@
           "step": "expect_no_event"
         },
         {
+          "event": "metaharness.trace.SessionSummarized",
+          "step": "expect_no_event"
+        },
+        {
           "event": "metaharness.trace.UnkClassified",
           "step": "expect_no_event"
         },
@@ -21417,6 +23449,10 @@
         {
           "kind": "event",
           "name": "metaharness.trace.RecordNormalized"
+        },
+        {
+          "kind": "event",
+          "name": "metaharness.trace.SessionSummarized"
         },
         {
           "kind": "event",
@@ -21538,6 +23574,10 @@
           "step": "expect_no_event"
         },
         {
+          "event": "metaharness.trace.SessionSummarized",
+          "step": "expect_no_event"
+        },
+        {
           "event": "metaharness.trace.UnkClassified",
           "step": "expect_no_event"
         },
@@ -21648,6 +23688,10 @@
         {
           "kind": "event",
           "name": "metaharness.trace.RecordNormalized"
+        },
+        {
+          "kind": "event",
+          "name": "metaharness.trace.SessionSummarized"
         },
         {
           "kind": "event",
@@ -21769,6 +23813,10 @@
           "step": "expect_no_event"
         },
         {
+          "event": "metaharness.trace.SessionSummarized",
+          "step": "expect_no_event"
+        },
+        {
           "event": "metaharness.trace.UnkClassified",
           "step": "expect_no_event"
         },
@@ -21879,6 +23927,10 @@
         {
           "kind": "event",
           "name": "metaharness.trace.RecordNormalized"
+        },
+        {
+          "kind": "event",
+          "name": "metaharness.trace.SessionSummarized"
         },
         {
           "kind": "event",
@@ -22000,6 +24052,10 @@
           "step": "expect_no_event"
         },
         {
+          "event": "metaharness.trace.SessionSummarized",
+          "step": "expect_no_event"
+        },
+        {
           "event": "metaharness.trace.UnkClassified",
           "step": "expect_no_event"
         },
@@ -22110,6 +24166,10 @@
         {
           "kind": "event",
           "name": "metaharness.trace.RecordNormalized"
+        },
+        {
+          "kind": "event",
+          "name": "metaharness.trace.SessionSummarized"
         },
         {
           "kind": "event",
@@ -22246,6 +24306,10 @@
           "step": "expect_no_event"
         },
         {
+          "event": "metaharness.trace.SessionSummarized",
+          "step": "expect_no_event"
+        },
+        {
           "event": "metaharness.trace.UnkClassified",
           "step": "expect_no_event"
         },
@@ -22352,6 +24416,10 @@
         {
           "kind": "event",
           "name": "metaharness.trace.RecordNormalized"
+        },
+        {
+          "kind": "event",
+          "name": "metaharness.trace.SessionSummarized"
         },
         {
           "kind": "event",
@@ -22473,6 +24541,10 @@
           "step": "expect_no_event"
         },
         {
+          "event": "metaharness.trace.SessionSummarized",
+          "step": "expect_no_event"
+        },
+        {
           "event": "metaharness.trace.UnkClassified",
           "step": "expect_no_event"
         },
@@ -22583,6 +24655,10 @@
         {
           "kind": "event",
           "name": "metaharness.trace.RecordNormalized"
+        },
+        {
+          "kind": "event",
+          "name": "metaharness.trace.SessionSummarized"
         },
         {
           "kind": "event",
@@ -22704,6 +24780,10 @@
           "step": "expect_no_event"
         },
         {
+          "event": "metaharness.trace.SessionSummarized",
+          "step": "expect_no_event"
+        },
+        {
           "event": "metaharness.trace.UnkClassified",
           "step": "expect_no_event"
         },
@@ -22814,6 +24894,10 @@
         {
           "kind": "event",
           "name": "metaharness.trace.RecordNormalized"
+        },
+        {
+          "kind": "event",
+          "name": "metaharness.trace.SessionSummarized"
         },
         {
           "kind": "event",
@@ -22945,6 +25029,10 @@
           "step": "expect_no_event"
         },
         {
+          "event": "metaharness.trace.SessionSummarized",
+          "step": "expect_no_event"
+        },
+        {
           "event": "metaharness.trace.UnkClassified",
           "step": "expect_no_event"
         },
@@ -23051,6 +25139,10 @@
         {
           "kind": "event",
           "name": "metaharness.trace.RecordNormalized"
+        },
+        {
+          "kind": "event",
+          "name": "metaharness.trace.SessionSummarized"
         },
         {
           "kind": "event",
@@ -23182,6 +25274,10 @@
           "step": "expect_no_event"
         },
         {
+          "event": "metaharness.trace.SessionSummarized",
+          "step": "expect_no_event"
+        },
+        {
           "event": "metaharness.trace.UnkClassified",
           "step": "expect_no_event"
         },
@@ -23288,6 +25384,10 @@
         {
           "kind": "event",
           "name": "metaharness.trace.RecordNormalized"
+        },
+        {
+          "kind": "event",
+          "name": "metaharness.trace.SessionSummarized"
         },
         {
           "kind": "event",
@@ -23419,6 +25519,10 @@
           "step": "expect_no_event"
         },
         {
+          "event": "metaharness.trace.SessionSummarized",
+          "step": "expect_no_event"
+        },
+        {
           "event": "metaharness.trace.UnkClassified",
           "step": "expect_no_event"
         },
@@ -23525,6 +25629,10 @@
         {
           "kind": "event",
           "name": "metaharness.trace.RecordNormalized"
+        },
+        {
+          "kind": "event",
+          "name": "metaharness.trace.SessionSummarized"
         },
         {
           "kind": "event",
@@ -23656,6 +25764,10 @@
           "step": "expect_no_event"
         },
         {
+          "event": "metaharness.trace.SessionSummarized",
+          "step": "expect_no_event"
+        },
+        {
           "event": "metaharness.trace.UnkClassified",
           "step": "expect_no_event"
         },
@@ -23762,6 +25874,10 @@
         {
           "kind": "event",
           "name": "metaharness.trace.RecordNormalized"
+        },
+        {
+          "kind": "event",
+          "name": "metaharness.trace.SessionSummarized"
         },
         {
           "kind": "event",
@@ -23883,6 +25999,10 @@
           "step": "expect_no_event"
         },
         {
+          "event": "metaharness.trace.SessionSummarized",
+          "step": "expect_no_event"
+        },
+        {
           "event": "metaharness.trace.UnkClassified",
           "step": "expect_no_event"
         },
@@ -23997,6 +26117,10 @@
         {
           "kind": "event",
           "name": "metaharness.trace.RecordNormalized"
+        },
+        {
+          "kind": "event",
+          "name": "metaharness.trace.SessionSummarized"
         },
         {
           "kind": "event",
@@ -24141,6 +26265,10 @@
           "step": "expect_no_event"
         },
         {
+          "event": "metaharness.trace.SessionSummarized",
+          "step": "expect_no_event"
+        },
+        {
           "event": "metaharness.trace.UnkClassified",
           "step": "expect_no_event"
         },
@@ -24251,6 +26379,10 @@
         {
           "kind": "event",
           "name": "metaharness.trace.RecordNormalized"
+        },
+        {
+          "kind": "event",
+          "name": "metaharness.trace.SessionSummarized"
         },
         {
           "kind": "event",
@@ -24395,6 +26527,10 @@
           "step": "expect_no_event"
         },
         {
+          "event": "metaharness.trace.SessionSummarized",
+          "step": "expect_no_event"
+        },
+        {
           "event": "metaharness.trace.UnkClassified",
           "step": "expect_no_event"
         },
@@ -24505,6 +26641,10 @@
         {
           "kind": "event",
           "name": "metaharness.trace.RecordNormalized"
+        },
+        {
+          "kind": "event",
+          "name": "metaharness.trace.SessionSummarized"
         },
         {
           "kind": "event",
@@ -24646,6 +26786,10 @@
         },
         {
           "event": "metaharness.trace.RecordNormalized",
+          "step": "expect_no_event"
+        },
+        {
+          "event": "metaharness.trace.SessionSummarized",
           "step": "expect_no_event"
         },
         {

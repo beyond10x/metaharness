@@ -783,3 +783,360 @@ fn the_viewer_renders_two_vendor_records_of_one_format() {
     );
     assert!(html.contains("0 divergence(s)"), "{html}");
 }
+
+// --- trace-ir-summary/1 (amendment a42) ----------------------------------------------------------
+
+/// The summary's keys, in the order a42 point 2 renders them.
+const SUMMARY_KEYS: [&str; 21] = [
+    "format",
+    "source",
+    "transcript_digest",
+    "adapter",
+    "model",
+    "models",
+    "turns",
+    "tokens_basis",
+    "input_tokens",
+    "output_tokens",
+    "cache_read_input_tokens",
+    "cache_creation_input_tokens",
+    "cost_usd",
+    "duration_ms",
+    "duration_api_ms",
+    "first_timestamp_ms",
+    "last_timestamp_ms",
+    "is_error",
+    "stop_reason",
+    "tool_calls",
+    "unk",
+];
+
+fn project_as(out: &std::path::Path, from: Option<&str>, record: &str, to: &str) -> i32 {
+    let out = out.display().to_string();
+    let mut argv = vec!["metaharness", "project"];
+    if let Some(from) = from {
+        argv.extend(["--from", from]);
+    }
+    argv.extend([record, "--to", to, "--out", &out]);
+    code_of(&argv)
+}
+
+/// Projects `record` twice to `trace-ir-summary` and once to `trace-ir`, holds the two summaries
+/// to the same bytes in a42's key order, and returns the summary and the document.
+fn summary_and_document(
+    label: &str,
+    from: Option<&str>,
+    record: &str,
+) -> (serde_json::Value, serde_json::Value) {
+    let scratch = tempfile::tempdir().expect("a scratch directory");
+    let summary_path = scratch.path().join("summary.json");
+    let again_path = scratch.path().join("summary-again.json");
+    let document_path = scratch.path().join("document.json");
+    assert_eq!(
+        project_as(&summary_path, from, record, "trace-ir-summary"),
+        0,
+        "{label}"
+    );
+    assert_eq!(
+        project_as(&again_path, from, record, "trace-ir-summary"),
+        0,
+        "{label}"
+    );
+    assert_eq!(
+        project_as(&document_path, from, record, "trace-ir"),
+        0,
+        "{label}"
+    );
+
+    let text = std::fs::read_to_string(&summary_path).expect("the summary is written");
+    assert_eq!(
+        text,
+        std::fs::read_to_string(&again_path).expect("the summary is written"),
+        "{label}: the same record summarizes to the same bytes"
+    );
+    assert!(text.ends_with("}\n"), "{label}: one document, one newline");
+    let positions: Vec<usize> = SUMMARY_KEYS
+        .iter()
+        .map(|key| {
+            text.find(&format!("\n  \"{key}\":"))
+                .unwrap_or_else(|| panic!("{label}: the summary carries {key}"))
+        })
+        .collect();
+    assert!(
+        positions.windows(2).all(|pair| pair[0] < pair[1]),
+        "{label}: keys render in a42's order"
+    );
+    let summary = serde_json::from_str(&text).expect("the summary is JSON");
+    (summary, read_document(&document_path))
+}
+
+/// a42 point 3: the four token counts are the terminal node's `usage` when it is an object
+/// (`"session"`), else the request nodes' `usage` summed per key with an unstated key `null`
+/// (`"sum-of-requests"`), else `null` with no basis.
+fn assert_tokens_as_the_basis_says(
+    label: &str,
+    summary: &serde_json::Value,
+    events: &[serde_json::Value],
+    terminal: &serde_json::Value,
+) {
+    let requests: Vec<&serde_json::Value> = events
+        .iter()
+        .map(|node| &node["kind"])
+        .filter(|kind| {
+            kind["event"] == "run_outcome"
+                && kind
+                    .as_object()
+                    .is_some_and(|kind| !kind.contains_key("num_turns"))
+                && kind["usage"].is_object()
+        })
+        .map(|kind| &kind["usage"])
+        .collect();
+    let basis = if terminal["usage"].is_object() {
+        "session"
+    } else if requests.is_empty() {
+        ""
+    } else {
+        "sum-of-requests"
+    };
+    for key in [
+        "input_tokens",
+        "output_tokens",
+        "cache_read_input_tokens",
+        "cache_creation_input_tokens",
+    ] {
+        let stated = match basis {
+            "session" => terminal["usage"].get(key).cloned().unwrap_or_default(),
+            "sum-of-requests" => {
+                let figures: Vec<u64> = requests
+                    .iter()
+                    .filter_map(|usage| usage[key].as_u64())
+                    .collect();
+                if figures.is_empty() {
+                    serde_json::Value::Null
+                } else {
+                    serde_json::Value::from(figures.iter().sum::<u64>())
+                }
+            }
+            _ => serde_json::Value::Null,
+        };
+        assert_eq!(
+            summary[key], stated,
+            "{label}: {key} read as {basis:?} says"
+        );
+    }
+    if basis.is_empty() {
+        assert!(summary["tokens_basis"].is_null(), "{label}");
+    } else {
+        assert_eq!(summary["tokens_basis"], basis, "{label}");
+    }
+}
+
+/// a42 point 2: `models` names every model the opening and `run_outcome` nodes name, first seen,
+/// once, each with the terminal node's `model_usage` figures for it and `null` where none is
+/// stated.
+fn assert_models_as_named(
+    label: &str,
+    summary: &serde_json::Value,
+    events: &[serde_json::Value],
+    terminal: &serde_json::Value,
+) {
+    let mut named: Vec<&str> = Vec::new();
+    for kind in events
+        .iter()
+        .map(|node| &node["kind"])
+        .filter(|kind| kind["event"] == "session_start" || kind["event"] == "run_outcome")
+    {
+        let usage_keys = kind["model_usage"]
+            .as_object()
+            .into_iter()
+            .flat_map(|by_model| by_model.keys().map(String::as_str));
+        let observed = kind["observed_models"]
+            .as_array()
+            .into_iter()
+            .flatten()
+            .filter_map(|entry| entry["model"].as_str());
+        for name in kind["model"]
+            .as_str()
+            .into_iter()
+            .chain(usage_keys)
+            .chain(observed)
+        {
+            if !named.contains(&name) {
+                named.push(name);
+            }
+        }
+    }
+    let models = summary["models"].as_array().expect("a list of models");
+    let summarized: Vec<&str> = models
+        .iter()
+        .map(|model| model["name"].as_str().expect("a name"))
+        .collect();
+    assert_eq!(
+        summarized, named,
+        "{label}: every named model, first seen, once"
+    );
+    for model in models {
+        let per_model = &terminal["model_usage"][model["name"].as_str().expect("a name")];
+        for key in [
+            "input_tokens",
+            "output_tokens",
+            "cache_read_input_tokens",
+            "cache_creation_input_tokens",
+            "cost_usd",
+        ] {
+            let stated = per_model.get(key).cloned().unwrap_or_default();
+            assert_eq!(model[key], stated, "{label}: {} {key}", model["name"]);
+        }
+    }
+}
+
+/// Holds the summary of `record` to the document the same verb writes: it names that document,
+/// reads its opening and terminal nodes, and leaves exactly `nulls` null.
+fn assert_summary_of_document(from: Option<&str>, record: &str, nulls: &[&str]) {
+    let label = from.unwrap_or("metaharness.event/1");
+    let (summary, document) = summary_and_document(label, from, record);
+    assert_eq!(
+        summary.as_object().map(serde_json::Map::len),
+        Some(SUMMARY_KEYS.len()),
+        "{label}: no key beyond a42's"
+    );
+    assert_eq!(summary["format"], "trace-ir-summary/1", "{label}");
+    assert_eq!(summary["source"], label, "{label}");
+    assert_eq!(
+        summary["source"], document["metaharness"]["source"],
+        "{label}"
+    );
+    assert_eq!(
+        summary["transcript_digest"], document["transcript_digest"],
+        "{label}: the summary names the document it was made from"
+    );
+    let events = document["events"].as_array().expect("nodes");
+    assert_eq!(
+        summary["adapter"], events[0]["kind"]["adapter"],
+        "{label}: the opening node's adapter"
+    );
+    assert_eq!(
+        summary["model"], events[0]["kind"]["model"],
+        "{label}: the opening node's model"
+    );
+    let terminal = &events
+        .iter()
+        .rev()
+        .find(|node| {
+            node["kind"]["event"] == "run_outcome"
+                && node["kind"]
+                    .as_object()
+                    .is_some_and(|kind| kind.contains_key("num_turns"))
+        })
+        .expect("a terminal node")["kind"];
+    assert_eq!(summary["turns"], terminal["num_turns"], "{label}");
+    assert_tokens_as_the_basis_says(label, &summary, events, terminal);
+    assert_models_as_named(label, &summary, events, terminal);
+    assert_eq!(summary["cost_usd"], terminal["total_cost_usd"], "{label}");
+    for key in ["duration_ms", "duration_api_ms", "is_error", "stop_reason"] {
+        assert_eq!(summary[key], terminal[key], "{label}: {key}");
+    }
+    let calls: Vec<&serde_json::Value> = events
+        .iter()
+        .filter(|node| node["kind"]["event"] == "tool_call")
+        .map(|node| &node["kind"]["name"])
+        .collect();
+    let summarized: Vec<&serde_json::Value> = summary["tool_calls"]
+        .as_array()
+        .expect("a list of calls")
+        .iter()
+        .map(|call| &call["name"])
+        .collect();
+    assert_eq!(summarized, calls, "{label}: one entry per call, in order");
+    let unk: u64 = document["metaharness"]["unk_kinds"]
+        .as_object()
+        .expect("the unk kinds")
+        .values()
+        .filter_map(serde_json::Value::as_u64)
+        .sum();
+    assert_eq!(summary["unk"], unk, "{label}: the document's unk count");
+
+    for key in SUMMARY_KEYS {
+        assert_eq!(
+            summary[key].is_null(),
+            nulls.contains(&key),
+            "{label}: {key} is null exactly when the record does not state it ({})",
+            summary[key]
+        );
+    }
+}
+
+/// a42 point 5, with `--from`: each golden vendor record summarizes through its production reader,
+/// and each leaves `null` exactly what its record does not state (a42, *What the goldens leave
+/// null*): never `0`, never `""`.
+#[test]
+fn each_golden_vendor_record_summarizes_to_trace_ir_summary() {
+    let nulls: [(&str, &[&str]); 3] = [
+        ("claude-code-stream-json", &[]),
+        (
+            "codex-rollout",
+            &[
+                "model",
+                "cache_creation_input_tokens",
+                "cost_usd",
+                "duration_api_ms",
+                "stop_reason",
+            ],
+        ),
+        (
+            "harness-json",
+            &[
+                "cache_creation_input_tokens",
+                "cost_usd",
+                "duration_ms",
+                "duration_api_ms",
+                "first_timestamp_ms",
+                "last_timestamp_ms",
+                "stop_reason",
+            ],
+        ),
+    ];
+    for ((from, crate_name, record, _), (named, nulls)) in VENDOR_RECORDS.iter().zip(nulls) {
+        assert_eq!(*from, named);
+        assert_summary_of_document(Some(from), &golden(crate_name, record), nulls);
+    }
+}
+
+/// a42 point 5, without `--from`: the recorded event stream summarizes as the verb reads it, named
+/// by the stream's own digest; none of its results states `is_error`, so each call reads
+/// `answered: true, error: null`.
+#[test]
+fn the_recorded_event_stream_summarizes_without_from() {
+    assert_summary_of_document(None, &run_a(), &[]);
+    let scratch = tempfile::tempdir().expect("a scratch directory");
+    let out = scratch.path().join("summary.json");
+    assert_eq!(project_as(&out, None, &run_a(), "trace-ir-summary"), 0);
+    let summary = read_document(&out);
+    let calls = summary["tool_calls"].as_array().expect("a list of calls");
+    assert_eq!(calls.len(), 6);
+    for call in calls {
+        assert_eq!(call["answered"], true, "{call}");
+        assert!(call["error"].is_null(), "{call}");
+    }
+}
+
+/// a42 point 5: the page renders documents, so a summary asked for beside `--html` is refused,
+/// not rendered as a page or written as a document.
+#[test]
+fn a_summary_with_html_is_refused_and_writes_nothing() {
+    let scratch = tempfile::tempdir().expect("a scratch directory");
+    let page = scratch.path().join("page.html");
+    assert_eq!(
+        code_of(&[
+            "metaharness",
+            "project",
+            &run_a(),
+            "--to",
+            "trace-ir-summary",
+            "--html",
+            &page.display().to_string(),
+        ]),
+        2
+    );
+    assert!(!page.exists(), "a refused summary writes no page");
+}

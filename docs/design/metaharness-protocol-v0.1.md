@@ -1496,6 +1496,7 @@ metaharness conformance <kind>                 # the free vectors (§ 8.5) — n
 metaharness project <events.jsonl> --out <f>   # the projection, as a verb (a15: --events became a positional)
 metaharness project --html <f> <a.jsonl> <b.jsonl>  # two runs, aligned, as one static page (a15)
 metaharness project --from <format> <record> --out <f>  # a vendor record through its production reader (a28)
+metaharness project [--from <format>] <file> --to trace-ir-summary  # the document's trace-ir-summary/1 (a42)
 metaharness audit --transcript <f> [--events <f>] [--spec <s>] [--auditor <p>]  # judge offline
 metaharness doctor <kind>                      # installed vendor version vs the adapter's pin
 ```
@@ -3737,3 +3738,210 @@ vendor's handling of it is unknown (`codex-0.153.4-hook-failure.txt`).
 sorted order, so `"onFailure": "block"` sits between `command` and `timeout`. No C1 fixture and no
 spawn vector carries the settings document, and none of them moved. The hook program's text moved
 (§ 5). Its output for every reply metaharness writes did not.
+
+### Amendment a42 — `trace-ir-summary/1`, the one projection of a `trace-ir/1` document (2026-10-21)
+
+From `story:retire-trace-formats-beside-trace-ir` (Atlas ADR 0096 decision 7, wave 7). The story
+decides that two of the formats ADR 0096 lists beside `trace-ir/1` survive as projections of it:
+`takt-trace/1`'s harness-step rows and Loom's jsonl for agent work. Both read one declared
+projection rather than one shaped for each, because takt and Loom own their formats (ADR 0096, one
+owner per layer). metaharness states what a session says, and each consumer maps that into its own
+record. They reach it through the binary, `metaharness project --to trace-ir-summary`, and not
+through a crate (`AGENTS.md` § *What this repository owns*).
+
+**1. What it is.** `trace-ir-summary/1` is a function of one `trace-ir/1` document and of nothing
+else. It reads no clock, no file and no environment. In code it is
+`metaharness_protocol::summarize(&TraceIrDocument) -> TraceIrSummary` and `TraceIrSummary::render`.
+The summary reads the document's nodes as the document writes them (`TraceIrEvent::kind`, the
+family under `event`) and never goes back to the event stream or the vendor record. Two consumers
+holding the same document therefore hold the same summary. It is the document's projection, not a
+second reading of the run.
+
+**2. The fields, in the order they render, and where each is read.** The *terminal node* is the last
+`run_outcome` node carrying the key `num_turns`. `session.ended` always writes that key, `null` or
+not, and the `usage` fold into `run_outcome` (§ 4.3) never does, because it carries only
+`request_id`, `model` and `usage`. Those fold nodes are the *request nodes*. The *opening node* is
+node 0 when its family is `session_start`.
+
+| field | type | family | key | `null` when |
+|---|---|---|---|---|
+| `format` | string | — | the constant `trace-ir-summary/1` | never |
+| `source` | string | the document | `metaharness.source` | never |
+| `transcript_digest` | string | the document | `transcript_digest` | never |
+| `adapter` | string or `null` | `session_start`, the opening node | `adapter` | node 0 is not `session_start`, or the key is not a string |
+| `model` | string or `null` | `session_start`, the opening node | `model` | the opening record names no model |
+| `models` | list | `session_start` and `run_outcome`, every node; the terminal node's `model_usage` | see below | never; `[]` when no node names a model |
+| `turns` | integer or `null` | `run_outcome`, the terminal node | `num_turns` | no terminal node, or the vendor did not say |
+| `tokens_basis` | `"session"`, `"sum-of-requests"` or `null` | `run_outcome` | see point 3 | no terminal node, or neither the terminal node nor any request node carries a `usage` object |
+| `input_tokens` | integer or `null` | `run_outcome`, as `tokens_basis` says | `usage.input_tokens` | the basis is `null`, or no node it reads states the key |
+| `output_tokens` | integer or `null` | `run_outcome`, as `tokens_basis` says | `usage.output_tokens` | the same |
+| `cache_read_input_tokens` | integer or `null` | `run_outcome`, as `tokens_basis` says | `usage.cache_read_input_tokens` | the same |
+| `cache_creation_input_tokens` | integer or `null` | `run_outcome`, as `tokens_basis` says | `usage.cache_creation_input_tokens` | the same |
+| `cost_usd` | number or `null` | `run_outcome`, the terminal node | `total_cost_usd` | the same |
+| `duration_ms` | integer or `null` | `run_outcome`, the terminal node | `duration_ms` | the same |
+| `duration_api_ms` | integer or `null` | `run_outcome`, the terminal node | `duration_api_ms` | the same |
+| `first_timestamp_ms` | integer or `null` | any node | the node's own `timestamp_ms`, the first non-`null` one in document order | no node carries a parsed timestamp |
+| `last_timestamp_ms` | integer or `null` | any node | the node's own `timestamp_ms`, the last non-`null` one in document order | the same |
+| `is_error` | boolean or `null` | `run_outcome`, the terminal node | `is_error` | no terminal node, or the vendor did not say |
+| `stop_reason` | string or `null` | `run_outcome`, the terminal node | `stop_reason` | the same |
+| `tool_calls` | list | `tool_call`, every node in order; `tool_result` | see below | never; `[]` when there is no `tool_call` node |
+| `unk` | integer | the document | `metaharness.unk_kinds`, summed (equal to `metaharness.families.unk`) | never; `0` is a count the document states |
+
+One `tool_calls` entry is written per `tool_call` node, in document order. It has four keys.
+`call_id` and `name` are the node's own keys. `answered` says whether any `tool_result` node carries
+the same `call_id`; a call whose `call_id` is not a string is answered by nothing, because
+nothing can name it. `error` is the `is_error` of the first such node. So `error` is `null` both when
+the document has no result for the call (`answered: false`) and when the result did not say
+(`answered: true`), and `answered` keeps those two cases apart. A result whose `call_id` matches no
+call is not summarized: it answers nothing in this list, and the document keeps it.
+
+One `models` entry is written per model name the document carries, in first-seen order and without
+repeats. A name is read from the nodes of the two families that carry one, in document order: the
+node's `model` when it is a string, then the keys of its `model_usage` in the document's key
+order, then the string `model` of each `observed_models` entry (a22) in list order. On the
+committed records these are the opening Claude model, the model of each Claude or b10x request
+node, the Claude terminal record's `modelUsage` keys and the Codex turn selections. An entry has
+six keys: `name`, `input_tokens`, `output_tokens`, `cache_read_input_tokens`,
+`cache_creation_input_tokens` and `cost_usd`. The five figures are the terminal node's
+`model_usage[name]` figures (`cost_usd` from that entry's `cost_usd`), and each is `null` where the
+document does not state it per model. A request node's `usage` is not attributed to its model. A
+request is one call, not the model's share of the session. The Claude record names the same
+model `claude-opus-5` on its requests and `claude-opus-5[1m]` in `modelUsage`, so attributing
+request sums would count the same tokens under two entries.
+
+No listed field is dropped. Each one is carried by a `trace-ir/1` family as this protocol fills it
+(`required_ir_fields`). The `run_outcome` keys the summary leaves out (`subtype`, `terminal_reason`,
+`api_error_status`, `ttft_ms`, `time_to_request_ms`, `permission_denials`, `subagents_spawned`)
+stay in the document, which the summary names by digest. `model_usage` and `observed_models` are
+read for `models` only, and the rest of each stays in the document too.
+
+**3. Absence stays `null` (invariant 3), and the tokens say where they came from.** A value the
+document does not state is `null`, never `0` and never `""`. `tokens_basis` names which nodes the
+four token counts were read from:
+
+- `"session"`: the terminal node's `usage` is an object. The counts are its own totals, and a key it
+  does not state is `null`. The request nodes are not added up, because the terminal record is the
+  vendor's own total. On the committed Claude record the terminal record says 96 output tokens
+  and its two request nodes say 20 and 1.
+- `"sum-of-requests"`: there is a terminal node, its `usage` is not an object, and at least one
+  request node's `usage` is. Each count is the sum over the request nodes that state that key. A
+  key that no request node states is `null`, never `0`, and a sum past `u64` is `null` too. This
+  is the b10x loop record, whose `finished` line carries no usage while each `usage` line states
+  one request's (`crates/metaharness-b10x/src/seam.rs`, the `"usage"` arm).
+- `null`: no terminal node, or neither it nor any request node carries a `usage` object. All four
+  counts are `null`. A document without a terminal node is a run that did not close, and its
+  request nodes are not summed. A Codex rollout without `task_complete` is such a document, and its
+  request nodes carry the rollout's running `total_token_usage`
+  (`crates/metaharness-codex/src/rollout.rs`, the `"token_count"` arm), which a sum would multiply.
+
+`model` is the opening record's. The per-turn selections a Codex terminal record lists
+(`observed_models`, a22) are not folded into it, so a Codex summary whose opening record names no
+model reads `model: null` and names `gpt-5.6-sol` under `models`. The cost is the vendor's float,
+passed through, never multiplied out (§ 4.1).
+
+**Scope of the Claude figures.** On the Claude record, the terminal record's `usage` covers the
+main model only, while `total_cost_usd` covers every model the session billed. Verified on the
+committed golden (Claude Code 2.1.240, `crates/metaharness-claude/fixtures/golden/transcript.jsonl`
+line 6). `usage` states 4 input, 96 output, 22308 cache-read and 22421 cache-write tokens, which are
+`modelUsage."claude-opus-5[1m]"`'s figures exactly. `modelUsage."claude-haiku-4-5-20251001"`'s
+1032 input and 12 output tokens appear in no `usage` figure. `total_cost_usd` 0.238876 is the two
+entries' `costUSD` together, 0.237784 + 0.001092 (the latter written `0.0010919999999999999`). So
+the summary's top-level token counts on a Claude record are the main model's, its `cost_usd` is
+the session's, and `models` carries every model's own figures.
+
+**What `input_tokens` counts, per vendor.** The summary does not normalize. Each count is the
+reader's figure as the vendor wrote it, and the vendors disagree on whether cached input is
+inside `input_tokens`:
+
+| source | reader | `input_tokens` | evidence |
+|---|---|---|---|
+| `claude-code-stream-json` | `crates/metaharness-claude/src/transcript.rs`, `fn usage` (`usage.input_tokens`) and `fn model_usage` (`inputTokens`) | excludes cache reads and cache writes | verified on Claude Code 2.1.240: the golden's `input_tokens` 4 is below its `cache_read_input_tokens` 22308, so it cannot contain them |
+| `codex-rollout` | `crates/metaharness-codex/src/rollout.rs`, the `"token_count"` arm (`total_token_usage.input_tokens`; `cached_input_tokens` is `cache_read_input_tokens`) | includes cached input | verified on codex-cli 0.144.0: the golden's line 18 states `total_tokens` 27664 = `input_tokens` 27570 + `output_tokens` 94, so the 23040 cached tokens are inside `input_tokens` |
+| `harness-json` | `crates/metaharness-b10x/src/seam.rs`, the `"usage"` arm (`input_tokens`; `cached_input_tokens` is `cache_read_input_tokens`) | **unverified** | `b10x-harness` 0.15.1's golden comes from an emulated endpoint (`provider_emulated`). Its 42 input and 7 cached tokens fit either reading, and the line carries no total that would tell them apart |
+| `metaharness.event/1` | the stream's own `usage` as the adapter wrote it | the writing adapter's | the stream carries no vendor name beside `usage`; a consumer reads `adapter` |
+
+A consumer that adds `input_tokens` and `cache_read_input_tokens` across vendors therefore counts
+Codex cached input twice. Normalizing would be a figure no vendor wrote, so it is the consumer's
+step to take, under its own name.
+
+**4. Named, and deterministic.** `source` and `transcript_digest` are the document's own, so the
+summary names the bytes it was made from: the event stream, or under `--from` the vendor record
+(a28 point 3). A consumer that keeps the summary instead of the document can still say which
+document it stands for. The render is `serde_json`'s pretty form of the struct with a trailing
+newline. Keys come in the struct's field order and nested keys in the entry's field order. No
+clock is read, and the only maps read are the document's own, in its key order, so the same
+document renders to the same bytes every time (P1). A cost is rendered as the shortest text that
+parses back to the same `f64`. `metaharness-protocol` enables `serde_json`'s `float_roundtrip`
+feature, so the reader parses a vendor's 17-digit spelling such as `0.0010919999999999999` to the
+nearest `f64` in a build of that crate alone, not only where another crate in the workspace
+happens to enable the feature. A cost that is not finite has no JSON spelling, and `serde_json`
+would write it as `null`, which reads as a document that stated no cost. `TraceIrSummary::render`
+refuses it with an error instead, for the top-level `cost_usd` and every `models` entry's. A
+document never carries one, because its own render refuses it first. The case is an embedder
+holding a `TraceIrSummary` it changed.
+
+**5. The verb.** `metaharness project --to trace-ir-summary` writes the summary of the document
+`project` would otherwise write, with and without `--from`, to `--out` or stdout. `--to` keeps the
+string-plus-library parse (D11): `metaharness::ProjectionForm` parses `trace-ir` and
+`trace-ir-summary`, and anything else is refused by name (exit 2). The refusal moved from the CLI
+into the library and now lists both forms; before this amendment the CLI's words named the one form
+`trace-ir`. `--to trace-ir-summary` with `--html` is refused (exit 2): the page renders documents,
+and a caller who asked for a summary and got a page would cite the wrong artifact. More than one
+event stream under `--to trace-ir-summary` is refused before any is read, with
+`Refusal::SummaryStreamCount` (exit 2): a summary is one document's, and the viewer's refusal,
+which asks for one or two streams, does not fit a verb that takes exactly one.
+
+**6. Specified before built.** `spec/domains/trace.yaml` declares `metaharness.trace.SessionSummary`,
+`metaharness.trace.SummarizedModel`, `metaharness.trace.SummarizedToolCall` and the enum
+`metaharness.trace.TokensBasis`. It also declares the command
+`metaharness.trace.SummarizeRecord` over `SourceKind`, with one guarded outcome per committed golden
+vendor record and the event stream as the default, emitting `metaharness.trace.SessionSummarized`.
+Two limits of ESS 0.67.0 shape that event. A payload literal cannot be `null` (`ESS-COMMAND-002`,
+`-005`), and a `Binary64` anywhere in the core specification refuses the conformance suite
+(`ESS-AUTHOR-036`; `spec/monetary` exists for this reason). So each event field carries the
+production render's **JSON text** of the summary field of the same name. `null` is the text
+`null`, a cost is `0.238876`, and a string keeps its quotes. That pins the difference between `null`
+and `0` byte for byte, which a typed literal could not. `cost_usd`'s type is declared in
+`spec/monetary` as `metaharness.monetary.SummaryCost`, beside the other two monetary observations.
+`SessionSummary` leaves it out with an `UNMAPPED` note, and `SummarizedModel` leaves its own
+`cost_usd`, of the same type, out the same way. The conformance target parses the bytes
+`TraceIrSummary::render` wrote and fills every payload value from that parse: each top-level
+value's compact JSON text. A nested object's keys therefore come in `serde_json`'s sorted order in
+the payload, not in the render's. The key order of the render itself is pinned by the CLI tests.
+The target re-derives no value and reads none off the typed struct, so a field the struct holds
+right and the render writes wrong fails the scenario.
+
+**What the goldens state, and leave `null`, and why.** The Claude record states every top-level
+field (`tokens_basis` `"session"`). Its `models` are `claude-opus-5[1m]` (the opening record's;
+`modelUsage` figures 4 / 96 / 22308 / 22421, cost 0.237784), `claude-opus-5` (its two request
+nodes'; no per-model figure, all five `null`) and `claude-haiku-4-5-20251001` (`modelUsage`
+1032 / 12 / 0 / 0, cost `0.0010919999999999999`). The Codex rollout leaves `model` `null` (its
+opening record names none), and `cache_creation_input_tokens`, `cost_usd`, `duration_api_ms` and
+`stop_reason` `null` (its terminal record does not state them). Its `tokens_basis` is `"session"`
+and its one `models` entry is `gpt-5.6-sol` with every figure `null`. The b10x loop record's
+`tokens_basis` is `"sum-of-requests"`: 84 input, 12 output and 14 cache-read tokens over its two
+`usage` lines, `cache_creation_input_tokens` `null` because neither line states one. It leaves
+`cost_usd`, `duration_ms`, `duration_api_ms` and `stop_reason` `null`, because its terminal record
+carries no cost and no duration, and both timestamps `null` because no line of the record carries
+one. Its one `models` entry is `b10x-emulated`, every figure `null`. The recorded event stream
+states every top-level field (`tokens_basis` `"session"`). Its one `models` entry is
+`claude-sonnet-5`, every figure `null`, and each of its six results leaves `is_error` unsaid, so
+each entry reads `answered: true, error: null`.
+
+**Corrections after the adversary pass (2026-10-21).** As first written, this amendment read the
+tokens off the terminal node only, so every token count of a b10x loop summary was `null` although
+the record states them per request (now `tokens_basis`). It named only the opening record's model,
+so the Claude haiku model, which the session billed, and the Codex turn selections were invisible
+(now `models`). It said a request sum "would be a figure nobody billed", which hid that Claude's
+terminal `usage` is the main model's alone (now *Scope of the Claude figures*). It did not say what
+`input_tokens` counts per vendor (now the table above, with the b10x row unverified). It said the
+`--to` refusal kept the CLI's words, which was false (point 5). The render wrote a non-finite cost
+as `null`, and a build of `metaharness-protocol` alone parsed a 17-digit cost one ULP off (point 4).
+Two streams got the viewer's refusal (point 5). The conformance target read the typed struct
+rather than the rendered bytes (point 6).
+
+**Boundaries.** This amendment adds no event, command, frame or document wire. A `trace-ir/1`
+document is unchanged, and so is its golden. takt's and Loom's moves onto the summary are their
+repositories' stories (`story:retire-trace-formats-beside-trace-ir`, Decisions). The summary
+redacts nothing. A summary of an operator's real transcript names that transcript's digest and
+carries its tool names, and it is evidence in the sense of `AGENTS.md` § Safety envelope.

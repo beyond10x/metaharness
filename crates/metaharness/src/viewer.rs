@@ -31,9 +31,57 @@ use serde_json::Value;
 
 use crate::refusal::Refusal;
 
-/// The target form `project` writes. One form, named, so an unknown one is refused rather than
-/// silently producing this.
+/// The target form `project` writes by default: the `trace-ir/1` document. Named, so an unknown
+/// form is refused rather than silently producing this.
 pub const TRACE_IR_FORM: &str = "trace-ir";
+
+/// The other target form (amendment a42): the document's `trace-ir-summary/1`.
+pub const TRACE_IR_SUMMARY_FORM: &str = "trace-ir-summary";
+
+/// A target form `project --to` writes.
+///
+/// A string the library parses rather than a `clap` enum, as `--from` is, so an unknown form is
+/// refused once, by the library, in the same words on both faces (design D11).
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum ProjectionForm {
+    /// The `trace-ir/1` document.
+    TraceIr,
+    /// The document's `trace-ir-summary/1` (`metaharness_protocol::summarize`).
+    TraceIrSummary,
+}
+
+impl ProjectionForm {
+    /// The two, default first.
+    pub const ALL: [ProjectionForm; 2] = [ProjectionForm::TraceIr, ProjectionForm::TraceIrSummary];
+
+    /// The name `--to` admits.
+    #[must_use]
+    pub const fn as_str(self) -> &'static str {
+        match self {
+            ProjectionForm::TraceIr => TRACE_IR_FORM,
+            ProjectionForm::TraceIrSummary => TRACE_IR_SUMMARY_FORM,
+        }
+    }
+}
+
+impl FromStr for ProjectionForm {
+    type Err = Refusal;
+
+    /// By name, and refused by name: the refusal carries both admitted spellings.
+    fn from_str(name: &str) -> Result<Self, Refusal> {
+        Self::ALL
+            .into_iter()
+            .find(|form| form.as_str() == name)
+            .ok_or_else(|| Refusal::Io {
+                detail: format!(
+                    "--to {name} names a form this build does not write; the forms are `{}`. \
+                     Refused rather than defaulted, because a caller who asked for another form \
+                     and silently got this one would cite the wrong document",
+                    Self::ALL.map(Self::as_str).join("`, `")
+                ),
+            })
+    }
+}
 
 /// How two runs were put beside each other.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]

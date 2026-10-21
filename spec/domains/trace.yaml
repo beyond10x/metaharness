@@ -164,6 +164,90 @@ types:
     # (16 and 14 lines; evals/aep/runs/README.md: hand-written inputs, not a
     # model's). Reading them in the gate is not a paid run (invariant 5).
     variants: [decomposer-clean, plan-reviewer-clean]
+  - name: metaharness.trace.SummarizedToolCall
+    kind: struct
+    fields:
+      - {name: call_id, type: Optional<String>, presence: null_when_absent}
+      - {name: name, type: Optional<String>, presence: null_when_absent}
+      - {name: answered, type: Boolean}
+      - {name: error, type: Optional<Boolean>, presence: null_when_absent}
+    # Amendment a42 point 2: one entry per tool_call node, in document order.
+    # call_id and name are the node's own keys; answered is whether a
+    # tool_result node carries the same call_id; error is the first such node's
+    # is_error, null both when nothing answered the call and when the result
+    # did not say (answered keeps the two apart).
+    # crates/metaharness-protocol/src/trace_summary.rs SummarizedToolCall.
+  - name: metaharness.trace.TokensBasis
+    kind: enum
+    # Amendment a42 point 3: which nodes the summary's four token counts were
+    # read from. session: the terminal node's usage is an object, its totals
+    # taken as written. sum-of-requests: there is a terminal node, its usage is
+    # not an object, and at least one request node's (the usage fold, no
+    # num_turns) is; each count sums the request nodes stating that key. The
+    # summary renders null when there is no terminal node or no usage object
+    # at all. crates/metaharness-protocol/src/trace_summary.rs TokensBasis.
+    variants: [session, sum-of-requests]
+  - name: metaharness.trace.SummarizedModel
+    kind: struct
+    fields:
+      - {name: name, type: String}
+      - {name: input_tokens, type: Optional<Integer>, presence: null_when_absent}
+      - {name: output_tokens, type: Optional<Integer>, presence: null_when_absent}
+      - {name: cache_read_input_tokens, type: Optional<Integer>, presence: null_when_absent}
+      - {name: cache_creation_input_tokens, type: Optional<Integer>, presence: null_when_absent}
+    # Amendment a42 point 2: one entry per model name the document carries, in
+    # first-seen order without repeats, read from session_start and run_outcome
+    # nodes: the node's model, its model_usage keys, its observed_models
+    # entries' model. The figures are the terminal node's model_usage[name]
+    # figures, null where the document states none per model; a request node's
+    # usage is never attributed to its model.
+    # UNMAPPED: cost_usd (that model_usage entry's cost_usd, rendered last) is
+    # a finite Binary64, refused in this projection (ESS-AUTHOR-036). Its type
+    # is metaharness.monetary.SummaryCost, as SessionSummary's cost_usd is.
+    # crates/metaharness-protocol/src/trace_summary.rs SummarizedModel.
+  - name: metaharness.trace.SessionSummary
+    kind: struct
+    fields:
+      - {name: format, type: String}
+      - {name: source, type: String}
+      - {name: transcript_digest, type: String}
+      - {name: adapter, type: Optional<String>, presence: null_when_absent}
+      - {name: model, type: Optional<String>, presence: null_when_absent}
+      - {name: models, type: List<metaharness.trace.SummarizedModel>}
+      - {name: turns, type: Optional<Integer>, presence: null_when_absent}
+      - {name: tokens_basis, type: Optional<metaharness.trace.TokensBasis>, presence: null_when_absent}
+      - {name: input_tokens, type: Optional<Integer>, presence: null_when_absent}
+      - {name: output_tokens, type: Optional<Integer>, presence: null_when_absent}
+      - {name: cache_read_input_tokens, type: Optional<Integer>, presence: null_when_absent}
+      - {name: cache_creation_input_tokens, type: Optional<Integer>, presence: null_when_absent}
+      - {name: duration_ms, type: Optional<Integer>, presence: null_when_absent}
+      - {name: duration_api_ms, type: Optional<Integer>, presence: null_when_absent}
+      - {name: first_timestamp_ms, type: Optional<Integer>, presence: null_when_absent}
+      - {name: last_timestamp_ms, type: Optional<Integer>, presence: null_when_absent}
+      - {name: is_error, type: Optional<Boolean>, presence: null_when_absent}
+      - {name: stop_reason, type: Optional<String>, presence: null_when_absent}
+      - {name: tool_calls, type: List<metaharness.trace.SummarizedToolCall>}
+      - {name: unk, type: Integer}
+    # trace-ir-summary/1 (amendment a42), TraceIrSummary in
+    # crates/metaharness-protocol/src/trace_summary.rs, rendered in this field
+    # order. format is the constant trace-ir-summary/1 (SUMMARY_FORMAT); source
+    # and transcript_digest are the document's own (DocumentHeader). adapter and
+    # model are the opening session_start node's; models is every model the
+    # document names (SummarizedModel). turns, the durations, is_error and
+    # stop_reason are the terminal node's: the last run_outcome node carrying
+    # num_turns, which session.ended always writes and the usage fold never
+    # does. The four token counts are read as tokens_basis says: the terminal
+    # node's usage totals (session), or, only when the terminal node carries no
+    # usage object, the sum over the request nodes (sum-of-requests). No
+    # normalization: input_tokens excludes cached input on Claude and includes
+    # it on Codex, and is unverified on b10x (a42 point 3). The timestamps are
+    # the first and last non-null node timestamp_ms. unk is the sum of
+    # metaharness.unk_kinds. A value the document does not state is null, never
+    # 0 or "" (invariant 3).
+    # UNMAPPED: cost_usd (the terminal node's total_cost_usd, rendered between
+    # cache_creation_input_tokens and duration_ms) is a finite Binary64, which
+    # ESS 0.67.0 refuses in the core conformance projection (ESS-AUTHOR-036). Its
+    # type is metaharness.monetary.SummaryCost in spec/monetary/observations.yaml.
 
 commands:
   - name: metaharness.trace.ClassifyEventKind
@@ -411,6 +495,165 @@ commands:
     # not is refused by the verb (a28 point 4) and pinned per cross pair in
     # crates/metaharness-cli/tests/project.rs, not driven by this suite.
 
+  - name: metaharness.trace.SummarizeRecord
+    # Amendment a42: `metaharness project --to trace-ir-summary`, observed
+    # through its library entries. A vendor SourceKind is read by
+    # metaharness::project_vendor_record (crates/metaharness/src/viewer.rs) over
+    # the golden record NormalizeRecord names; the event stream is read by
+    # metaharness::project_file over evals/aep/runs/decomposer-clean.events.jsonl,
+    # as the verb reads it without --from. The document is summarized by
+    # metaharness_protocol::summarize twice and rendered by
+    # TraceIrSummary::render. Every field below except byte_stable is the compact
+    # JSON text of the rendered summary's field of the same name, taken from a
+    # parse of the rendered bytes and never from the typed summary: a string
+    # keeps its quotes, an absent value is the text null, and a nested object's
+    # keys come in serde_json's sorted order (the render's own key order is
+    # pinned by crates/metaharness-cli/tests/project.rs). ESS 0.67.0 admits no
+    # null payload literal (ESS-COMMAND-002) and no Binary64 in this projection
+    # (ESS-AUTHOR-036), and the text is what tells null from 0 byte for byte.
+    # byte_stable is whether the two renders agree. The outcome is named from
+    # the summary's own source, never from the input: metaharness.event/1 is
+    # the event stream, the default. Each vendor outcome pins at least one null
+    # the record leaves unstated; the Claude one pins the null figures of a
+    # model its record names on requests only.
+    input: [{name: source, type: metaharness.trace.SourceKind}]
+    outcomes:
+      - name: claude-transcript-summarized
+        when: source == claude-code-stream-json
+        emits: [metaharness.trace.SessionSummarized]
+        # crates/metaharness-claude/fixtures/golden/transcript.jsonl: the
+        # terminal result record states turns, usage, total_cost_usd, both
+        # durations and stop_reason; output_tokens 96 is that record's total,
+        # not the two request nodes' 20 + 1, and it is the main model's alone
+        # (modelUsage claude-opus-5[1m]), while cost_usd 0.238876 is both
+        # models'. models: the opening model, the request nodes' claude-opus-5
+        # (no per-model figure), then the modelUsage keys in the document's
+        # order; haiku's cost is the vendor's 17-digit spelling.
+        payload:
+          metaharness.trace.SessionSummarized:
+            format: '"trace-ir-summary/1"'
+            source: '"claude-code-stream-json"'
+            transcript_digest: '"ff0d5eebe13e1e1c3722688b17b071af62ba8adaddece4899a5c482ea881179a"'
+            adapter: '"claude"'
+            model: '"claude-opus-5[1m]"'
+            models: '[{"cache_creation_input_tokens":22421,"cache_read_input_tokens":22308,"cost_usd":0.237784,"input_tokens":4,"name":"claude-opus-5[1m]","output_tokens":96},{"cache_creation_input_tokens":null,"cache_read_input_tokens":null,"cost_usd":null,"input_tokens":null,"name":"claude-opus-5","output_tokens":null},{"cache_creation_input_tokens":0,"cache_read_input_tokens":0,"cost_usd":0.0010919999999999999,"input_tokens":1032,"name":"claude-haiku-4-5-20251001","output_tokens":12}]'
+            turns: '2'
+            tokens_basis: '"session"'
+            input_tokens: '4'
+            output_tokens: '96'
+            cache_read_input_tokens: '22308'
+            cache_creation_input_tokens: '22421'
+            cost_usd: '0.238876'
+            duration_ms: '4784'
+            duration_api_ms: '5372'
+            first_timestamp_ms: '1787453878487'
+            last_timestamp_ms: '1787453880172'
+            is_error: 'false'
+            stop_reason: '"end_turn"'
+            tool_calls: '[{"answered":true,"call_id":"toolu_0126wZX9VgSsd4Hw7AbgMkc3","error":false,"name":"Bash"}]'
+            unk: '0'
+            byte_stable: true
+      - name: codex-rollout-summarized
+        when: source == codex-rollout
+        emits: [metaharness.trace.SessionSummarized]
+        # crates/metaharness-codex/fixtures/golden/rollout.jsonl: the opening
+        # record names no model (the turn selection observed_models carries,
+        # a22, is under models with no per-model figure); the terminal record
+        # states no cache writes, no cost, no API duration and no stop reason;
+        # input_tokens includes the 23040 cached (total_tokens 27664 = 27570 +
+        # 94); the result carries no is_error; three kinds are unk
+        # (turn.started, turn.ended, warning).
+        payload:
+          metaharness.trace.SessionSummarized:
+            format: '"trace-ir-summary/1"'
+            source: '"codex-rollout"'
+            transcript_digest: '"b6ac934e09b71f95d24025d343ea4719b940a124cdef33d1bfb348daddae8900"'
+            adapter: '"codex"'
+            model: 'null'
+            models: '[{"cache_creation_input_tokens":null,"cache_read_input_tokens":null,"cost_usd":null,"input_tokens":null,"name":"gpt-5.6-sol","output_tokens":null}]'
+            turns: '1'
+            tokens_basis: '"session"'
+            input_tokens: '27570'
+            output_tokens: '94'
+            cache_read_input_tokens: '23040'
+            cache_creation_input_tokens: 'null'
+            cost_usd: 'null'
+            duration_ms: '7074'
+            duration_api_ms: 'null'
+            first_timestamp_ms: '1787453919893'
+            last_timestamp_ms: '1787453926967'
+            is_error: 'false'
+            stop_reason: 'null'
+            tool_calls: '[{"answered":true,"call_id":"call_bnZWdUqhCidLSR2PelWxMxcK","error":null,"name":"exec"}]'
+            unk: '3'
+            byte_stable: true
+      - name: harness-record-summarized
+        when: source == harness-json
+        emits: [metaharness.trace.SessionSummarized]
+        # crates/metaharness-b10x/fixtures/golden/loop.jsonl: the terminal
+        # record carries no usage, so the tokens are the two usage lines'
+        # (lines 4 and 10: 42 + 42 in, 8 + 4 out, 7 + 7 cached) and neither
+        # states a cache write; no cost and no duration, and no line carries
+        # a timestamp; two turn.started are unk.
+        payload:
+          metaharness.trace.SessionSummarized:
+            format: '"trace-ir-summary/1"'
+            source: '"harness-json"'
+            transcript_digest: '"eae41809f984ea2bf6b0a6e548263889a1fa8dcf640ad1e7ff5089b8ff45f15f"'
+            adapter: '"b10x"'
+            model: '"b10x-emulated"'
+            models: '[{"cache_creation_input_tokens":null,"cache_read_input_tokens":null,"cost_usd":null,"input_tokens":null,"name":"b10x-emulated","output_tokens":null}]'
+            turns: '2'
+            tokens_basis: '"sum-of-requests"'
+            input_tokens: '84'
+            output_tokens: '12'
+            cache_read_input_tokens: '14'
+            cache_creation_input_tokens: 'null'
+            cost_usd: 'null'
+            duration_ms: 'null'
+            duration_api_ms: 'null'
+            first_timestamp_ms: 'null'
+            last_timestamp_ms: 'null'
+            is_error: 'false'
+            stop_reason: 'null'
+            tool_calls: '[{"answered":true,"call_id":"call_b10x_001","error":false,"name":"file_read"}]'
+            unk: '2'
+            byte_stable: true
+      - name: event-stream-summarized
+        emits: [metaharness.trace.SessionSummarized]
+        summary: The recorded event stream, read without --from; the summary names it by the stream's own digest and source metaharness.event/1.
+        # evals/aep/runs/decomposer-clean.events.jsonl (hand-written, not a
+        # model's): every top-level field stated; none of its six results
+        # states is_error, so each entry is answered with error null.
+        payload:
+          metaharness.trace.SessionSummarized:
+            format: '"trace-ir-summary/1"'
+            source: '"metaharness.event/1"'
+            transcript_digest: '"94bb32f1d4a5dbdcb4793021058a8d64d614449c22eee4bdeba29134b617596a"'
+            adapter: '"claude"'
+            model: '"claude-sonnet-5"'
+            models: '[{"cache_creation_input_tokens":null,"cache_read_input_tokens":null,"cost_usd":null,"input_tokens":null,"name":"claude-sonnet-5","output_tokens":null}]'
+            turns: '7'
+            tokens_basis: '"session"'
+            input_tokens: '42'
+            output_tokens: '2100'
+            cache_read_input_tokens: '181000'
+            cache_creation_input_tokens: '19400'
+            cost_usd: '0.21'
+            duration_ms: '18200'
+            duration_api_ms: '17100'
+            first_timestamp_ms: '1787302800000'
+            last_timestamp_ms: '1787302817300'
+            is_error: 'false'
+            stop_reason: '"end_turn"'
+            tool_calls: '[{"answered":true,"call_id":"toolu_1","error":null,"name":"Task"},{"answered":true,"call_id":"toolu_2","error":null,"name":"Bash"},{"answered":true,"call_id":"toolu_3","error":null,"name":"Bash"},{"answered":true,"call_id":"toolu_4","error":null,"name":"Bash"},{"answered":true,"call_id":"toolu_5","error":null,"name":"Bash"},{"answered":true,"call_id":"toolu_6","error":null,"name":"Bash"}]'
+            unk: '0'
+            byte_stable: true
+    # UNMAPPED: a tool_call no result answers (answered false, error null), a
+    # document with no terminal node, tokens_basis null and a non-finite cost
+    # the render refuses occur in no committed record; they are pinned by the
+    # unit tests in trace_summary.rs, not driven by this suite.
+
 # Conformance observations, not newly published runtime wire events.
 events:
   - name: metaharness.trace.FamilyClassified
@@ -457,6 +700,37 @@ events:
     fields:
       - {name: refused, type: Boolean}
       - {name: names_the_source, type: Boolean}
+  - name: metaharness.trace.SessionSummarized
+    # One String per metaharness.trace.SessionSummary field plus cost_usd, each
+    # the field's compact JSON text in a parse of the production render
+    # (SummarizeRecord).
+    fields:
+      - {name: format, type: String}
+      - {name: source, type: String}
+      - {name: transcript_digest, type: String}
+      - {name: adapter, type: String}
+      - {name: model, type: String}
+      - {name: models, type: String}
+      - {name: turns, type: String}
+      - {name: tokens_basis, type: String}
+      - {name: input_tokens, type: String}
+      - {name: output_tokens, type: String}
+      - {name: cache_read_input_tokens, type: String}
+      - {name: cache_creation_input_tokens, type: String}
+      # cost_usd, and each models entry's cost_usd inside models: the text is
+      # the shortest spelling that round-trips the f64 the reader parsed, an
+      # observation of rendered bytes and not an amount. The money type stays
+      # metaharness.monetary.SummaryCost (spec/monetary/observations.yaml).
+      - {name: cost_usd, type: String}
+      - {name: duration_ms, type: String}
+      - {name: duration_api_ms, type: String}
+      - {name: first_timestamp_ms, type: String}
+      - {name: last_timestamp_ms, type: String}
+      - {name: is_error, type: String}
+      - {name: stop_reason, type: String}
+      - {name: tool_calls, type: String}
+      - {name: unk, type: String}
+      - {name: byte_stable, type: Boolean}
 
 # An immutable retained document, not a second run lifecycle.
 entities:

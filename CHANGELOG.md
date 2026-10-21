@@ -3,6 +3,12 @@
 What changed. The design document carries *why*; where code and design disagreed, the design
 was amended and the amendment is named here.
 
+## [Unreleased]
+
+### Added
+
+- `metaharness project --to trace-ir-summary`, with or without `--from`, writes `trace-ir-summary/1`, the one projection of a `trace-ir/1` document that takt's harness-step rows and Loom's jsonl read; `metaharness_protocol::summarize`, `TraceIrSummary`, `SummarizedToolCall`, `SummarizedModel`, `TokensBasis`, `SUMMARY_FORMAT`, `metaharness::ProjectionForm`, `metaharness::TRACE_IR_SUMMARY_FORM` and `metaharness::Refusal::SummaryStreamCount` for a summary asked of other than one event stream (a42).
+
 ## [0.12.0] — 2026-10-21
 
 ### Changed

@@ -26,7 +26,9 @@ use std::time::Duration;
 
 use clap::{Args, Parser, Subcommand};
 use metaharness::protocol::{Kind, RunSpec, VectorOutcome, parse_command_line};
-use metaharness::{Input, Metaharness, ProcessAuditor, Refusal, Run, RunExit, VendorSource};
+use metaharness::{
+    Input, Metaharness, ProcessAuditor, ProjectionForm, Refusal, Run, RunExit, VendorSource,
+};
 
 /// One interface to many agent harnesses.
 #[derive(Parser, Debug)]
@@ -140,10 +142,16 @@ pub struct ProjectArgs {
     /// by the library, in the same words on both faces (design D11).
     #[arg(long, value_name = "FORMAT")]
     pub from: Option<String>,
-    /// The target form.
+    /// The target form: `trace-ir` (the `trace-ir/1` document) or `trace-ir-summary` (its
+    /// `trace-ir-summary/1`, design amendment a42). A summary is one run's: under
+    /// `trace-ir-summary` exactly one event stream is accepted.
+    ///
+    /// A string the library parses rather than a `clap` enum, so an unknown form is refused once,
+    /// by the library, in the same words on both faces (design D11).
     #[arg(long, default_value = "trace-ir")]
     pub to: String,
-    /// Write the `trace-ir/1` document here instead of to stdout.
+    /// Write the document (or its summary, under `--to trace-ir-summary`) here instead of to
+    /// stdout.
     #[arg(long, value_name = "FILE")]
     pub out: Option<std::path::PathBuf>,
     /// Render one or two runs as a static two-column page at this path.
@@ -256,15 +264,22 @@ pub fn execute(cli: Cli) -> i32 {
 /// reader instead; the library picks the reader and states the one rule a wrong format is refused
 /// by, and nothing vendor-specific is parsed here.
 fn project(args: &ProjectArgs) -> i32 {
-    if args.to != metaharness::TRACE_IR_FORM {
+    let form = match args.to.parse::<ProjectionForm>() {
+        Ok(form) => form,
+        Err(refusal) => return refuse(&refusal),
+    };
+    if form == ProjectionForm::TraceIrSummary && args.html.is_some() {
         return refuse(&Refusal::Io {
             detail: format!(
-                "--to {} names a form this build does not write; the one form is `{}`. Refused \
-                 rather than defaulted, because a caller who asked for another form and silently \
-                 got this one would cite the wrong document",
-                args.to,
-                metaharness::TRACE_IR_FORM
+                "--to {} with --html is refused: the page renders trace-ir/1 documents, and a \
+                 caller who asked for a summary and got a page would cite the wrong artifact",
+                metaharness::TRACE_IR_SUMMARY_FORM
             ),
+        });
+    }
+    if form == ProjectionForm::TraceIrSummary && args.events.len() != 1 {
+        return refuse(&Refusal::SummaryStreamCount {
+            given: args.events.len(),
         });
     }
     let source = match args.from.as_deref().map(str::parse::<VendorSource>) {
@@ -305,7 +320,11 @@ fn project(args: &ProjectArgs) -> i32 {
             given: documents.len(),
         });
     };
-    let rendered = match document.render() {
+    let rendered = match form {
+        ProjectionForm::TraceIr => document.render(),
+        ProjectionForm::TraceIrSummary => metaharness::protocol::summarize(document).render(),
+    };
+    let rendered = match rendered {
         Ok(rendered) => rendered,
         Err(error) => {
             return refuse(&Refusal::Io {

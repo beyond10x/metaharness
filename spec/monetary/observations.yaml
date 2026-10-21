@@ -20,3 +20,16 @@ types:
     # The row's ordinal plus retained run directory identifies the admission.
     # No observation is created from a reservation, failed spawn or missing terminal.
     # Ordered I/O and resume corruption checks run in the Rust admission suite.
+  - name: metaharness.monetary.SummaryCost
+    kind: struct
+    fields:
+      - {name: cost_usd, type: Optional<Binary64>, presence: null_when_absent}
+    # Amendment a42: trace-ir-summary/1 cost_usd, the field
+    # metaharness.trace.SessionSummary leaves UNMAPPED. It is the terminal
+    # run_outcome node's total_cost_usd passed through (TerminalCost above),
+    # crates/metaharness-protocol/src/trace_summary.rs TraceIrSummary::cost_usd.
+    # Also the type of each models entry's cost_usd, which
+    # metaharness.trace.SummarizedModel leaves UNMAPPED: the terminal node's
+    # model_usage[name].cost_usd passed through (SummarizedModel::cost_usd).
+    # A document that states no cost renders null, never 0, and a non-finite
+    # cost is refused by the render, never written as null.

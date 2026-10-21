@@ -1670,6 +1670,74 @@ fn project_vendor_record(input: &Value) -> Observed {
     )
 }
 
+/// `metaharness.trace.SummarizeRecord` (amendment a42): `metaharness project --to
+/// trace-ir-summary` through its library entries. A vendor source is read by
+/// `metaharness::project_vendor_record` over the golden record `ProjectVendorRecord` reads; the
+/// event stream by `metaharness::project_file` over the recorded `decomposer-clean` run, as the
+/// verb reads it without `--from`. The document is summarized twice by
+/// `metaharness_protocol::summarize`. Every payload field but `byte_stable` is the compact JSON
+/// text of the rendered field of the same name, parsed from the production render's bytes and
+/// re-derived from nothing, so `null` and `0` differ byte for byte. The outcome is named from the summary's own
+/// `source`, never from the input.
+fn summarize_record(input: &Value) -> Observed {
+    let source = input["source"].as_str().unwrap();
+    let document = match source.parse::<metaharness::VendorSource>() {
+        Ok(vendor) => {
+            let relative = match vendor {
+                metaharness::VendorSource::ClaudeCodeStreamJson => {
+                    "crates/metaharness-claude/fixtures/golden/transcript.jsonl"
+                }
+                metaharness::VendorSource::CodexRollout => {
+                    "crates/metaharness-codex/fixtures/golden/rollout.jsonl"
+                }
+                metaharness::VendorSource::HarnessJson => {
+                    "crates/metaharness-b10x/fixtures/golden/loop.jsonl"
+                }
+            };
+            metaharness::project_vendor_record(&repository_root().join(relative), vendor)
+        }
+        Err(_) => metaharness::project_file(
+            &repository_root().join("evals/aep/runs/decomposer-clean.events.jsonl"),
+        ),
+    };
+    let document = match document {
+        Ok(document) => document,
+        Err(refusal) => {
+            return Observed {
+                outcome: format!("summary-refused:{source}:{refusal}"),
+                ..Observed::default()
+            };
+        }
+    };
+    let summary = metaharness::protocol::summarize(&document);
+    let first = summary.render().unwrap();
+    let second = metaharness::protocol::summarize(&document)
+        .render()
+        .unwrap();
+    let outcome = match summary.source {
+        "claude-code-stream-json" => "claude-transcript-summarized",
+        "codex-rollout" => "codex-rollout-summarized",
+        "harness-json" => "harness-record-summarized",
+        "metaharness.event/1" => "event-stream-summarized",
+        other => panic!("the summary names an undeclared source {other}"),
+    };
+    // Every payload value is read off the production render's own bytes, parsed and written back
+    // as compact JSON text, never re-serialized from the typed summary, so a field the render
+    // writes wrong cannot be corrected on the way to the scenario. A key the render carries beyond
+    // the declared ones is observed too and fails as an undeclared field. A nested object's keys
+    // come out sorted, because the parse does not keep the render's order.
+    let rendered: Value = serde_json::from_str(&first).unwrap();
+    let mut payload = json!({ "byte_stable": first == second });
+    for (key, value) in rendered.as_object().unwrap() {
+        payload[key] = Value::String(value.to_string());
+    }
+    event(outcome, "metaharness.trace.SessionSummarized", payload)
+}
+
+#[allow(
+    clippy::too_many_lines,
+    reason = "one arm per specified command, read top to bottom"
+)]
 fn execute(command: &str, input: &Value) -> Observed {
     match command {
         "metaharness.trace.ClassifyEventKind" => classify(input),
@@ -1678,6 +1746,7 @@ fn execute(command: &str, input: &Value) -> Observed {
         "metaharness.trace.ProjectRecordedRun" => project_recorded_run(input),
         "metaharness.trace.NormalizeRecord" => normalize(input),
         "metaharness.trace.ProjectVendorRecord" => project_vendor_record(input),
+        "metaharness.trace.SummarizeRecord" => summarize_record(input),
         "metaharness.session.PollSteering" => polling(input),
         "metaharness.observations.ReadFinalAnswer"
         | "metaharness.observations.ReadObservedModel"
@@ -2022,7 +2091,7 @@ fn ess_generated_scenarios_drive_production_targets() {
     if external.is_none() {
         assert_eq!(
             scenarios.len(),
-            103,
+            107,
             "review and update coverage deliberately"
         );
         assert_eq!(
@@ -2052,6 +2121,7 @@ fn ess_generated_scenarios_drive_production_targets() {
             "ProjectRecordedRun",
             "NormalizeRecord",
             "ProjectVendorRecord",
+            "SummarizeRecord",
         ] {
             assert!(
                 scenarios.keys().any(|id| id.contains(command)),

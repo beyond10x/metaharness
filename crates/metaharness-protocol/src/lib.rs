@@ -39,6 +39,7 @@ mod projection;
 mod seam;
 mod spec;
 mod trace_ir;
+mod trace_summary;
 
 pub use capability::{
     AdapterClass, AdapterId, Capabilities, CommandSupport, Tier, TierStatus, decision_modes_all,
@@ -88,4 +89,7 @@ pub use trace_ir::{
     AdapterRef, AssistantRequest, CLOSED_FAMILY, IR_ADAPTER, IR_FORMAT, MetaharnessBlock,
     StreamClose, TraceIrDocument, TraceIrEvent, UNK_FAMILY, UNK_REASON, parse_timestamp_ms,
     project_document,
+};
+pub use trace_summary::{
+    SUMMARY_FORMAT, SummarizedModel, SummarizedToolCall, TokensBasis, TraceIrSummary, summarize,
 };

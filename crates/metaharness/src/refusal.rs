@@ -182,6 +182,16 @@ pub enum Refusal {
         /// How many were given.
         given: usize,
     },
+    /// `project --to trace-ir-summary` was given something other than one event stream (design
+    /// amendment a42 point 5).
+    ///
+    /// A summary is one run's: it is a function of one document, and a second stream would have
+    /// to be summarized into a file nobody named or silently dropped. The viewer's refusal does
+    /// not fit, because it tells the caller to give one *or two*.
+    SummaryStreamCount {
+        /// How many were given.
+        given: usize,
+    },
     /// `project --from <format>` could not be honoured (design amendment a28): the format is not
     /// one this build has a reader for, or the record is not that format.
     ///
@@ -635,6 +645,12 @@ impl fmt::Display for Refusal {
                 "the viewer renders one or two runs and was given {given}: two columns is the \
                  decided shape, and a third would have to be aligned against a rule nothing \
                  decides. Give one or two event streams"
+            ),
+            Refusal::SummaryStreamCount { given } => write!(
+                f,
+                "--to trace-ir-summary summarizes one run's document and was given {given} event \
+                 streams: a summary is a function of one document, and a second would be written \
+                 nowhere or dropped. Give exactly one event stream, and run the verb once per run"
             ),
             Refusal::ProjectionSource {
                 source,

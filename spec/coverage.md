@@ -12,14 +12,14 @@ ess verify conform synthesize --path spec --scenarios spec --suite-format 5 --st
 ```
 
 `--scenarios spec` selects the authored scenarios `spec/ess-inputs.yaml` lists;
-without it ESS selects none and writes the 100 generated ones only.
+without it ESS selects none and writes the 104 generated ones only.
 `task check` validates both manifests, checks suite drift, and executes the
 production target in `crates/metaharness-aep/src/drive/ess_conformance.rs`.
 CI installs ESS 0.67.0 from commit
 `4579d8049bb5b83749b46059dfc0982de7633485`. Use that compiler locally.
 
-The committed count is **103 selected scenarios** (100 generated, 3 authored):
-103 passed, zero failed, skipped, unsupported or synthesis refusals. Unknown suite versions, steps,
+The committed count is **107 selected scenarios** (104 generated, 3 authored):
+107 passed, zero failed, skipped, unsupported or synthesis refusals. Unknown suite versions, steps,
 bindings, shapes and predicates fail closed. The target handles only the
 constructs this suite uses; extending the specification may require extending it.
 
@@ -34,7 +34,7 @@ constructs this suite uses; extending the specification may require extending it
 | Workspace and file containment | The production name predicate and owned tool server operate on a selected directory; an outside symlink is refused. This does not prove process or cgroup isolation. |
 | Context files (`metaharness.workspace.DeclareContextFiles`, amendment a35) | Each probe is a real start of all three kinds over `ScriptedRunner` in a git work tree the target made, whose `.git` is a gitfile naming a sibling git directory. Every refusal production raises (no `--cwd`, an empty path, absolute, `..`, a path that is not UTF-8, symbolic link, not a regular file, not there, not text, untracked, count cap, byte cap: twelve, one outcome each) must come from every kind before the spawn with the same reason, and the target maps the refusal type exhaustively, so a thirteenth fails to compile; the accepted probe reads `session.started.context_files` off each run and compares every digest with the tree's bytes. No vendor process or model starts. |
 | Accounting | Real finite and uncapped policy functions execute. Ledger views read files written by SpendBudget and AdmissionBudget, including persisted invocation count. |
-| Session format (`trace-ir/1`, domain `metaharness.trace`) | The production projection `project_document` and the three production readers run over committed inputs only: one framed event per wire kind, classified by the node the writer emits; completeness over three marker shapes built through the production `EventStream`; the digest over the framed bytes beside the vendor's reference; the two recorded `evals/aep/runs` streams retained as rendered documents whose view is read back from disk and re-projected; the three golden vendor records normalized through `ClaudeSeams`, `RolloutReader` and `B10xSeams`; the same three records through the verb's own library entry, `metaharness::project_vendor_record` (`metaharness project --from`, amendment a28), with the source name, the record digest, the unclaimed attestation and the census against the adapter's expected stream read off the rendered document, and the event stream's name refused as a `--from`. No vendor process or model starts. |
+| Session format (`trace-ir/1`, domain `metaharness.trace`) | The production projection `project_document` and the three production readers run over committed inputs only: one framed event per wire kind, classified by the node the writer emits; completeness over three marker shapes built through the production `EventStream`; the digest over the framed bytes beside the vendor's reference; the two recorded `evals/aep/runs` streams retained as rendered documents whose view is read back from disk and re-projected; the three golden vendor records normalized through `ClaudeSeams`, `RolloutReader` and `B10xSeams`; the same three records through the verb's own library entry, `metaharness::project_vendor_record` (`metaharness project --from`, amendment a28), with the source name, the record digest, the unclaimed attestation and the census against the adapter's expected stream read off the rendered document, and the event stream's name refused as a `--from`; the same three records and the recorded `decomposer-clean` stream summarized to `trace-ir-summary/1` (`metaharness project --to trace-ir-summary`, amendment a42), every summary field pinned as its rendered JSON text, `null` included. No vendor process or model starts. |
 
 The immutable Recorded entities expose existing observations: a closed stream and
 snapshots of retained finite/admission ledgers. They add no running-session
@@ -460,3 +460,51 @@ and 4 grid shapes.
 Mutation audit, 2026-10-21, the command above: 104 mutants, 103 killed, none
 survived, one inconclusive (`ProjectRecordedRun/decomposer-clean-recorded`, as
 before), none unwitnessed; all 14 `CloseUnsteeredStream` mutants are killed.
+
+## Amendment a42 extension — `trace-ir-summary/1`
+
+Protocol amendment a42 (2026-10-21) adds `trace-ir-summary/1`, the one projection
+of a `trace-ir/1` document that takt's harness-step rows and Loom's jsonl read,
+written by `metaharness project --to trace-ir-summary` with or without `--from`.
+The domain `metaharness.trace` gains the types `SessionSummary`,
+`SummarizedModel` and `SummarizedToolCall`, the enum `TokensBasis` and the
+command `SummarizeRecord`, with four generated
+scenarios. Three are one per golden vendor record, read by
+`metaharness::project_vendor_record`. The default is the recorded
+`decomposer-clean` stream, read by `metaharness::project_file`. Each summarizes
+the document twice through `metaharness_protocol::summarize`, parses the bytes
+`TraceIrSummary::render` wrote, and observes every rendered field as its compact
+JSON text, nested keys sorted; no value is read off the typed struct. The
+`models` and `tokens_basis` literals pin each record's per-model figures and the
+nodes its token counts came from (`"sum-of-requests"` for the b10x loop record,
+`"session"` for the other three). ESS 0.67.0 admits no `null` payload
+literal and no `Binary64` in this projection, and the text tells `null` from `0`
+byte for byte. `cost_usd`'s type is `metaharness.monetary.SummaryCost` in
+`spec/monetary`, for the top-level cost and each `models` entry's. The outcome
+is named from the summary's own `source`. The suite
+moves from 103 to 107 scenarios (104 generated, 3 authored), zero refused,
+regenerated with ESS 0.67.0.
+
+Hardening evidence, 2026-10-21, restored and rerun green: making `summarize`
+write `0.0` for a cost the document does not state failed
+`codex-rollout-summarized` and `harness-record-summarized` (105 passed, two
+failed), the two records that state no cost. The Claude record states every
+summary field, so its outcome pins no `null`. The Codex and b10x outcomes pin the
+nulls. A call no result answers and a document with no terminal node occur in no
+committed record. Both are pinned by the unit tests in
+`crates/metaharness-protocol/src/trace_summary.rs`, not by this suite.
+
+Mutation probe after the adversary pass, 2026-10-21: 17 hand mutants of
+`trace_summary.rs`, each run against the protocol tests, the CLI tests and this
+suite, the file restored and compared after each. All 17 fail at least one
+layer. This suite fails 10 of them: turns off by one, the two cache keys
+swapped, the timestamps swapped, the first tool call dropped, an absent token
+count written as `0`, an absent cost written as `0`, an unstated request key
+summed as `0`, a model named twice, a model's figures dropped, and
+`tokens_basis` always `"session"`. Seven pass this suite and fail only the
+protocol tests: the last timestamp taken as the largest, every call marked
+answered, the last result's verdict kept, the first session close taken as
+terminal, a `session_start` after node 0 taken as opening, a usage fold without
+`num_turns` taken as terminal, and a non-finite cost written as `null`. No
+committed record tells the first six apart from the production code, and no
+committed record carries a non-finite cost.
