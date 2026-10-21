@@ -48,10 +48,21 @@
 //!   handshake per request against a real vendor host. It is taken because connection reuse plus
 //!   `Content-Length`/chunked framing plus a mid-stream retry is three interacting state machines,
 //!   and this build would rather be slow than subtly wrong about where a response ends.
-//! * **The TLS leg is unexercised by the tests here.** Every vector in this module runs against a
-//!   plain-HTTP fake upstream, on purpose: they must cost nothing and need no network. The rustls
-//!   path is therefore *built, not verified* — it flips to verified when V-LP2 runs one live
-//!   session through it, and until then this comment is the label.
+//! * **The TLS leg is tested against a local upstream, never a vendor host.** Vectors 7 and 8 run
+//!   a rustls fake upstream on 127.0.0.1 under a certificate authority the test generates, so
+//!   they cost nothing and need no network. Vector 7 trusts that CA and checks the custody token
+//!   arrives on the far side of the handshake and the response bytes reach the child. Vector 8
+//!   presents a certificate the proxy cannot trust — an issuer outside the compiled-in roots, an
+//!   issuer outside the roots it was given, a trusted issuer that signed for another name — and
+//!   checks the handshake fails before any request, so the token never crosses. The test CA
+//!   reaches the proxy through `start_trusting`, which swaps the roots and exists only under
+//!   `cfg(test)`. That means the unit tests never compile the `cfg(not(test))` trust line in
+//!   `connect`, the one every real run takes; `tests/adversary_w5u5_tls_production.rs` drives
+//!   the production build through `start` and fails if that line trusts an issuer outside the
+//!   compiled-in roots, over TLS 1.3 and 1.2. Not covered here: the compiled-in roots accepting a real vendor chain, and a
+//!   close-delimited body that ends without `close_notify` (the `UnexpectedEof` arm of
+//!   `copy_to_end`). One live session through this leg is V-LP2 in
+//!   `docs/design/loopback-provider-v0.1.md`; these tests do not run it.
 //! * **A request body arriving `Transfer-Encoding: chunked` from the child is refused by name**
 //!   (400) rather than relayed. The body must be buffered — otherwise the 401 retry has nothing
 //!   left to resend — and a chunked *request* decoder is machinery no observed Claude Code request
@@ -128,7 +139,34 @@ impl LoopbackProxy {
         custody: Arc<CredentialCustody>,
         run_id: &str,
     ) -> io::Result<LoopbackHandle> {
-        let upstream = parse_upstream(upstream)?;
+        Self::start_to(parse_upstream(upstream)?, custody, run_id)
+    }
+
+    /// [`LoopbackProxy::start`] with the upstream leg trusting `roots` instead of the compiled-in
+    /// set — **test builds only**, so a test can stand up a TLS upstream under a CA it generated.
+    ///
+    /// It swaps the roots and nothing else: the configuration is built by the same
+    /// [`client_config`] as the production one, so certificate and host-name verification run
+    /// exactly as they do on a real run. Outside `cfg(test)` neither this constructor nor the field
+    /// it fills exists, so no production caller can reach a different trust.
+    #[cfg(test)]
+    fn start_trusting(
+        upstream: &str,
+        custody: Arc<CredentialCustody>,
+        run_id: &str,
+        roots: rustls::RootCertStore,
+    ) -> io::Result<LoopbackHandle> {
+        let mut upstream = parse_upstream(upstream)?;
+        upstream.trust = Some(client_config(roots));
+        Self::start_to(upstream, custody, run_id)
+    }
+
+    /// Serve one run's traffic to an upstream already parsed.
+    fn start_to(
+        upstream: Upstream,
+        custody: Arc<CredentialCustody>,
+        run_id: &str,
+    ) -> io::Result<LoopbackHandle> {
         let placeholder = placeholder_for(run_id, &nonce()?);
         let listener = TcpListener::bind(("127.0.0.1", 0))?;
         let port = listener.local_addr()?.port();
@@ -285,6 +323,10 @@ struct Upstream {
     port: u16,
     /// What goes in `Host:` — the authority exactly as the operator wrote it.
     authority: String,
+    /// The TLS configuration a test handed [`LoopbackProxy::start_trusting`]; `None` is the
+    /// compiled-in roots. The field does not exist outside `cfg(test)`.
+    #[cfg(test)]
+    trust: Option<Arc<rustls::ClientConfig>>,
 }
 
 /// Split `scheme://host[:port]` into something connectable.
@@ -328,6 +370,8 @@ fn parse_upstream(raw: &str) -> io::Result<Upstream> {
         host,
         port,
         authority: authority.to_string(),
+        #[cfg(test)]
+        trust: None,
     })
 }
 
@@ -620,29 +664,38 @@ fn connect(upstream: &Upstream) -> io::Result<Box<dyn ReadWrite + Send>> {
             format!("{} is not a TLS server name: {error}", upstream.host),
         )
     })?;
-    let session = rustls::ClientConnection::new(tls_config(), name).map_err(io::Error::other)?;
+    #[cfg(test)]
+    let config = upstream.trust.clone().unwrap_or_else(tls_config);
+    #[cfg(not(test))]
+    let config = tls_config();
+    let session = rustls::ClientConnection::new(config, name).map_err(io::Error::other)?;
     Ok(Box::new(rustls::StreamOwned::new(session, socket)))
 }
 
 /// The one TLS client configuration, built once.
 ///
 /// Mozilla's trust anchors compiled in rather than the platform store, so the proxy trusts the
-/// same roots on a laptop and in CI; `ring` rather than `aws-lc-rs` so the build needs no cmake.
+/// same roots on a laptop and in CI.
 fn tls_config() -> Arc<rustls::ClientConfig> {
     static CONFIG: OnceLock<Arc<rustls::ClientConfig>> = OnceLock::new();
     Arc::clone(CONFIG.get_or_init(|| {
-        let roots = rustls::RootCertStore {
+        client_config(rustls::RootCertStore {
             roots: webpki_roots::TLS_SERVER_ROOTS.to_vec(),
-        };
-        let provider = Arc::new(rustls::crypto::ring::default_provider());
-        Arc::new(
-            rustls::ClientConfig::builder_with_provider(provider)
-                .with_safe_default_protocol_versions()
-                .expect("ring supports rustls's default protocol versions")
-                .with_root_certificates(roots)
-                .with_no_client_auth(),
-        )
+        })
     }))
+}
+
+/// A TLS client configuration verifying against `roots`: `ring` rather than `aws-lc-rs` so the
+/// build needs no cmake, rustls's safe default protocol versions, no client certificate.
+fn client_config(roots: rustls::RootCertStore) -> Arc<rustls::ClientConfig> {
+    let provider = Arc::new(rustls::crypto::ring::default_provider());
+    Arc::new(
+        rustls::ClientConfig::builder_with_provider(provider)
+            .with_safe_default_protocol_versions()
+            .expect("ring supports rustls's default protocol versions")
+            .with_root_certificates(roots)
+            .with_no_client_auth(),
+    )
 }
 
 /// One request as the child sent it, with its body already in memory.
@@ -1175,19 +1228,35 @@ mod tests {
     /// An upstream that answers from a script and records what it was asked.
     struct FakeUpstream {
         port: u16,
+        /// Whether it speaks TLS, so [`FakeUpstream::base`] names the scheme the proxy must use.
+        tls: bool,
         seen: Arc<Mutex<Vec<Seen>>>,
+        /// One entry per TLS connection: `Ok` when its handshake completed, the error if not.
+        handshakes: Arc<Mutex<Vec<Result<(), String>>>>,
         stopping: Arc<AtomicBool>,
     }
 
     impl FakeUpstream {
         fn serving(replies: Vec<Reply>) -> Self {
+            Self::listening(replies, None)
+        }
+
+        /// The same scripted upstream behind TLS, presenting the certificate `config` holds.
+        fn serving_tls(replies: Vec<Reply>, config: Arc<rustls::ServerConfig>) -> Self {
+            Self::listening(replies, Some(config))
+        }
+
+        fn listening(replies: Vec<Reply>, tls: Option<Arc<rustls::ServerConfig>>) -> Self {
             let listener = TcpListener::bind(("127.0.0.1", 0)).expect("a fake upstream port");
             let port = listener.local_addr().expect("its address").port();
             let seen = Arc::new(Mutex::new(Vec::new()));
+            let handshakes = Arc::new(Mutex::new(Vec::new()));
             let stopping = Arc::new(AtomicBool::new(false));
             let queue = Arc::new(Mutex::new(VecDeque::from(replies)));
+            let speaks_tls = tls.is_some();
             {
                 let seen = Arc::clone(&seen);
+                let handshakes = Arc::clone(&handshakes);
                 let stopping = Arc::clone(&stopping);
                 std::thread::spawn(move || {
                     for incoming in listener.incoming() {
@@ -1197,19 +1266,44 @@ mod tests {
                         let Ok(stream) = incoming else { break };
                         let reply = queue.lock().expect("the script").pop_front();
                         let seen = Arc::clone(&seen);
-                        std::thread::spawn(move || fake_connection(&stream, &seen, reply));
+                        if let Some(config) = tls.clone() {
+                            let handshakes = Arc::clone(&handshakes);
+                            std::thread::spawn(move || {
+                                fake_tls_connection(stream, config, &seen, &handshakes, reply);
+                            });
+                        } else {
+                            std::thread::spawn(move || fake_connection(&stream, &seen, reply));
+                        }
                     }
                 });
             }
             Self {
                 port,
+                tls: speaks_tls,
                 seen,
+                handshakes,
                 stopping,
             }
         }
 
         fn base(&self) -> String {
-            format!("http://127.0.0.1:{}", self.port)
+            let scheme = if self.tls { "https" } else { "http" };
+            format!("{scheme}://127.0.0.1:{}", self.port)
+        }
+
+        /// The TLS handshakes seen so far, waiting up to 10 s for the first one to be recorded.
+        ///
+        /// The proxy answers the child as soon as its own side of a refused handshake fails, which
+        /// can be before this upstream's connection thread has written down its side.
+        fn handshakes(&self) -> Vec<Result<(), String>> {
+            let deadline = std::time::Instant::now() + Duration::from_secs(10);
+            loop {
+                let record = self.handshakes.lock().expect("the record").clone();
+                if !record.is_empty() || std::time::Instant::now() >= deadline {
+                    return record;
+                }
+                std::thread::sleep(Duration::from_millis(10));
+            }
         }
 
         fn authority(&self) -> String {
@@ -1229,8 +1323,50 @@ mod tests {
     }
 
     fn fake_connection(stream: &TcpStream, seen: &Mutex<Vec<Seen>>, reply: Option<Reply>) {
+        let mut wire = stream;
+        scripted_exchange(&mut wire, seen, reply);
+        let _ = stream.shutdown(Shutdown::Both);
+    }
+
+    /// One TLS connection: finish the handshake, then answer exactly as the plain upstream does.
+    ///
+    /// The handshake is driven to its end before a byte of request is read, so a refused one is
+    /// recorded as a refused handshake and cannot pass for a request that merely went missing.
+    fn fake_tls_connection(
+        stream: TcpStream,
+        config: Arc<rustls::ServerConfig>,
+        seen: &Mutex<Vec<Seen>>,
+        handshakes: &Mutex<Vec<Result<(), String>>>,
+        reply: Option<Reply>,
+    ) {
+        let _ = stream.set_read_timeout(Some(Duration::from_secs(10)));
+        let session = rustls::ServerConnection::new(config).expect("a server session");
+        let mut tls = rustls::StreamOwned::new(session, stream);
+        while tls.conn.is_handshaking() {
+            if let Err(error) = tls.conn.complete_io(&mut tls.sock) {
+                handshakes
+                    .lock()
+                    .expect("the record")
+                    .push(Err(error.to_string()));
+                let _ = tls.sock.shutdown(Shutdown::Both);
+                return;
+            }
+        }
+        handshakes.lock().expect("the record").push(Ok(()));
+        scripted_exchange(&mut tls, seen, reply);
+        tls.conn.send_close_notify();
+        let _ = tls.flush();
+        let _ = tls.sock.shutdown(Shutdown::Both);
+    }
+
+    /// Read one request, record it, answer it from the script — over whichever stream carries it.
+    fn scripted_exchange<S: Read + Write>(
+        stream: &mut S,
+        seen: &Mutex<Vec<Seen>>,
+        reply: Option<Reply>,
+    ) {
         let request = {
-            let mut reader = BufReader::new(stream);
+            let mut reader = BufReader::new(&mut *stream);
             // The same reader the proxy uses: the fake upstream speaks the dialect the proxy
             // writes, so a malformed forward fails here rather than being absorbed.
             match read_request(&mut reader) {
@@ -1244,25 +1380,70 @@ mod tests {
             headers: request.headers.clone(),
             body: request.body.clone(),
         });
-        let mut out = stream;
         match reply {
-            Some(Reply::Fixed { status, body }) => fixed(&mut out, status, &body),
+            Some(Reply::Fixed { status, body }) => fixed(stream, status, &body),
             Some(Reply::RotateThen401 { credential, fresh }) => {
                 write_fake_credential(&credential, &fresh);
                 fixed(
-                    &mut out,
+                    stream,
                     401,
                     r#"{"type":"error","error":{"type":"expired"}}"#,
                 );
             }
-            Some(Reply::Sse { resume, stalled }) => sse(&mut out, &resume, &stalled),
-            None => fixed(
-                &mut out,
-                500,
-                r#"{"error":"the script ran out of replies"}"#,
-            ),
+            Some(Reply::Sse { resume, stalled }) => sse(stream, &resume, &stalled),
+            None => fixed(stream, 500, r#"{"error":"the script ran out of replies"}"#),
         }
-        let _ = stream.shutdown(Shutdown::Both);
+    }
+
+    /// A certificate authority generated for one test, held in memory and never written anywhere.
+    fn test_ca(name: &str) -> rcgen::CertifiedIssuer<'static, rcgen::KeyPair> {
+        let mut params =
+            rcgen::CertificateParams::new(Vec::<String>::new()).expect("CA parameters");
+        params
+            .distinguished_name
+            .push(rcgen::DnType::CommonName, name);
+        params.is_ca = rcgen::IsCa::Ca(rcgen::BasicConstraints::Unconstrained);
+        params.key_usages = vec![
+            rcgen::KeyUsagePurpose::KeyCertSign,
+            rcgen::KeyUsagePurpose::CrlSign,
+        ];
+        let key = rcgen::KeyPair::generate().expect("a CA key");
+        rcgen::CertifiedIssuer::self_signed(params, key).expect("a self-signed CA")
+    }
+
+    /// A TLS server configuration presenting a certificate for `name`, signed by `ca`.
+    ///
+    /// `name` goes into the subject alternative names as written: an IP literal becomes an IP
+    /// entry, anything else a DNS entry — which is what lets one case sign for the wrong name.
+    fn server_signed_by(
+        ca: &rcgen::CertifiedIssuer<'static, rcgen::KeyPair>,
+        name: &str,
+    ) -> Arc<rustls::ServerConfig> {
+        let key = rcgen::KeyPair::generate().expect("a leaf key");
+        let mut params =
+            rcgen::CertificateParams::new(vec![name.to_string()]).expect("leaf parameters");
+        params.extended_key_usages = vec![rcgen::ExtendedKeyUsagePurpose::ServerAuth];
+        let leaf = params.signed_by(&key, ca).expect("a leaf signed by the CA");
+        let private = rustls::pki_types::PrivateKeyDer::Pkcs8(key.serialize_der().into());
+        Arc::new(
+            rustls::ServerConfig::builder_with_provider(Arc::new(
+                rustls::crypto::ring::default_provider(),
+            ))
+            .with_safe_default_protocol_versions()
+            .expect("ring supports rustls's default protocol versions")
+            .with_no_client_auth()
+            .with_single_cert(vec![leaf.der().clone()], private)
+            .expect("a server certificate and its key"),
+        )
+    }
+
+    /// A root store holding exactly one CA.
+    fn trusting(ca: &rcgen::CertifiedIssuer<'static, rcgen::KeyPair>) -> rustls::RootCertStore {
+        let mut roots = rustls::RootCertStore::empty();
+        roots
+            .add(ca.der().clone())
+            .expect("the test CA is a usable trust anchor");
+        roots
     }
 
     fn fixed<W: Write>(out: &mut W, status: u16, body: &str) {
@@ -1676,6 +1857,144 @@ mod tests {
         assert_eq!(seen[1].body, payload.as_bytes());
         assert_eq!(proxy.report().forwarded, 2);
         proxy.shutdown();
+    }
+
+    /// Vector 7, the TLS leg. A CA made in this test signs the fake upstream's certificate for
+    /// 127.0.0.1, the proxy trusts exactly that CA, and the custody token has to come out the far
+    /// side of a real rustls handshake — the leg that carries the operator's token to the vendor.
+    #[test]
+    fn the_tls_leg_carries_the_custody_token_to_a_trusted_upstream_and_relays_its_answer() {
+        let dir = tempfile::TempDir::new().expect("a directory");
+        let (_, custody) = custody_over(dir.path(), "fake-upstream-token");
+        let ca = test_ca("metaharness loopback test CA");
+        let upstream = FakeUpstream::serving_tls(
+            vec![Reply::Fixed {
+                status: 200,
+                body: r#"{"ok":"over tls"}"#.to_string(),
+            }],
+            server_signed_by(&ca, "127.0.0.1"),
+        );
+        let proxy = LoopbackProxy::start_trusting(&upstream.base(), custody, "tls", trusting(&ca))
+            .expect("a proxy");
+
+        let auth = format!("Authorization: Bearer {}", proxy.placeholder());
+        let (head, body) = ask(proxy.port(), &messages_request(&auth));
+
+        assert!(
+            head.starts_with("HTTP/1.1 200 OK"),
+            "the child must get the upstream's own answer across the TLS leg, got: {head}"
+        );
+        assert_eq!(
+            body, br#"{"ok":"over tls"}"#,
+            "the response bytes reach the child verbatim"
+        );
+        assert_eq!(
+            upstream.handshakes(),
+            vec![Ok(())],
+            "exactly one TLS handshake, and it completed"
+        );
+        let seen = upstream.requests();
+        assert_eq!(seen.len(), 1, "exactly one request reached the upstream");
+        assert_eq!(
+            seen[0].header("authorization"),
+            Some("Bearer fake-upstream-token"),
+            "the upstream must read the custody token out of the TLS leg"
+        );
+        assert!(
+            !seen[0]
+                .headers
+                .iter()
+                .any(|(_, value)| value.contains(proxy.placeholder())),
+            "no header may still carry the placeholder"
+        );
+        assert_eq!(seen[0].header("host"), Some(upstream.authority().as_str()));
+        assert_eq!(seen[0].body, br#"{"model":"claude-opus-5","messages":[]}"#);
+        assert_eq!(proxy.report().forwarded, 1);
+        proxy.shutdown();
+    }
+
+    /// Vector 8. An upstream whose certificate the proxy cannot trust is refused in the handshake,
+    /// and the custody token never crosses: the fake upstream records no request at all. Three
+    /// ways to be untrusted, each on its own upstream:
+    ///
+    /// * an issuer outside the compiled-in roots, through the production constructor — so what
+    ///   refuses it is `tls_config`, not seam roots (the `cfg(not(test))` line that selects it in
+    ///   a real run is covered by `tests/adversary_w5u5_tls_production.rs`);
+    /// * an issuer outside the roots the seam was given — so the seam swaps the roots and leaves
+    ///   verification on;
+    /// * a trusted issuer that signed for another name — so the host is checked, not only the
+    ///   chain.
+    #[test]
+    fn an_untrusted_upstream_certificate_is_refused_before_the_credential_is_sent() {
+        let ca = test_ca("metaharness loopback test CA");
+        let stranger = test_ca("a CA the proxy was never given");
+        let cases: [(
+            &str,
+            Arc<rustls::ServerConfig>,
+            Option<rustls::RootCertStore>,
+        ); 3] = [
+            (
+                "an issuer outside the compiled-in roots",
+                server_signed_by(&ca, "127.0.0.1"),
+                None,
+            ),
+            (
+                "an issuer outside the roots the seam was given",
+                server_signed_by(&stranger, "127.0.0.1"),
+                Some(trusting(&ca)),
+            ),
+            (
+                "a trusted issuer that signed for another name",
+                server_signed_by(&ca, "localhost"),
+                Some(trusting(&ca)),
+            ),
+        ];
+        for (case, server, roots) in cases {
+            let dir = tempfile::TempDir::new().expect("a directory");
+            let (_, custody) = custody_over(dir.path(), "fake-upstream-token");
+            let upstream = FakeUpstream::serving_tls(
+                vec![Reply::Fixed {
+                    status: 200,
+                    body: r#"{"ok":true}"#.to_string(),
+                }],
+                server,
+            );
+            let proxy = match roots {
+                None => LoopbackProxy::start(&upstream.base(), custody, "untrusted"),
+                Some(roots) => {
+                    LoopbackProxy::start_trusting(&upstream.base(), custody, "untrusted", roots)
+                }
+            }
+            .expect("a proxy");
+
+            let auth = format!("Authorization: Bearer {}", proxy.placeholder());
+            let (head, body) = ask(proxy.port(), &messages_request(&auth));
+
+            assert!(
+                head.starts_with("HTTP/1.1 502"),
+                "{case}: the proxy answers the child itself, got: {head}"
+            );
+            let text = String::from_utf8_lossy(&body);
+            assert!(
+                !text.contains("fake-upstream-token"),
+                "{case}: the refusal must not carry the credential"
+            );
+            assert!(
+                text.contains("metaharness") && text.contains("certificate"),
+                "{case}: the refusal names who refused and why: {text}"
+            );
+            let handshakes = upstream.handshakes();
+            assert!(
+                handshakes.len() == 1 && handshakes[0].is_err(),
+                "{case}: the upstream saw one handshake and it did not complete: {handshakes:?}"
+            );
+            assert!(
+                upstream.requests().is_empty(),
+                "{case}: no request, and so no credential, reached the upstream"
+            );
+            assert_eq!(proxy.report().forwarded, 0, "{case}: nothing was forwarded");
+            proxy.shutdown();
+        }
     }
 
     /// The placeholder names the run, which is what makes a request arriving on this port

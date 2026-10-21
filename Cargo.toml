@@ -31,6 +31,7 @@ clap = { version = "4", features = ["derive"] }
 # reach it. A nonce derived from the clock or the pid would be guessable; this is the OS entropy
 # source and it is already in the tree under `tempfile`, so it costs no new crate.
 getrandom = "0.4"
+rcgen = { version = "0.14", default-features = false, features = ["crypto", "ring"] }
 # `flock` on the custody lock file, so the serialization survives a process that dies holding it —
 # a lock *file* created with `create_new` would strand every later run behind a crash. Already in
 # the tree under `tempfile`, so the `fs` feature costs no new crate; `fs2` would have cost one.

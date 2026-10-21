@@ -8,6 +8,7 @@ was amended and the amendment is named here.
 ### Changed
 
 - **Breaking:** Claude H11 rests on `--setting-sources ""` and the scratch config home, `gap` on a version without a clean memory canary; the walk finds all six memory shapes and reports them instead of refusing (a36).
+- The loopback's upstream TLS leg is tested against a rustls upstream on 127.0.0.1 under a CA the test generates; an untrusted certificate is refused before the credential is sent. Dev-dependency `rcgen` 0.14.
 
 ## [0.11.0] — 2026-10-21
 
