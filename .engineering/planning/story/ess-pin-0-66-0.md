@@ -2,7 +2,7 @@
 format: aep.planning-md/3
 id: story:ess-pin-0-66-0
 kind: story
-status: active
+status: implemented
 title: The specification and the gate move to ESS 0.66.0
 refs:
 - provider: atlas
@@ -26,10 +26,11 @@ scope:
   path: spec/ess-inputs.yaml
 - confidence: inferred
   path: spec/monetary/ess-inputs.yaml
-revision: 11
+revision: 13
 transitions:
 - {from: "draft", to: "proposed", at: "2026-10-20T20:30:18Z", actor: "human:timo", revision: 10}
 - {from: "proposed", to: "active", at: "2026-10-20T20:30:18Z", actor: "human:timo", revision: 11}
+- {from: "active", to: "implemented", at: "2026-10-21T09:47:36Z", actor: "human:timo", revision: 13, decided_on: {"recorded":{"test_result":1,"review_outcome":2,"verification":1,"ess_conformance_coverage_v1":1}}}
 ---
 # Story: the specification and the gate move to ESS 0.66.0
 
@@ -77,3 +78,13 @@ scenario count 87 plus the authored ones, the count gate in `ess_conformance.rs`
   `spec/domains/` (the two outcomes' guards or authored scenarios), `spec/conformance.json`,
   `crates/metaharness-aep/src/drive/ess_conformance.rs`, `spec/coverage.md`, `README.md:81` (names the ESS
   version), `CHANGELOG.md`.
+## Delivered (wave 4 of 2026-10-21, unit 1)
+
+Commit `49d98f4`, merged `5eacbd4`; two `aep:adversary` passes (`review-result:adr0096-w4-ess-pin-adversary-1`,
+`-2`), the last correction verified by the coordinator. `ESS_VERSION` 0.66.0; the suite regenerated with
+`--suite-format 5 --strict-requires`. Two guards changed because the specification was wrong, not to get
+past the synthesizer: the three `ESS-SYNTH-022` refusals stayed with authored scenarios admitted through
+`ess-inputs.yaml` (ESS issues 619 and 620, fixes planned for ESS 0.67.0). The two scenarios that asserted
+an outcome on an absent `is_error` moved to Rust tests beside `reason_from_record`; the guard says the
+specification does not decide such records (`story:session-close-decides-absent-fields`, after ESS 0.67.0).
+Carried: pass 2's F2, the ignored acceptance case of its story.

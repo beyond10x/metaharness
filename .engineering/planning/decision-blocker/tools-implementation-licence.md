@@ -12,7 +12,7 @@ refs:
   reference: adr-0097
 relations:
 - blocks: story:metaharness-tools-on-tools-crates
-revision: 3
+revision: 4
 transitions:
 - {from: "open", to: "cleared", at: "2026-10-20T07:51:33Z", actor: "human:timo", revision: 3}
 ---
@@ -49,3 +49,8 @@ crates moved from harness become Apache-2.0 in tools 0.2.0." So `b10x-tool-fs`, 
 and `b10x-tool-toolchain` are Apache-2.0 from tools 0.2.0 on, and metaharness adopts them at that
 tag; until 0.2.0 is out `dependency-blocker:tools-0-2-0-release` holds both tools stories. Cleared
 on this answer.
+## Relicence landed
+
+Recorded 2026-10-21 during wave 4: tools commit `d5614d87` makes `b10x-tool-fs`, `b10x-tool-code-editor` and
+`b10x-tool-toolchain` Apache-2.0 from tools 0.2.0 on, as option A said. Adoption by metaharness is a wave 5
+candidate.

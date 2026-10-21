@@ -1,0 +1,13 @@
+{
+  "at": "2026-10-21T09:38:13Z",
+  "actor": "human:timo",
+  "artifact": "story:session-request-carries-context-files",
+  "kind": "story",
+  "revision": 46,
+  "change": {
+    "change": "evidence",
+    "kind": "verification",
+    "source": "coordinator, wave 4 of 2026-10-21: the claim that --context works on every kind within the stated bounds and records what was read. Baseline 32d91e8: --context refused on Claude and Codex, passed unchecked on b10x. Treatment 0d218e4 (merged d0a0b85), coordinator's own run after the final correction: workspace 989 passed, 0 failed, 50 ignored; synthesize --check 103 selected, 0 refusals; conformance 103/103; clippy, fmt, docs check exit 0; the recurse-submodules flag and the b10x system-prompt channel read in the diff; native Claude 9/9 per binary (implementor, round 1)",
+    "reference": "unit commit 0d218e4, merge d0a0b85"
+  }
+}

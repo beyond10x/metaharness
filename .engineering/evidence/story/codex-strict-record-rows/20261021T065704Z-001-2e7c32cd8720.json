@@ -1,0 +1,13 @@
+{
+  "at": "2026-10-21T06:57:04Z",
+  "actor": "human:timo",
+  "artifact": "story:codex-strict-record-rows",
+  "kind": "story",
+  "revision": 26,
+  "change": {
+    "change": "evidence",
+    "kind": "verification",
+    "source": "coordinator, wave 4 of 2026-10-21: the claim that H1b on Codex is decided from the recorded personality and --strict-version applies to Codex. Baseline cfad31d: H1b always unk on Codex, --strict-version not read on Codex. Treatment e67b3f8 (merged 32d91e8), coordinator's own run after the final wording correction: workspace 945 passed, 0 failed, 46 ignored; clippy -D warnings, fmt, docs check exit 0; the adversary's pre-existing ordering case ignored with its reason; native lane 8/8 (implementor), H1b ok pragmatic natively, 0.160.0 refused before spawn",
+    "reference": "unit commit e67b3f8, merge 32d91e8"
+  }
+}

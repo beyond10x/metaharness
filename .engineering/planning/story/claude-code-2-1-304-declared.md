@@ -2,7 +2,7 @@
 format: aep.planning-md/3
 id: story:claude-code-2-1-304-declared
 kind: story
-status: active
+status: implemented
 title: The Claude Code adapter declares 2.1.304 and the built-in plugins it ships
 refs:
 - provider: atlas
@@ -48,10 +48,11 @@ scope:
   path: website/docs/harnesses/claude.md
 - confidence: inferred
   path: website/docs/status.md
-revision: 24
+revision: 27
 transitions:
 - {from: "draft", to: "proposed", at: "2026-10-20T20:30:18Z", actor: "human:timo", revision: 23}
 - {from: "proposed", to: "active", at: "2026-10-20T20:30:18Z", actor: "human:timo", revision: 24}
+- {from: "active", to: "implemented", at: "2026-10-21T09:47:36Z", actor: "human:timo", revision: 27, decided_on: {"recorded":{"test_result":1,"review_outcome":2,"verification":1,"ess_conformance_coverage_v1":1}}}
 ---
 # Story: the Claude Code adapter declares 2.1.304 and the built-in plugins it ships
 
@@ -161,3 +162,25 @@ managed settings (`/etc/claude-code/` does not exist, checked 2026-10-20), so th
 reaches the session through the operator's account or organization (inferred). Under the H1a default
 above it is in the pinned binary's compiled list and matched on its `@builtin` source, so it reads as a
 named built-in, not a gap; the implementor pins that shape with a vector built from this list.
+## Observed: a cwd CLAUDE.md was not loaded under `--setting-sources ""` (relayed 2026-10-21)
+
+`b10x-chef-orchestrator` ran `metaharness run claude --hermetic off --cwd <dir with a canary CLAUDE.md>`
+(metaharness 0.9.3, Claude Code 2.1.305): input 17,184 tokens against 17,179 without it, and the child did not
+quote the canary when asked to quote every reminder block (records in that session's job directory,
+`memprobe/events-{off,canary,quote-canary}.jsonl`). `crates/metaharness-claude/src/launch.rs:191-193` says a
+memory file in an ancestor enters the context. This unit re-probes it credential-free: the native fixture's
+loopback endpoint records the request body, so whether a canary memory file's text reaches the model can be
+read off the request at 2.1.304, in the cwd and in an ancestor, and the H11 wording and `launch.rs:191-193`
+follow what is observed. Observation only, not a rule, until that probe.
+## Delivered (wave 4 of 2026-10-21, unit 2)
+
+Commit `0fac9b6`, merged `cfad31d`; two `aep:adversary` passes (`review-result:adr0096-w4-claude-adversary-1`,
+`-2`) and two correction rounds plus a final correction, verified by the coordinator. Pins Claude Code
+2.1.304 and 2.1.305. H1a passes a built-in plugin only on its name and `<name>@builtin` source within the
+pinned binary's compiled list (version-keyed; D2). `--strict-version` now applies to Claude: an off-pin
+binary is refused before spawn, with a five-second deadline on the `--version` probe. H4 reads `ok` on the
+launch's own endpoint placeholder only when none of the four managed-settings paths exists, else `gap`
+naming them. Round 1's widened H11 memory walk was reverted in round 2: with TMPDIR under HOME it found the
+operator's own memory file and refused every run; amendment a33 records the extra shapes as found and not
+counted, and `story:claude-h11-memory-walk-shapes` was decided C by `b10x-chef-orchestrator` (H11 rests on
+the imposed `--setting-sources ""` control and a per-version canary). Carried: pass 2's F3 and F9.

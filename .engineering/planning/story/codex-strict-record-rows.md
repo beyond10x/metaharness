@@ -2,7 +2,7 @@
 format: aep.planning-md/3
 id: story:codex-strict-record-rows
 kind: story
-status: active
+status: implemented
 title: '--hermetic strict can pass on Codex: H1a, H1b, H4 and H5 become decidable'
 refs:
 - provider: atlas
@@ -54,10 +54,11 @@ scope:
   path: website/docs/harnesses/codex.md
 - confidence: cited
   path: website/docs/status.md
-revision: 26
+revision: 28
 transitions:
 - {from: "draft", to: "proposed", at: "2026-10-20T20:30:18Z", actor: "human:timo", revision: 25}
 - {from: "proposed", to: "active", at: "2026-10-20T20:30:18Z", actor: "human:timo", revision: 26}
+- {from: "active", to: "implemented", at: "2026-10-21T09:47:36Z", actor: "human:timo", revision: 28, decided_on: {"recorded":{"test_result":1,"review_outcome":2,"verification":1,"ess_conformance_coverage_v1":1}}}
 ---
 # Story: `--hermetic strict` can pass on Codex: H1a, H1b, H4 and H5 become decidable
 
@@ -127,3 +128,14 @@ where a credential-free run can observe it and labelled unverified otherwise. No
   (the opening record), `crates/metaharness-codex/src/vectors.rs`, `crates/metaharness/src/audit.rs`
   (H1a, H1b, H4, H5 arms), `crates/metaharness-codex/tests/`, `docs/design/metaharness-protocol-v0.1.md`,
   `website/docs/hermetic.md`, `CHANGELOG.md`. To be scoped by `aep:story-scoper` before proposal.
+## Delivered (wave 4 of 2026-10-21, unit 3)
+
+Commit `e67b3f8`, merged `32d91e8`; two `aep:adversary` passes (`review-result:adr0096-w4-codex-adversary-1`,
+`-2`), the correction verified by the coordinator. D1 = B: no change to invariant 3 or amendment a13. H1b
+is decided from the record: the reader completes the opening record from the first
+`turn_context.personality` and compares it with the plan; a hook request releases the opening record at
+once (H1b `unk` on that run) and `finish` cannot return a `tool.requested`. When a Codex config layer
+exists (the three `/etc/codex` files) H1b and H2 are attested unavailable. The H2 attestation no longer
+claims a `hooks.json` that is not written. `--strict-version` applies to Codex, reusing unit 2's guard.
+Pass 2 notes N1 (a hook read before `session_meta`, not produced by 0.153.4), N2 (cloud config layers
+unverified) and N3 stay open.

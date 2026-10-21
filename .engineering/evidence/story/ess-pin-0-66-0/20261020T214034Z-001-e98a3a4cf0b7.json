@@ -1,0 +1,13 @@
+{
+  "at": "2026-10-20T21:40:34Z",
+  "actor": "human:timo",
+  "artifact": "story:ess-pin-0-66-0",
+  "kind": "story",
+  "revision": 11,
+  "change": {
+    "change": "evidence",
+    "kind": "verification",
+    "source": "coordinator, wave 4 of 2026-10-20: the claim that the specification and the gate run on ESS 0.66.0. Baseline 8c553e1: 0.66.0 refused synthesis three times (ESS-SYNTH-022), and with the authored scenarios admitted but the guards unchanged it still did (90 selected, 3 authored, 3 refusals). Treatment 49d98f4 (merged 5eacbd4), coordinator's own run after its pass-2 wording fixes: validate strict 7 files and 2 files valid; synthesize --check exit 0 (90 selected, 3 authored, 0 refusals); metaharness-aep 80 and the adversary file 1 passed 1 ignored; metaharness lib 110 passed; conformance 90/90; docs check and fmt exit 0",
+    "reference": "unit commit 49d98f4, merge 5eacbd4"
+  }
+}

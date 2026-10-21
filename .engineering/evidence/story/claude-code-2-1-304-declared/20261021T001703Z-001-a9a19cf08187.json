@@ -1,0 +1,13 @@
+{
+  "at": "2026-10-21T00:17:03Z",
+  "actor": "human:timo",
+  "artifact": "story:claude-code-2-1-304-declared",
+  "kind": "story",
+  "revision": 25,
+  "change": {
+    "change": "evidence",
+    "kind": "verification",
+    "source": "coordinator, wave 4 of 2026-10-21: the claim that metaharness declares Claude Code 2.1.304 and 2.1.305 and their built-in plugins. Baseline 5eacbd4: pin 2.1.259; takt's four built-ins read H1a gap; --strict-version never read on Claude. Treatment 0fac9b6 (merged cfad31d), coordinator's own run after the final correction: the adversary file 2 passed 1 ignored, audit 70, metaharness lib 113, contract golden 5, clippy, docs check, fmt exit 0; metaharness-claude lib alone 112 passed 1 failed on golden-transcript float formatting (pre-existing F9, passes under --workspace, which the implementor ran: 924 passed, 0 failed); native lane 7/7 on each binary (implementor and adversary runs)",
+    "reference": "unit commit 0fac9b6, merge cfad31d"
+  }
+}
