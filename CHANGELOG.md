@@ -8,6 +8,7 @@ was amended and the amendment is named here.
 ### Changed
 
 - **Breaking:** Claude H11 rests on `--setting-sources ""` and the scratch config home, `gap` on a version without a clean memory canary; the walk finds all six memory shapes and reports them instead of refusing (a36).
+- `website/` drops its leftover npm `.npmrc` and Docusaurus ignore entries; `website/.gitignore` keeps only `/build`, the `task docs:build` output. The published files are unchanged.
 
 ## [0.11.0] — 2026-10-21
 
