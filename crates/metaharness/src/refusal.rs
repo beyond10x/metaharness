@@ -138,6 +138,12 @@ pub enum Refusal {
     SpecWithoutAuditor,
     /// `--auditor` was given and `--spec` was not, so there is nothing to check against.
     AuditorWithoutSpec,
+    /// Auditor arguments were given (`-- <args>`, or [`crate::Metaharness::with_auditor_arg`])
+    /// and `--auditor` was not (design amendment a43).
+    ///
+    /// They go to the auditor after everything metaharness adds, so with no auditor nothing
+    /// receives them, and an expectation document named among them would be checked by nobody.
+    AuditorArgsWithoutAuditor,
     /// The expectation document could not be read.
     SpecUnreadable {
         /// Which document.
@@ -598,6 +604,12 @@ impl fmt::Display for Refusal {
                 "--auditor was given without --spec: the invocation is \
                  '<prefix…> --spec <spec> --transcript <path>', so there is nothing to check \
                  against",
+            ),
+            Refusal::AuditorArgsWithoutAuditor => f.write_str(
+                "auditor arguments after -- were given without --auditor: they are passed to the \
+                 auditor after everything metaharness adds, and with no auditor nothing receives \
+                 them, so an expectation document named there would be checked by nobody. Name \
+                 the auditor with --auditor '<argv prefix>', or drop the arguments",
             ),
             Refusal::SpecUnreadable { path, detail } => write!(
                 f,

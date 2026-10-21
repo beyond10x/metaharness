@@ -160,6 +160,26 @@ message says which of these had happened. No vendor session is started.
 A specification nobody checked reads exactly like a specification that passed.
 :::
 
+`run` checks the pairing when it starts, before the scratch tree, any proxy or the harness
+process. Each case below exits `2` with no harness process started and no provider request made.
+The first case that matches is the one reported:
+
+| The run asked for | The refusal says |
+|---|---|
+| `--spec` and no `--auditor`, with or without an audit | `--spec was given without --auditor` |
+| `--auditor` and no `--spec`, with or without an audit | `--auditor was given without --spec` |
+| arguments after `--` and no `--auditor`, with or without an audit | `auditor arguments after -- were given without --auditor` |
+| `--spec` and `--auditor`, with no `--audit` and `--hermetic` not `strict` | `--spec and --auditor were given on a run that wants no audit` |
+| an expectation document whose path is not UTF-8, or that is missing, is not a regular file, or cannot be opened | `the expectation document <FILE> could not be read` |
+| an `--auditor` prefix that is empty or only spaces, or whose first word starts with `-` | `the auditor prefix is empty`, or `the auditor prefix starts with "<WORD>", which reads as an option` |
+| an `--auditor` program that cannot be started: a path that is not an existing regular file with an execute bit, or a bare name found as no such file on `PATH` | `the auditor program "<WORD>"`, then why |
+
+`--hermetic strict` asks for an audit the way `--audit` does. A bare program name is looked for
+on the `PATH` `run` itself was started with, because that is the `PATH` the auditor inherits.
+Every check but the last runs again at audit time, after the session, because the document can
+change while the session runs. A program removed or changed during the session is still exit `2`
+after it.
+
 `--auditor` takes an **argv prefix**, so a single-word program name is a degenerate prefix and a
 two-word subcommand is not a special case.
 

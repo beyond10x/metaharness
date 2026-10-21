@@ -1587,7 +1587,9 @@ For `AEP` the auditor is `protocol observe trace check`. Nothing in metaharness 
 
 **No discovery.** The auditor is named explicitly (`--auditor`, or the field in `RunSpec`). A
 `--spec` with no auditor is a **refusal**, not a skip: a specification nobody checked reads exactly
-like a specification that passed.
+like a specification that passed. **Since amendment a43 `start` checks the pairing before the
+spawn**, on every run and not only an audited one, so the refusal comes before a session is paid
+for.
 
 **Exit codes of `metaharness run --audit`:**
 
@@ -3737,3 +3739,144 @@ vendor's handling of it is unknown (`codex-0.153.4-hook-failure.txt`).
 sorted order, so `"onFailure": "block"` sits between `command` and `timeout`. No C1 fixture and no
 spawn vector carries the settings document, and none of them moved. The hook program's text moved
 (§ 5). Its output for every reply metaharness writes did not.
+
+### Amendment a43 — the `--spec` and `--auditor` pairing is checked before the spawn (2026-10-21)
+
+Coordinator decision, 2026-10-21, `story:spec-auditor-pairing-checked-before-spawn`.
+
+**1. The defect.** § 9.4 says a `--spec` with no auditor is a refusal. The pairing was checked in
+one place, `run_auditor`, and only `Run::audit` called it, after the session had ended. The binary
+calls `Run::audit` only for a run that wants an audit (`--audit`, or `--hermetic strict` since a3),
+so the check never ran for any other run. Observed on 0.12.0:
+`run codex … --spec <file>` with no `--auditor` and no `--audit` ran the session, made one provider
+request and exited `0`; nobody checked the document. With `--audit` added, the same run made the
+same request and then exited `2` with `SpecWithoutAuditor`. `--auditor` without `--spec`, and
+`--spec` with `--auditor` on a run that wants no audit, ran the session the same way, and no auditor
+was started. Each of these runs paid for a session whose expectation document no auditor would
+check. The review of the first version of this amendment found three more in the same class:
+auditor arguments after `--` with no `--auditor` were dropped; an auditor program that could not be
+started was found only after the session; and a document whose path is not UTF-8 passed the check
+and was handed to the auditor as another path.
+
+**2. The decision.** `start` checks the pairing before anything that touches the machine: in
+`start_resolved`, after `check_spec` and before the caller catalogue is read, the frame is
+resolved, the scratch tree is made, a loopback proxy is started, a `--version` probe runs or the
+harness is spawned. It applies to every kind and to both faces (D11). The binary's `run` reaches
+it through `Metaharness::start`, and an embedder through `start_with` or `start_with_clock`. The
+check is `check_pairing`, a crate-private function in `auditor.rs` beside `run_auditor`. Every
+refusal is exit `2`, and the first row that matches wins:
+
+| # | the run asked for | refusal | also raised at audit time |
+|---|---|---|---|
+| 1 | `--spec` and no `--auditor`, with or without an audit | `Refusal::SpecWithoutAuditor` | yes |
+| 2 | `--auditor` and no `--spec`, with or without an audit | `Refusal::AuditorWithoutSpec` | yes |
+| 3 | auditor arguments (`-- <args>`, or `with_auditor_arg`) and no `--auditor`, with or without an audit | `Refusal::AuditorArgsWithoutAuditor` | yes |
+| 4 | `--spec` and `--auditor`, on a run that wants no audit: no `--audit`, and `--hermetic` is not `strict` | `Refusal::Launch`, whose detail names `--spec`, `--auditor` and `--audit` | no; an audited run cannot reach it |
+| 5 | the expectation document's path is not UTF-8, or the document is missing, is not a regular file, or cannot be opened | `Refusal::SpecUnreadable { path, detail }` | yes |
+| 6 | the auditor prefix names no program: it has no word in it (empty, or white space only), or its first word starts with `-` | `Refusal::AuditorNotInvokable { argv: [], detail }` | yes |
+| 7 | the prefix's first word cannot be started: a word with `/` in it that is not an existing regular file with an execute bit, or a bare word that is no such file in any directory of the `PATH` the auditor would inherit | `Refusal::AuditorNotInvokable { argv: [], detail }` | no; the invoker answers at audit time |
+
+Row 3 is worded like row 1, `auditor arguments after -- were given without --auditor`. The
+arguments go to the auditor after everything metaharness adds, so with no auditor nothing receives
+them; one that names an expectation document (`-- --spec <file>`) is a document nobody checks.
+With `--spec` as well, row 1 matches first. It has no code string, as rows 1 and 2 have none.
+
+Row 4 uses `Refusal::Launch` because no audit-time name fits a run that never audits, and `Launch`
+is the variant `check_spec` already uses for a declaration that means nothing without its partner
+(`--scratch-cwd` without `--cwd`, a27). Rows 5 to 7 cover a run that names an auditor that still
+could not check the document. The argv in rows 6 and 7 is empty because there is no transcript yet
+to build one around.
+
+Row 5 refuses a path that is not UTF-8 first. The auditor is handed the path as text
+(`auditor_argv`, through `Path::display`), which replaces every byte that is not UTF-8, so it would
+be pointed at another file, one that need not exist, and the document that was checked would be
+checked by nobody. The detail names the path's bytes through `escape_ascii`, as a37 names a scratch
+root: `its path <bytes> is not UTF-8, and the auditor is handed the path as text, in which it would
+name another file. Name the document by a path that is UTF-8`. Every other part of the auditor's
+argv is UTF-8 by type: the prefix and the pass-through arguments are `String`s, and the transcript
+path is the `String` the opening record carries. Row 5 then reads the document's metadata before
+it opens the file. A directory is refused, although it opens on Linux, and a FIFO is refused
+without an open that would wait for a writer. The document is checked, not read: its content is
+the auditor's business (D12).
+
+Row 6 is read off the prefix alone. Its detail is `the auditor prefix is empty`, or `the auditor
+prefix starts with "<word>", which reads as an option and names no program`.
+
+Row 7 resolves the first word against the environment the auditor will run in. `ProcessAuditor`
+starts it with `Command::new`, which passes this process's environment on unchanged, so the `PATH`
+searched is this process's own. A word with `/` in it is taken as written, relative to the current
+directory when it is relative. A bare word is looked for in each `PATH` directory in order, an
+empty entry naming the current directory, and a file without an execute bit is passed over, as
+`execvp` passes it over. The detail names the word and why: `the auditor program "<word>" cannot
+be found: <what the platform said>`, `… is not a regular file`, `… has no execute bit`, `… is not an
+executable regular file in any directory of PATH`, or `… has no '/' in it and PATH is not set, so
+there is no directory to find it in`.
+
+**3. The audit-time checks stay, and share the rules.** `run_auditor` keeps rows 1, 2, 3, 5 and 6.
+It is public, an embedder can call it on its own, and a document can be removed while the session
+runs. It now uses the same document check, so a directory and a path that is not UTF-8 are
+refused there too. Its prefix check now reads the prefix instead of the first argv word.
+`auditor_argv` puts `--spec` first when the prefix has no word, so the old test,
+`argv.first().is_none_or(String::is_empty)`, could never be true, and an empty prefix reached the
+invoker as a program named `--spec`. Row 7 is not repeated there: the invoker is the embedder's,
+and `ProcessAuditor` reports a program it cannot start as `AuditorNotInvokable` with the argv.
+
+**4. What does not change.** `run --audit --spec <file> --auditor <prefix>`, and the same with
+`--hermetic strict` in place of `--audit`, start and are judged as before when the prefix's first
+word resolves. A run that names neither `--spec` nor `--auditor` nor auditor arguments is not
+affected. § 9.4's exit-code table does not change: each refusal here is a case of its row `2`,
+*metaharness itself could not do its job*, now raised before the session instead of after it.
+
+**5. What this does not cover, and what it costs.**
+
+- Row 7 is this crate's own walk and not `Command`'s, and the two differ in two places. With
+  `PATH` unset it refuses, where the C library would search a default list of its own. An execute
+  bit is any of the three, not one this user holds, so a file only another user may run passes and
+  is still refused by the invoker after the session.
+- Row 7 holds when the run starts. A program removed or changed while the session runs is still
+  `AuditorNotInvokable` after it, from the invoker.
+- Row 7 checks this process's `PATH` whatever invoker the embedder passes to `Run::audit` later. An
+  embedder whose own invoker finds programs another way, a `FakeAuditor` in a test included, names
+  a prefix whose first word resolves here too.
+- Whether the auditor accepts its arguments, and whether it produces verdict rows, is known only
+  when it runs.
+
+**6. Tests.** The library face runs over `ScriptedRunner`, whose log counts spawns
+(`crates/metaharness/tests/audit.rs`, section *the pairing, before the spawn*). The auditor every
+case names, unless the case is about the auditor, is a script the test writes and gives mode
+`0700`, named by absolute path, so the row under test is the only one that applies. Every row runs
+on Claude, Codex and b10x, and each is refused by name with a spawn count of `0`:
+
+| row | test |
+|---|---|
+| 1 | `a_spec_without_an_auditor_is_refused_before_the_harness_starts`, with no audit, `--audit` and `--hermetic strict` |
+| 2 | `an_auditor_without_a_spec_is_refused_before_the_harness_starts`, the same three |
+| 3 | `auditor_arguments_without_an_auditor_are_refused_before_the_harness_starts`, the same three |
+| 4 | `a_spec_and_an_auditor_on_a_run_that_wants_no_audit_are_refused_before_the_harness_starts`, `--hermetic off` and `on` |
+| 5 | `an_expectation_document_that_is_not_a_readable_regular_file_is_refused_before_the_harness_starts`: a missing path, a directory, and a file of mode `000` when this process cannot open it; `an_expectation_document_whose_path_is_not_utf8_is_refused_naming_its_bytes` |
+| 6 | `an_auditor_prefix_with_no_word_is_refused_before_the_harness_starts`, `""` and `"   "`; `an_auditor_prefix_whose_first_word_is_an_option_is_refused_before_the_harness_starts` |
+| 7 | `an_auditor_whose_program_cannot_be_started_is_refused_before_the_harness_starts`: an absolute path to nothing, a directory, a file with no execute bit, a relative path to nothing and a bare word on no `PATH` directory |
+
+`when_two_rows_apply_the_first_in_the_table_is_the_refusal` fixes the order, one case for each
+pair of rows that can apply to the same run: 1 and 3, 1 and 5, 2 and 7, 4 and 5, 4 and 7, 5 and 6,
+5 and 7. The unit tests in `auditor.rs` drive row 7's walk over a `PATH` they write: a word found in
+the second directory, a file with no execute bit passed over for one that has it, an empty entry,
+and no `PATH`. The empty entry is asserted on the list of directories searched, because a test may
+not change the process's current directory.
+
+The control, `an_audited_or_strict_run_that_names_both_starts_and_calls_the_auditor_as_before`:
+an audited Claude run and a strict one that name both start once, and the auditor is called once
+with the document. At audit time, `a_directory_named_as_the_expectation_document_is_refused_at_audit_time_too`,
+`an_auditor_prefix_with_no_word_is_refused_at_audit_time_without_an_invocation` and
+`auditor_arguments_without_an_auditor_are_refused_at_audit_time_without_an_invocation` refuse with
+no call to the invoker.
+
+The binary face is `crates/metaharness-cli/tests/spec_auditor_pairing.rs`. A fake `claude` in the
+child's `$HOME/.local/bin` writes a marker file when launched, and a fake auditor named by path
+writes another. Every row exits `2`, prints its refusal and leaves both markers absent. For rows 3
+and 5 the expected text is the library's own refusal, rendered in the test, so the two faces word
+it the same. The controls launch both and exit `3`, as before this amendment, because the fake
+writes no record and the floor finds nothing out:
+`an_audited_spec_and_auditor_launch_the_harness_and_the_auditor_as_before` names the auditor by
+path, and `an_auditor_named_by_a_bare_word_on_the_path_is_launched` names it by a bare word found
+on the binary's own `PATH`.

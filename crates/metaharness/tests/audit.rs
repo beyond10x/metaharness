@@ -2199,3 +2199,604 @@ fn a_strict_run_asks_for_the_floor_even_without_the_audit_flag() {
     plain = plain.with_hermetic(HermeticMode::On);
     assert!(!plain.spec().audit);
 }
+
+// ---------------------------------------------------------------- the pairing, before the spawn
+//
+// Amendment a43. Every case starts over `ScriptedRunner`, whose log counts the children it was
+// asked to start, so "refused before the harness starts" is read off that count and never off the
+// refusal alone.
+
+/// An auditor `start` resolves: a script given mode `0700`, named by absolute path, then the three
+/// words the reference auditor takes after its program. The directory holds it; nothing here runs
+/// it, because every audit below goes through `FakeAuditor`.
+///
+/// Every case that names an auditor names this one unless the case is about the auditor, so the
+/// row under test is the only row of amendment a43 that applies.
+fn invokable_auditor() -> (tempfile::TempDir, String) {
+    let directory = tempfile::tempdir().expect("a directory");
+    let program = directory.path().join("auditor");
+    std::fs::write(&program, "#!/bin/sh\necho 'one ok'\n").expect("written");
+    let mut permissions = std::fs::metadata(&program).expect("there").permissions();
+    std::os::unix::fs::PermissionsExt::set_mode(&mut permissions, 0o700);
+    std::fs::set_permissions(&program, permissions).expect("executable");
+    let program = program.to_str().expect("a UTF-8 scratch path").to_string();
+    assert!(
+        !program.contains(char::is_whitespace),
+        "the prefix splits on white space, so the program path must have none: {program}"
+    );
+    (directory, format!("{program} observe trace check"))
+}
+
+/// What `start` says about an auditor program it cannot start (amendment a43, row 7).
+fn not_invokable(detail: String) -> Refusal {
+    Refusal::AuditorNotInvokable {
+        argv: Vec::new(),
+        detail,
+    }
+}
+
+/// What row 7 says about a path that names nothing, in the platform's own words.
+fn cannot_be_found(word: &str) -> String {
+    let error = std::fs::metadata(word).expect_err("nothing is there");
+    format!("the auditor program {word:?} cannot be found: {error}")
+}
+
+/// The three kinds, so a check that held on one kind only fails by kind.
+const PAIRING_KINDS: [Kind; 3] = [Kind::Claude, Kind::Codex, Kind::B10x];
+
+/// The three ways a run can ask for an audit or not: none, `--audit`, and `--hermetic strict`.
+const AUDIT_REQUESTS: [(bool, HermeticMode); 3] = [
+    (false, HermeticMode::Off),
+    (true, HermeticMode::Off),
+    (false, HermeticMode::Strict),
+];
+
+/// A builder of this kind that starts over the scripted runner and reaches nothing real.
+///
+/// No credential is copied on any kind. Codex is observed through an endpoint nothing listens on,
+/// so it needs no frame. b10x keeps its default decisions, which its own start refuses before any
+/// program is resolved, so a case that got that far fails by the wrong name and never launches.
+fn pairing_builder(kind: Kind) -> Metaharness {
+    let builder = Metaharness::new(kind).with_credentials(CredentialSource::None);
+    match kind {
+        Kind::Codex => builder
+            .with_decisions(DecisionMode::Observe)
+            .with_model_endpoint("http://127.0.0.1:1")
+            .with_model("synthetic-never-called"),
+        Kind::Claude | Kind::B10x => builder,
+    }
+}
+
+/// Start it over the scripted runner: what the start said, and how many children it started.
+fn start_counting(builder: Metaharness) -> (Result<(), Refusal>, u32) {
+    let log = ScriptedLog::new();
+    let mut runner = ScriptedRunner::new(
+        vec![ScriptStep::line(
+            r#"{"emit":"session.ended","is_error":false,"subtype":"success"}"#,
+        )],
+        log.clone(),
+    );
+    let started = builder
+        .start_with_clock(
+            Input::Prompt("check the pairing".to_string()),
+            &mut runner,
+            &mut ScriptedSeams,
+            Box::new(ManualClock::new()),
+        )
+        .map(|_run| ());
+    (started, log.spawns())
+}
+
+/// An auditor answer with one verdict row, so an invocation that should not happen would succeed.
+fn one_row() -> AuditorRun {
+    AuditorRun {
+        exit_code: Some(0),
+        stdout: "one ok\n".to_string(),
+        stderr: String::new(),
+    }
+}
+
+#[test]
+fn a_spec_without_an_auditor_is_refused_before_the_harness_starts() {
+    let document = tempfile::NamedTempFile::new().expect("a document");
+    for kind in PAIRING_KINDS {
+        for (audit, hermetic) in AUDIT_REQUESTS {
+            let (started, spawns) = start_counting(
+                pairing_builder(kind)
+                    .with_audit(audit)
+                    .with_hermetic(hermetic)
+                    .with_spec_file(document.path()),
+            );
+            let case = format!("{kind:?}, --audit {audit}, --hermetic {hermetic:?}");
+            assert_eq!(started, Err(Refusal::SpecWithoutAuditor), "{case}");
+            assert_eq!(spawns, 0, "{case}: no harness process");
+        }
+    }
+}
+
+#[test]
+fn an_auditor_without_a_spec_is_refused_before_the_harness_starts() {
+    let (_held, auditor) = invokable_auditor();
+    for kind in PAIRING_KINDS {
+        for (audit, hermetic) in AUDIT_REQUESTS {
+            let (started, spawns) = start_counting(
+                pairing_builder(kind)
+                    .with_audit(audit)
+                    .with_hermetic(hermetic)
+                    .with_auditor(auditor.as_str()),
+            );
+            let case = format!("{kind:?}, --audit {audit}, --hermetic {hermetic:?}");
+            assert_eq!(started, Err(Refusal::AuditorWithoutSpec), "{case}");
+            assert_eq!(spawns, 0, "{case}: no harness process");
+        }
+    }
+}
+
+#[test]
+fn auditor_arguments_without_an_auditor_are_refused_before_the_harness_starts() {
+    let document = tempfile::NamedTempFile::new().expect("a document");
+    let named = document.path().to_str().expect("a UTF-8 scratch path");
+    for kind in PAIRING_KINDS {
+        for (audit, hermetic) in AUDIT_REQUESTS {
+            let (started, spawns) = start_counting(
+                pairing_builder(kind)
+                    .with_audit(audit)
+                    .with_hermetic(hermetic)
+                    .with_auditor_arg("--spec")
+                    .with_auditor_arg(named),
+            );
+            let case = format!("{kind:?}, --audit {audit}, --hermetic {hermetic:?}, -- --spec");
+            assert_eq!(started, Err(Refusal::AuditorArgsWithoutAuditor), "{case}");
+            assert_eq!(spawns, 0, "{case}: no harness process");
+        }
+    }
+}
+
+#[test]
+fn a_spec_and_an_auditor_on_a_run_that_wants_no_audit_are_refused_before_the_harness_starts() {
+    let document = tempfile::NamedTempFile::new().expect("a document");
+    let (_held, auditor) = invokable_auditor();
+    for kind in PAIRING_KINDS {
+        for hermetic in [HermeticMode::Off, HermeticMode::On] {
+            let (started, spawns) = start_counting(
+                pairing_builder(kind)
+                    .with_hermetic(hermetic)
+                    .with_spec_file(document.path())
+                    .with_auditor(auditor.as_str()),
+            );
+            let case = format!("{kind:?}, --hermetic {hermetic:?}, no --audit");
+            match &started {
+                Err(Refusal::Launch { detail }) => {
+                    assert!(
+                        detail.starts_with(
+                            "--spec and --auditor were given on a run that wants no audit"
+                        ),
+                        "{case}: {detail}"
+                    );
+                    assert!(
+                        detail.contains("--audit or --hermetic strict"),
+                        "{case}: the refusal says how to ask for one: {detail}"
+                    );
+                }
+                other => panic!("{case}: {other:?}"),
+            }
+            assert_eq!(spawns, 0, "{case}: no harness process");
+        }
+    }
+}
+
+#[test]
+fn an_expectation_document_that_is_not_a_readable_regular_file_is_refused_before_the_harness_starts()
+ {
+    let scratch = tempfile::tempdir().expect("a directory");
+    let missing = scratch.path().join("no-such-expectations.yaml");
+    let directory = scratch.path().join("a-directory");
+    std::fs::create_dir(&directory).expect("made");
+    let mut documents = vec![(missing, None), (directory, Some("not a regular file"))];
+    // A file this process may not open. A process that can open it anyway (root can) has nothing
+    // to show here, so the case is only listed when the open fails.
+    let locked = scratch.path().join("locked.yaml");
+    std::fs::write(&locked, "kinds: []\n").expect("written");
+    let mut permissions = std::fs::metadata(&locked).expect("there").permissions();
+    std::os::unix::fs::PermissionsExt::set_mode(&mut permissions, 0o000);
+    std::fs::set_permissions(&locked, permissions).expect("locked");
+    if std::fs::File::open(&locked).is_err() {
+        documents.push((locked, None));
+    }
+
+    let (_held, auditor) = invokable_auditor();
+    for kind in PAIRING_KINDS {
+        for (document, detail_names) in &documents {
+            let (started, spawns) = start_counting(
+                pairing_builder(kind)
+                    .with_audit(true)
+                    .with_spec_file(document)
+                    .with_auditor(auditor.as_str()),
+            );
+            let case = format!("{kind:?}, {}", document.display());
+            match &started {
+                Err(Refusal::SpecUnreadable { path, detail }) => {
+                    assert_eq!(path, document, "{case}: the refusal names the path");
+                    if let Some(words) = detail_names {
+                        assert!(detail.contains(words), "{case}: {detail}");
+                    }
+                }
+                other => panic!("{case}: {other:?}"),
+            }
+            assert_eq!(spawns, 0, "{case}: no harness process");
+        }
+    }
+}
+
+#[test]
+fn an_expectation_document_whose_path_is_not_utf8_is_refused_naming_its_bytes() {
+    let scratch = tempfile::tempdir().expect("a directory");
+    let document = scratch.path().join(
+        <std::ffi::OsStr as std::os::unix::ffi::OsStrExt>::from_bytes(b"expectations-\xff.yaml"),
+    );
+    // A readable regular file: the path is the only thing wrong with it.
+    std::fs::write(&document, "kinds: []\n").expect("written");
+    let bytes = document.as_os_str().as_encoded_bytes().escape_ascii();
+    assert!(bytes.to_string().ends_with(r"expectations-\xff.yaml"));
+    let refusal = Refusal::SpecUnreadable {
+        path: document.clone(),
+        detail: format!(
+            "its path {bytes} is not UTF-8, and the auditor is handed the path as text, in which \
+             it would name another file. Name the document by a path that is UTF-8"
+        ),
+    };
+    let (_held, auditor) = invokable_auditor();
+    for kind in PAIRING_KINDS {
+        let (started, spawns) = start_counting(
+            pairing_builder(kind)
+                .with_audit(true)
+                .with_spec_file(&document)
+                .with_auditor(auditor.as_str()),
+        );
+        assert_eq!(started, Err(refusal.clone()), "{kind:?}");
+        assert_eq!(spawns, 0, "{kind:?}: no harness process");
+    }
+
+    let mut invoker = FakeAuditor::answering(one_row());
+    let refused = run_auditor(
+        Some(&document),
+        Some(auditor.as_str()),
+        &[],
+        std::path::Path::new("t.jsonl"),
+        &mut invoker,
+    );
+    assert_eq!(refused, Err(refusal), "refused at audit time too");
+    assert!(invoker.calls().is_empty(), "nothing was invoked");
+}
+
+#[test]
+fn an_auditor_prefix_with_no_word_is_refused_before_the_harness_starts() {
+    let document = tempfile::NamedTempFile::new().expect("a document");
+    for kind in PAIRING_KINDS {
+        for prefix in ["", "   "] {
+            let (started, spawns) = start_counting(
+                pairing_builder(kind)
+                    .with_audit(true)
+                    .with_spec_file(document.path())
+                    .with_auditor(prefix),
+            );
+            let case = format!("{kind:?}, --auditor {prefix:?}");
+            assert_eq!(
+                started,
+                Err(Refusal::AuditorNotInvokable {
+                    argv: Vec::new(),
+                    detail: "the auditor prefix is empty".to_string(),
+                }),
+                "{case}"
+            );
+            assert_eq!(spawns, 0, "{case}: no harness process");
+        }
+    }
+}
+
+#[test]
+fn an_auditor_prefix_whose_first_word_is_an_option_is_refused_before_the_harness_starts() {
+    let document = tempfile::NamedTempFile::new().expect("a document");
+    let prefixes = [
+        ("--spec x.yaml", "--spec"),
+        ("-v protocol", "-v"),
+        ("  -", "-"),
+    ];
+    for kind in PAIRING_KINDS {
+        for (prefix, word) in prefixes {
+            let (started, spawns) = start_counting(
+                pairing_builder(kind)
+                    .with_audit(true)
+                    .with_spec_file(document.path())
+                    .with_auditor(prefix),
+            );
+            let case = format!("{kind:?}, --auditor {prefix:?}");
+            assert_eq!(
+                started,
+                Err(not_invokable(format!(
+                    "the auditor prefix starts with {word:?}, which reads as an option and names \
+                     no program"
+                ))),
+                "{case}"
+            );
+            assert_eq!(spawns, 0, "{case}: no harness process");
+        }
+    }
+
+    for (prefix, word) in prefixes {
+        let mut invoker = FakeAuditor::answering(one_row());
+        let refused = run_auditor(
+            Some(document.path()),
+            Some(prefix),
+            &[],
+            std::path::Path::new("t.jsonl"),
+            &mut invoker,
+        )
+        .expect_err("an option names no program");
+        match refused {
+            Refusal::AuditorNotInvokable { detail, .. } => assert!(
+                detail.starts_with(&format!("the auditor prefix starts with {word:?}")),
+                "{prefix:?}: {detail}"
+            ),
+            other => panic!("{prefix:?}: {other:?}"),
+        }
+        assert!(
+            invoker.calls().is_empty(),
+            "{prefix:?}: nothing was invoked"
+        );
+    }
+}
+
+#[test]
+fn an_auditor_whose_program_cannot_be_started_is_refused_before_the_harness_starts() {
+    let document = tempfile::NamedTempFile::new().expect("a document");
+    let scratch = tempfile::tempdir().expect("a directory");
+    let base = scratch
+        .path()
+        .to_str()
+        .expect("a UTF-8 scratch path")
+        .to_string();
+    let nothing = format!("{base}/no-such-auditor");
+    let not_executable = format!("{base}/not-executable");
+    std::fs::write(&not_executable, "#!/bin/sh\necho 'one ok'\n").expect("written");
+    let mut permissions = std::fs::metadata(&not_executable)
+        .expect("there")
+        .permissions();
+    std::os::unix::fs::PermissionsExt::set_mode(&mut permissions, 0o644);
+    std::fs::set_permissions(&not_executable, permissions).expect("not executable");
+    let relative = "no-such-directory/no-such-auditor";
+    let unlisted = "metaharness-pairing-test-no-such-auditor";
+    let on_path = std::env::var_os("PATH");
+    if let Some(path) = &on_path {
+        assert!(
+            std::env::split_paths(path).all(|directory| !directory.join(unlisted).exists()),
+            "the case needs {unlisted} to be on no PATH directory"
+        );
+    }
+    let unlisted_detail = if on_path.is_some() {
+        format!(
+            "the auditor program {unlisted:?} is not an executable regular file in any \
+             directory of PATH"
+        )
+    } else {
+        format!(
+            "the auditor program {unlisted:?} has no '/' in it and PATH is not set, so there is \
+             no directory to find it in"
+        )
+    };
+    let cases = [
+        (nothing.clone(), cannot_be_found(&nothing)),
+        (
+            base.clone(),
+            format!("the auditor program {base:?} is not a regular file"),
+        ),
+        (
+            not_executable.clone(),
+            format!("the auditor program {not_executable:?} has no execute bit"),
+        ),
+        (relative.to_string(), cannot_be_found(relative)),
+        (unlisted.to_string(), unlisted_detail),
+    ];
+    for kind in PAIRING_KINDS {
+        for (word, detail) in &cases {
+            let (started, spawns) = start_counting(
+                pairing_builder(kind)
+                    .with_audit(true)
+                    .with_spec_file(document.path())
+                    .with_auditor(format!("{word} observe trace check")),
+            );
+            let case = format!("{kind:?}, --auditor {word:?}");
+            assert_eq!(started, Err(not_invokable(detail.clone())), "{case}");
+            assert_eq!(spawns, 0, "{case}: no harness process");
+        }
+    }
+}
+
+/// Two rows of amendment a43 that apply to one run, the builder of that run, and whether a refusal
+/// is the one the earlier row names.
+type TwoRows = (&'static str, Metaharness, fn(&Refusal) -> bool);
+
+#[test]
+fn when_two_rows_apply_the_first_in_the_table_is_the_refusal() {
+    let document = tempfile::NamedTempFile::new().expect("a document");
+    let scratch = tempfile::tempdir().expect("a directory");
+    let missing = scratch.path().join("no-such-expectations.yaml");
+    let unresolvable = format!("{}/no-such-auditor check", scratch.path().display());
+    let (_held, auditor) = invokable_auditor();
+    let audited = |builder: Metaharness| builder.with_audit(true);
+    let pairs: [TwoRows; 7] = [
+        (
+            "1 and 3",
+            audited(pairing_builder(Kind::Claude))
+                .with_spec_file(document.path())
+                .with_auditor_arg("--strict"),
+            |refused| *refused == Refusal::SpecWithoutAuditor,
+        ),
+        (
+            "1 and 5",
+            audited(pairing_builder(Kind::Claude)).with_spec_file(&missing),
+            |refused| *refused == Refusal::SpecWithoutAuditor,
+        ),
+        (
+            "2 and 7",
+            audited(pairing_builder(Kind::Claude)).with_auditor(unresolvable.as_str()),
+            |refused| *refused == Refusal::AuditorWithoutSpec,
+        ),
+        (
+            "4 and 5",
+            pairing_builder(Kind::Claude)
+                .with_spec_file(&missing)
+                .with_auditor(auditor.as_str()),
+            |refused| matches!(refused, Refusal::Launch { .. }),
+        ),
+        (
+            "4 and 7",
+            pairing_builder(Kind::Claude)
+                .with_spec_file(document.path())
+                .with_auditor(unresolvable.as_str()),
+            |refused| matches!(refused, Refusal::Launch { .. }),
+        ),
+        (
+            "5 and 6",
+            audited(pairing_builder(Kind::Claude))
+                .with_spec_file(&missing)
+                .with_auditor("--spec x.yaml"),
+            |refused| matches!(refused, Refusal::SpecUnreadable { .. }),
+        ),
+        (
+            "5 and 7",
+            audited(pairing_builder(Kind::Claude))
+                .with_spec_file(&missing)
+                .with_auditor(unresolvable.as_str()),
+            |refused| matches!(refused, Refusal::SpecUnreadable { .. }),
+        ),
+    ];
+    for (rows, builder, expected) in pairs {
+        let (started, spawns) = start_counting(builder);
+        let refused = started.expect_err(rows);
+        assert!(expected(&refused), "rows {rows}: {refused:?}");
+        assert_eq!(spawns, 0, "rows {rows}: no harness process");
+    }
+}
+
+#[test]
+fn an_audited_or_strict_run_that_names_both_starts_and_calls_the_auditor_as_before() {
+    let document = tempfile::NamedTempFile::new().expect("a document");
+    let (_held, prefix) = invokable_auditor();
+    let program = prefix.split_whitespace().next().expect("a program");
+    for (audit, hermetic) in [(true, HermeticMode::Off), (false, HermeticMode::Strict)] {
+        let case = format!("--audit {audit}, --hermetic {hermetic:?}");
+        let log = ScriptedLog::new();
+        let mut runner = ScriptedRunner::new(
+            vec![ScriptStep::line(
+                r#"{"emit":"session.ended","is_error":false,"subtype":"success"}"#,
+            )],
+            log.clone(),
+        );
+        let mut run = pairing_builder(Kind::Claude)
+            .with_audit(audit)
+            .with_hermetic(hermetic)
+            .with_spec_file(document.path())
+            .with_auditor(prefix.as_str())
+            .start_with_clock(
+                Input::Prompt("check the pairing".to_string()),
+                &mut runner,
+                &mut ScriptedSeams,
+                Box::new(ManualClock::new()),
+            )
+            .unwrap_or_else(|refusal| panic!("{case}: refused: {refusal}"));
+        assert_eq!(log.spawns(), 1, "{case}: started once");
+        run.drain().expect("drains");
+        assert!(run.wants_audit(), "{case}");
+
+        let mut auditor = FakeAuditor::answering(one_row());
+        let report = run.audit(&mut auditor).expect("audited");
+        let verdict = report.auditor.expect("the auditor ran");
+        assert_eq!(verdict.verdict_rows, 1, "{case}");
+        assert_eq!(auditor.calls().len(), 1, "{case}");
+        let argv = &auditor.calls()[0];
+        assert_eq!(argv[..4], [program, "observe", "trace", "check"], "{case}");
+        assert_eq!(argv[4], "--spec", "{case}");
+        assert_eq!(argv[5], document.path().display().to_string(), "{case}");
+    }
+}
+
+#[test]
+fn a_directory_named_as_the_expectation_document_is_refused_at_audit_time_too() {
+    let directory = tempfile::tempdir().expect("a directory");
+    let (_held, prefix) = invokable_auditor();
+    let mut auditor = FakeAuditor::answering(one_row());
+    let refused = run_auditor(
+        Some(directory.path()),
+        Some(prefix.as_str()),
+        &[],
+        std::path::Path::new("t.jsonl"),
+        &mut auditor,
+    )
+    .expect_err("a directory is not a document");
+    match refused {
+        Refusal::SpecUnreadable { path, detail } => {
+            assert_eq!(path, directory.path());
+            assert!(detail.contains("not a regular file"), "{detail}");
+        }
+        other => panic!("{other:?}"),
+    }
+    assert!(auditor.calls().is_empty(), "nothing was invoked");
+}
+
+#[test]
+fn an_auditor_prefix_with_no_word_is_refused_at_audit_time_without_an_invocation() {
+    let document = tempfile::NamedTempFile::new().expect("a document");
+    for prefix in ["", "   "] {
+        let mut auditor = FakeAuditor::answering(one_row());
+        let refused = run_auditor(
+            Some(document.path()),
+            Some(prefix),
+            &[],
+            std::path::Path::new("t.jsonl"),
+            &mut auditor,
+        )
+        .expect_err("an empty prefix names no program");
+        match refused {
+            Refusal::AuditorNotInvokable { detail, .. } => {
+                assert_eq!(detail, "the auditor prefix is empty", "{prefix:?}");
+            }
+            other => panic!("{prefix:?}: {other:?}"),
+        }
+        assert!(
+            auditor.calls().is_empty(),
+            "{prefix:?}: nothing was invoked"
+        );
+    }
+}
+
+#[test]
+fn auditor_arguments_without_an_auditor_are_refused_at_audit_time_without_an_invocation() {
+    let document = tempfile::NamedTempFile::new().expect("a document");
+    let named = document.path().to_str().expect("a UTF-8 scratch path");
+    let arguments = ["--spec".to_string(), named.to_string()];
+    let mut auditor = FakeAuditor::answering(one_row());
+    let refused = run_auditor(
+        None,
+        None,
+        &arguments,
+        std::path::Path::new("t.jsonl"),
+        &mut auditor,
+    );
+    assert_eq!(refused, Err(Refusal::AuditorArgsWithoutAuditor));
+    assert!(auditor.calls().is_empty(), "nothing was invoked");
+
+    let refused = run_auditor(
+        Some(document.path()),
+        None,
+        &arguments,
+        std::path::Path::new("t.jsonl"),
+        &mut auditor,
+    );
+    assert_eq!(
+        refused,
+        Err(Refusal::SpecWithoutAuditor),
+        "with a document as well, row 1 matches first"
+    );
+    assert!(auditor.calls().is_empty(), "nothing was invoked");
+}

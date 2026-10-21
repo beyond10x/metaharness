@@ -455,6 +455,10 @@ impl Metaharness {
         let frame = self.frame.clone();
         let spec = self.applied(input);
         check_spec(&spec)?;
+        // The `--spec`/`--auditor` pairing (amendment a43), here and not only at audit time: a run
+        // whose expectation document no auditor would check is refused before anything below
+        // reads a file, makes the scratch tree, starts a proxy or spawns the harness.
+        crate::auditor::check_pairing(&spec)?;
         // Read and checked once, here, before the frame (amendment a40): every way the file is not
         // a catalogue is a refusal by name before anything is resolved or spawned, and the scratch
         // copy the server reads is written from this value, never from the caller's file again.
