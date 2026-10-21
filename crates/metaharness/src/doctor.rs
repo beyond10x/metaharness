@@ -297,7 +297,7 @@ fn declared_flags(help: &str) -> std::collections::BTreeMap<String, bool> {
 /// A hand-rolled walk rather than a `which` dependency, because the whole point is to use
 /// **exactly** the string the launch plan constructs — a resolver with its own opinions about
 /// order would reintroduce the disagreement this exists to close.
-fn resolve_on(program: &str, child_path: &str) -> Result<std::path::PathBuf, Refusal> {
+pub(crate) fn resolve_on(program: &str, child_path: &str) -> Result<std::path::PathBuf, Refusal> {
     use std::os::unix::fs::PermissionsExt as _;
     for dir in child_path.split(':').filter(|dir| !dir.is_empty()) {
         let candidate = std::path::Path::new(dir).join(program);

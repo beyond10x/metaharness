@@ -125,6 +125,54 @@ was amended and the amendment is named here.
   without `is_error` is outside what the specification decides; two tests beside
   `Run::reason_from_record` pin production's answer for it (`error`, or `completed` for the legacy
   subtype `success`) (`spec/coverage.md`).
+- `metaharness-claude` pins Claude Code **2.1.304 and 2.1.305** (design amendment a33,
+  `story:claude-code-2-1-304-declared`): `PINNED_VERSIONS` `["2.1.259"]` → `["2.1.304", "2.1.305"]`,
+  so H9 reads `ok` on a record of either, and the `contract_result` provider reads
+  `claude 2.1.304, 2.1.305`. Each binary is qualified credential-free: the native fixture ran the
+  production driver against each under `credentials: none` and, new, `credentials: loopback` (fake
+  custody token, owned stub upstream, loopback-only namespace). 2.1.303 stays off the pin. Surface,
+  method and what stays unverified: `docs/research/2026-10-21-claude-code-2.1.304-adapter-surface.md`.
+- `--strict-version` refuses an off-pin Claude binary **before the spawn**. The Claude launch never
+  read the flag, so the off-pin version was first seen in the opening record after the vendor had the
+  prompt; it now reads the `--version` of the binary on the child's `PATH`, with the plan's own
+  environment, and refuses with exit 2 when the version is unpinned or unreadable, or when
+  `--version` has not exited within 5 seconds (the child is killed and the refusal says so). A
+  synthetic runner has no binary to ask and is refused under the flag, as on b10x.
+- H1a admits the vendor's built-in plugins by name **and** source, per pinned version.
+  `metaharness-claude` declares the twelve plugins each pinned binary compiles in
+  (`BUILTIN_PLUGINS`, keyed by version and held to `PINNED_VERSIONS` by a test; read from each
+  binary) and their source `<name>@builtin`; the floor (`FloorInputs::builtin_plugins`,
+  `metaharness::builtin_plugins`) reads a record plugin `ok` only when it is a declared installed
+  plugin or a built-in of the version the record reports, by name and source, and the row names each
+  built-in it admitted. A plugin carrying a built-in's name with any other source, or no source, stays
+  `gap`; so does any built-in in a record on an unpinned version, and a plugin with no name, which the
+  comparison used to drop. A credential-free 2.1.304 or 2.1.305 run with no declared plugin therefore
+  reads H1a `ok` where it read `gap`; takt's operator-login list (`cc-plugin-sec-default`,
+  `-agents-md`, `-telemetry`, `-plugin-authoring`) reads `ok` and names all four.
+- H4 reads `ok` under `credentials: none` with a declared endpoint. The record names
+  `ANTHROPIC_API_KEY` there because the child holds the plan's own placeholder, and H4 called it an
+  undeclared operator key. The floor now recognises the placeholder from the run's attestation (the
+  exact H4 sentence the launch writes, `metaharness_claude::ENDPOINT_KEY_POSTURE`,
+  `FloorInputs::endpoint_key_posture`), never from the variable's name; an operator key reads as
+  before. The launch writes that sentence only when no Claude managed settings exist
+  (`metaharness_claude::MANAGED_SETTINGS_PATHS`: `/etc/claude-code/managed-settings.json`, its
+  `managed-settings.d`, and the WSL pair; `LaunchContext::managed_settings`), because their `env` or
+  `apiKeyHelper` can replace the placeholder past `--setting-sources ""`. With any present, H4 is
+  attested unavailable naming them and the floor reads `gap` with that reason.
+- `CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC=1` is set under `credentials: none` as well as
+  `loopback`, and still never under an operator login or an API key: it keeps the
+  `cc-plugin-telemetry` built-in and first-party analytics out of a run whose model traffic
+  metaharness directs, while under a real credential it also gates account-keyed behaviour no
+  credential-free probe can observe. The c1 launch fixtures do not move (both are credentialed).
+- H11's Claude wording follows the observation at both pins: with `--setting-sources ""` a canary of
+  every memory shape in the cwd and in an ancestor reached no request, while the same binary sent
+  every one with the project and local sources on. The ancestor walk still refuses; the refusal and
+  the `--cwd` attestation now say why (`fixtures/c1/memory-ancestor-refusal.json` moves with it).
+  The walk still looks for `CLAUDE.md` and `AGENTS.md` and nothing else. The loader also reads
+  `.claude/CLAUDE.md`, `CLAUDE.local.md`, `.claude/AGENTS.md` and `.claude/rules/**/*.md` from an
+  ancestor; the walk does not look for those (a33), and `story:claude-h11-memory-walk-shapes`
+  (decided: option C) covers them, because looking for them refused every scratch run whose
+  `TMPDIR` sits under a `HOME` holding `~/.claude/CLAUDE.md`.
 
 ### Added
 

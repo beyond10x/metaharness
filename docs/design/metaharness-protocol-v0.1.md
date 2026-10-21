@@ -1244,7 +1244,7 @@ when its unobservability is a property of the mechanism rather than of the run.
 | H8 | hooks and customizations are not skipped | an argv **denylist**: neither `--bare` nor **`--safe-mode`**, and neither `CLAUDE_CODE_SAFE_MODE` nor `CLAUDE_CODE_SIMPLE` in the child environment | launch: the argv and environment as values | n/a — launch assertion | **gating** |
 | H9 | the vendor version is the pinned one | `doctor` before the run | record: the harness version in the opening record | absent ⇒ `unk` | **gating** |
 | H10 | governing documents cannot move under the run | inputs are copied into the run directory, not referenced | record: the digest of the copied tree, in `session.started` | n/a | **gating** |
-| H11 | **no memory file outside the copied tree is discoverable** | the scratch root has no `CLAUDE.md` / `AGENTS.md` ancestor above it, or an explicit `--system-prompt` replaces discovery. **a6: under an operator-named `--cwd` the walk's findings go into the attested-unavailable reason instead of refusing — the operator declared the tree, memory files and all.** **a27: under `--cwd <dir> --scratch-cwd` this row is never declared: the same walk runs from `<dir>`, nothing above it is `imposed`, a memory file above it is `unavailable` (so strict exits 1 after the run), and a `CLAUDE.md`/`AGENTS.md` at the copy's root is the copy's own, listed in `ambient_inputs`** | launch: the ancestor walk from the scratch cwd — or from the declared copy (a27) — as a value | n/a — launch assertion | **gating** |
+| H11 | **no memory file outside the copied tree is discoverable** | the scratch root has no `CLAUDE.md` / `AGENTS.md` ancestor above it, or an explicit `--system-prompt` replaces discovery. **a33: the 2.1.304 and 2.1.305 loader also reads `.claude/CLAUDE.md`, `CLAUDE.local.md`, `.claude/AGENTS.md` and `.claude/rules/**/*.md` from an ancestor; the walk does not look for them, and `story:claude-h11-memory-walk-shapes` (decided: option C) covers them.** **a6: under an operator-named `--cwd` the walk's findings go into the attested-unavailable reason instead of refusing — the operator declared the tree, memory files and all.** **a27: under `--cwd <dir> --scratch-cwd` this row is never declared: the same walk runs from `<dir>`, nothing above it is `imposed`, a memory file above it is `unavailable` (so strict exits 1 after the run), and a `CLAUDE.md`/`AGENTS.md` at the copy's root is the copy's own, listed in `ambient_inputs`** | launch: the ancestor walk from the scratch cwd — or from the declared copy (a27) — as a value | n/a — launch assertion | **gating** |
 
 Three rows deserve their reasons in full.
 
@@ -1256,7 +1256,10 @@ half of the denylist is not decorative.
 
 **H11 did not exist and should have** (review finding **F14**). `CLAUDE.md` auto-discovery is on in
 every run that is not `--bare`, and H8 forbids `--bare` — so a `CLAUDE.md` in any ancestor of the
-scratch working directory enters the context of a run this design calls hermetic. H10 pins the
+scratch working directory enters the context of a run this design calls hermetic. (**a33:** not at
+2.1.304 or 2.1.305, where `--setting-sources ""` kept a canary of every memory shape in the cwd and in an
+ancestor out of every request; the walk and its refusal stay, because that is the binary's
+behaviour.) H10 pins the
 *copied* documents and was silent about the uncopied ones. A second ambient input is named by the
 same source and is **not** closed here: `--exclude-dynamic-system-prompt-sections` describes moving
 *"cwd, env info, memory paths, **git status**"* out of the system prompt, which means git status is
@@ -2147,7 +2150,8 @@ credentials, model quality and monetary cost explicitly unverified where the
 observations do not reach. Historical captures retain their original version;
 regenerate only derived warning/provider expectations. Fixture tokens and prices
 are synthetic and never actual paid spend. Claude's observed built-in plugins
-leave its H1a floor unqualified; retain its older pin. Native b10x observations
+leave its H1a floor unqualified; retain its older pin (**superseded by a33**: the
+pin moves to 2.1.304 and 2.1.305 and H1a admits the built-ins by name and source). Native b10x observations
 remain separate from a governed AEP engine run and from its source/version pair.
 
 The b10x source/version pair will advance together to release0.13.3 at
@@ -2669,3 +2673,119 @@ nothing on the served path enforces it: measured once, a `file_write` carrying a
 amendment. The refusal ends with the re-pin on which harness runs the guard.
 
 No event or frame wire change.
+
+### Amendment a33 — the Claude pin moves to 2.1.304 and 2.1.305 and H1a admits the built-ins they compile in (2026-10-21)
+
+`story:claude-code-2-1-304-declared` (Atlas ADR 0096 L2). a25 kept the Claude pin at 2.1.259
+because *"Claude's observed built-in plugins leave its H1a floor unqualified"*. **That sentence is
+superseded:** the pin moves to **2.1.304 and 2.1.305**, and the built-ins are declared per version,
+matched and named. Seven decisions; the evidence is
+`docs/research/2026-10-21-claude-code-2.1.304-adapter-surface.md`.
+
+**1. Two pins, each qualified credential-free.** The installed `claude` moved 2.1.304 → 2.1.305
+within a day of the 2.1.304 qualification, and a pin that names only the older binary leaves H9
+`gap` on every default run of the machine it was qualified on. So both are pinned, and each is
+qualified on its own: the native fixture (`crates/metaharness-claude/tests/native_fixture.rs`) runs
+the production driver against each binary in a loopback-only namespace, under `credentials: none`
+and `credentials: loopback` (a fake custody token in the fixture's own scratch HOME, the owned
+`/v1/messages` stub as the proxy's upstream). Success, provider refusal, an allowed and a denied
+`Bash` call, interrupt, halt and the turn ceiling hold in both modes on both binaries; each opening
+record reports its binary's version and the floor reads H9 `ok`. 2.1.303 stays off the pin. No
+operator-login or API-key session was driven on either.
+
+**2. `--strict-version` refuses an off-pin Claude binary before the spawn.** The Claude launch never
+read the flag; the off-pin version was first seen in the opening record, after the vendor had the
+prompt. It now resolves the binary on the child's own `PATH`, the way the spawn does, reads its
+`--version` with the plan's environment (no model call, no operator config home), and refuses before
+any file is written for the child when the version is not pinned or not readable. The probe has a
+deadline of 5 seconds: a binary whose `--version` has not exited by then is killed and reaped, and
+the run is refused by name (*"its --version did not exit within 5000 ms and was killed"*). A runner
+that launches no executable reports no version, and strict refuses, as the b10x launch does.
+Observed: 2.1.303 refused under both credential-free modes, nothing reaching the stub. **Recorded,
+not closed:** the probe and the spawn resolve the binary separately, so a link swapped between the
+two runs a binary the probe never asked; H9 still reads the version the opening record reports and
+catches it after the spawn.
+
+**3. H1a: exactly the declared set, beside the built-ins of the binary the record reports.** The
+adapter declares, per pinned version, the plugins that binary compiles in — twelve for each of
+2.1.304 and 2.1.305, read from each binary's registration function — and the source a record gives
+a built-in, `<name>@builtin` (the binary's own sentinel). A test holds the list table to
+`PINNED_VERSIONS`, so a version cannot be pinned without its list. The floor reads a record plugin
+as one of two things: a **declared installed plugin**, compared by name with what metaharness
+installed as before; or a **built-in**, whose record version, name **and** source equal a declared
+entry. Anything else is a `gap`: a plugin carrying a built-in's name with another source or none (an
+ambient plugin can be called anything, so a name alone never matches), a built-in source on a name
+the binary does not compile, any built-in in a record on an unpinned version, and a plugin with no
+name, which the comparison used to drop. The row names every built-in it admitted. This is not a
+declaration standing in for an observation (invariant 3): the record still has to carry each
+plugin. Which built-ins a session carries varies with the account and server flags — the
+credential-free modes carry `cc-plugin-agents-md` and `cc-plugin-plugin-authoring` on both binaries;
+an operator-login 2.1.304 session relayed from another repository's record also carried
+`cc-plugin-telemetry` and `cc-plugin-sec-default`, which the binary seats for Team and Enterprise
+organizations — so the floor admits the compiled list and reports what it saw. D2's vector is the
+floor tests (`crates/metaharness/tests/audit.rs`, takt's list and an ambient same-named plugin),
+because the adapter's conformance vectors cannot call the floor: the core crate depends on the
+adapter, not the other way round.
+
+**4. The launch keeps switching off what it can.** A built-in is compiled in and no scratch home
+removes it. The one the binary lets a launch switch off is `cc-plugin-telemetry`:
+`CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC=1` keeps it out of the session. The launch sets it under
+`credentials: none` as well as `loopback` — the runs whose model traffic metaharness directs, where
+first-party analytics would be the one request that bypasses the declared endpoint — and does
+**not** set it under an operator login or an API key, where the binary also gates account-keyed
+behaviour on it (the served model catalog's published path, claude.ai downloads) that no
+credential-free probe can observe. There the built-in is admitted by name and `@builtin` source.
+
+**5. H4 reads the launch's own endpoint placeholder from the attestation.** Under
+`credentials: none` with a declared endpoint the child's `ANTHROPIC_API_KEY` holds the plan's
+placeholder, the record reports `apiKeySource: "ANTHROPIC_API_KEY"`, and H4 read that as an
+undeclared operator key — on a key metaharness put there and attested as *"no operator credential is
+in the child at all"*. H4 now reads `ok` there when, and only when, the run's attestation carries
+that exact H4 sentence (`metaharness_claude::ENDPOINT_KEY_POSTURE`, handed to the floor by the
+launch); the variable's name alone never does. An operator key reads as before.
+
+The launch makes that claim only when nothing it cannot switch off can falsify it. Claude's managed
+settings are such a source: `--setting-sources ""` does not name them, and their `env` or
+`apiKeyHelper` puts a key in the child (an adversary pass drove both against 2.1.304 and the stub
+received the managed key). The paths the pinned binaries read on Linux —
+`/etc/claude-code/managed-settings.json`, the `/etc/claude-code/managed-settings.d` drop-in
+directory, and under WSL the same pair in `/mnt/c/Program Files/ClaudeCode` — are
+`metaharness_claude::MANAGED_SETTINGS_PATHS`; the caller looks for each before planning, and when
+any exists the launch attests H4 unavailable,
+naming them, instead of the placeholder sentence. H4 then reads the key the record names as a `gap`,
+as before this amendment, with the launch's reason in the row. Where none exists — this machine,
+2026-10-21 — the claim and the `ok` stand.
+
+**6. H11 follows what was observed; the walk's shapes are left to their own story.** § 8.1's reading for
+this row — *"`CLAUDE.md` auto-discovery is on in every run that is not `--bare`"* (finding F14) —
+does not hold at 2.1.304 or 2.1.305: project-memory discovery is gated on the `projectSettings`
+source (`CLAUDE.local.md` on `localSettings`), and `--setting-sources ""` switches both off. The
+native fixture planted a canary of each shape in the cwd and in an ancestor: run directly with
+`--setting-sources project,local`, each binary sent every one — `CLAUDE.md`, `.claude/CLAUDE.md`,
+`CLAUDE.local.md`, a `.claude/rules` file, and, where no `CLAUDE.md`-family file sits in or above the
+cwd, `AGENTS.md` and `.claude/AGENTS.md` through `cc-plugin-agents-md`; through the launch, none
+reached any request under `none` or `loopback`. The ancestor walk and its refusal stay, because
+that is the binary's behaviour, not a control metaharness holds, and a binary that loaded memory
+regardless of the source would put the file in context with nothing in the record to say so.
+
+**The walk does not look for the other four shapes.** It looks for `CLAUDE.md` and `AGENTS.md` in
+each directory above the cwd, and lists those two at a declared scratch copy's root (a27), as before
+this amendment, and looks for nothing else. The loader of both pinned binaries also reads
+`.claude/CLAUDE.md`, `CLAUDE.local.md`, `.claude/AGENTS.md` and every `.md` file under
+`.claude/rules` from those directories — its own list of memory files, and each one observed in the
+control above. The walk does not look for those four. Looking for them was built and reverted
+within this amendment: the operator's own `~/.claude/CLAUDE.md` is a `.claude/CLAUDE.md` above every
+scratch root under `HOME`, so on a machine whose `TMPDIR` sits there every scratch Claude run was
+refused and every `--cwd --scratch-cwd` run read H11 unavailable — including an embedder's copies —
+while the canaries showed none of those files reaching the model through the launch.
+`story:claude-h11-memory-walk-shapes` (decided: option C) covers them.
+
+**7. The `--cwd` H11 row says what was observed.** Under an operator-named cwd the row was attested
+unavailable with *"the operator declared the tree as the run's context by naming it"*, which reads
+as though the tree's memory files were in context. It now says the tree is the operator's, so
+metaharness claims nothing about it, and that `--setting-sources ""` kept memory files in and above
+the cwd out of every request at both pins — the binary's behaviour, not a control.
+
+No event or frame wire change. `FloorInputs` gains `builtin_plugins` and `endpoint_key_posture`;
+`contract_result`'s provider reads `claude 2.1.304, 2.1.305`; the c1 refusal fixture for a memory
+ancestor carries the new sentence.

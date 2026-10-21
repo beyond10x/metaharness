@@ -7,13 +7,13 @@ use std::collections::BTreeMap;
 use std::path::PathBuf;
 
 use metaharness_claude::{
-    ADAPTER_ID, HOOK_TIMEOUT_SECONDS, LaunchContext, LaunchRefusal, PINNED_VERSIONS,
-    TranscriptReader, capabilities, conformance_vectors, parse_hook_input, plan_launch,
-    render_hook_response, render_operation,
+    ADAPTER_ID, BUILTIN_PLUGINS, HOOK_TIMEOUT_SECONDS, LaunchContext, LaunchRefusal,
+    PINNED_VERSIONS, TranscriptReader, builtin_plugin_source, builtin_plugins, capabilities,
+    conformance_vectors, parse_hook_input, plan_launch, render_hook_response, render_operation,
 };
 use metaharness_protocol::{
-    ConformanceTier, Decision, DecisionCensus, DecisionMode, Digest, Event, HermeticMode, Kind,
-    Operation, RefusalCode, RunSpec, Seam, ToolSurface, TranscriptRef,
+    ConformanceTier, CredentialSource, Decision, DecisionCensus, DecisionMode, Digest, Event,
+    HermeticMode, Kind, Operation, RefusalCode, RunSpec, Seam, ToolSurface, TranscriptRef,
 };
 
 fn context() -> LaunchContext {
@@ -28,6 +28,7 @@ fn context() -> LaunchContext {
         marketplace_plugins: Vec::new(),
         loopback: None,
         tool_server: Some(PathBuf::from("/usr/local/bin/metaharness")),
+        managed_settings: Vec::new(),
     }
 }
 
@@ -42,15 +43,99 @@ fn spec() -> RunSpec {
 fn the_adapter_names_itself_and_its_pin() {
     // **The one deliberate literal.** Every other assertion about the pin reads `PINNED_VERSIONS`,
     // so a move shows up here — in a diff a reviewer reads — and nowhere else. Moved
-    // 2.1.240 → 2.1.241 on 2026-08-24 and 2.1.241 → 2.1.259 on 2026-09-03; see `PINNED_VERSIONS`'
-    // own note for what was re-read on the new binary and what was carried over unverified.
+    // 2.1.240 → 2.1.241 on 2026-08-24, 2.1.241 → 2.1.259 on 2026-09-03 and 2.1.259 → 2.1.304
+    // and 2.1.305 on 2026-10-21; see `PINNED_VERSIONS`' own note for what was re-read on each new
+    // binary and what was carried over unverified.
     assert_eq!(ADAPTER_ID, "claude");
-    assert_eq!(PINNED_VERSIONS, ["2.1.259"]);
+    assert_eq!(PINNED_VERSIONS, ["2.1.304", "2.1.305"]);
     assert_eq!(
         capabilities().versions_pinned,
         PINNED_VERSIONS.map(ToString::to_string).to_vec(),
         "what the adapter publishes and what it pins cannot disagree"
     );
+}
+
+/// Every pinned version declares the plugins its binary compiles in, and no list outlives its pin
+/// (design amendment a33). A pin added without re-reading its binary fails the first assertion.
+#[test]
+fn every_pinned_version_declares_the_plugins_its_binary_compiles_in() {
+    let listed: Vec<&str> = BUILTIN_PLUGINS
+        .iter()
+        .map(|(version, _)| *version)
+        .collect();
+    assert_eq!(
+        listed, PINNED_VERSIONS,
+        "one built-in list per pinned version, in the pin's order"
+    );
+    assert_eq!(
+        builtin_plugins("2.1.303"),
+        None,
+        "an unpinned binary has no list"
+    );
+}
+
+/// Each list, written out: a fact about one binary, read from its registration function
+/// (`docs/research/2026-10-21-claude-code-2.1.304-adapter-surface.md`), in the order the binary
+/// registers them, with the one source its opening record gives a built-in.
+#[test]
+fn each_pinned_binarys_compiled_in_plugins_are_declared_by_name_with_their_builtin_source() {
+    let read_from_2_1_304 = [
+        "cc-plugin-sec-default",
+        "cc-plugin-agents-md",
+        "cc-plugin-telemetry",
+        "cc-plugin-plugin-authoring",
+        "cc-plugin-mods-guide",
+        "cc-plugin-tips",
+        "cc-plugin-mermaid",
+        "cc-plugin-responsive-mode",
+        "cc-plugin-diff",
+        "cc-plugin-you-should-know",
+        "cc-plugin-easel",
+        "cc-plugin-claude-test",
+    ];
+    let read_from_2_1_305 = read_from_2_1_304;
+    assert_eq!(builtin_plugins("2.1.304"), Some(&read_from_2_1_304[..]));
+    assert_eq!(builtin_plugins("2.1.305"), Some(&read_from_2_1_305[..]));
+    assert_eq!(
+        builtin_plugin_source("cc-plugin-telemetry"),
+        "cc-plugin-telemetry@builtin"
+    );
+}
+
+/// The launch disables the one built-in it can, and only where nothing of the operator's travels.
+///
+/// `CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC` keeps `cc-plugin-telemetry` out of a 2.1.304 session
+/// (read with `claude plugin details`, and in the native fixture's opening record). Under
+/// `credentials: none` the child talks to a declared endpoint or to nobody, so first-party
+/// analytics would be the one request that bypasses it; under an operator login or an API key the
+/// switch also turns off server-side behaviour no credential-free probe can observe, so it is not
+/// set there and the built-in is admitted by name instead.
+#[test]
+fn the_traffic_switch_is_set_in_every_credential_free_launch_and_in_no_credentialed_one() {
+    let switch = "CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC";
+    let mut free = spec();
+    free.credentials = CredentialSource::None;
+    free.model_endpoint = Some("http://127.0.0.1:9".to_string());
+    let plan = plan_launch(&free, &context()).expect("an endpoint run plans");
+    assert_eq!(plan.env.get(switch).map(String::as_str), Some("1"));
+
+    let mut nowhere = spec();
+    nowhere.credentials = CredentialSource::None;
+    let plan = plan_launch(&nowhere, &context()).expect("a credential-free run plans");
+    assert_eq!(plan.env.get(switch).map(String::as_str), Some("1"));
+
+    let plan = plan_launch(&spec(), &context()).expect("an operator-login run plans");
+    assert_eq!(plan.env.get(switch), None);
+
+    let mut keyed = spec();
+    keyed.credentials = CredentialSource::ApiKey;
+    let mut keyed_context = context();
+    keyed_context.inherited_env.insert(
+        "ANTHROPIC_API_KEY".to_string(),
+        "sk-not-a-real-key".to_string(),
+    );
+    let plan = plan_launch(&keyed, &keyed_context).expect("an api-key run plans");
+    assert_eq!(plan.env.get(switch), None);
 }
 
 #[test]

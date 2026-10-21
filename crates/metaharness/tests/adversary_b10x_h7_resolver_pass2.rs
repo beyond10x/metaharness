@@ -55,6 +55,8 @@ fn h7(observed: &str, planned: &str) -> (Verdict, String) {
             pinned_versions: &pins,
             planned_cwd: Some(planned),
             declared_plugins: &[],
+            builtin_plugins: &[],
+            endpoint_key_posture: None,
             planned_mcp_servers: &[],
         },
     );

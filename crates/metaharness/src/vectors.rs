@@ -594,6 +594,29 @@ pub fn capabilities(kind: Kind) -> Result<metaharness_protocol::Capabilities, Re
     }
 }
 
+/// The plugins compiled into each pinned binary of this kind, keyed by version, as the floor's H1a
+/// matches them (amendment a33).
+///
+/// The names and the source spelling are the adapter's (invariant 2); this only pairs them in the
+/// floor's neutral shape. Empty for a kind whose adapter declares none, so a record plugin carrying
+/// a built-in source on that kind is still a plugin nobody declared.
+#[must_use]
+pub fn builtin_plugins(kind: Kind) -> Vec<crate::audit::BuiltinPlugin> {
+    match kind {
+        Kind::Claude => metaharness_claude::BUILTIN_PLUGINS
+            .iter()
+            .flat_map(|(version, names)| {
+                names.iter().map(|name| crate::audit::BuiltinPlugin {
+                    version: (*version).to_string(),
+                    name: (*name).to_string(),
+                    source: metaharness_claude::builtin_plugin_source(name),
+                })
+            })
+            .collect(),
+        Kind::Codex | Kind::B10x => Vec::new(),
+    }
+}
+
 /// What the adapter for this kind declares its contract owes (CT-4).
 ///
 /// The dispatch is the enforcement: a new [`Kind`] does not compile until it names a declaration,
