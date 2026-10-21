@@ -2,15 +2,19 @@
 format: aep.planning-md/3
 id: story:website-drops-npm-leftovers
 kind: story
-status: draft
+status: active
 title: The website directory carries no package-manager leftovers
-revision: 1
+revision: 4
+transitions:
+- {from: "draft", to: "proposed", at: "2026-10-21T12:00:26Z", actor: "human:timo", revision: 3}
+- {from: "proposed", to: "active", at: "2026-10-21T12:00:26Z", actor: "human:timo", revision: 4}
 ---
 # Story: the website directory carries no package-manager leftovers
 
 ## Scheduling
 
-Draft, filed 2026-10-21 from the repository review of that date (finding 9). Small; fits any wave.
+Wave 5 unit 6 (`approval-record:adr-0096-wave-5`), filed 2026-10-21 from the repository review of that date
+(finding 9).
 
 ## Outcome
 

@@ -2,7 +2,7 @@
 format: aep.planning-md/3
 id: story:session-close-decides-absent-fields
 kind: story
-status: draft
+status: active
 title: The session domain decides terminal records whose optional fields are absent
 refs:
 - provider: atlas
@@ -10,14 +10,18 @@ refs:
 relations:
 - decomposes: epic:session-format
 - informed_by: review-result:adr0096-w4-ess-pin-adversary-1
-revision: 1
+revision: 4
+transitions:
+- {from: "draft", to: "proposed", at: "2026-10-21T12:00:25Z", actor: "human:timo", revision: 3}
+- {from: "proposed", to: "active", at: "2026-10-21T12:00:25Z", actor: "human:timo", revision: 4}
 ---
 # Story: the session domain decides terminal records whose optional fields are absent
 
 ## Scheduling
 
-Draft, filed 2026-10-21 from the adversary's first pass on wave 4 unit 1
-(`review-result:adr0096-w4-ess-pin-adversary-1`, finding F2, `pre-existing`). Not in wave 4.
+Wave 5 unit 3 (`approval-record:adr-0096-wave-5`), filed 2026-10-21 from the adversary's first pass on wave 4
+unit 1 (`review-result:adr0096-w4-ess-pin-adversary-1`, finding F2, `pre-existing`). The guards are rewritten
+with the presence construct ESS 0.67.0 offers (issue 620, released 2026-10-21).
 
 ## Outcome
 

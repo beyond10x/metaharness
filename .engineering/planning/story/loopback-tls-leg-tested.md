@@ -2,15 +2,19 @@
 format: aep.planning-md/3
 id: story:loopback-tls-leg-tested
 kind: story
-status: draft
+status: active
 title: The loopback's upstream TLS leg is exercised by a test
-revision: 1
+revision: 4
+transitions:
+- {from: "draft", to: "proposed", at: "2026-10-21T12:00:26Z", actor: "human:timo", revision: 3}
+- {from: "proposed", to: "active", at: "2026-10-21T12:00:26Z", actor: "human:timo", revision: 4}
 ---
 # Story: the loopback's upstream TLS leg is exercised by a test
 
 ## Scheduling
 
-Draft, filed 2026-10-21 from the repository review of that date (finding 5). Wave 5 candidate.
+Wave 5 unit 5 (`approval-record:adr-0096-wave-5`), filed 2026-10-21 from the repository review of that date
+(finding 5).
 
 ## Outcome
 

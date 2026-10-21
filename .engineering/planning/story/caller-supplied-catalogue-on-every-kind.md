@@ -2,7 +2,7 @@
 format: aep.planning-md/3
 id: story:caller-supplied-catalogue-on-every-kind
 kind: story
-status: draft
+status: active
 title: A caller supplies the tool catalogue on every kind
 summary: Loom hands metaharness run the catalogue a session may see; the model is offered that and nothing else, on Claude Code, Codex and harness, attested in session.started.
 owner: metaharness
@@ -35,13 +35,21 @@ scope:
   path: crates/metaharness/src/run.rs
 - confidence: inferred
   path: docs/design/metaharness-protocol-v0.1.md
-revision: 12
+revision: 15
+transitions:
+- {from: "draft", to: "proposed", at: "2026-10-21T12:00:26Z", actor: "human:timo", revision: 14, decided_on: {"recorded":{"review_outcome":4}}}
+- {from: "proposed", to: "active", at: "2026-10-21T12:00:26Z", actor: "human:timo", revision: 15, decided_on: {"recorded":{"review_outcome":4}}}
 ---
 # Story: a caller supplies the tool catalogue on every kind
 
 ## Scheduling
 
-Draft. Not in the wave of 2026-10-20 (owner's instruction). Gap 1 of Atlas ADR 0098 Consequences.
+Wave 5 unit 4 (`approval-record:adr-0096-wave-5`), gap 1 of Atlas ADR 0098 Consequences; its dependencies
+(`story:metaharness-tools-on-tools-crates`, `story:metaharness-tools-adopts-tool-contract`,
+`story:trace-ir-domain`, `story:strict-hermetic-with-embedder-scratch-cwd`) are implemented. Decided by the
+coordinator (D2): the per-kind vectors are synthetic; a live Claude or Codex launch with a catalogue stays
+labelled unverified, because it needs a paid run (no paid run in this wave). This unit is the trigger for
+release 0.12.0, which `b10x-chef-orchestrator` approves or holds separately on the release PR.
 
 ## Outcome
 

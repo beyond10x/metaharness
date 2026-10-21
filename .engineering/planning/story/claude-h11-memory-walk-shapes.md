@@ -2,7 +2,7 @@
 format: aep.planning-md/3
 id: story:claude-h11-memory-walk-shapes
 kind: story
-status: draft
+status: active
 title: Which memory-file shapes the Claude H11 walk counts
 refs:
 - provider: atlas
@@ -10,15 +10,50 @@ refs:
 relations:
 - decomposes: epic:loom-agent-work-through-metaharness
 - informed_by: review-result:adr0096-w4-claude-adversary-1
-revision: 2
+scope:
+- confidence: inferred
+  path: CHANGELOG.md
+- confidence: inferred
+  path: crates/metaharness-aep/src/drive/ess_conformance.rs
+- confidence: cited
+  path: crates/metaharness-claude/fixtures/c1/memory-ancestor-refusal.json
+- confidence: cited
+  path: crates/metaharness-claude/src/launch.rs
+- confidence: cited
+  path: crates/metaharness-claude/src/lib.rs
+- confidence: cited
+  path: crates/metaharness-claude/src/vectors.rs
+- confidence: cited
+  path: crates/metaharness-claude/tests/adapter.rs
+- confidence: inferred
+  path: crates/metaharness/src/audit.rs
+- confidence: cited
+  path: crates/metaharness/src/builder.rs
+- confidence: inferred
+  path: crates/metaharness/src/run.rs
+- confidence: cited
+  path: crates/metaharness/tests/adversary_claude_2_1_304_pass1.rs
+- confidence: cited
+  path: docs/design/metaharness-protocol-v0.1.md
+- confidence: inferred
+  path: spec/conformance.json
+- confidence: inferred
+  path: spec/coverage.md
+- confidence: inferred
+  path: spec/domains/workspace.yaml
+revision: 7
+transitions:
+- {from: "draft", to: "proposed", at: "2026-10-21T12:00:25Z", actor: "human:timo", revision: 6}
+- {from: "proposed", to: "active", at: "2026-10-21T12:00:25Z", actor: "human:timo", revision: 7}
 ---
 # Story: which memory-file shapes the Claude H11 walk counts
 
 ## Scheduling
 
-Decided; not implemented in wave 4 unit 2 (whose last correction reverted the widened walk). Implementation
-is its own unit with its own adversary passes: first unit of wave 5 unless `b10x-chef-orchestrator` places it
-before release 0.11.0.
+Wave 5 unit 1 (`approval-record:adr-0096-wave-5`), decided C. Condition from `b10x-chef-orchestrator`
+(2026-10-21): before the merge, every consumer of the H11 result in the beyond10x repositories is listed and
+reported; if a consumer breaks, the unit stops and goes back to `b10x-chef-orchestrator`. The ESS scenario
+`DeclareScratchWorkingDirectory/outcome/memory-above-the-copy-fails-strict` (a27) changes with it.
 
 ## Outcome
 
@@ -76,3 +111,23 @@ to `gap`."
   17,184 against 17,179 tokens without the file).
 - A is out: scratch roots outside `HOME` mean `/tmp`, which the operator's rules forbid (per-user quota).
 - B would still refuse under `~/beyond10x`, which carries a private `CLAUDE.md` since 2026-10-21 01:4x.
+## Scope
+
+Derived 2026-10-21 by `story-scoper` at main 5df311b. Every line is **cited** (read from the story or the tree) or **inferred** (a reading that could be wrong).
+
+- **Primary surface:** `crates/metaharness-claude` (H11 attestation, refusal, per-version canary table) and `crates/metaharness` (the walk, the floor) — cited
+- **Files:**
+  - `crates/metaharness/src/builder.rs:2033` `memory_ancestors` (shared by Claude `:870`, Codex `:1151` and b10x `:655`/`:698`), the Claude `LaunchFacts` at `:933`, and the declared-copy tests at `:3884` (`a_memory_file_above_the_declared_copy_still_fails_strict`, a Claude run) — cited
+  - `crates/metaharness-claude/src/launch.rs`: `LaunchContext::memory_ancestors` doc at `:191`, `LaunchRefusal::MemoryAncestorsFound` at `:427`, `memory_refusal` at `:556`, the refusal in `plan_launch` at `:735`, the three H11 branches of the attestation at `:1688-1739`, and tests at `:2780`, `:3046`, `:3108`, `:3165` — cited
+  - `crates/metaharness-claude/src/lib.rs:180` `PINNED_VERSIONS`; the new canary table goes beside `MENTION_CANARIES` at `:274` — cited
+  - `crates/metaharness-claude/src/vectors.rs:50`, `:144-240`, `:495`, `:583`, `:981` and `crates/metaharness-claude/fixtures/c1/memory-ancestor-refusal.json` — cited
+  - `crates/metaharness/tests/adversary_claude_2_1_304_pass1.rs:188`, the ignored case to rewrite — cited
+  - `crates/metaharness-claude/tests/adapter.rs:84`, pin-coupling test for the new table — cited
+  - `crates/metaharness-claude/tests/native_fixture.rs:1049`, the native canary (ignored in `task check`) — cited
+- **Also likely:** `crates/metaharness/src/audit.rs:857` (H11 ignores the version today); new fields on `FloorInputs` (`audit.rs:35`) and `LaunchFacts` (`run.rs:209`) break 12 struct literals; the wider walk must be Claude-only, since Codex and b10x still decide H11 from it — inferred
+- **ESS spec / conformance:** if a declared copy under an `AGENTS.md` now reads H11 imposed, `spec/domains/workspace.yaml` (`DeclareScratchWorkingDirectory/outcome/memory-above-the-copy-fails-strict`), `spec/conformance.json`, `spec/coverage.md:222-250` and `crates/metaharness-aep/src/drive/ess_conformance.rs:121` change — inferred
+- **Documents:** design doc § 8.1 H11 row `:1247`, a33 `:2759-2791`, a new amendment after a35; `website/docs/harnesses/claude.md:74-79`, `website/docs/reference/cli.md:195-198`, `CHANGELOG.md` — cited
+- **Would collide with:** `crates/metaharness-claude/src/launch.rs`, `crates/metaharness/src/builder.rs`, `run.rs` `LaunchFacts`, `audit.rs` `FloorInputs`, the design doc's amendment tail, `spec/domains/workspace.yaml`
+- **Size:** M, or L with the declared-copy flip and its ESS change; 12–20 files; no paid or native run for the gate — inferred
+
+Scoper's contradictions with the story body: line reference stale (`:1948` → `:2033`); the walk is shared with Codex and b10x; the conformance scenario `memory-above-the-copy-fails-strict` flips under C; canary count 12, not 9; "pinned without a canary reads gap" is reachable only for a leaking row or an unpinned version; the canary covers the cwd and one level above, not `$HOME/.claude/CLAUDE.md`.
