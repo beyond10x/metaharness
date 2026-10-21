@@ -1729,12 +1729,11 @@ mod tests {
         }
     }
 
-    /// A terminal record that carries no `is_error`, left out or `null`, is outside what
-    /// `positive-terminal-record` in `spec/domains/session.yaml` decides: ESS reads a comparison
-    /// with an absent value as unknown. Production decides it, and this pins how. Any subtype but
-    /// the legacy `success` closes `error`, because success is never read from absence (amendment
-    /// a18), unless `stop_reason` or `terminal_reason` carries a budget word, which closes
-    /// `budget` first (`reason_from_record`, `run.rs:1226-1230`).
+    /// A terminal record that carries no `is_error`, left out or `null`. Any subtype but the legacy
+    /// `success` closes `error`, because success is never read from absence (amendment a18),
+    /// unless `stop_reason` or `terminal_reason` carries a budget word, which closes `budget`
+    /// first (`reason_from_record`). `spec/domains/session.yaml` decides the same records with
+    /// `coalesce` (ESS `ess/29`), and its suite holds them against this function as well.
     #[test]
     fn a_terminal_record_without_is_error_closes_error_for_any_other_subtype() {
         for record in [

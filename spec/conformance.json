@@ -144,9 +144,9 @@
     }
   },
   "provenance": {
-    "contract_digest": "57bbdc2b02c3a7d0f8f809857af754e10f54d17cc5d3413884ea83929868570c",
+    "contract_digest": "419007f71a6a0c97f38c3591c79e4573685bd9a6f4757dbda6b4e8ed10ba278e",
     "scenario_initial_state": "empty",
-    "spec_digest": "41ace62dc89e0a009be94ac2d6f0a6ae3924e9157d27cb69f24d87d495ac8d50",
+    "spec_digest": "bebf0b1da38ad7806fb63ec0045fe6c0aabc5bf09f092710373e4b4cfbff401a",
     "specification_version": "v1",
     "suite_version": "ess-conformance/35",
     "system": "metaharness"
@@ -4554,10 +4554,6 @@
         {
           "command": "metaharness.session.CloseUnsteeredStream",
           "input": {
-            "is_error": {
-              "kind": "literal",
-              "value": true
-            },
             "stop_reason": {
               "kind": "literal",
               "value": "stop_reason"
@@ -4702,9 +4698,30 @@
               "kind": "literal",
               "value": "budget-exhausted"
             },
-            "subtype": {
+            "terminal_present": {
               "kind": "literal",
-              "value": "subtype"
+              "value": false
+            }
+          },
+          "step": "execute_command"
+        },
+        {
+          "outcome": {
+            "command": "metaharness.session.CloseUnsteeredStream",
+            "outcome": "failed-or-unknown-terminal"
+          },
+          "step": "expect_outcome"
+        },
+        {
+          "command": "metaharness.session.CloseUnsteeredStream",
+          "input": {
+            "is_error": {
+              "kind": "literal",
+              "value": false
+            },
+            "stop_reason": {
+              "kind": "literal",
+              "value": "stop_reason"
             },
             "terminal_present": {
               "kind": "literal",
@@ -4729,7 +4746,7 @@
           "input": {
             "is_error": {
               "kind": "literal",
-              "value": false
+              "value": true
             },
             "stop_reason": {
               "kind": "literal",
@@ -4737,11 +4754,11 @@
             },
             "subtype": {
               "kind": "literal",
-              "value": "subtype"
+              "value": "success"
             },
             "terminal_present": {
               "kind": "literal",
-              "value": false
+              "value": true
             },
             "terminal_reason": {
               "kind": "literal",
@@ -4882,17 +4899,9 @@
               "kind": "literal",
               "value": "budget-exhausted"
             },
-            "subtype": {
-              "kind": "literal",
-              "value": "subtype"
-            },
             "terminal_present": {
               "kind": "literal",
               "value": true
-            },
-            "terminal_reason": {
-              "kind": "literal",
-              "value": "terminal_reason"
             }
           },
           "step": "execute_command"
@@ -5018,10 +5027,6 @@
               "kind": "literal",
               "value": true
             },
-            "stop_reason": {
-              "kind": "literal",
-              "value": "stop_reason"
-            },
             "subtype": {
               "kind": "literal",
               "value": "budget-exhausted"
@@ -5029,10 +5034,6 @@
             "terminal_present": {
               "kind": "literal",
               "value": true
-            },
-            "terminal_reason": {
-              "kind": "literal",
-              "value": "terminal_reason"
             }
           },
           "step": "execute_command"
@@ -5051,14 +5052,6 @@
               "kind": "literal",
               "value": true
             },
-            "stop_reason": {
-              "kind": "literal",
-              "value": "stop_reason"
-            },
-            "subtype": {
-              "kind": "literal",
-              "value": "subtype"
-            },
             "terminal_present": {
               "kind": "literal",
               "value": true
@@ -5066,6 +5059,31 @@
             "terminal_reason": {
               "kind": "literal",
               "value": "budget-exhausted"
+            }
+          },
+          "step": "execute_command"
+        },
+        {
+          "outcome": {
+            "command": "metaharness.session.CloseUnsteeredStream",
+            "outcome": "observed-budget-stop"
+          },
+          "step": "expect_outcome"
+        },
+        {
+          "command": "metaharness.session.CloseUnsteeredStream",
+          "input": {
+            "is_error": {
+              "kind": "literal",
+              "value": false
+            },
+            "stop_reason": {
+              "kind": "literal",
+              "value": "budget-exhausted"
+            },
+            "terminal_present": {
+              "kind": "literal",
+              "value": true
             }
           },
           "step": "execute_command"
@@ -5202,10 +5220,6 @@
               "kind": "literal",
               "value": "stop_reason"
             },
-            "subtype": {
-              "kind": "literal",
-              "value": "subtype"
-            },
             "terminal_present": {
               "kind": "literal",
               "value": true
@@ -5330,6 +5344,35 @@
         {
           "event": "metaharness.workspace.ScratchCwdAttested",
           "step": "expect_no_event"
+        },
+        {
+          "command": "metaharness.session.CloseUnsteeredStream",
+          "input": {
+            "stop_reason": {
+              "kind": "literal",
+              "value": "stop_reason"
+            },
+            "subtype": {
+              "kind": "literal",
+              "value": "success"
+            },
+            "terminal_present": {
+              "kind": "literal",
+              "value": true
+            },
+            "terminal_reason": {
+              "kind": "literal",
+              "value": "terminal_reason"
+            }
+          },
+          "step": "execute_command"
+        },
+        {
+          "outcome": {
+            "command": "metaharness.session.CloseUnsteeredStream",
+            "outcome": "positive-terminal-record"
+          },
+          "step": "expect_outcome"
         }
       ]
     },

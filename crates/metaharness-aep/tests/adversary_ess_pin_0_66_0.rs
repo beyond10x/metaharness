@@ -117,11 +117,11 @@ fn every_authored_scenario_is_decided_by_the_specifications_reference_model() {
 /// `scripted.rs:358`).
 const SUCCESS_RECORD: &str = r#"{"emit":"session.ended","is_error":false,"subtype":"success"}"#;
 
-/// Pre-existing, measured on this revision: production closes that record `completed`
-/// (`session.yaml`, `positive-terminal-record` payload), and the specification does not decide it,
-/// because an absent `stop_reason`/`terminal_reason` leaves the budget comparisons unknown.
+/// Production closes that record `completed` (`session.yaml`, `positive-terminal-record` payload).
+/// Pre-existing when written: the specification did not decide it, because an absent
+/// `stop_reason`/`terminal_reason` left the budget comparisons unknown. The acceptance case of
+/// `story:session-close-decides-absent-fields`, whose guards say what an absent field compares as.
 #[test]
-#[ignore = "pre-existing; the acceptance case of story:session-close-decides-absent-fields"]
 fn the_specification_decides_the_success_record_the_repository_writes() {
     let mut runner = ScriptedRunner::new(
         vec![ScriptStep::line(SUCCESS_RECORD.to_owned())],
