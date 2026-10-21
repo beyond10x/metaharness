@@ -1,0 +1,3 @@
+{
+  "h11_imposed": "--setting-sources \"\" switches off the project and local sources the pinned binary's memory discovery is gated on, and CLAUDE_CONFIG_DIR=/scratch/run-1/claude-home is a fresh scratch config home the launch writes no memory file into; the floor holds this to the memory canary recorded for the record's version (a36); the ancestor walk from the scratch cwd /scratch/run-1/work found 1 memory file(s) above it, reported and not refused: /scratch/CLAUDE.md"
+}

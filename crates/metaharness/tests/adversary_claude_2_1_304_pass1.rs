@@ -9,7 +9,7 @@
 //! 2026-10-21: `apiKeySource` is `"ANTHROPIC_API_KEY"` there, because the launch hands the child
 //! its endpoint placeholder in that variable.
 
-use std::path::Path;
+use std::path::{Path, PathBuf};
 
 use metaharness::protocol::{CredentialSource, HermeticMode, HermeticRow, Kind, Verdict};
 use metaharness::{
@@ -135,39 +135,49 @@ fn h4_does_not_call_the_plans_own_endpoint_placeholder_an_undeclared_key() {
 // --------------------------------------------- H11: the walk against the pinned loader's shapes
 
 /// Every file shape the 2.1.304 loader reads from a directory above the cwd once a project or
-/// local source is on, besides the `CLAUDE.md` the walk already looks for. Observed 2026-10-21: the
-/// vendor run directly with `--setting-sources project,local` sent a canary from each of these,
-/// planted one to four levels above the cwd, and with `--setting-sources project` it sent one from
-/// `<HOME>/.claude/CLAUDE.md` — the operator's own user memory — whenever the cwd sat below HOME.
-const SHAPES_THE_WALK_DOES_NOT_READ: [&str; 3] =
-    [".claude/CLAUDE.md", "CLAUDE.local.md", ".claude/rules/r.md"];
+/// local source is on — the binary's own list (research page § *H11: memory files*). Observed
+/// 2026-10-21: the vendor run directly with `--setting-sources project,local` sent a canary from
+/// each, and through the launch (`--setting-sources ""`) none. `.claude/rules` is read
+/// recursively, so one file sits a directory deeper.
+const SHAPES_THE_PINNED_LOADER_READS: [&str; 7] = [
+    "CLAUDE.md",
+    "CLAUDE.local.md",
+    "AGENTS.md",
+    ".claude/CLAUDE.md",
+    ".claude/AGENTS.md",
+    ".claude/rules/r.md",
+    ".claude/rules/nested/r.md",
+];
 
 /// A strict Claude run in an embedder's declared scratch copy at `<root>/copy`, after `plant`
-/// wrote into `root`. `Ok(verdict)` is H11's floor row; `Err` is the launch's refusal.
-fn h11_over_a_declared_copy(plant: impl FnOnce(&Path)) -> Result<(Verdict, String), String> {
+/// wrote into `root`, its opening record on `version`. Returns `root` as the walk sees it (links
+/// resolved) and either H11's floor row or the launch's refusal.
+fn h11_over_a_declared_copy(
+    version: &str,
+    plant: impl FnOnce(&Path),
+) -> (PathBuf, Result<(Verdict, String), String>) {
     let root = tempfile::tempdir().unwrap();
     let copy = root.path().join("copy");
     std::fs::create_dir(&copy).unwrap();
     plant(root.path());
+    let seen = std::fs::canonicalize(root.path()).unwrap();
     let log = ScriptedLog::new();
     let started = start(
         credential_free()
             .with_hermetic(HermeticMode::Strict)
             .with_cwd(&copy)
             .with_scratch_cwd(),
-        vec![
-            init_line(metaharness_claude::PINNED_VERSIONS[0], "none", Some(&copy)),
-            RESULT.to_owned(),
-        ],
+        vec![init_line(version, "none", Some(&copy)), RESULT.to_owned()],
         &log,
     );
-    match started {
+    let outcome = match started {
         Ok(mut run) => {
             run.drain().expect("drains");
             Ok(floor_row(&run, HermeticRow::H11))
         }
         Err(refusal) => Err(refusal.to_string()),
-    }
+    };
+    (seen, outcome)
 }
 
 fn write(path: &Path, text: &str) {
@@ -175,41 +185,44 @@ fn write(path: &Path, text: &str) {
     std::fs::write(path, text).unwrap();
 }
 
-/// Amendment a33 § 4 keeps the ancestor walk *because* the 2.1.304 gate is *"one pin's
-/// behaviour, not a control metaharness holds, and a binary that loaded memory regardless of the
-/// source would put the file in context with nothing in the record to say so"*. The walk is that
-/// control, and it looks for `CLAUDE.md` and `AGENTS.md` only (`builder.rs`, `memory_ancestors`).
-/// A memory file of any other shape the pinned loader reads sits above the cwd with H11 attested
-/// `imposed` — *"no memory file outside the copied tree is discoverable"* — and kept out of the
-/// context only by the gate a33 says is not a control. On a machine whose TMPDIR is under HOME,
-/// `<HOME>/.claude/CLAUDE.md` is such a file above every scratch cwd.
+/// Rewritten to decision C (`story:claude-h11-memory-walk-shapes`, design amendment a36). The pass-1
+/// finding stands — the walk looked for `CLAUDE.md` and `AGENTS.md` while the pinned loader reads
+/// seven shapes — and the decision answers it the other way round: H11 does not rest on the walk
+/// any more. It rests on `--setting-sources ""` and the fresh scratch config home, held to the
+/// memory canary recorded for the record's version, and the walk reports what it finds. So every
+/// shape above the copy is **named** in an `ok` H11 row and none is refused.
 #[test]
-#[ignore = "pre-existing; decided as option C in story:claude-h11-memory-walk-shapes, to be rewritten there"]
-fn h11_is_not_ok_over_a_memory_file_the_pinned_loader_reads_and_the_walk_does_not() {
-    // The control: nothing planted, so the test's own ancestors are clean and the row can read ok.
-    let clean = h11_over_a_declared_copy(|_| {});
-    assert!(
-        matches!(clean, Ok((Verdict::Ok, _))),
-        "the control must read H11 ok, or the temporary directory's ancestors already hold a \
-         memory file and nothing below is measured: {clean:?}"
-    );
-    // The mechanism works for the shape it knows.
-    let known = h11_over_a_declared_copy(|root| write(&root.join("CLAUDE.md"), "canary"));
-    assert!(
-        !matches!(known, Ok((Verdict::Ok, _))),
-        "a CLAUDE.md above the copy is caught: {known:?}"
-    );
+fn h11_names_every_memory_shape_the_pinned_loader_reads_and_refuses_none() {
+    let pinned = metaharness_claude::PINNED_VERSIONS[0];
+    // The control: nothing planted, and the row reads ok.
+    let (_, clean) = h11_over_a_declared_copy(pinned, |_| {});
+    assert!(matches!(clean, Ok((Verdict::Ok, _))), "{clean:?}");
 
-    let mut missed = Vec::new();
-    for shape in SHAPES_THE_WALK_DOES_NOT_READ {
-        let outcome = h11_over_a_declared_copy(|root| write(&root.join(shape), "canary"));
-        if let Ok((Verdict::Ok, detail)) = outcome {
-            missed.push(format!("{shape}: H11 ok — {detail}"));
+    let mut wrong = Vec::new();
+    for shape in SHAPES_THE_PINNED_LOADER_READS {
+        let (root, outcome) =
+            h11_over_a_declared_copy(pinned, |root| write(&root.join(shape), "canary"));
+        let planted = root.join(shape).display().to_string();
+        match outcome {
+            Ok((Verdict::Ok, detail)) if detail.contains(&planted) => {}
+            other => wrong.push(format!("{shape}: {other:?}")),
         }
     }
     assert!(
-        missed.is_empty(),
-        "memory files the 2.1.304 loader reads sat above the cwd and H11 read ok:\n{}",
-        missed.join("\n")
+        wrong.is_empty(),
+        "a memory file above the copy must be named in an ok H11 and never refused:\n{}",
+        wrong.join("\n")
     );
+}
+
+/// The guard half of decision C: the claim is only as good as the canary of the binary that ran.
+/// A record on a version with no memory canary reads H11 `gap`, whatever the attestation says.
+#[test]
+fn h11_is_gap_on_a_record_version_with_no_memory_canary() {
+    let (_, outcome) = h11_over_a_declared_copy("2.1.303", |_| {});
+    let Ok((verdict, detail)) = outcome else {
+        panic!("the launch was refused: {outcome:?}");
+    };
+    assert_eq!(verdict, Verdict::Gap, "{detail}");
+    assert!(detail.contains("2.1.303"), "{detail}");
 }

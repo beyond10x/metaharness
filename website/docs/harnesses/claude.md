@@ -73,10 +73,14 @@ not pinned; 2.1.303 is refused.
 
 Memory files: at both pins no memory file in the working directory or above it reached the model
 under the launch's `--setting-sources ""` — `CLAUDE.md`, `.claude/CLAUDE.md`, `CLAUDE.local.md`,
-`.claude/rules/*.md`, `AGENTS.md` or `.claude/AGENTS.md`. The ancestor walk still refuses a scratch
-run with a `CLAUDE.md` or `AGENTS.md` above it, because that is the binary's behaviour, not a control
-metaharness holds; it does not look for the other four shapes yet. Design amendment **a33**; evidence in
-`docs/research/2026-10-21-claude-code-2.1.304-adapter-surface.md`.
+`.claude/rules/*.md`, `AGENTS.md` or `.claude/AGENTS.md`, twelve canaries in the cwd and its parent,
+all twelve sent by the same binary with the project and local sources on. H11 rests on that control
+and the fresh scratch config home: the adapter records the canary per pinned version
+(`MEMORY_CANARIES`), and the floor reads H11 `ok` only on a record version whose canary kept every
+shape out; a version with no canary, or one whose canary reached a request, reads `gap`. The ancestor
+walk looks for all six shapes and names what it finds in the H11 row; it refuses nothing. User memory
+(a `CLAUDE.md` in the config home) and managed memory were not probed. Design amendments **a33** and
+**a36**; evidence in `docs/research/2026-10-21-claude-code-2.1.304-adapter-surface.md`.
 
 ## Declared capabilities
 

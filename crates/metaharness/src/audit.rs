@@ -61,6 +61,31 @@ pub struct FloorInputs<'a> {
     /// states it for its pinned binary (amendment a34). Appended to that row's `unk` detail so the
     /// row says why it is unknown; it never decides a verdict. Empty for a kind that states none.
     pub record_silences: &'a [(HermeticRow, &'a str)],
+    /// The memory canary recorded for each pinned version, for H11 (amendment a36). `Some` for a
+    /// kind whose H11 rests on a launch control the binary has to honour: an imposed H11 then
+    /// reads `ok` only on a record version whose canary kept every shape out. `None` for a kind
+    /// whose H11 is not held to a canary; the attestation alone decides it.
+    pub memory_canaries: Option<&'a [MemoryCanary]>,
+}
+
+/// One pinned version's memory canary, as the adapter records it (amendment a36): how many
+/// memory files were planted in and above the cwd, how many the binary sent to a request with
+/// the project and local sources on (the control), and how many reached a request through the
+/// launch's own argv and environment.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct MemoryCanary {
+    /// The pinned version whose binary the canary ran against.
+    pub version: String,
+    /// Memory files planted, every shape in the cwd and in its parent.
+    pub planted: usize,
+    /// How many the same binary sent with the sources on. Fewer than `planted` means the probe
+    /// did not show the binary reads every shape, so it shows nothing about the ones it missed.
+    pub control_sent: usize,
+    /// How many reached a request through the launch, over every credential surface probed.
+    pub reached_through_launch: usize,
+    /// What the canary and the walk do not cover, as the adapter states it; an `ok` H11 ends with
+    /// it, so the row never reads as wider than the measurement (a36 § 6). Empty for none.
+    pub not_covered: String,
 }
 
 /// One plugin compiled into a pinned vendor binary, as the adapter says that binary's opening
@@ -853,8 +878,13 @@ pub fn hermetic_floor(events: &[Event], inputs: &FloorInputs<'_>) -> Vec<RowVerd
         ),
     });
 
-    // H11 — no memory file outside the copied tree is discoverable. Launch.
-    rows.push(attested(HermeticRow::H11, hermetic));
+    // H11 — no memory file outside the copied tree is discoverable. Launch, held to the memory
+    // canary of the version the record reports where the kind records one (amendment a36).
+    rows.push(memory_held_to_canary(
+        attested(HermeticRow::H11, hermetic),
+        harness_version.as_deref(),
+        inputs.memory_canaries,
+    ));
 
     rows.sort_by_key(|verdict| verdict.row);
     rows
@@ -1039,6 +1069,67 @@ fn resolve_without_the_reader(name: &Path) -> Option<PathBuf> {
     Some(resolved)
 }
 
+/// H11's attested verdict, held to the memory canary of the binary that ran (amendment a36).
+/// Only an `ok` is held: a canary never turns a `gap` or an `unk` into anything better.
+fn memory_held_to_canary(
+    attested: RowVerdict,
+    version: Option<&str>,
+    canaries: Option<&[MemoryCanary]>,
+) -> RowVerdict {
+    let Some(canaries) = canaries else {
+        return attested;
+    };
+    if attested.verdict != Verdict::Ok {
+        return attested;
+    }
+    let Some(version) = version else {
+        return row(
+            HermeticRow::H11,
+            Verdict::Unk,
+            format!(
+                "{}; the opening record names no version, so there is no memory canary to hold \
+                 the control to",
+                attested.detail
+            ),
+        );
+    };
+    let Some(canary) = canaries.iter().find(|canary| canary.version == version) else {
+        return row(
+            HermeticRow::H11,
+            Verdict::Gap,
+            format!(
+                "{}; but there is no memory canary recorded for {version}, so nobody measured \
+                 whether this binary honours the control",
+                attested.detail
+            ),
+        );
+    };
+    let measured = format!(
+        "the memory canary recorded for {version}: {} planted, the control sent {}, {} reached a \
+         request through the launch",
+        canary.planted, canary.control_sent, canary.reached_through_launch
+    );
+    if canary.reached_through_launch > 0 || canary.control_sent < canary.planted {
+        return row(
+            HermeticRow::H11,
+            Verdict::Gap,
+            format!(
+                "{}; but {measured}, so the control is not shown to keep every memory shape out",
+                attested.detail
+            ),
+        );
+    }
+    row(
+        HermeticRow::H11,
+        Verdict::Ok,
+        if canary.not_covered.is_empty() {
+            format!("{}; {measured}", attested.detail)
+        } else {
+            format!("{}; {measured}; {}", attested.detail, canary.not_covered)
+        },
+    )
+}
+
 /// A launch-asserted row, read out of metaharness's own attestation.
 ///
 /// The attestation is a claim and not evidence (§ 8.3): it says what metaharness imposed before
@@ -1138,6 +1229,7 @@ impl crate::run::Run {
                 planned_mcp_servers: &launch.planned_mcp_servers,
                 planned_output_style: launch.planned_output_style,
                 record_silences: launch.record_silences,
+                memory_canaries: launch.memory_canaries.as_deref(),
             },
         )
     }

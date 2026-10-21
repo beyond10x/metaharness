@@ -119,7 +119,10 @@ That is the same file a walk widened to these shapes finds: built that way withi
 walk refused every scratch Claude run on this machine (plain `cargo test --workspace`: 842 passed,
 80 failed, every failure tracing to `~/.claude/CLAUDE.md`), so it was reverted. The walk
 looks for `CLAUDE.md` and `AGENTS.md` only; it does not look for the other four shapes, which
-`story:claude-h11-memory-walk-shapes` (decided: option C) covers (a33 § 6).
+`story:claude-h11-memory-walk-shapes` (decided: option C) covers (a33 § 6). **Superseded by a36:**
+the walk now looks for all six shapes and reports what it finds in the H11 row without refusing, so
+the widened walk finding `~/.claude/CLAUDE.md` is information, and H11 rests on the launch control
+held to `MEMORY_CANARIES`, the twelve-canary result above per pinned version.
 
 User memory (`CLAUDE.md` in the scratch config home) and managed memory were not probed. The relayed
 2.1.305 observation (a `--cwd` canary `CLAUDE.md` not quoted under `--hermetic off`) agrees and was
@@ -153,7 +156,7 @@ not reproduced as such.
 | the vendor's behaviour when the hook exceeds its timeout (Q10) | unverified |
 | the transcript shapes the reader maps: `system/init` (version, model, cwd, tools, plugins with `name`/`path`/`source`, `mcp_servers`, `apiKeySource`, `output_style`), assistant `tool_use`, user `tool_result`, `result` with usage | observed |
 | `system/task_*`, `tool_progress`, `background_tasks_changed`, `api_retry` (read from 2.1.259's schema) | unverified at both (no fixture produces them) |
-| the H11 walk looks for `CLAUDE.md` and `AGENTS.md` only; the loader also reads `.claude/CLAUDE.md`, `CLAUDE.local.md`, `.claude/AGENTS.md`, `.claude/rules/**/*.md` from an ancestor (a33 § 6) | binary (both); each observed as loaded with the sources on and kept out under the launch; the walk does **not look for** the four extra shapes (`story:claude-h11-memory-walk-shapes`, decided: option C) |
+| the H11 walk looks for `CLAUDE.md` and `AGENTS.md` only; the loader also reads `.claude/CLAUDE.md`, `CLAUDE.local.md`, `.claude/AGENTS.md`, `.claude/rules/**/*.md` from an ancestor (a33 § 6) | binary (both); each observed as loaded with the sources on and kept out under the launch; the walk did **not look for** the four extra shapes (`story:claude-h11-memory-walk-shapes`, decided: option C); since a36 it looks for all six and reports them |
 | the golden transcript and hook input (`fixtures/golden/`) | unchanged 2.1.240 bytes; `golden-version-pair` warns by design |
 | `cc-plugin-sec-default` is the fourth built-in of an operator login | unverified here (relayed, 2.1.304 only) |
 

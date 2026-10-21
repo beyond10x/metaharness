@@ -116,18 +116,34 @@ fn scratch_cwd_plan(input: &Value) -> Observed {
         "imposed"
     };
     let h11_imposed = attestation.claims(HermeticRow::H11);
+    // Amendment a36: a memory file above the copy is named in the imposed H11 row, never refused,
+    // and never decides the row. Read off the row's own text, by the path the walk resolves.
+    let planted_above = fs::canonicalize(root.path())
+        .unwrap()
+        .join("AGENTS.md")
+        .display()
+        .to_string();
+    let memory_above_reported = attestation
+        .imposed
+        .iter()
+        .any(|control| control.row == HermeticRow::H11 && control.how.contains(&planted_above));
     let report = run.audit(&mut FakeAuditor::missing()).unwrap();
     let exit_code = run.exit(Some(&report)).code();
-    let outcome = match (h7, h11_imposed, exit_code) {
-        ("declared", true, 0) => "strict-admits-the-declared-copy".to_owned(),
-        ("declared", false, 1) => "memory-above-the-copy-fails-strict".to_owned(),
-        ("unavailable", false, 1) => "named-without-declaration-keeps-a6".to_owned(),
+    let outcome = match (h7, h11_imposed, exit_code, memory_above_reported) {
+        ("declared", true, 0, false) => "strict-admits-the-declared-copy".to_owned(),
+        ("declared", true, 0, true) => "memory-above-the-copy-is-reported".to_owned(),
+        ("unavailable", false, 1, false) => "named-without-declaration-keeps-a6".to_owned(),
         other => format!("undeclared-shape:{other:?}"),
     };
     event(
         &outcome,
         "metaharness.workspace.ScratchCwdAttested",
-        json!({"h7":h7,"h11_imposed":h11_imposed,"exit_code":exit_code}),
+        json!({
+            "h7": h7,
+            "h11_imposed": h11_imposed,
+            "exit_code": exit_code,
+            "memory_above_reported": memory_above_reported,
+        }),
     )
 }
 

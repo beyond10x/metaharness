@@ -1,6 +1,0 @@
-{
-  "refusal": {
-    "code": null,
-    "display": "H11: the ancestor walk found /scratch/CLAUDE.md; a memory file above the scratch cwd is refused whatever the pinned binary loads, because what --setting-sources \"\" keeps out (the CLAUDE.md shapes, observed at 2.1.304 and 2.1.305) is the pinned binary's behaviour and not a control metaharness holds"
-  }
-}

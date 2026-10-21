@@ -35,7 +35,7 @@ the beyond10x loop, which it observes — see [the b10x adapter](../harnesses/b1
 | `--model <NAME>` | — | The model to ask for. Passed through to the vendor, which resolves it. |
 | `--max-turns <N>` | — | A ceiling on turns. |
 | `--cwd <DIR>` | scratch | A named working directory for the child, **which it can write to**. Alone, the operator's real tree: trades two hermetic rows for real work — see below. |
-| `--scratch-cwd` | off | Declares the `--cwd` directory as the embedder's **disposable scratch copy**. H7 is attested `declared`, H11 is measured from the copy, and `--hermetic strict` passes on the pair when the record's cwd is the copy; on b10x that is the directory the loop reports, and where it reports none (`--substrate <socket>`) H7 is `unk` and it exits 3 — see below. Refused without `--cwd`. |
+| `--scratch-cwd` | off | Declares the `--cwd` directory as the embedder's **disposable scratch copy**. H7 is attested `declared`, H11 is attested from the copy as over a scratch cwd, and `--hermetic strict` passes on the pair when the record's cwd is the copy; on b10x that is the directory the loop reports, and where it reports none (`--substrate <socket>`) H7 is `unk` and it exits 3 — see below. Refused without `--cwd`. |
 | `--context <FILE>` | *(none)* | A file the run is handed before it starts, named relative to the `--cwd` tree. Repeatable, **every kind**. See below. |
 
 ### `--context`: files the run is handed
@@ -192,9 +192,13 @@ same sandbox grant — and the attestation changes:
   declared the directory as its scratch copy, metaharness did not create it, `--add-dir` is never
   passed. The floor reads it `ok` only when the record's cwd is the planned one; the declaration
   never stands in for the record.
-- **H11** is **measured**, exactly as for a scratch cwd: the ancestor walk runs from the copy. Nothing
-  above it is `ok`; a `CLAUDE.md` or `AGENTS.md` above it is a gap, and `--hermetic strict` exits 1
-  after the run. A memory file at the copy's root is the copy's own and is listed in the
+- **H11** is attested exactly as for a scratch cwd, with the ancestor walk run from the copy. On
+  Claude Code it rests on `--setting-sources ""` and the fresh scratch config home, held to the
+  memory canary of the record's version; the walk looks for every memory shape the pinned loader
+  reads and names what it finds in the row, so a memory file above the copy is reported and
+  `--hermetic strict` still passes (amendment a36). On Codex and b10x the walk looks for `CLAUDE.md`
+  and `AGENTS.md` and decides the row: a file above the copy is a gap, and `--hermetic strict`
+  exits 1 after the run. A memory file at the copy's root is the copy's own and is listed in the
   attestation's `ambient_inputs`.
 - `--hermetic strict` **passes** on a declared copy with nothing above it, when the record's cwd
   is the copy. On b10x the record's cwd is the directory the pinned loop (0.15.1) reports, compared

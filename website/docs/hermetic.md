@@ -68,7 +68,10 @@ whether the documents moved"*, which made `--hermetic strict` unpassable.
 The attestation knows a third state beside imposed and unavailable, for one row only: under
 [`--cwd <DIR> --scratch-cwd`](reference/cli.md#--scratch-cwd-the-embedders-disposable-copy) H7 is
 **`declared`** — the embedder declared the directory as its disposable scratch copy — and the floor
-reads it `ok` only when the record's cwd is the one planned. H11 stays measured.
+reads it `ok` only when the record's cwd is the one planned. H11 is never declared. On Codex and
+b10x the ancestor walk from the copy still decides it. On Claude Code it rests on the launch's
+`--setting-sources ""` and fresh scratch config home, held to the memory canary recorded for the
+record's version; the walk names what it finds above the copy and refuses nothing (amendment a36).
 
 H7 compares **directories, not spellings**: the record's cwd and the planned one are the same
 directory when they are equal or when both are absolute paths that resolve, links followed, to the

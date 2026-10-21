@@ -126,7 +126,7 @@
       "metaharness.workspace.DeclareProcessWrites/outcome/process-invalid-directory",
       "metaharness.workspace.DeclareProcessWrites/outcome/process-read-only-default",
       "metaharness.workspace.DeclareScratchWorkingDirectory/outcome/declaration-without-directory",
-      "metaharness.workspace.DeclareScratchWorkingDirectory/outcome/memory-above-the-copy-fails-strict",
+      "metaharness.workspace.DeclareScratchWorkingDirectory/outcome/memory-above-the-copy-is-reported",
       "metaharness.workspace.DeclareScratchWorkingDirectory/outcome/named-without-declaration-keeps-a6",
       "metaharness.workspace.DeclareScratchWorkingDirectory/outcome/strict-admits-the-declared-copy"
     ],
@@ -144,9 +144,9 @@
     }
   },
   "provenance": {
-    "contract_digest": "da67657c040e62d85851f163c6dfee92c82cc6885a56bea031f8dd298e3f07ee",
+    "contract_digest": "57bbdc2b02c3a7d0f8f809857af754e10f54d17cc5d3413884ea83929868570c",
     "scenario_initial_state": "empty",
-    "spec_digest": "edbdd759da7f75edce66ffe2ea26573831f93178db78804856e91c7853d14b7f",
+    "spec_digest": "41ace62dc89e0a009be94ac2d6f0a6ae3924e9157d27cb69f24d87d495ac8d50",
     "specification_version": "v1",
     "suite_version": "ess-conformance/35",
     "system": "metaharness"
@@ -23865,8 +23865,8 @@
         }
       ]
     },
-    "metaharness.workspace.DeclareScratchWorkingDirectory/outcome/memory-above-the-copy-fails-strict": {
-      "purpose": "`metaharness.workspace.DeclareScratchWorkingDirectory` answers `memory-above-the-copy-fails-strict` for an input that satisfies that branch's guard",
+    "metaharness.workspace.DeclareScratchWorkingDirectory/outcome/memory-above-the-copy-is-reported": {
+      "purpose": "`metaharness.workspace.DeclareScratchWorkingDirectory` answers `memory-above-the-copy-is-reported` for an input that satisfies that branch's guard",
       "source": [
         {
           "kind": "type",
@@ -23884,7 +23884,7 @@
           "kind": "outcome",
           "name": {
             "command": "metaharness.workspace.DeclareScratchWorkingDirectory",
-            "outcome": "memory-above-the-copy-fails-strict"
+            "outcome": "memory-above-the-copy-is-reported"
           }
         },
         {
@@ -23994,16 +23994,17 @@
         {
           "outcome": {
             "command": "metaharness.workspace.DeclareScratchWorkingDirectory",
-            "outcome": "memory-above-the-copy-fails-strict"
+            "outcome": "memory-above-the-copy-is-reported"
           },
           "step": "expect_outcome"
         },
         {
           "event": "metaharness.workspace.ScratchCwdAttested",
           "payload": {
-            "exit_code": 1.0,
-            "h11_imposed": false,
-            "h7": "declared"
+            "exit_code": 0.0,
+            "h11_imposed": true,
+            "h7": "declared",
+            "memory_above_reported": true
           },
           "shape": {
             "exit_code": {
@@ -24020,6 +24021,10 @@
                 "declared",
                 "unavailable"
               ]
+            },
+            "memory_above_reported": {
+              "holds": "primitive",
+              "kind": "boolean"
             }
           },
           "step": "expect_event"
@@ -24252,7 +24257,8 @@
           "payload": {
             "exit_code": 1.0,
             "h11_imposed": false,
-            "h7": "unavailable"
+            "h7": "unavailable",
+            "memory_above_reported": false
           },
           "shape": {
             "exit_code": {
@@ -24269,6 +24275,10 @@
                 "declared",
                 "unavailable"
               ]
+            },
+            "memory_above_reported": {
+              "holds": "primitive",
+              "kind": "boolean"
             }
           },
           "step": "expect_event"
@@ -24501,7 +24511,8 @@
           "payload": {
             "exit_code": 0.0,
             "h11_imposed": true,
-            "h7": "declared"
+            "h7": "declared",
+            "memory_above_reported": false
           },
           "shape": {
             "exit_code": {
@@ -24518,6 +24529,10 @@
                 "declared",
                 "unavailable"
               ]
+            },
+            "memory_above_reported": {
+              "holds": "primitive",
+              "kind": "boolean"
             }
           },
           "step": "expect_event"

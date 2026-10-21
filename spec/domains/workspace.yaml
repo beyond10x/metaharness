@@ -131,9 +131,8 @@ commands:
     # Design amendment a27. Each outcome is a real `--hermetic strict` Claude run over
     # ScriptedRunner in a directory the target made; the H7 state and H11 verdict are
     # read off session.started's attestation and the exit code off the production
-    # floor. No vendor process or model starts. The exit is 1 after the run, never a
-    # pre-spawn refusal: a memory file above the copy is the embedder's placement,
-    # measured and reported, not metaharness failing to do its job.
+    # floor. No vendor process or model starts. A memory file above the copy is
+    # named in an imposed H11 and refuses nothing (amendment a36).
     input: [{name: probe, type: metaharness.workspace.ScratchCwdProbe}]
     outcomes:
       - name: declaration-without-directory
@@ -142,14 +141,14 @@ commands:
       - name: strict-admits-the-declared-copy
         when: probe == declared
         emits: [metaharness.workspace.ScratchCwdAttested]
-        payload: {metaharness.workspace.ScratchCwdAttested: {h7: declared, h11_imposed: true, exit_code: 0}}
-      - name: memory-above-the-copy-fails-strict
+        payload: {metaharness.workspace.ScratchCwdAttested: {h7: declared, h11_imposed: true, memory_above_reported: false, exit_code: 0}}
+      - name: memory-above-the-copy-is-reported
         when: probe == declared-under-memory
         emits: [metaharness.workspace.ScratchCwdAttested]
-        payload: {metaharness.workspace.ScratchCwdAttested: {h7: declared, h11_imposed: false, exit_code: 1}}
+        payload: {metaharness.workspace.ScratchCwdAttested: {h7: declared, h11_imposed: true, memory_above_reported: true, exit_code: 0}}
       - name: named-without-declaration-keeps-a6
         emits: [metaharness.workspace.ScratchCwdAttested]
-        payload: {metaharness.workspace.ScratchCwdAttested: {h7: unavailable, h11_imposed: false, exit_code: 1}}
+        payload: {metaharness.workspace.ScratchCwdAttested: {h7: unavailable, h11_imposed: false, memory_above_reported: false, exit_code: 1}}
     # UNMAPPED: the declaration confines nothing; the copy's fences are
     # story:confinement-of-vendor-kinds. Making the copy is the embedder's.
 
@@ -214,6 +213,7 @@ events:
     fields:
       - {name: h7, type: metaharness.workspace.CwdAttestation}
       - {name: h11_imposed, type: Boolean}
+      - {name: memory_above_reported, type: Boolean}
       - {name: exit_code, type: Integer}
   - name: metaharness.workspace.ContextFilesRecorded
     fields:

@@ -930,8 +930,8 @@ fn native_strict_version_refuses_an_off_pin_binary_before_the_spawn() {
 
 /// The memory shapes the pinned loader reads from a directory once a project or local source is
 /// on, read from its own list of memory files (design amendment a33), less the two `AGENTS.md`
-/// shapes, which the next constant holds. The H11 walk counts only `CLAUDE.md` and `AGENTS.md`;
-/// the rest are `story:claude-h11-memory-walk-shapes`.
+/// shapes, which the next constant holds. The H11 walk looks for every one of them
+/// ([`metaharness_claude::MEMORY_SHAPES`], design amendment a36).
 const LOADED_SHAPES: [&str; 4] = [
     "CLAUDE.md",
     ".claude/CLAUDE.md",
@@ -1044,9 +1044,13 @@ fn vendor_with_project_and_local_sources(shapes: &[&str]) -> Vec<String> {
 ///   no `CLAUDE.md` of its own, which is why a world with any such file above it (the operator's own
 ///   `~/.claude/CLAUDE.md`, for one) sends none even with the sources on. The lane therefore runs
 ///   with an empty directory bound over `$HOME/.claude`.
+///
+/// What it measured is compared with the binary's row in [`metaharness_claude::MEMORY_CANARIES`]
+/// (amendment a36): at 2.1.304 and 2.1.305 that row records none reaching a request. A binary whose
+/// canary leaks needs a row saying so, which the floor reads as H11 `gap`.
 #[test]
 #[ignore = "actual Claude and production driver; explicit binaries/evidence and isolated loopback network namespace required"]
-fn native_memory_canaries_in_the_cwd_and_an_ancestor_never_reach_the_model() {
+fn native_memory_canaries_in_the_cwd_and_an_ancestor_match_the_recorded_row() {
     let _lease = NATIVE_RUN
         .lock()
         .unwrap_or_else(std::sync::PoisonError::into_inner);
@@ -1067,12 +1071,24 @@ fn native_memory_canaries_in_the_cwd_and_an_ancestor_never_reach_the_model() {
         "memory files above the evidence root change what the control loads; run the lane with \
          them hidden: {above:?}"
     );
+    let version = vendor_version();
+    let row = metaharness_claude::memory_canary(version).expect("a pinned version has a row");
+    let mut measured = metaharness_claude::MemoryCanary {
+        version: row.version,
+        planted: 0,
+        control_sent: 0,
+        launch_none: 0,
+        launch_loopback: 0,
+    };
+    let mut leaked = Vec::new();
     for shapes in [&LOADED_SHAPES[..], &AGENTS_SHAPES[..]] {
         let control = vendor_with_project_and_local_sources(shapes);
         let expected: Vec<String> = shapes
             .iter()
             .flat_map(|shape| ["cwd", "ancestor"].map(|place| canary(place, shape)))
             .collect();
+        measured.planted += expected.len();
+        measured.control_sent += control.len();
         assert_eq!(
             control, expected,
             "the control with the project and local sources: {shapes:?}"
@@ -1088,14 +1104,23 @@ fn native_memory_canaries_in_the_cwd_and_an_ancestor_never_reach_the_model() {
                 "the run reached the model: {}",
                 root.display()
             );
-            assert_eq!(
-                canaries_in_requests(&root, shapes),
-                Vec::<String>::new(),
-                "{credentials:?} {shapes:?}: {}",
-                root.display()
-            );
+            let reached = canaries_in_requests(&root, shapes);
+            match credentials {
+                Credentials::None => measured.launch_none += reached.len(),
+                Credentials::Loopback => measured.launch_loopback += reached.len(),
+            }
+            if !reached.is_empty() {
+                leaked.push(format!("{credentials:?} {reached:?}: {}", root.display()));
+            }
         }
     }
+    // Amendment a36: H11 rests on this measurement, so the binary under test has to reproduce its
+    // recorded row exactly; a pin move re-runs this lane. A leak is not a failure here: recorded,
+    // it turns H11 to `gap` in the floor (decision C; coordinator decision D3).
+    assert_eq!(
+        measured, row,
+        "{version}: the measured memory canary is not the recorded row; leaked: {leaked:?}"
+    );
 }
 
 /// Every request body's `system` blocks, as text.

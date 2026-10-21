@@ -8,9 +8,10 @@ use std::path::PathBuf;
 
 use metaharness_claude::{
     ADAPTER_ID, BUILTIN_PLUGINS, CONTEXT_CHANNEL, HOOK_TIMEOUT_SECONDS, LaunchContext,
-    LaunchRefusal, MENTION_CANARIES, Mention, PINNED_VERSIONS, TranscriptReader,
-    builtin_plugin_source, builtin_plugins, capabilities, conformance_vectors, mention_canary,
-    parse_hook_input, plan_launch, render_hook_response, render_operation,
+    LaunchRefusal, MEMORY_CANARIES, MEMORY_SHAPES, MENTION_CANARIES, MemoryCanary, Mention,
+    PINNED_VERSIONS, TranscriptReader, builtin_plugin_source, builtin_plugins, capabilities,
+    conformance_vectors, memory_canary, mention_canary, parse_hook_input, plan_launch,
+    render_hook_response, render_operation,
 };
 use metaharness_protocol::{
     ConformanceTier, CredentialSource, Decision, DecisionCensus, DecisionMode, Digest, Event,
@@ -114,6 +115,77 @@ fn every_pinned_version_records_its_mention_canary_and_the_context_channel_rests
         CONTEXT_CHANNEL,
         metaharness_protocol::ContextChannel::SystemPrompt
     );
+}
+
+/// The memory canary H11 rests on (design amendment a36), held to the pin the way the built-in
+/// list and the mention canary are: a version cannot be pinned without its row, so a pin move that
+/// did not re-run the canary probe fails here before it lands. A row records what the probe
+/// measured, and a row in which a canary reached a request is recordable: decision C turns H11 to
+/// `gap` for it, which is the floor's job and not this test's (coordinator decision D3). So this
+/// asks for a row per pin and a probe that could see every shape, never for zero leaks. The
+/// research page is where the numbers come from
+/// (`docs/research/2026-10-21-claude-code-2.1.304-adapter-surface.md`, § *H11: memory files*).
+/// Like the other two, this cannot tell a measured row from a copied one; the native fixture's
+/// canary case is the measurement.
+#[test]
+fn every_pinned_version_records_its_memory_canary() {
+    let listed: Vec<&str> = MEMORY_CANARIES.iter().map(|row| row.version).collect();
+    assert_eq!(
+        listed, PINNED_VERSIONS,
+        "one memory canary row per pinned version, in the pin's order"
+    );
+    assert_eq!(
+        memory_canary("2.1.303"),
+        None,
+        "an unpinned binary has no row"
+    );
+    for row in MEMORY_CANARIES {
+        assert_eq!(
+            row.planted,
+            2 * MEMORY_SHAPES.len(),
+            "{}: each shape in the cwd and in its parent",
+            row.version
+        );
+        assert_eq!(
+            row.control_sent, row.planted,
+            "{}: the positive control saw every canary",
+            row.version
+        );
+        assert!(
+            row.launch_none <= row.planted && row.launch_loopback <= row.planted,
+            "{}: no more canaries reached a request than were planted",
+            row.version
+        );
+    }
+    assert_eq!(
+        MEMORY_SHAPES,
+        [
+            "CLAUDE.md",
+            "CLAUDE.local.md",
+            "AGENTS.md",
+            ".claude/CLAUDE.md",
+            ".claude/AGENTS.md",
+            ".claude/rules",
+        ],
+        "the binary's own list, in its order"
+    );
+}
+
+/// A row in which a canary reached the model, or in which the control missed one, keeps nothing
+/// out: the first is the leak, the second a probe that could not have seen it.
+#[test]
+fn a_canary_that_reached_a_request_or_a_blind_control_is_not_kept_out() {
+    let measured = MEMORY_CANARIES[0];
+    let leaked = MemoryCanary {
+        launch_loopback: 1,
+        ..measured
+    };
+    assert!(!leaked.kept_out());
+    let blind = MemoryCanary {
+        control_sent: measured.planted - 1,
+        ..measured
+    };
+    assert!(!blind.kept_out());
 }
 
 /// Each list, written out: a fact about one binary, read from its registration function
