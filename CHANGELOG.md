@@ -23,6 +23,7 @@ was amended and the amendment is named here.
 ### Security
 
 - Security: update rustls, rustls-webpki and webpki-roots.
+- Security: the Claude tool-call seam fails closed.
 
 ## [0.11.0] — 2026-10-21
 

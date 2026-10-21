@@ -366,7 +366,8 @@ pub struct LaunchPlan {
     pub mcp_config: Option<Value>,
     /// The `PreToolUse` hook definition, as a value, so its two dangerous absences are testable:
     /// **neither `async` nor `asyncRewake` is set** (V7b, finding F6, design § 7.8). A hook that
-    /// matches every tool and does not block is a guard that has already stopped guarding.
+    /// matches every tool and does not block is a guard that has already stopped guarding. Its
+    /// one required presence is testable the same way: `onFailure: "block"` (amendment a41).
     pub hook: Value,
     /// What metaharness imposed and what it could not.
     ///
@@ -1613,6 +1614,11 @@ fn bare_allowed_tools(args: &[String]) -> Vec<String> {
 /// declared itself `async` would be a guard that has already stopped guarding (finding F6,
 /// design § 7.8).
 ///
+/// `onFailure: "block"` is present, and that is the point too: both pins default the key to
+/// `continue`, under which a hook that cannot start, times out or prints invalid JSON lets the
+/// call go ahead without a decision. `block` turns those failures into a blocked call, and both
+/// pins apply it only to a command hook with neither `async` nor `asyncRewake` (amendment a41).
+///
 /// The `command` is the program's path as one single-quoted shell word (amendment a37): the
 /// pinned binary hands the string to a shell, so an unquoted root with a space in it would run
 /// the wrong program.
@@ -1635,6 +1641,7 @@ fn build_hook(hook_path: &Path) -> Result<Value, LaunchRefusal> {
             "type": "command",
             "command": command,
             "timeout": HOOK_TIMEOUT_SECONDS,
+            "onFailure": "block",
         }],
     }))
 }
@@ -3033,9 +3040,132 @@ mod tests {
         let entry = &plan.hook["hooks"][0];
         assert_eq!(entry["type"], json!("command"));
         assert_eq!(entry["timeout"], json!(HOOK_TIMEOUT_SECONDS));
+        assert_eq!(entry["onFailure"], json!("block"));
         assert!(entry.get("async").is_none());
         assert!(entry.get("asyncRewake").is_none());
         assert_eq!(plan.settings["hooks"]["PreToolUse"][0], plan.hook);
+    }
+
+    /// What one pinned binary says about a settings hook's `onFailure`, each field a string found
+    /// verbatim in that binary and none of it driven (design amendment a41 § 3, invariant 4).
+    struct OnFailureReading {
+        version: &'static str,
+        /// The key on a `type: command` hook: its two values, optional, and what it does.
+        key: &'static str,
+        /// When `block` applies to a hook.
+        applies: &'static str,
+        /// Which outcomes `block` turns into a blocked action.
+        converts: &'static str,
+        /// The events `block` does not reach.
+        exempt: &'static str,
+        /// A hook that could not start.
+        spawn_failed: &'static str,
+        /// A hook that ran past its timeout.
+        timed_out: &'static str,
+        /// Stdout the parser could not read as a hook decision, with an exit other than `2`.
+        invalid_output: &'static str,
+    }
+
+    /// One row per pinned version; a pin that moves without a new row fails the tests below.
+    const ON_FAILURE_READINGS: [OnFailureReading; 2] = [
+        OnFailureReading {
+            version: "2.1.304",
+            key: r#"At=p(()=>N(["continue","block"]).optional().describe("What a failure of this hook does: it could not start (a missing script or plugin directory), timed out, exited with a code other than 0 or 2, or printed JSON that is invalid or fails validation. 'continue' (default): the failure is reported and the action goes ahead. 'block': the failure counts as exit code 2, so the action the event guards (a tool call, a permission request, a prompt) is blocked. Ignored for async hooks and on Stop, SubagentStop, TaskCompleted and TeammateIdle.")"#,
+            applies: r#"function a1e(e){switch(e.type){case"command":return e.onFailure==="block"&&e.async!==!0&&e.asyncRewake!==!0;case"http":return e.onFailure==="block";default:return!1}"#,
+            converts: r#"let S=e.outcome==="cancelled"&&r?.aborted!==!0?"timed out":e.outcome==="non_blocking_error"?"failed":void 0;"#,
+            exempt: r#"l1e=new Set(["Stop","SubagentStop","TaskCompleted","TeammateIdle"])"#,
+            spawn_failed: r#"wr.spawnFailed&&!iEn(rt,Da)){yield{outcome:"non_blocking_error",hook:Co};return}"#,
+            timed_out: r#"yield{message:en({type:"hook_cancelled",hookName:st,toolUseID:s,hookEvent:rt,command:ma,durationMs:vs,timedOut:!y?.aborted,timeoutMs:Ks}),outcome:"cancelled""#,
+            invalid_output: r#"else if(Hf){Qo=!0;let $a=rct(Hf,wr.status,wr.stderr);tf({hookId:Fr,hookName:st,hookEvent:rt,output:wr.output,stdout:wr.stdout,stderr:$a,exitCode:wr.status,outcome:"error"}),yield{message:en({type:"hook_non_blocking_error",hookName:st,toolUseID:s,hookEvent:rt,stderr:$a,stdout:wr.stdout,exitCode:wr.status,command:ma,durationMs:vs}),outcome:"non_blocking_error",hook:Co};return}"#,
+        },
+        OnFailureReading {
+            version: "2.1.305",
+            key: r#"At=p(()=>F(["continue","block"]).optional().describe("What a failure of this hook does: it could not start (a missing script or plugin directory), timed out, exited with a code other than 0 or 2, or printed JSON that is invalid or fails validation. 'continue' (default): the failure is reported and the action goes ahead. 'block': the failure counts as exit code 2, so the action the event guards (a tool call, a permission request, a prompt) is blocked. Ignored for async hooks and on Stop, SubagentStop, TaskCompleted and TeammateIdle.")"#,
+            applies: r#"function k1e(e){switch(e.type){case"command":return e.onFailure==="block"&&e.async!==!0&&e.asyncRewake!==!0;case"http":return e.onFailure==="block";default:return!1}"#,
+            converts: r#"let S=e.outcome==="cancelled"&&r?.aborted!==!0?"timed out":e.outcome==="non_blocking_error"?"failed":void 0;"#,
+            exempt: r#"S1e=new Set(["Stop","SubagentStop","TaskCompleted","TeammateIdle"])"#,
+            spawn_failed: r#"Sr.spawnFailed&&!NEn(ot,Na)){yield{outcome:"non_blocking_error",hook:Lo};return}"#,
+            timed_out: r#"yield{message:rn({type:"hook_cancelled",hookName:it,toolUseID:s,hookEvent:ot,command:ha,durationMs:Us,timedOut:!y?.aborted,timeoutMs:Vr}),outcome:"cancelled""#,
+            invalid_output: r#"else if(Sf){Ao=!0;let za=Yct(Sf,Sr.status,Sr.stderr);Wc({hookId:$r,hookName:it,hookEvent:ot,output:Sr.output,stdout:Sr.stdout,stderr:za,exitCode:Sr.status,outcome:"error"}),yield{message:rn({type:"hook_non_blocking_error",hookName:it,toolUseID:s,hookEvent:ot,stderr:za,stdout:Sr.stdout,exitCode:Sr.status,command:ha,durationMs:Us}),outcome:"non_blocking_error",hook:Lo};return}"#,
+        },
+    ];
+
+    /// The vendor half of a41 § 6: the hook metaharness writes carries `onFailure: "block"`, it
+    /// meets every pin's condition for `block` to apply, and every pin's reading routes `failure`
+    /// to the outcome `block` converts into a blocked tool call.
+    fn the_vendor_blocks(failure: &str, route: impl Fn(&OnFailureReading) -> &'static str) {
+        let plan = plan();
+        let entry = &plan.hook["hooks"][0];
+        assert_eq!(entry["onFailure"], json!("block"), "{entry}");
+        assert_eq!(plan.settings["hooks"]["PreToolUse"][0], plan.hook);
+        assert_eq!(
+            ON_FAILURE_READINGS.map(|reading| reading.version),
+            PINNED_VERSIONS,
+            "a pinned version without its onFailure reading"
+        );
+        for reading in &ON_FAILURE_READINGS {
+            let version = reading.version;
+            assert!(
+                reading.key.contains(r#"(["continue","block"]).optional()"#),
+                "{version}"
+            );
+            assert!(reading.key.contains(failure), "{version}: {failure}");
+            assert!(
+                reading.key.contains(
+                    "'block': the failure counts as exit code 2, so the action the event guards \
+                     (a tool call,"
+                ),
+                "{version}"
+            );
+            assert!(
+                reading.applies.contains(
+                    r#"case"command":return e.onFailure==="block"&&e.async!==!0&&e.asyncRewake!==!0;"#
+                ),
+                "{version}"
+            );
+            assert_eq!(entry["type"], json!("command"), "{version}");
+            assert_ne!(entry.get("async"), Some(&json!(true)), "{version}");
+            assert_ne!(entry.get("asyncRewake"), Some(&json!(true)), "{version}");
+            assert!(!reading.exempt.contains(r#""PreToolUse""#), "{version}");
+            let outcome = if route(reading).ends_with(r#"outcome:"cancelled""#) {
+                r#"e.outcome==="cancelled"&&r?.aborted!==!0?"timed out""#
+            } else {
+                assert!(
+                    route(reading).contains(r#"outcome:"non_blocking_error""#),
+                    "{version}"
+                );
+                r#"e.outcome==="non_blocking_error"?"failed""#
+            };
+            assert!(reading.converts.contains(outcome), "{version}");
+        }
+    }
+
+    /// Design amendment a41 § 6, the first row: a seam hook that cannot start.
+    #[test]
+    fn the_vendor_blocks_the_call_when_the_seam_hook_cannot_start() {
+        the_vendor_blocks("it could not start", |reading| reading.spawn_failed);
+    }
+
+    /// Design amendment a41 § 6, the second row: a seam hook that runs past the vendor's timeout.
+    #[test]
+    fn the_vendor_blocks_the_call_when_the_seam_hook_times_out() {
+        assert!(
+            ON_FAILURE_READINGS
+                .iter()
+                .all(|reading| reading.timed_out.contains("timedOut:!y?.aborted"))
+        );
+        the_vendor_blocks("timed out", |reading| reading.timed_out);
+    }
+
+    /// Design amendment a41 § 6, the third row: a seam hook whose stdout is a JSON object the
+    /// vendor cannot read. What the program prints instead of a decision is the other half,
+    /// `hook::tests::an_answer_that_is_not_a_hook_decision_is_denied_rather_than_passed_through`.
+    #[test]
+    fn the_vendor_blocks_the_call_when_the_seam_hook_prints_invalid_json() {
+        the_vendor_blocks(
+            "printed JSON that is invalid or fails validation",
+            |reading| reading.invalid_output,
+        );
     }
 
     /// The words `/bin/sh -c` splits a command string into, NUL-separated so a newline survives.

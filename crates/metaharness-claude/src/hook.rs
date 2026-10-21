@@ -33,13 +33,20 @@
 //! request arrives, and a request may arrive before its decision), but it is why the common path
 //! costs no waiting at all.
 //!
-//! # Fail closed, three ways
+//! # Fail closed, four ways
 //!
-//! With no channel, no writable request directory, or no answer inside its own budget, the
-//! program **denies with a reason**. That is § 2.2 item 3 — *"a guard that silently stops
-//! guarding is the defect this repository writes registers about"* — and it is why the program
-//! never exits non-zero to signal trouble: a non-zero exit is a vendor-interpreted signal, while
-//! a `deny` with a reason is a decision the model is told about.
+//! With no channel, no writable request directory, no answer inside its own budget, or an
+//! answer that is not a hook decision, the program **denies with a reason**. That is § 2.2 item 3
+//! — *"a guard that silently stops guarding is the defect this repository writes registers
+//! about"* — and it is why the program never exits non-zero to signal trouble: a non-zero exit is
+//! a vendor-interpreted signal, while a `deny` with a reason is a decision the model is told
+//! about.
+//!
+//! The fourth is design amendment a41 § 5. The hook's `onFailure: "block"` reaches only what
+//! the vendor counts as a failure, and the vendor reads plain text, an open `{`, several
+//! documents or a document without a decision as a success that decided nothing. So an answer
+//! is forwarded only in the shape metaharness writes one: empty for abstain, or one line that
+//! opens as a `PreToolUse` allow or deny and closes with `}}`.
 
 use std::path::{Path, PathBuf};
 
@@ -122,6 +129,22 @@ fn no_channel_reason() -> String {
      guard that cannot be consulted refuses rather than passing the call through"
         .to_string()
 }
+
+/// The reason the installed program gives when the answer it found is not a hook decision.
+#[must_use]
+fn unreadable_answer_reason() -> String {
+    "metaharness answered this call with something that is not a hook decision, so the call did \
+     not run; the hook program forwards only an allow or a deny in the shape metaharness writes \
+     them and refuses anything else rather than passing the call through"
+        .to_string()
+}
+
+/// How every decision [`render_hook_response`] writes opens: compact, keys in order, so the
+/// program can tell a decision from anything else without parsing JSON.
+const ALLOW_OPENING: &str =
+    r#"{"hookSpecificOutput":{"hookEventName":"PreToolUse","permissionDecision":"allow""#;
+const DENY_OPENING: &str =
+    r#"{"hookSpecificOutput":{"hookEventName":"PreToolUse","permissionDecision":"deny""#;
 
 /// One deny body, compact, as the program will print it.
 ///
@@ -209,6 +232,9 @@ pub fn hook_program(channel: &HookChannelPaths) -> Result<String, PathNotUtf8> {
     let ticks = HOOK_WAIT_SECONDS * 10;
     let unanswered = deny_body(unanswered_reason());
     let no_channel = deny_body(no_channel_reason());
+    let unreadable = deny_body(unreadable_answer_reason());
+    let allow = shell_quote(ALLOW_OPENING);
+    let deny = shell_quote(DENY_OPENING);
     Ok(format!(
         r#"#!/bin/sh
 # metaharness PreToolUse seam. Generated per run; edited by nobody.
@@ -220,6 +246,8 @@ set -u
 REQUESTS={requests}
 RESPONSES={responses}
 TICKS={ticks}
+NL='
+'
 
 fail_closed() {{
     printf '%s\n' "$1"
@@ -240,7 +268,18 @@ while [ "$tick" -lt "$TICKS" ]; do
     if [ -e "$RESPONSES/$key.json" ]; then
         # An empty file is metaharness abstaining: no bytes, no permissionDecision, and the
         # vendor's own permission pipeline decides. That is not the same as allowing.
-        cat "$RESPONSES/$key.json"
+        if [ -s "$RESPONSES/$key.json" ]; then
+            # Anything but one line shaped as an allow or a deny would reach the vendor as no
+            # decision at all, which onFailure cannot block, so it is refused here instead.
+            reply=$(cat "$RESPONSES/$key.json" 2>/dev/null) || reply=
+            case $reply in
+                *"$NL"*) reply= ;;
+            esac
+            case $reply in
+                {allow}*'}}}}' | {deny}*'}}}}') printf '%s\n' "$reply" ;;
+                *) fail_closed '{unreadable}' ;;
+            esac
+        fi
         exit 0
     fi
     sleep 0.1 2>/dev/null || sleep 1
@@ -281,6 +320,9 @@ mod tests {
         for body in [
             deny_body(unanswered_reason()),
             deny_body(no_channel_reason()),
+            deny_body(unreadable_answer_reason()),
+            ALLOW_OPENING.to_string(),
+            DENY_OPENING.to_string(),
         ] {
             assert!(!body.contains('\''), "{body}");
         }
@@ -322,7 +364,7 @@ mod tests {
         assert_eq!(program.matches("exit 0").count(), 2);
         assert!(!program.contains("exit 1"));
         assert!(program.contains(r#""permissionDecision":"deny""#));
-        assert_eq!(program.matches("fail_closed '").count(), 4);
+        assert_eq!(program.matches("fail_closed '").count(), 5);
     }
 
     #[test]
@@ -338,9 +380,11 @@ mod tests {
     /// double quote, a parameter, a backtick, a space and a newline (amendment a37).
     const AWKWARD: &str = "it's \"q\" $HOME `true` a b\nc";
 
-    /// What the vendor would hand the hook, and what metaharness answers.
+    /// What the vendor would hand the hook, and what metaharness answers: the allow its writer
+    /// produces, newline included.
     const INPUT: &[u8] = br#"{"hook_event_name":"PreToolUse","tool_use_id":"toolu_1"}"#;
-    const ANSWER: &[u8] = br#"{"hookSpecificOutput":{"permissionDecision":"allow"}}"#;
+    const ANSWER: &[u8] =
+        b"{\"hookSpecificOutput\":{\"hookEventName\":\"PreToolUse\",\"permissionDecision\":\"allow\"}}\n";
 
     /// The first published request in `requests`, while the program is still running.
     fn published_request(
@@ -421,16 +465,188 @@ mod tests {
         };
         assert_eq!(request.parent(), Some(channel.requests.as_path()));
         assert_eq!(std::fs::read(&request).expect("request"), INPUT);
-        std::fs::write(
-            channel
-                .responses
-                .join(request.file_name().expect("a file name")),
-            ANSWER,
-        )
-        .expect("answered");
+        answer(&channel.responses, &request, ANSWER);
         let output = child.wait_with_output().expect("the hook ends");
         assert!(output.status.success(), "{output:?}");
         assert_eq!(output.stdout, ANSWER);
+    }
+
+    /// Publish `reply` as the answer to `request` under one rename, as metaharness's writer does,
+    /// so the program never reads a half-written file.
+    fn answer(responses: &Path, request: &Path, reply: &[u8]) {
+        let name = request.file_name().expect("a file name");
+        let pending = responses.join(format!(".writing.{}", name.to_string_lossy()));
+        std::fs::write(&pending, reply).expect("written");
+        std::fs::rename(&pending, responses.join(name)).expect("answered");
+    }
+
+    /// Run `program` from `base` as the vendor would, with [`INPUT`] on stdin, and answer the
+    /// request it publishes with `reply`, or never for `None`. Returns what the vendor would read.
+    fn drive(
+        base: &Path,
+        program: &str,
+        channel: &HookChannelPaths,
+        reply: Option<&[u8]>,
+    ) -> std::process::Output {
+        use std::io::Write as _;
+        use std::process::{Command, Stdio};
+
+        let script = base.join("pretooluse");
+        std::fs::write(&script, program).expect("written");
+        let mut child = Command::new("/bin/sh")
+            .arg(&script)
+            .env_clear()
+            .env("PATH", "/usr/bin:/bin")
+            .stdin(Stdio::piped())
+            .stdout(Stdio::piped())
+            .stderr(Stdio::piped())
+            .spawn()
+            .expect("the hook runs");
+        child
+            .stdin
+            .take()
+            .expect("stdin")
+            .write_all(INPUT)
+            .expect("input written");
+        if let Some(reply) = reply {
+            let request = published_request(&channel.requests, &mut child)
+                .expect("the program published its request");
+            answer(&channel.responses, &request, reply);
+        }
+        child.wait_with_output().expect("the hook ends")
+    }
+
+    /// A channel whose two directories exist, under a fresh scratch root.
+    fn ready_channel(base: &Path) -> HookChannelPaths {
+        let channel = HookChannelPaths::under(&base.join("run"));
+        std::fs::create_dir_all(&channel.requests).expect("requests");
+        std::fs::create_dir_all(&channel.responses).expect("responses");
+        channel
+    }
+
+    /// The reason in the one `deny` the program printed, after checking that the program
+    /// refused the call the way every fail-closed path does: exit `0` and exactly the deny body
+    /// the run loop's renderer writes. Never an allow, never silence.
+    fn denial_reason(output: &std::process::Output, case: &str) -> String {
+        assert!(output.status.success(), "{case}: {output:?}");
+        let printed: serde_json::Value = serde_json::from_slice(&output.stdout)
+            .unwrap_or_else(|error| panic!("{case}: printed no decision ({error}): {output:?}"));
+        let decision = &printed["hookSpecificOutput"];
+        assert_eq!(decision["hookEventName"], "PreToolUse", "{case}: {printed}");
+        assert_eq!(decision["permissionDecision"], "deny", "{case}: {printed}");
+        let reason = decision["permissionDecisionReason"]
+            .as_str()
+            .unwrap_or_else(|| panic!("{case}: a deny without a reason: {printed}"))
+            .to_string();
+        assert_eq!(
+            String::from_utf8_lossy(&output.stdout),
+            format!("{}\n", deny_body(reason.clone())),
+            "{case}"
+        );
+        reason
+    }
+
+    /// Design amendment a41 § 6: with no request directory to publish into, the program denies
+    /// with its no-channel reason.
+    #[test]
+    fn a_channel_that_cannot_be_reached_is_denied_with_a_reason() {
+        let base = tempfile::tempdir().expect("a directory");
+        let channel = HookChannelPaths::under(&base.path().join("never-created"));
+        let program = hook_program(&channel).expect("a UTF-8 channel");
+        let output = drive(base.path(), &program, &channel, None);
+        assert_eq!(
+            denial_reason(&output, "no channel"),
+            no_channel_reason(),
+            "{output:?}"
+        );
+    }
+
+    /// Design amendment a41 § 6: a request nobody answers is denied on the program's own budget,
+    /// shortened here from the program's 570 tenths of a second to 3.
+    #[test]
+    fn an_answer_that_never_comes_is_denied_on_the_programs_own_budget() {
+        let base = tempfile::tempdir().expect("a directory");
+        let channel = ready_channel(base.path());
+        let budget = format!("\nTICKS={}\n", HOOK_WAIT_SECONDS * 10);
+        let program = hook_program(&channel).expect("a UTF-8 channel");
+        assert!(program.contains(&budget));
+        let program = program.replace(&budget, "\nTICKS=3\n");
+        let output = drive(base.path(), &program, &channel, None);
+        assert_eq!(
+            denial_reason(&output, "no answer"),
+            unanswered_reason(),
+            "{output:?}"
+        );
+    }
+
+    /// Design amendment a41 § 5: a reply the vendor would read as no decision at all (plain
+    /// text, a `{` left open, an empty object, an announced async hook, several documents, a
+    /// lone newline) or as a decision metaharness never writes is denied with a reason. Under
+    /// `onFailure: "block"` the vendor blocks only what it counts as a failure, and none of these
+    /// is one.
+    #[test]
+    fn an_answer_that_is_not_a_hook_decision_is_denied_rather_than_passed_through() {
+        let allow = br#"{"hookSpecificOutput":{"hookEventName":"PreToolUse","permissionDecision":"allow"}}"#;
+        let several = [&allow[..], b"\n{}\n"].concat();
+        let cases: [(&str, &[u8]); 8] = [
+            ("plain text", b"the call is fine\n"),
+            ("an open brace", b"{\"hookSpecificOutput\":\n"),
+            ("an empty object", b"{}\n"),
+            ("an announced async hook", b"{\"async\":true}\n"),
+            ("several documents", &several),
+            ("a lone newline", b"\n"),
+            (
+                "no hook event name",
+                br#"{"hookSpecificOutput":{"permissionDecision":"allow"}}"#,
+            ),
+            (
+                "a decision metaharness never writes",
+                br#"{"hookSpecificOutput":{"hookEventName":"PreToolUse","permissionDecision":"ask"}}"#,
+            ),
+        ];
+        for (case, reply) in cases {
+            let base = tempfile::tempdir().expect("a directory");
+            let channel = ready_channel(base.path());
+            let program = hook_program(&channel).expect("a UTF-8 channel");
+            let output = drive(base.path(), &program, &channel, Some(reply));
+            let reason = denial_reason(&output, case);
+            assert!(reason.contains("not a hook decision"), "{case}: {reason}");
+        }
+    }
+
+    /// Design amendment a41 § 5, the other half: every decision the run loop renders reaches the
+    /// vendor byte for byte as the writer wrote it, and an abstain still prints nothing.
+    #[test]
+    fn every_decision_metaharness_writes_reaches_the_vendor_byte_for_byte() {
+        let decisions = [
+            Decision::Allow,
+            Decision::Deny {
+                reason: format!("not here: {AWKWARD} {{}}"),
+            },
+            Decision::Replace {
+                input: serde_json::json!({"command": AWKWARD, "nested": {"a": [1, "}}"]}}),
+            },
+        ];
+        for decision in decisions {
+            let written = format!("{}\n", render_hook_response(&decision));
+            let base = tempfile::tempdir().expect("a directory");
+            let channel = ready_channel(base.path());
+            let program = hook_program(&channel).expect("a UTF-8 channel");
+            let output = drive(base.path(), &program, &channel, Some(written.as_bytes()));
+            assert!(output.status.success(), "{decision:?}: {output:?}");
+            assert_eq!(
+                String::from_utf8_lossy(&output.stdout),
+                written,
+                "{decision:?}"
+            );
+        }
+
+        let base = tempfile::tempdir().expect("a directory");
+        let channel = ready_channel(base.path());
+        let program = hook_program(&channel).expect("a UTF-8 channel");
+        let output = drive(base.path(), &program, &channel, Some(b""));
+        assert!(output.status.success(), "abstain: {output:?}");
+        assert!(output.stdout.is_empty(), "abstain: {output:?}");
     }
 
     /// Amendment a37: a channel that is not UTF-8 is refused by name, carrying the path it was
