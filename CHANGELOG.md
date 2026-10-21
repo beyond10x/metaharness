@@ -13,6 +13,10 @@ was amended and the amendment is named here.
 
 - `README.md`, the status page and the quickstart scope `METAHARNESS_LIVE=1` to the commands that check it (`metaharness aep drive run`, `resume` and `eval run`, the `aep-eval` runner with `--spend`, the ignored live tests) and say that a plain `metaharness run` does not check it; `crates/metaharness-cli/tests/live_scope_documented.rs` holds every page that names the variable to that.
 
+### Fixed
+
+- `run` checks the `--spec`/`--auditor` pairing before the spawn on every kind and exits 2 with no harness process started for `--spec` without `--auditor` (`SpecWithoutAuditor`), `--auditor` without `--spec` (`AuditorWithoutSpec`), auditor arguments after `--` without `--auditor` (new `AuditorArgsWithoutAuditor`), both on a run with no `--audit` and not `--hermetic strict` (`Launch`), a document that is missing, not a regular file, unreadable or whose path is not UTF-8 (`SpecUnreadable`), and an auditor prefix that is empty, starts with `-` or names no executable regular file by path or on `PATH` (`AuditorNotInvokable`); the audit-time checks stay and now refuse a directory and an empty prefix too (a43).
+
 ## [0.12.0] — 2026-10-21
 
 ### Changed

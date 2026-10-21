@@ -1199,6 +1199,15 @@ pub fn anything_was_adjudicated(events: &[Event]) -> bool {
     })
 }
 
+/// Whether a run with this spec owes a verdict: `--audit`, or `--hermetic strict` (amendment a3).
+///
+/// One function for [`crate::run::Run::wants_audit`] and the pairing check `start` makes before
+/// the spawn (amendment a43), so the run that is refused for wanting no audit and the run that is
+/// never audited are the same run.
+pub(crate) fn spec_wants_audit(spec: &metaharness_protocol::RunSpec) -> bool {
+    spec.audit || spec.hermetic == metaharness_protocol::HermeticMode::Strict
+}
+
 impl crate::run::Run {
     /// Whether this run owes a verdict.
     ///
@@ -1210,7 +1219,7 @@ impl crate::run::Run {
     /// is recorded for the design register rather than decided here twice.
     #[must_use]
     pub fn wants_audit(&self) -> bool {
-        self.spec().audit || self.spec().hermetic == metaharness_protocol::HermeticMode::Strict
+        spec_wants_audit(self.spec())
     }
 
     /// The twelve rows, evaluated from this run's own events.
