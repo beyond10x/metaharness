@@ -2153,6 +2153,175 @@ fn ess_suite_matches_the_current_specification() {
     );
 }
 
+/// Every terminal-record shape `CloseUnsteeredStream` takes: `terminal_present`, then `is_error`
+/// true, false or absent, `subtype` `success`, the budget word, another word or absent, and
+/// `stop_reason` and `terminal_reason` each the budget word, another word or absent. 216 shapes;
+/// an absent field is left out of the input, as a vendor record leaves it out.
+fn terminal_record_shapes() -> Vec<(String, Value)> {
+    const BUDGET: &str = "budget-exhausted";
+    fn tag(value: Option<&Value>) -> &'static str {
+        match value {
+            None => "n",
+            Some(Value::Bool(true)) => "t",
+            Some(Value::Bool(false)) => "f",
+            Some(Value::String(word)) if word == "success" => "s",
+            Some(Value::String(word)) if word == BUDGET => "b",
+            Some(_) => "o",
+        }
+    }
+    let words = [Some(json!(BUDGET)), Some(json!("other")), None];
+    let mut shapes = Vec::new();
+    for terminal_present in [true, false] {
+        for is_error in [Some(json!(true)), Some(json!(false)), None] {
+            for subtype in [
+                Some(json!("success")),
+                Some(json!(BUDGET)),
+                Some(json!("other")),
+                None,
+            ] {
+                for stop_reason in words.clone() {
+                    for terminal_reason in words.clone() {
+                        let mut input = json!({"terminal_present": terminal_present});
+                        let fields = [
+                            ("is_error", &is_error),
+                            ("subtype", &subtype),
+                            ("stop_reason", &stop_reason),
+                            ("terminal_reason", &terminal_reason),
+                        ];
+                        let mut name = format!("grid-{}", if terminal_present { "t" } else { "f" });
+                        for (field, value) in fields {
+                            name.push('-');
+                            name.push_str(tag(value.as_ref()));
+                            if let Some(value) = value {
+                                input[field] = value.clone();
+                            }
+                        }
+                        shapes.push((name, input));
+                    }
+                }
+            }
+        }
+    }
+    shapes
+}
+
+/// One authored `ess-scenario/1` for `CloseUnsteeredStream` over `input`, whose outcome and
+/// `StreamClassified` reason are the ones production's close produced over the same record.
+fn production_scenario(name: &str, input: &Value) -> String {
+    let observed = closure(input);
+    let reason = &observed.events["metaharness.session.StreamClassified"]["reason"];
+    let mut lines = vec![
+        "type: ess-scenario/1".to_owned(),
+        "domain: metaharness.session".to_owned(),
+        format!("scenario: {name}"),
+        "summary: Production's close of one terminal-record shape.".to_owned(),
+        "timeline:".to_owned(),
+        "  - at: 2026-10-21T00:00:00Z".to_owned(),
+        "    command: metaharness.session.CloseUnsteeredStream".to_owned(),
+        "    input:".to_owned(),
+    ];
+    for field in [
+        "terminal_present",
+        "is_error",
+        "subtype",
+        "stop_reason",
+        "terminal_reason",
+    ] {
+        lines.push(format!(
+            "      {field}: {}",
+            input.get(field).unwrap_or(&Value::Null)
+        ));
+    }
+    lines.extend([
+        format!("    outcome: {}", observed.outcome),
+        "    events:".to_owned(),
+        "      - event: metaharness.session.StreamClassified".to_owned(),
+        format!("        payload: {{reason: {reason}}}"),
+    ]);
+    lines.join("\n") + "\n"
+}
+
+/// `story:session-close-decides-absent-fields`: ESS's reference model decides every terminal-record
+/// shape, and decides it as production closes it. Each expectation is read off a real run over
+/// `ScriptedRunner` (`closure`), never written by hand, so a shape the specification leaves Unknown
+/// or closes otherwise fails by its name.
+#[test]
+fn the_reference_model_closes_every_terminal_record_shape_as_production_does() {
+    let root = Path::new(env!("CARGO_MANIFEST_DIR")).join("../..");
+    let scenarios = tempfile::tempdir().unwrap();
+    let shapes = terminal_record_shapes();
+    assert_eq!(shapes.len(), 216, "the grid is 2 x 3 x 4 x 3 x 3 shapes");
+    let mut expected = Vec::new();
+    for (name, input) in &shapes {
+        fs::write(
+            scenarios.path().join(format!("{name}.yaml")),
+            production_scenario(name, input),
+        )
+        .unwrap();
+        expected.push(format!("metaharness.session/authored/{name}"));
+    }
+    let report = scenarios.path().join("report.json");
+    let output = Process::new("ess")
+        .args(["verify", "conform", "run", "--strict-requires", "--path"])
+        .arg(root.join("spec"))
+        .arg("--scenarios")
+        .arg(scenarios.path())
+        .args(["--suite-format", "5", "--target", "interpreted"])
+        .args(["--report-format", "2", "--report-out"])
+        .arg(&report)
+        .output()
+        .expect("ESS 0.67.0 is a gate prerequisite");
+    let text = format!(
+        "{}{}",
+        String::from_utf8_lossy(&output.stdout),
+        String::from_utf8_lossy(&output.stderr)
+    );
+    let report: Value = serde_json::from_slice(
+        &fs::read(&report).unwrap_or_else(|_| panic!("no report written:\n{text}")),
+    )
+    .unwrap();
+    let passed = report["outcomes"]["passed"].as_array().unwrap();
+    // A shape whose expectation the guards decide otherwise is not run: ESS refuses it at
+    // selection (`ESS-AUTHOR-041`) and names it only under `coverage.refused`.
+    let refused = report["coverage"]["refused"].as_array().unwrap();
+    let undecided: Vec<String> = expected
+        .iter()
+        .filter(|id| !passed.iter().any(|held| held == id.as_str()))
+        .map(|id| {
+            if let Some(refusal) = refused.iter().find(|r| r["scenario"] == id.as_str()) {
+                let why: String = refusal["message"]
+                    .as_str()
+                    .unwrap()
+                    .chars()
+                    .take(400)
+                    .collect();
+                return format!("refused {id}\n    {why}");
+            }
+            let mut lines = text
+                .lines()
+                .skip_while(|line| !line.trim_end().ends_with(id));
+            let status = lines
+                .next()
+                .map_or(format!("absent {id}"), |line| line.trim().to_owned());
+            let why: String = lines
+                .next()
+                .unwrap_or("")
+                .trim()
+                .chars()
+                .take(160)
+                .collect();
+            format!("{status}\n    {why}")
+        })
+        .collect();
+    assert!(
+        undecided.is_empty(),
+        "{} of {} terminal-record shapes the specification does not close as production does:\n{}",
+        undecided.len(),
+        expected.len(),
+        undecided.join("\n")
+    );
+}
+
 #[test]
 fn ess_specification_is_part_of_the_repository_gate() {
     let taskfile = include_str!("../../../../Taskfile.yml");

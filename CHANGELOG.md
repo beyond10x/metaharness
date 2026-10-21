@@ -8,6 +8,7 @@ was amended and the amendment is named here.
 ### Changed
 
 - **Breaking:** Claude H11 rests on `--setting-sources ""` and the scratch config home, `gap` on a version without a clean memory canary; the walk finds all six memory shapes and reports them instead of refusing (a36).
+- The specification decides every terminal record, any optional field absent: `CloseUnsteeredStream` guards use `coalesce` (`ess/29`), 216 of 216 shapes as production closes them.
 
 ## [0.11.0] — 2026-10-21
 

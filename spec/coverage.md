@@ -4,7 +4,7 @@ This is a bounded retrofit of Metaharness's observable boundaries. It preserves
 frame/1 and adapter ownership. It does not claim to specify every event,
 credential rule, process-isolation mechanism or vendor version.
 
-ESS 0.67.0 validates both manifests. The core model uses ess/15;
+ESS 0.67.0 validates both manifests. The core model uses ess/29;
 conformance.json is a declared-coverage ess-conformance/35 suite. Regenerate it:
 
 ```console
@@ -341,13 +341,14 @@ Two guards change, each because the specification was wrong:
 A guard over an absent `Optional` stays unknown in 0.66.0, and a presence test
 beside a comparison over the same field (`all: [defined(x), x == …]`) is refused in
 turn: ESS cannot show that `defined(x)` fails alone only where the comparison is
-unknown. A terminal record without `is_error` is therefore outside what
-`positive-terminal-record` decides, as the guard says. Production's handling of it
+unknown. Under 0.66.0 a terminal record without `is_error` was therefore outside what
+`positive-terminal-record` decided. Production's handling of it
 (`error` for any other subtype, `completed` for the legacy subtype `success`,
-`budget` for a budget word beside it) is pinned beside `Run::reason_from_record` by
+`budget` for a budget word beside it) was pinned beside `Run::reason_from_record` by
 `a_terminal_record_without_is_error_closes_error_for_any_other_subtype` and
 `a_terminal_record_without_is_error_closes_completed_for_the_legacy_success_subtype`
-in `crates/metaharness/src/run.rs`, not by the suite.
+in `crates/metaharness/src/run.rs` only. Both tests stay; the suite holds the same
+records since the `coalesce` guards (section below).
 
 Three authored scenarios (`spec/scenarios/`, listed in `spec/ess-inputs.yaml`) send
 inputs the guards decide and no generated scenario sends. ESS's reference model
@@ -368,7 +369,7 @@ failed on any of them: the first against this suite (89 of 90 passed, the named
 one failed), the second and third together against the earlier 91-scenario
 revision (89 passed, two failed). Planting the a18 regression (an absent verdict
 closing `completed`) fails the first `run.rs` test, and removing the legacy reading
-fails the second; neither fails a scenario. Apart from the two outcome scenarios
+fails the second; on this revision neither failed a scenario. Apart from the two outcome scenarios
 the guard changes touch, every generated scenario is the one 0.56.0 wrote.
 
 Mutation audit, 2026-10-20, against ESS's reference model rather than production:
@@ -409,3 +410,53 @@ failed), observed as `strict-admits-the-declared-copy` with
 `memory_above_reported: false`. The canary guard itself (a version with no canary,
 or a canary that reached a request, reads H11 `gap`) is pinned by
 `crates/metaharness/tests/audit.rs`, not by this suite.
+
+## `coalesce` guards — the session close decides absent fields
+
+ESS 0.67.0 lets a command guard write `coalesce(x, d) == v` from format `ess/29`
+and reads `d` where `x` is absent (ESS changelog 0.67.0, beyond10x/ess#620; below
+`ess/29` the validator refuses the spelling as `unsupported_format_version`, naming
+`ess/29`). `spec/system.yaml` moves from `ess/15` to `ess/29`; every domain
+validates unchanged, and no scenario outside `CloseUnsteeredStream` changes.
+
+`CloseUnsteeredStream`'s guards now say what an absent field compares as:
+
+- A budget word is `coalesce(<field>, "") == "budget-exhausted"` over `subtype`,
+  `stop_reason` and `terminal_reason`: an absent field carries no word.
+- `positive-terminal-record` is `terminal_present == true`,
+  `coalesce(is_error, false) == false` (no explicit error) and any of
+  `coalesce(is_error, true) == false` (an explicit `false`) and
+  `coalesce(subtype, "") == "success"` (the legacy success). An absent `is_error`
+  is neither verdict.
+- Its `none:` budget clause is gone. ESS answers accepting branches in declaration
+  order (its own `ESS-AUTHOR-041` refusal states the rule), and
+  `observed-budget-stop`, declared first, is now decided on every input, so the
+  clause decided nothing. It was the 2026-10-20 audit's survivor; kept, its
+  or-to-and mutant is unwitnessed (`ESS-MUTATE-004`).
+
+The grid is every terminal-record shape: `terminal_present` × `is_error` (true,
+false, absent) × `subtype` (`success`, the budget word, another, absent) ×
+`stop_reason` and `terminal_reason` (the budget word, another, absent), 216 shapes.
+Production decides all 216, so none is left out. ESS's reference model passed 184
+and left 32 unsupported on the previous guards (0.67.0); it passes 216 now.
+`the_reference_model_closes_every_terminal_record_shape_as_production_does`
+(`crates/metaharness-aep/src/drive/ess_conformance.rs`) holds it in `task check`:
+each shape's expectation is production's own close over `ScriptedRunner`, and the
+reference model must pass every one. The success record the repository's vectors
+write is decided too
+(`the_specification_decides_the_success_record_the_repository_writes`).
+
+The suite keeps 103 scenarios (100 generated, 3 authored), zero refused. The three
+`CloseUnsteeredStream` outcome scenarios change, and synthesis now sends optional
+inputs absent: an absent verdict with subtype `success` and with another subtype
+are generated scenarios, run against production. The generated suite also sends
+`is_error: false` beside a budget word and `is_error: true` beside subtype
+`success`, the inputs the first two authored scenarios were selected for; they stay.
+Planted, run and restored, 2026-10-21: the a18 regression (an absent verdict
+closing `completed`) fails `failed-or-unknown-terminal` (102 of 103) and 8 grid
+shapes; removing the legacy reading fails `positive-terminal-record` (102 of 103)
+and 4 grid shapes.
+
+Mutation audit, 2026-10-21, the command above: 104 mutants, 103 killed, none
+survived, one inconclusive (`ProjectRecordedRun/decomposer-clean-recorded`, as
+before), none unwitnessed; all 14 `CloseUnsteeredStream` mutants are killed.
