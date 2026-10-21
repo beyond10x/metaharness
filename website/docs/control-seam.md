@@ -76,7 +76,7 @@ Three things it says out loud rather than leaving you to find out:
 | Surface | Status |
 |---|---|
 | `native` *(default)* | The vendor's own tools, narrowed at the decision seam. |
-| `owned` | metaharness owns the tool surface and runs the tools itself. **Refused** in this build — per-step re-listing depends on unverified vendor behaviour. |
+| `owned` | metaharness owns the tool surface and runs the tools itself. **Refused** on `codex` and `b10x` in this build — per-step re-listing depends on unverified vendor behaviour. On `claude`, `--catalogue` implies it. |
 
 ## Three properties that are easy to break by accident
 

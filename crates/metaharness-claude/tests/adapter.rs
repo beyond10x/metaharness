@@ -21,6 +21,7 @@ use metaharness_protocol::{
 fn context() -> LaunchContext {
     LaunchContext {
         context_files: Vec::new(),
+        catalogue: None,
         scratch_root: PathBuf::from("/scratch/run-9"),
         cwd: PathBuf::from("/scratch/run-9/work"),
         credentials_file: Some(PathBuf::from("/operator/.claude/.credentials.json")),
@@ -374,9 +375,9 @@ fn every_conformance_vector_passes_without_a_model_a_network_or_a_credential() {
     // Six recorded launch expectations (the sixth is a35's `--context` block, in
     // `--append-system-prompt`), the four computed launch vectors that carry observe mode, the
     // declared scratch copy (a27), plugin injection (a10, crossing #4) and the pinned marketplace
-    // placement (a16), three synthesised replays, the two golden recorded-wire vectors (CT-2) and
-    // the version pair (CT-3).
-    assert_eq!(outcomes.len(), 16);
+    // placement (a16), three synthesised replays, the two golden recorded-wire vectors (CT-2), the
+    // version pair (CT-3) and the caller's catalogue (a40).
+    assert_eq!(outcomes.len(), 17);
     for outcome in &outcomes {
         assert!(outcome.passed, "{}: {}", outcome.id, outcome.detail);
         assert!(matches!(

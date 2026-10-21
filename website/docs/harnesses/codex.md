@@ -10,7 +10,7 @@ Pinned to **0.153.4**. Adapter class: `harness`.
 
 ```bash
 metaharness run codex --hermetic -p "…"
-metaharness conformance codex     # 22 vectors, 4 of which run a real process and the real hook
+metaharness conformance codex     # 23 vectors, 4 of which run a real process and the real hook
 metaharness doctor codex
 ```
 

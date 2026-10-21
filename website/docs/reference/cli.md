@@ -109,10 +109,43 @@ login is refused by name — see [the codex adapter](../harnesses/codex.md).
 |---|---|---|
 | `--frame <FILE>` | — | A sealed `metaharness.frame/1` document. See [frames](../frames.md). |
 | `--decisions <MODE>` | `frame` | `frame` (the adapter decides from the admitted set) or `ask` (the embedder decides; one round trip per call). |
-| `--tool-surface <SURFACE>` | `native` | `native`, or `owned` — which this build **refuses**. |
+| `--tool-surface <SURFACE>` | `native` | `native`, or `owned` — which this build **refuses** on `codex` and `b10x`. |
+| `--catalogue <FILE>` | *(none)* | A caller's `tool-contract/1` document whose entries are the run's whole tool set. **`claude` only**; implies `--tool-surface owned`. See below. |
 
 The frame is a **path**, not a parsed value, on purpose: resolving it is the library's job, and
 parsing it in the binary would put protocol logic in the CLI.
+
+### `--catalogue`: the caller's tools instead of the vendor's
+
+On `claude` the launch removes the built-in tools (`--tools ""`) and names one MCP server,
+`metaharness mcp-serve --catalogue <copy>`, which lists each entry under its `mcp` rendering and
+nothing else, instead of the verbs the owned surface lists by default; Claude Code offers each as
+`mcp__metaharness__<name>`. A call to anything else, or to an entry this build does not perform,
+resolves to no operation, so a frame denies it as `UNCOVERED_TOOL`. The file is read and checked
+once, before the frame and before the spawn, and the server reads a scratch copy of the checked
+document. That copy is JSON with the characters YAML refuses raw or reads as line breaks written
+as `\u` escapes, and it is read back before the spawn. A leading byte-order mark in the file is
+dropped before it is parsed. A live launch with a catalogue has not been driven; the vector that
+pins it is synthetic (design amendment a40).
+
+A `tools/call` to an entry answers `isError` and performs nothing when its arguments are not an
+object, carry a key that is not one of the entry's input fields, or leave out (or give as null) a
+field the entry requires. The answer names the entry and the field.
+
+Refused before the spawn with exit 2, by name: `catalogue-not-carried` on `codex` and `b10x`;
+`catalogue-needs-owned-surface` beside `--tool-surface native`; `catalogue-with-allow-program`
+beside `--allow-program`, because a server handed a catalogue publishes no `run` for the programs
+to be started by; `catalogue-unreadable` for a path that is not a regular file, cannot be read, is
+past 4 MiB or is not UTF-8; `catalogue-not-tool-contract` or `catalogue-malformed` for a file that
+is not a catalogue, and `catalogue-malformed` as well for one whose scratch copy would be past
+4 MiB or would not read back as the same catalogue; `catalogue-copy-differs` when the copy written
+into the scratch tree reads back as anything but the checked catalogue. `mcp-serve --catalogue <FILE>` serves the same catalogue on
+its own, and refuses `--allow-program` beside it with the same code.
+
+`catalogue-copy-differs` is the one catalogue refusal that comes after something has started. It
+fires after the scratch files are written, after a loopback proxy has started when the run uses
+one, and under `--strict-version` after the vendor binary has been run with `--version`. Its
+message says which of these had happened. No vendor session is started.
 
 ### Audit
 

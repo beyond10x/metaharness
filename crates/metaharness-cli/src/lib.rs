@@ -187,9 +187,18 @@ pub struct McpServeArgs {
     /// A program the served `run` may start. Repeatable, and an empty set publishes no `run`.
     ///
     /// Declared rather than open, because an argv whose program could be anything is the shell
-    /// this surface exists to remove.
+    /// this surface exists to remove. Refused beside `--catalogue`, whose server publishes no
+    /// `run`.
     #[arg(long, value_name = "PROGRAM")]
     pub allow_program: Vec<String>,
+    /// A caller's `tool-contract/1` catalogue to serve instead of the three verbs (design
+    /// amendment a40).
+    ///
+    /// Each entry is listed as its own tool under its `mcp` rendering, and only an entry this
+    /// binary performs does anything when called. Read and checked before the first request; a
+    /// file that is not a catalogue is refused by name.
+    #[arg(long, value_name = "FILE")]
+    pub catalogue: Option<std::path::PathBuf>,
 }
 
 /// `doctor <kind>`.
@@ -319,7 +328,27 @@ fn project(args: &ProjectArgs) -> i32 {
 
 /// `mcp-serve` — the owned tool surface, on stdin and stdout, until the client goes away.
 fn mcp_serve(args: &McpServeArgs) -> i32 {
-    use metaharness_tools::{Catalogue, LocalOperations, Server, Verbs, serve};
+    use metaharness_tools::{CallerCatalogue, Catalogue, LocalOperations, Server, Verbs, serve};
+
+    // A server handed a catalogue publishes its entries and no `run`, so programs named for `run`
+    // would start nothing (design amendment a40). Refused on the flags alone, before any file is
+    // read, as `run claude` refuses the same pair.
+    if args.catalogue.is_some() && !args.allow_program.is_empty() {
+        return refuse(&Refusal::CatalogueWithAllowProgram {
+            programs: args.allow_program.clone(),
+        });
+    }
+
+    // Next, so a file that is not a catalogue is refused before the workspace is opened.
+    let caller = match args
+        .catalogue
+        .as_deref()
+        .map(CallerCatalogue::read)
+        .transpose()
+    {
+        Ok(caller) => caller,
+        Err(error) => return refuse(&Refusal::Catalogue { error }),
+    };
 
     if !args.writable && !args.allow_program.is_empty() {
         return refuse(&Refusal::Io {
@@ -338,7 +367,11 @@ fn mcp_serve(args: &McpServeArgs) -> i32 {
         Err(detail) => return refuse(&Refusal::Io { detail }),
     };
 
-    let mut server = Server::new(Verbs::new(Catalogue::of(operations)));
+    let verbs = Verbs::new(Catalogue::of(operations));
+    let mut server = match caller {
+        Some(caller) => Server::with_catalogue(verbs, caller),
+        None => Server::new(verbs),
+    };
     let stdin = std::io::stdin();
     match serve(&mut server, stdin.lock(), std::io::stdout().lock()) {
         Ok(()) => 0,

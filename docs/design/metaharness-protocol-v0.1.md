@@ -3320,3 +3320,286 @@ Codex and b10x are not refused. Nothing found shows that either reads these lite
 and what it does with them is unverified. A Claude run under such a root used to be spawned with a
 hook the vendor would not run, and now it is refused. The CHANGELOG marks that **Breaking**.
 `Refusal` and the Claude `LaunchRefusal` each gain a variant.
+
+### Amendment a40 — a caller supplies the catalogue: carried on Claude, refused by name on Codex and b10x (2026-10-21)
+
+`story:caller-supplied-catalogue-on-every-kind` (Atlas ADR 0098, gap 1). **Decision D2** (the wave's
+coordinator, 2026-10-21): the per-kind vectors are synthetic, a deterministic fixture driven through
+the adapter's own launch plan and event mapping with no vendor binary run, and a live launch with a
+catalogue stays unverified (invariant 4). Until now the owned surface was fixed: `mcp-serve` published
+the three verbs over `LocalOperations`, and the only caller-side choice was `--allow-program`. Loom's
+session executor needs to hand a run the catalogue a session may see and have the model offered
+that and nothing else. Nine decisions, written before the code (invariant 8).
+
+**1. The declaration.** `RunSpec::catalogue: Option<PathBuf>`, on the command line `--catalogue
+<FILE>`, on the builder `Metaharness::with_catalogue(path)`. The file is one `tool-contract/1`
+document, the format the `tools` repository publishes (ADR 0095 point 2), read by that format's own
+crate: `b10x-tool-contract` 0.2.0 (`tools` tag `0.2.0`, `60d4d0e3`), the same package `Cargo.lock`
+already resolved for harness's tools crates. There is no local reader and no interim format.
+The declaration implies the owned surface, because a catalogue is something metaharness serves. On
+the command line `--catalogue` makes `--tool-surface` default to `owned` (clap `default_value_if`).
+`with_catalogue` sets both. A run that names the catalogue and `--tool-surface native` explicitly
+is refused, **`catalogue-needs-owned-surface`**, instead of one of the two being ignored. A
+serialized `RunSpec` omits the field when it is absent, so every existing document is unchanged.
+
+**2. Which kind can carry it.** The question for each kind is whether the launch can take the
+vendor's own tools away, put the catalogue in their place, and have the vendor's record say so.
+
+| kind | carried | why |
+|---|---|---|
+| `claude` | **yes** | `--tools ""` removes the built-in set (V11), `--mcp-config` with `--strict-mcp-config` names one server, and the opening record lists the tools the session has. § 7.5 strategy C, already built; the catalogue changes what that server publishes |
+| `codex` | **no — refused, `catalogue-not-carried`** | see below. **A finding, not a pass: the story's acceptance is not met for Codex** |
+| `b10x` | **no — refused, `catalogue-not-carried`** | its published toolset is its policy (`spec.rs`, `Kind::B10x`), and the pinned loop (0.15.1) takes no catalogue file. Refused by name, which the story allows for this kind only |
+
+Codex is refused in this build for two reasons; neither is that the vendor cannot remove its
+built-ins. **Corrected the same day** from Codex's source at tag `rust-v0.153.4` (`3d2ee51`,
+`codex-rs/`, read, not driven): a first draft of this section said `codex exec` had no verified way
+to remove them, and the source shows otherwise.
+
+- Under `codex exec`, each built-in has a switch. `shell`/`exec_command` needs
+  `features.shell_tool` (Stable, default on: `features/src/lib.rs:899-902`; checked at
+  `core/src/tools/spec_plan.rs:1078-1080`), which `--disable shell_tool` or
+  `-c features.shell_tool=false` turns off (`cli/src/main.rs:965`, folded into the config
+  overrides at `:1058`). `view_image` needs `features.view_image` (`spec_plan.rs:1253`).
+  `apply_patch` is registered only when the model's `apply_patch_tool_type` is set
+  (`spec_plan.rs:1239`), which comes from model info that `model_catalog_json` overrides, applied
+  at startup only (`config/src/config_toml.rs:366-368`). `update_plan` is off unless
+  `tools.update_plan.enabled` (`core/src/config/mod.rs:2648-2654`). Web search follows
+  `web_search` (`config_toml.rs:435`, `spec_plan.rs:1416`).
+- The app-server v2 protocol carries a catalogue natively. `thread/start` takes `dynamicTools`
+  (`app-server-protocol/src/protocol/v2/thread.rs:138-144`), and Codex calls the client back with
+  `item/tool/call` (`app-server-protocol/src/protocol/common.rs:1721`). An empty `environments`
+  "disables environment access" (`thread.rs:129-137`), and every environment-bound built-in is
+  registered only when there is an environment (`spec_plan.rs:1078`, `:1239`, `:1253`). Both fields
+  are `#[experimental]` (`thread.rs:135`, `:138`) and need `experimentalApi` at `initialize`.
+
+**First reason:** this build launches `codex exec`, and none of these switches has been driven
+here, alone or together; § 7.5 already refuses `--tool-surface owned` on Codex for the same
+reason. The route is the app-server one, filed as its own story, whose acceptance is a live probe
+at 0.153.4 whose model request lists exactly the catalogue's tools. **Second reason:** the record
+cannot show the result. A rollout's `session_meta` lists no tools, and the
+Codex mapping writes `offered_tools: None` (`rollout.rs`). So on this vendor, at this pin,
+`session.started.offered_tools` cannot equal the catalogue's names when read from the run's own
+record (invariant 3). Asserting it from the launch's configuration would be the confusion
+invariant 3 forbids. The check runs in `check_spec` before the `--tool-surface owned` refusal, so the
+message names the catalogue and not the surface the declaration implied. The Codex adapter's own
+`plan_launch` also refuses `--catalogue` (`LaunchRefusal::UnsupportedOption`,
+`UNSUPPORTED_CONTROL`), before the owned-surface check, so a caller of the pure function gets the
+same answer by name. `c1-caller-catalogue-refusal` pins it.
+
+That refusal opens with the prefix every `UnsupportedOption` shares (`launch.rs:661`, "the pinned
+codex exec has no way to express it"). For `--catalogue` the reason after the colon says what is
+meant: the switches exist and have not been driven here. For `--max-turns` the prefix is literal.
+`grep -rniE 'max_?turn|turn_limit|max_steps' codex-rs/` at rust-v0.153.4 finds no turn ceiling:
+its hits are TUI constants (`tui/src/dynamic_tools.rs:69-563`, `tui/src/app/recap.rs:37`,
+`tui/src/app_server_session/history.rs:26`) and a byte limit on a turn environment's working
+directory (`core/src/thread_manager.rs:104`). `exec/src/cli.rs` declares no turn, budget or limit
+flag.
+
+**3. The file is read once, before anything runs.** `start_resolved` reads and checks the
+catalogue right after `check_spec`. That is before the frame is resolved, before the scratch root
+exists, before a proxy binds, before the plan, and before anything is written or spawned. There
+are three refusals for the file, each with exit `2` and a message that begins with its code. The
+codes are exported as constants (`metaharness::CATALOGUE_UNREADABLE` and the rest), and like a37's
+they are launch-condition codes, not protocol `RefusalCode`s.
+
+- **`catalogue-unreadable`**: the platform would not hand over the file's text; or the path is not
+  a regular file (a directory, a FIFO, a device), asked of the path before it is opened and again
+  of the opened file, because the path may be replaced between the two; or the file is larger than
+  4 MiB (`metaharness_tools::CATALOGUE_BYTES_MAX`, 4,194,304 bytes), read to one byte past that and
+  no further; or its text is not UTF-8.
+- **`catalogue-not-tool-contract`**: the text is YAML, but its top level is not a mapping whose
+  `format` is `tool-contract/1`. This is read **before** the grammar. The format's parser refuses
+  unknown fields before it looks at `format`, so a document in another format would otherwise be
+  reported as malformed `tool-contract/1`, which names the wrong problem.
+- **`catalogue-malformed`**: anything else that stops the document being a usable catalogue. The
+  text is not YAML; the grammar refuses it; `tool_contract::validate` reports violations, all of
+  which are listed; an input field list has no shape (`Shape::of_fields`); the document has no
+  operations, which would launch a child with no tools at all (the reason
+  `LaunchRefusal::ToolServerMissing` exists); or an operation has no `mcp` rendering, or one that is
+  outside `[A-Za-z0-9_-]` or longer than 46 bytes. The rendering checks come from Claude Code
+  naming an MCP tool `mcp__metaharness__<name>` (18 bytes of prefix) and from the Messages API's
+  documented tool-name pattern, `^[a-zA-Z0-9_-]{1,64}$`. That pattern is read from the vendor's
+  documentation and was not driven here. Last, the scratch copy (decision 6) is rendered and read
+  back through the same reader before the document is accepted. It is refused when that copy would
+  be past 4 MiB, would not read back, or would read back as another catalogue, so a document the
+  parent accepts is one the server can serve. One case is known to need this: a key longer than
+  1024 characters, which block YAML admits as `? key` and the reader refuses in the copy's flow form
+  ("did not find expected ',' or '}'").
+
+These three, and the flag refusal below, fire before anything is written or spawned. The one other
+catalogue refusal does not. **`catalogue-copy-differs`** (decision 6) reads the copy back after the
+run's scratch files are written (`crates/metaharness/src/builder.rs:931`, the check at `:937`).
+By then a loopback credential proxy has started, when the run uses one (`:892`). Under
+`--strict-version`, the vendor binary has also been run with `--version` (`:918`). Its message
+says which of these had happened and does not say that nothing was started.
+
+One refusal is on the flags alone. It fires in `check_spec`, before the file is read:
+**`catalogue-with-allow-program`**, `--allow-program` beside `--catalogue`. The programs are what
+the served `run` may start, and a server handed a catalogue publishes that catalogue's entries and
+no `run`. No entry is performed as `run` either: the pinned harness maps contract names onto
+`file_read`, `dir_list`, `find`, `file_write` and `file_edit` and nothing else (harness `f087013`,
+`crates/harness-catalogue/src/local.rs:118-124`). Accepting the programs would be a declaration read
+nowhere. `mcp-serve` refuses the same pair on its flags, with or without `--writable`, before it
+reads the file, and the Claude adapter's `plan_launch` refuses it as
+`LaunchRefusal::CatalogueWithAllowProgram`. `--allow-program` without `--catalogue` is unchanged.
+
+**4. The name is the entry's `mcp` rendering.** A `tool-contract/1` operation name is dotted
+(`fs.read`), and a tool name may not contain a dot. The format carries a generated name per
+harness under `renderings`, and `mcp` is the one for an MCP server (`fs.read` → `fs_read`). Every
+operation in the released contracts carries one. So the published name is that rendering, and an
+operation without one is refused, not renamed by a rule metaharness made up. The validator already
+refuses two operations that share a rendering.
+
+**5. What is served: the catalogue's entries, flat, and nothing else.** `metaharness mcp-serve`
+takes `--catalogue <FILE>`. With it, `tools/list` answers one tool per entry: the name from
+decision 4, the description is the entry's `summary` with its `guidance` after a blank line, and
+the `inputSchema` is derived from the field list's shape. A struct becomes an object with
+`properties`, `required` for every field that is not `Optional`, and `additionalProperties: false`.
+`String`, `Integer` and `Boolean` map to themselves, `Bytes` to a base64 string, `List` to an array,
+`Map` to an object with `additionalProperties`, and an enum to a string `enum`. An `Optional` field
+is left out of `required` and takes its inner type's schema; an `Optional` anywhere else (a list's
+items, a map's values) becomes `anyOf` with `null`. Each top-level property also carries the
+field's `description`. **The three
+verbs are not published under a catalogue.** Behind `tool_invoke` they reach the whole local
+catalogue, which is tools outside the caller's. This departs from the story's Context ("a
+caller-supplied catalogue sits behind them, so the vendor-facing surface need not change"). Behind
+the verbs, the record's `offered_tools` would be the three verb names, and the acceptance requires
+it to equal the catalogue's names. The two cannot both hold, and the acceptance is the contract.
+Without `--catalogue`, what is served is byte-identical to before.
+
+A call to an entry is performed as the entry harness maps its contract name to. It takes the a32
+road (`tool_invoke {"name": <contract name>, "arguments": …}`), including a32 § 5's
+`expected_sha256` refusal. An entry harness does not map (`fs.stat`, `code.patch`, `code.move`,
+`code.delete`, `process.run`, or any operation a caller defines) answers `isError`: it is in the
+run's catalogue, nothing in this run performs it, and nothing was done. Performing a call for the
+caller is `story:decision-returns-caller-produced-result`. A call to a name that is not in the
+catalogue answers `isError` too, names the catalogue's tools, and performs nothing. That includes
+the verbs.
+
+Before a call to an entry is performed, its arguments are checked against the top level of the
+entry's published `inputSchema`. They must be an object; an absent `arguments` is read as `{}`.
+They must carry no key outside the entry's input fields, and must give every required field (one
+that is not `Optional`) a value other than null. A call that fails any of these answers `isError`,
+naming the entry and each field, and nothing is performed (`CatalogueEntry::argument_problems`,
+`crates/metaharness-tools/src/caller.rs:206`, called from the server at
+`crates/metaharness-tools/src/server.rs:172`). The check exists because the schema said
+`additionalProperties: false` while the server passed any arguments on. The a32 road drops a field
+the entry does not read, and harness `dir.list` then lists `"."` (harness `f087013`,
+`crates/harness-catalogue/src/catalogue.rs:486`), so `fs_list {"dir": "x"}` listed the workspace
+root. A field's value is not checked against its type here; the harness entry reads it. The check
+comes before the a32 § 5 guard, so `expected_sha256` reaches that guard only on an entry that
+declares it, such as `code.write`.
+
+**6. The Claude launch.** `LaunchContext::catalogue: Option<Value>` is the checked document as
+JSON, and the caller's to supply, on the same division as `context_files`: the core reads, the
+adapter decides. `plan_launch` adds a `ScratchFile` at `<scratch root>/catalogue.json` and appends
+`--catalogue <that path>` to the `mcp-serve` arguments in the MCP configuration. The server reads
+the **scratch copy**, so what is served is what was checked, and editing the caller's file during
+the run changes nothing. The copy is JSON, which the format's YAML parser reads, with one change
+from `serde_json`'s own output: each character that parser refuses raw or reads as a line break is
+written as a `\u` escape (`metaharness_tools::render_scratch_copy`). The parser is `unsafe-libyaml`
+0.2.11 under `serde_yaml_ng` 0.10. It admits tab, LF, CR, U+0020–U+007E, U+0085, U+00A0–U+D7FF,
+U+E000–U+FFFD and U+10000–U+10FFFF (`src/reader.rs:381-388`). It reads U+0085, U+2028 and U+2029
+as line breaks (`src/macros.rs:253-264`), and in a quoted scalar it folds a line break and drops
+the spaces beside it. So the code escapes 37 characters: U+007F–U+009F, U+2028, U+2029, U+FFFE
+and U+FFFF. Of these, 34 are refused raw (U+007F–U+0084, U+0086–U+009F, U+FFFE, U+FFFF) and 3 are
+read as line breaks (U+0085, U+2028, U+2029). A test walks every Unicode scalar value through the
+copy, each between spaces, and with that set escaped every one survives. Every character outside
+that set is written as `serde_json` writes it, so a copy without any of them is byte-identical to
+the unescaped one. Only the catalogue copy is rendered this way; every other scratch file is
+written exactly as before. A byte-order mark at the start of the caller's file is dropped before
+it is parsed: YAML admits one there, but `serde_yaml_ng` declares the stream UTF-8
+(`src/libyaml/parser.rs:75`). The reader then never looks for a mark (`unsafe-libyaml`
+`src/reader.rs:164-168`) and would read it as content. After the plan is materialised and before
+the spawn, the core reads the copy back through `CallerCatalogue::read`. When the copy reads back
+as another catalogue or not at all, it refuses **`catalogue-copy-differs`**, exit `2`. That check
+runs after the scratch files are written, after a loopback proxy has started when the run uses one,
+and under `--strict-version` after the vendor's `--version` probe (`builder.rs:892`, `:918`,
+`:931`, `:937`). So its message names the copy as `catalogue.json` in the run's scratch tree, never
+by its path, which lies under the operator's `TMPDIR`. It says that no vendor session was started,
+that the scratch files had been written and are removed with the scratch tree, and, when they
+happened, that the version probe had run and that a proxy had started and stops as the refusal
+returns. Nothing else in the argv, the environment, the settings or the hook changes. The adapter refuses three inconsistent inputs by name for a caller of the pure
+function: `LaunchRefusal::CatalogueUnread` (declared and not handed over, or handed over and not
+declared), `LaunchRefusal::CatalogueWithoutOwnedSurface` and
+`LaunchRefusal::CatalogueWithAllowProgram`. Through the builder, the core refusals fire first. a37 § 6 applies here too: Claude expands `${…}` in the `--mcp-config` document, so a
+`${…}` in a scratch root would reach the catalogue path as it reaches `--workspace`. That was read
+from the strings, not driven, and is outside this amendment.
+
+**7. The record, and the run's reading of it.** The meaning of `session.started.offered_tools` does
+not change: it is the vendor's own list, read from Claude's `system/init`. Under a catalogue on
+Claude it is `mcp__metaharness__<mcp rendering>` for each entry, which is the catalogue's names as
+the vendor spells an MCP tool. Under a catalogue the run does not read calls as the three verbs, so
+a model that calls `mcp__metaharness__tool_invoke` does not have its call laundered into the entry
+it names. The native rendering table is not consulted either, so a `Read` is not `file.read`. A call
+that names a published entry resolves through its contract name to the entry harness maps, with
+operation and subjects translated together (a32 § 2). Any other call resolves to no operation.
+Under a frame it is `Deny` with `UNCOVERED_TOOL`. With no frame it is `Abstain` with
+`NO_FRAME_IN_FORCE`, as before. In either case the server performs nothing (decision 5).
+`available_operations` keeps its owned-surface reading and stays absent.
+
+**Not done:** metaharness does not compare `offered_tools` with the catalogue during the run and
+emits no new warning. A reader compares the two. **Unverified (invariant 4):** a live Claude launch
+with a catalogue. In particular, nobody has checked whether one of the plugins compiled into
+2.1.304 or 2.1.305 (a33) adds a tool to a session under `--tools ""`. The synthetic vector cannot
+show that, because it writes the opening record itself.
+
+**8. Vectors.** Claude: `c1-caller-catalogue` (launch tier). The adapter's own `plan_launch`
+receives a synthetic two-entry catalogue, complete enough that `mcp-serve` serves it, and the
+fixture pins the argv, the MCP configuration with its `--catalogue` argument, and the scratch
+catalogue file. A test in `metaharness-tools` reads that pinned copy with the server's reader and
+compares its listing with the pinned `offered_tools`. A synthetic opening record then goes through
+the adapter's transcript mapping and pins `offered_tools`. The names that record lists are read off
+the adapter's plan: the scratch file at the path the server's `--catalogue` argument names, and
+the `mcp` rendering of each operation in it. The `offered_tools` that comes out must equal the
+names written out in the vector (`CATALOGUE_OFFERED`), never read off the document or the plan
+under test. So a plan whose copy drops, adds or renames an entry fails the vector, even against an
+expectation regenerated from that plan. A test drops one entry from the planned copy and sees the
+vector fail at that check. A plan whose server is told to serve no catalogue, or one at a path
+the plan does not write, fails naming which. Codex:
+`c1-caller-catalogue-refusal`. A core integration test drives the builder end to end with a scripted
+runner. The catalogue file is read and the launch materialised, and the server is built from the
+materialised copy: `tools/list` equals the catalogue's names, an opening record that offers exactly
+those yields equal `offered_tools`, and a call outside the catalogue is denied by the frame and not
+performed by the server. Each refusal has a test asserting that nothing was spawned. The contract
+golden records gain those two rows; every existing row is unchanged.
+
+**9. What changes for a caller.** No event or frame wire changes, and `metaharness.frame/1` is
+untouched. `RunSpec` gains a field, and `mcp-serve` and `run` each gain a flag. `Refusal`,
+`LaunchContext`, the Claude `LaunchRefusal` and `Server` gain items, and `metaharness-tools`
+publishes the catalogue reader. A run without `--catalogue` plans, serves and records exactly as
+before. `metaharness-tools` takes two direct dependencies that `Cargo.lock` already holds through
+harness: `b10x-tool-contract` and `serde_yaml_ng`, the second to read `format` before the grammar
+(decision 3). It also turns on `serde_json`'s `raw_value` feature, so `CallerCatalogue::document`
+carries the escaped copy's text unchanged. `metaharness aep drive` never passes `--catalogue`, so it
+reaches none of these refusals.
+
+**Corrected after the adversary pass (2026-10-21).** Four findings, each pinned by a test that was
+red first. (1) The copy was `serde_json`'s output as is, and a catalogue carrying a DEL, a C1
+control, U+FFFE or U+FFFF, escaped in the caller's YAML, was accepted by the parent and refused by
+the server ("control characters are not allowed"). The escaping, the parent's read-back and
+`catalogue-copy-differs` in decisions 3 and 6 close it. (2) The Claude vector pinned an abbreviated
+document that `mcp-serve` refused (`missing field profile`), and it derived the names it expected
+from that same document; decision 8 now says otherwise. (3) `--allow-program` beside `--catalogue`
+was accepted and did nothing; it is refused (decision 3). (4) The reader read any path to its end;
+the regular-file check and the 4 MiB cap are in decision 3.
+
+**Corrected after the second adversary pass (2026-10-21).** Five findings. Each is pinned by a test
+that was red first, except the last, whose call site no input reaches; unit tests on the refusal
+pin its message. (1) The reader takes U+2028 and U+2029 as line breaks, and a quoted scalar drops
+the spaces beside a line break. A valid catalogue with either between spaces was therefore refused
+as "its scratch copy reads back as another catalogue". The property test never put a space beside
+a character, so it could not see this. Both are escaped now, and the test puts a space beside
+every character (decision 6). The earlier text also counted 35 characters "refused raw" and listed
+U+0085 among them, but the reader admits U+0085 and folds it. Decision 6 now gives the set as the
+code escapes it. (2) A file starting with a byte-order mark was refused as more than one document.
+One leading mark is dropped (decision 6). (3) A call's arguments were not checked against the
+published schema. A field the entry did not declare was dropped, so `fs_list {"dir": "x"}` listed
+the workspace root. The server now refuses such a call by name (decision 5). (4) The Claude
+vector's opening record was built from `CATALOGUE_OFFERED` and read back against the same
+constant, so no change to the adapter could fail it. Its names now come from the plan
+(decision 8). (5) `catalogue-copy-differs` nested a second refusal that named the copy by its path
+under the operator's `TMPDIR`. It said "Nothing was started" though it fires after the scratch
+write, after a loopback proxy has started when the run uses one, and after the `--strict-version`
+probe when that flag is set. Decisions 3 and 6 now say when it runs and what its message says.

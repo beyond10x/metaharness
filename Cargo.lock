@@ -1376,7 +1376,9 @@ version = "0.11.0"
 dependencies = [
  "b10x-harness-catalogue",
  "b10x-harness-wire",
+ "b10x-tool-contract",
  "serde_json",
+ "serde_yaml_ng",
  "tempfile",
 ]
 

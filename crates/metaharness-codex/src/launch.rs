@@ -923,6 +923,21 @@ fn unsupported_options(spec: &RunSpec) -> Result<(), LaunchRefusal> {
     // planned, its placement is a named constant, and what is not known is labelled where a reader
     // meets it — `PLUGIN_HOME`, the attestation's `loaded_by`, and Q19 — instead of being refused
     // as if it were impossible.
+    //
+    // Ahead of the owned surface, because a catalogue implies that surface and the sentence must
+    // name what the caller declared (design amendment a40). The switches that take the built-in
+    // tools away exist at rust-v0.153.4 (`codex-rs/features/src/lib.rs:899-902`,
+    // `codex-rs/core/src/tools/spec_plan.rs:1078-1080`); a40 § 2 cites them. None has been driven.
+    if spec.catalogue.is_some() {
+        return Err(LaunchRefusal::UnsupportedOption {
+            option: "--catalogue",
+            why: "the switches that take its built-in tools away have not been driven in this \
+                  build, so the catalogue could be offered beside them rather than instead of \
+                  them, and a rollout lists no tools, so session.started's offered_tools could \
+                  not show which; `dynamicTools` at thread/start belongs to the app-server, \
+                  which this build does not launch",
+        });
+    }
     if spec.tool_surface == ToolSurface::Owned {
         return Err(LaunchRefusal::UnsupportedOption {
             option: "--tool-surface owned",
@@ -2663,6 +2678,28 @@ mod tests {
         owned.tool_surface = ToolSurface::Owned;
         let refusal = plan_launch(&owned, &context()).expect_err("refused");
         assert_eq!(refusal.code(), Some(RefusalCode::UnsupportedControl));
+    }
+
+    /// A caller-supplied catalogue is refused by name, and ahead of the owned surface it implies,
+    /// so the sentence names the declaration the caller made (design amendment a40).
+    #[test]
+    fn a_caller_catalogue_is_refused_by_name_ahead_of_the_surface_it_implies() {
+        let mut declared = spec();
+        declared.catalogue = Some(PathBuf::from("/operator/session-catalogue.yaml"));
+        declared.tool_surface = ToolSurface::Owned;
+        let refusal = plan_launch(&declared, &context()).expect_err("refused");
+        assert!(
+            matches!(
+                refusal,
+                LaunchRefusal::UnsupportedOption {
+                    option: "--catalogue",
+                    ..
+                }
+            ),
+            "{refusal:?}"
+        );
+        assert_eq!(refusal.code(), Some(RefusalCode::UnsupportedControl));
+        assert!(refusal.to_string().contains("offered_tools"), "{refusal}");
     }
 
     // ------------------------------------------------------------ observe mode (a10) and #4

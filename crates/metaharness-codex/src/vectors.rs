@@ -23,7 +23,7 @@ use std::path::PathBuf;
 use metaharness_protocol::{
     ConformanceTier, ContractObligations, CredentialSource, DeclaredContextFile, Digest, Emission,
     Event, EventStream, HermeticAttestation, HermeticMode, HermeticRow, Kind, Obligation, RunId,
-    RunSpec, TranscriptRef, VectorOutcome,
+    RunSpec, ToolSurface, TranscriptRef, VectorOutcome,
 };
 use serde_json::{Value, json};
 
@@ -49,6 +49,7 @@ pub const CONTRACT_OBLIGATIONS: ContractObligations = ContractObligations {
         "c1-memory-ancestor-refusal",
         "c1-scratch-cwd-declaration",
         "c1-context-files",
+        "c1-caller-catalogue-refusal",
     ]),
     recorded_wire: Obligation::Filled(&["golden-rollout"]),
     recorded_hook_input: Obligation::Filled(&["golden-hook-input"]),
@@ -92,7 +93,7 @@ pub fn conformance_vectors() -> Vec<VectorOutcome> {
 }
 
 /// The recorded expectations, paired with the case that produces them.
-const LAUNCH_FIXTURES: [(&str, &str); 7] = [
+const LAUNCH_FIXTURES: [(&str, &str); 8] = [
     (
         "c1-strict-hermetic",
         include_str!("../fixtures/c1/strict-hermetic.json"),
@@ -114,6 +115,10 @@ const LAUNCH_FIXTURES: [(&str, &str); 7] = [
     (
         "c1-context-files",
         include_str!("../fixtures/c1/context-files.json"),
+    ),
+    (
+        "c1-caller-catalogue-refusal",
+        include_str!("../fixtures/c1/caller-catalogue-refusal.json"),
     ),
 ];
 
@@ -204,6 +209,13 @@ fn launch_case(id: &str) -> Option<(RunSpec, LaunchContext)> {
             spec.context = vec!["todo.py".into(), "notes/closing.md".into()];
             context.cwd = PathBuf::from("/operator/repo");
             context.context_files = synthetic_context_files();
+        }
+        // A caller's catalogue (design amendment a40), with the owned surface it implies: refused
+        // by name, because `codex exec` cannot offer it instead of its own tools and its rollout
+        // could not show which it offered.
+        "c1-caller-catalogue-refusal" => {
+            spec.catalogue = Some(PathBuf::from("/operator/session-catalogue.yaml"));
+            spec.tool_surface = ToolSurface::Owned;
         }
         _ => return None,
     }
@@ -955,6 +967,7 @@ mod tests {
             "c1-loopback-subscription-refusal",
             "c1-unsupported-option-refusal",
             "c1-memory-ancestor-refusal",
+            "c1-caller-catalogue-refusal",
             "CX2-session",
             "CX2-version-gate",
             "CX2-drift-opaque",

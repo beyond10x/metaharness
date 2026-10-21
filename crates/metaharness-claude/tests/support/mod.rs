@@ -17,6 +17,7 @@ pub const SCRATCH_ROOT: &str = "/scratch/run-1";
 pub fn context() -> LaunchContext {
     LaunchContext {
         context_files: Vec::new(),
+        catalogue: None,
         scratch_root: PathBuf::from(SCRATCH_ROOT),
         cwd: PathBuf::from("/scratch/run-1/work"),
         credentials_file: Some(PathBuf::from("/operator/.claude/.credentials.json")),

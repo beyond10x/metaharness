@@ -298,6 +298,8 @@ fn every_builder_method_sets_one_field_of_the_one_options_type() {
         // And no host program was staged, so the sandbox holds only what substrate binds.
         driver: None,
         tool_surface: ToolSurface::Owned,
+        // No catalogue was named, so the owned server publishes the three verbs.
+        catalogue: None,
         allow_program: Vec::new(),
         credentials: CredentialSource::ApiKey,
         model: Some("sonnet".to_string()),

@@ -6,6 +6,7 @@ use b10x_harness_wire::{CallId, ToolCall, ToolName, ToolPort};
 use harness_catalogue::{DESCRIBE_VERB, INVOKE_VERB, Verbs};
 use serde_json::{Value, json};
 
+use crate::caller::CallerCatalogue;
 use crate::resolve::entry_of;
 
 /// The name the vendor prefixes its tools with, so the model sees `mcp__metaharness__tool_search`.
@@ -25,9 +26,10 @@ const METHOD_NOT_FOUND: i64 = -32601;
 /// JSON-RPC's "invalid request".
 const INVALID_REQUEST: i64 = -32600;
 
-/// The three verbs, answering MCP.
+/// The three verbs, or a caller's catalogue in front of them, answering MCP.
 pub struct Server {
     verbs: Verbs,
+    caller: Option<CallerCatalogue>,
 }
 
 impl std::fmt::Debug for Server {
@@ -40,7 +42,28 @@ impl Server {
     /// Serves this catalogue.
     #[must_use]
     pub fn new(verbs: Verbs) -> Self {
-        Self { verbs }
+        Self {
+            verbs,
+            caller: None,
+        }
+    }
+
+    /// Serves the caller's catalogue flat, and nothing else (design amendment a40).
+    ///
+    /// `tools/list` answers one tool per entry, by its `mcp` rendering. A call to an entry harness
+    /// maps is performed through `verbs` as that entry, on the road a contract name takes through
+    /// `tool_invoke`, so the `expected_sha256` refusal holds on it too. A call to an entry nothing
+    /// here performs, or to any name outside the catalogue (the three verbs included), answers
+    /// `isError` and does nothing. So does a call whose arguments the entry's published input
+    /// schema does not admit: not an object, a key outside its input fields, or a required field
+    /// left out or null. The field and the entry are named, so a call is never performed with a
+    /// field the operation would drop.
+    #[must_use]
+    pub fn with_catalogue(verbs: Verbs, catalogue: CallerCatalogue) -> Self {
+        Self {
+            verbs,
+            caller: Some(catalogue),
+        }
     }
 
     /// Answers one request, or `None` when it was a notification.
@@ -88,22 +111,81 @@ impl Server {
     }
 
     fn list(&self) -> Value {
-        let tools: Vec<Value> = self
-            .verbs
-            .specs()
-            .iter()
-            .map(|spec| {
-                json!({
-                    "name": spec.name.as_str(),
-                    "description": spec.description,
-                    "inputSchema": spec.input_schema,
+        let tools: Vec<Value> = match &self.caller {
+            Some(catalogue) => catalogue
+                .entries()
+                .iter()
+                .map(|entry| {
+                    json!({
+                        "name": entry.published,
+                        "description": entry.description,
+                        "inputSchema": entry.input_schema,
+                    })
                 })
-            })
-            .collect();
+                .collect(),
+            None => self
+                .verbs
+                .specs()
+                .iter()
+                .map(|spec| {
+                    json!({
+                        "name": spec.name.as_str(),
+                        "description": spec.description,
+                        "inputSchema": spec.input_schema,
+                    })
+                })
+                .collect(),
+        };
         json!({"tools": tools})
     }
 
     fn call(&mut self, params: &Value) -> Value {
+        let Some(catalogue) = &self.caller else {
+            return self.call_verb(params);
+        };
+        let Some(name) = params.get("name").and_then(Value::as_str) else {
+            return failed("a `tools/call` must name a tool");
+        };
+        let Some(entry) = catalogue.published(name) else {
+            let names = catalogue
+                .entries()
+                .iter()
+                .map(|entry| format!("`{}`", entry.published))
+                .collect::<Vec<_>>()
+                .join(", ");
+            return failed(&format!(
+                "`{name}` is not in this run's catalogue, so nothing was done. The tools this run \
+                 has are {names}."
+            ));
+        };
+        if harness_catalogue::harness_operation(&entry.contract_name).is_none() {
+            return failed(&format!(
+                "`{}` is in this run's catalogue as `{}`, and nothing in this run performs it, so \
+                 nothing was done.",
+                entry.published, entry.contract_name
+            ));
+        }
+        let arguments = params
+            .get("arguments")
+            .cloned()
+            .unwrap_or_else(|| json!({}));
+        let problems = entry.argument_problems(&arguments);
+        if !problems.is_empty() {
+            return failed(&format!(
+                "`{}` was called with arguments its input schema does not admit, so nothing was \
+                 done: {}.",
+                entry.published,
+                problems.join("; ")
+            ));
+        }
+        let invoke = json!({
+            "name": INVOKE_VERB,
+            "arguments": {"name": entry.contract_name, "arguments": arguments},
+        });
+        self.call_verb(&invoke)
+    }
+
+    fn call_verb(&mut self, params: &Value) -> Value {
         let Some(name) = params.get("name").and_then(Value::as_str) else {
             return failed("a `tools/call` must name a tool");
         };

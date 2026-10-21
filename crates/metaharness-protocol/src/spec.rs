@@ -256,16 +256,37 @@ pub struct RunSpec {
     #[cfg_attr(feature = "clap", arg(long, value_name = "PATH"))]
     pub driver: Option<PathBuf>,
 
-    /// Whose tools the model is offered.
-    #[cfg_attr(feature = "clap", arg(long, value_enum, default_value = "native"))]
+    /// Whose tools the model is offered. `owned` when [`Self::catalogue`] is set on the command
+    /// line and this is not.
+    #[cfg_attr(
+        feature = "clap",
+        arg(
+            long,
+            value_enum,
+            default_value = "native",
+            default_value_if("catalogue", clap::builder::ArgPredicate::IsPresent, "owned")
+        )
+    )]
     pub tool_surface: ToolSurface,
+
+    /// The catalogue the model is offered: one `tool-contract/1` document (design amendment a40).
+    ///
+    /// Read and checked once before anything runs, and refused by name when it cannot be read, is
+    /// another format, or cannot be served. The owned server then publishes the document's
+    /// operations, each by its `mcp` rendering, and nothing else. It implies
+    /// [`ToolSurface::Owned`]; an explicit `native` beside it is refused. Carried on `claude` only:
+    /// `codex` and `b10x` refuse it before the spawn.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    #[cfg_attr(feature = "clap", arg(long, value_name = "FILE"))]
+    pub catalogue: Option<PathBuf>,
 
     /// A program the **served** `run` tool may start. Repeatable; empty publishes no `run` at all.
     ///
     /// Only under [`ToolSurface::Owned`], where metaharness supplies the tools: an argv whose
     /// program could be anything is the shell that surface exists to remove, and a set nobody
     /// named means nobody wanted one. Under `native` the vendor's own shell is on the tool list
-    /// and this says nothing about it.
+    /// and this says nothing about it. Refused beside [`Self::catalogue`] (amendment a40): a
+    /// server handed a catalogue publishes its entries and no `run`.
     #[cfg_attr(feature = "clap", arg(long, value_name = "PROGRAM"))]
     pub allow_program: Vec<String>,
 
@@ -581,6 +602,7 @@ impl RunSpec {
             hooks: None,
             driver: None,
             tool_surface: ToolSurface::Native,
+            catalogue: None,
             allow_program: Vec::new(),
             credentials: CredentialSource::OperatorLogin,
             model: None,

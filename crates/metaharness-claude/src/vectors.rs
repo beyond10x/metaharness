@@ -30,7 +30,7 @@ use std::path::PathBuf;
 
 use metaharness_protocol::{
     ConformanceTier, ContractObligations, CredentialSource, DecisionMode, DeclaredContextFile,
-    Digest, EventStream, HermeticAttestation, HermeticMode, HermeticRow, Kind, Obligation,
+    Digest, Event, EventStream, HermeticAttestation, HermeticMode, HermeticRow, Kind, Obligation,
     PluginContent, PluginTree, RunId, RunSpec, Seam, ToolSurface, TranscriptRef, VectorOutcome,
     tree_digest,
 };
@@ -54,13 +54,14 @@ pub const CONTRACT_OBLIGATIONS: ContractObligations = ContractObligations {
         "c1-marketplace-plugin",
         "c1-scratch-cwd-declaration",
         "c1-context-files",
+        "c1-caller-catalogue",
     ]),
     recorded_wire: Obligation::Filled(&["golden-transcript"]),
     recorded_hook_input: Obligation::Filled(&["golden-hook-input"]),
     version_pair: Obligation::Filled(&["golden-version-pair"]),
 };
 
-use crate::launch::{LaunchContext, LaunchPlan, LaunchRefusal, plan_launch};
+use crate::launch::{LaunchContext, LaunchPlan, LaunchRefusal, ScratchFile, plan_launch};
 use crate::transcript::TranscriptReader;
 
 /// Every free vector this adapter carries, executed, each outcome saying what differed.
@@ -74,6 +75,7 @@ pub fn conformance_vectors() -> Vec<VectorOutcome> {
     outcomes.push(scratch_cwd_vector());
     outcomes.push(plugin_injection_vector());
     outcomes.push(marketplace_plugin_vector());
+    outcomes.push(caller_catalogue_vector(CALLER_CATALOGUE));
     outcomes.extend(replay_vectors());
     outcomes.push(golden_transcript_vector(GOLDEN_TRANSCRIPT));
     outcomes.push(golden_hook_vector(GOLDEN_HOOK_INPUT));
@@ -674,6 +676,7 @@ fn base_spec() -> RunSpec {
 fn base_context() -> LaunchContext {
     LaunchContext {
         context_files: Vec::new(),
+        catalogue: None,
         scratch_root: PathBuf::from("/scratch/run-1"),
         cwd: PathBuf::from("/scratch/run-1/work"),
         credentials_file: Some(PathBuf::from("/operator/.claude/.credentials.json")),
@@ -858,6 +861,256 @@ fn synthetic_plugin() -> (PathBuf, PluginTree) {
     (source, tree)
 }
 
+/// The recorded expectation of the caller-catalogue vector.
+const CALLER_CATALOGUE: &str = include_str!("../fixtures/c1/caller-catalogue.json");
+
+/// The names a vendor gives this run's tool server's tools.
+const OFFERED_PREFIX: &str = "mcp__metaharness__";
+
+/// What a session served [`synthetic_catalogue`] offers, written out rather than read off the
+/// document or the plan under test: the server publishes each entry under its `mcp` rendering, and
+/// the vendor prefixes the server's name. `metaharness-tools` serves the pinned copy and compares
+/// its listing with the `offered_tools` this vector pins (`tests/adversary_w5u4.rs`).
+const CATALOGUE_OFFERED: [&str; 2] = ["mcp__metaharness__fs_read", "mcp__metaharness__fs_stat"];
+
+/// C1 — **a caller's catalogue on the owned surface** (design amendment a40), synthetic end to
+/// end (decision D2): no vendor binary, no model.
+///
+/// Two halves. The launch: the built-in set removed, one server, that server told to serve the
+/// scratch copy, and the copy on the plan as the document the caller handed over. The record: an
+/// opening `system/init` line listing what the server publishes, read through the adapter's own
+/// reader, and the `session.started` it becomes. The listed names are read off the plan: the file
+/// the server's `--catalogue` argument names, among the plan's scratch files, and the `mcp`
+/// rendering of each operation in it. The `offered_tools` that comes out must be
+/// [`CATALOGUE_OFFERED`], written out, so a plan whose copy drops, adds or renames an entry fails
+/// the vector even against an expectation regenerated from that plan.
+///
+/// **What the vendor lists is synthesised here, not observed.** That the server lists exactly the
+/// catalogue is tested against the server itself (`metaharness-tools`, `tests/caller_catalogue.rs`
+/// and `tests/adversary_w5u4.rs`, which serves this vector's pinned copy); that the vendor then
+/// offers exactly what the server lists, under `--tools ""`, is the owned surface's standing
+/// assumption and is **unverified** for a catalogue: no live launch was made.
+fn caller_catalogue_vector(expectation: &str) -> VectorOutcome {
+    caller_catalogue_vector_of(expectation, synthetic_catalogue())
+}
+
+/// The caller-catalogue vector's id.
+const CALLER_CATALOGUE_ID: &str = "c1-caller-catalogue";
+
+/// [`caller_catalogue_vector`], handed `catalogue` in place of [`synthetic_catalogue`].
+fn caller_catalogue_vector_of(expectation: &str, catalogue: Value) -> VectorOutcome {
+    let (spec, context) = caller_catalogue_case_of(catalogue);
+    match plan_launch(&spec, &context) {
+        Ok(plan) => caller_catalogue_outcome(expectation, &plan),
+        Err(refusal) => compare(
+            CALLER_CATALOGUE_ID,
+            ConformanceTier::C1,
+            expectation,
+            &observed_refusal(&refusal),
+        ),
+    }
+}
+
+/// The caller-catalogue vector's verdict on one plan.
+fn caller_catalogue_outcome(expectation: &str, plan: &LaunchPlan) -> VectorOutcome {
+    let id = CALLER_CATALOGUE_ID;
+    let expected: Vec<String> = CATALOGUE_OFFERED.map(str::to_owned).to_vec();
+    let copy = match served_copy(plan) {
+        Ok(copy) => copy,
+        Err(detail) => return VectorOutcome::failed(id, ConformanceTier::C1, detail),
+    };
+    let served = catalogue_names(&copy.document);
+    let offered = offered_after_init(&served);
+    if offered.as_ref() != Some(&expected) {
+        return VectorOutcome::failed(
+            id,
+            ConformanceTier::C1,
+            format!(
+                "session.started offered {offered:?} for a server told to serve the plan's \
+                 scratch copy, whose mcp renderings give {served:?}; the vector names {expected:?}"
+            ),
+        );
+    }
+    let observed = json!({
+        "args": plan.args,
+        "mcp_config": plan.mcp_config,
+        "scratch_files": [{ "path": copy.path, "document": copy.document }],
+        "offered_tools": offered,
+    });
+    compare(id, ConformanceTier::C1, expectation, &observed)
+}
+
+/// The scratch file the plan's tool server is told to serve: the path after `--catalogue` in the
+/// server's arguments, and the file the plan writes at that path.
+fn served_copy(plan: &LaunchPlan) -> Result<&ScratchFile, String> {
+    let args: Vec<&str> = plan
+        .mcp_config
+        .as_ref()
+        .and_then(|config| config["mcpServers"]["metaharness"]["args"].as_array())
+        .into_iter()
+        .flatten()
+        .filter_map(Value::as_str)
+        .collect();
+    let Some(path) = args
+        .iter()
+        .position(|arg| *arg == "--catalogue")
+        .and_then(|at| args.get(at + 1))
+    else {
+        return Err(format!(
+            "the plan's tool server is told to serve no catalogue: its arguments are {args:?}"
+        ));
+    };
+    plan.scratch_files
+        .iter()
+        .find(|file| file.path == std::path::Path::new(path))
+        .ok_or_else(|| {
+            format!(
+                "the plan's tool server is told to serve the catalogue at {path}, and the plan \
+                 writes no scratch file there"
+            )
+        })
+}
+
+/// The run the caller-catalogue vector plans: the owned surface, a named catalogue, and
+/// `catalogue` handed over as the document the caller read and checked ([`synthetic_catalogue`]
+/// for the vector itself).
+fn caller_catalogue_case_of(catalogue: Value) -> (RunSpec, LaunchContext) {
+    let mut spec = base_spec();
+    spec.tool_surface = ToolSurface::Owned;
+    spec.catalogue = Some(PathBuf::from("/operator/session-catalogue.yaml"));
+    let mut context = base_context();
+    context.catalogue = Some(catalogue);
+    (spec, context)
+}
+
+/// A complete `tool-contract/1` document, the one `metaharness-tools` reads as its caller-catalogue
+/// fixture (`tests/fixtures/caller-catalogue.yaml`) written as JSON: synthetic entries with every
+/// field the format requires, so the copy this vector pins is a catalogue `mcp-serve` serves. The
+/// adapter copies it and parses none of it; the caller checked it before it got here.
+pub(crate) fn synthetic_catalogue() -> Value {
+    let profile = |subject: &str| {
+        json!({
+            "effects": ["read"],
+            "consequences": [],
+            "risk": "low",
+            "idempotency": "idempotent",
+            "preconditions": [],
+            "determinism": "deterministic",
+            "bounds": { "timeout_ms": { "default": 10000, "max": 60000 } },
+            "requires": { "binaries": [], "env": [], "settings": [], "secrets": [] },
+            "subjects": [{ "field": "path", "kind": "path", "pattern": subject }],
+            "placement": "local",
+            "capability": "workspace.read",
+            "output": { "untrusted": true, "failure_as_result": true },
+        })
+    };
+    json!({
+        "format": "tool-contract/1",
+        "toolset": "fs",
+        "version": "v1alpha1",
+        "summary": "A session's catalogue: read a window of one file, and say what one entry is. \
+                    Synthetic, written for metaharness's caller-catalogue tests; no tool in it is \
+                    offered for anything else.",
+        "errors": [{
+            "name": "fs.NotFound",
+            "summary": "Nothing exists at the path.",
+            "fields": [{ "name": "path", "type": "String" }],
+        }],
+        "operations": [
+            {
+                "name": "fs.read",
+                "summary": "Read a window of a file as numbered lines.",
+                "guidance": "Page with offset, the first line, numbered from 1.",
+                "renderings": { "claude": "Read", "codex": "read_file", "mcp": "fs_read" },
+                "input": [
+                    {
+                        "name": "path",
+                        "type": "String",
+                        "description": "The file, relative to the workspace root.",
+                    },
+                    {
+                        "name": "offset",
+                        "type": "Optional<Integer>",
+                        "description": "The first line to read, numbered from 1.",
+                    },
+                ],
+                "output": [{
+                    "name": "text",
+                    "type": "String",
+                    "description": "The window as numbered lines.",
+                }],
+                "outcomes": [
+                    { "name": "read", "summary": "The window is answered." },
+                    { "name": "not-found", "error": "fs.NotFound" },
+                ],
+                "profile": profile("fs.read({path})"),
+            },
+            {
+                "name": "fs.stat",
+                "summary": "Say what one entry is.",
+                "renderings": { "mcp": "fs_stat" },
+                "input": [{
+                    "name": "path",
+                    "type": "String",
+                    "description": "The entry, relative to the workspace root.",
+                }],
+                "output": [{
+                    "name": "kind",
+                    "type": "String",
+                    "description": "What the entry is.",
+                }],
+                "outcomes": [
+                    { "name": "stated", "summary": "The entry is described." },
+                    { "name": "not-found", "error": "fs.NotFound" },
+                ],
+                "profile": profile("fs.stat({path})"),
+            },
+        ],
+    })
+}
+
+/// Each entry's offered name: the server publishes it under its `mcp` rendering, and the vendor
+/// prefixes the server's name.
+fn catalogue_names(catalogue: &Value) -> Vec<String> {
+    catalogue["operations"]
+        .as_array()
+        .into_iter()
+        .flatten()
+        .filter_map(|operation| operation["renderings"]["mcp"].as_str())
+        .map(|published| format!("{OFFERED_PREFIX}{published}"))
+        .collect()
+}
+
+/// What `session.started` says was offered, after a synthetic opening record listing `tools`.
+fn offered_after_init(tools: &[String]) -> Option<Vec<String>> {
+    let init = json!({
+        "type": "system",
+        "subtype": "init",
+        "cwd": "/scratch/run-1/work",
+        "session_id": "s-0001",
+        "tools": tools,
+        "mcp_servers": [{ "name": "metaharness", "status": "connected" }],
+        "model": "a-model",
+        "permissionMode": "default",
+        "apiKeySource": "none",
+        "claude_code_version": crate::PINNED_VERSIONS[0],
+        "uuid": "u-0001",
+    })
+    .to_string();
+    let mut reader = TranscriptReader::new(replay_transcript(), replay_attestation())
+        .with_seam(Seam::OwnedTool)
+        .with_inputs_digest(Digest::of(b"the copied input tree"));
+    reader
+        .push_line(&init)
+        .into_iter()
+        .chain(reader.finish())
+        .find_map(|emission| match emission.event {
+            Event::SessionStarted { offered_tools, .. } => Some(offered_tools),
+            _ => None,
+        })
+        .flatten()
+}
+
 fn replay_vectors() -> Vec<VectorOutcome> {
     REPLAY_FIXTURES
         .iter()
@@ -993,6 +1246,7 @@ fn first_difference(expected: &str, observed: &str) -> String {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::launch::catalogue_path;
 
     /// C1, C2 and nothing that needs a model: the default gate must never reach for a credential
     /// (design D13).
@@ -1015,6 +1269,7 @@ mod tests {
             "c1-api-key",
             "c1-shadow-refusal",
             "c1-memory-ancestor-reported",
+            "c1-caller-catalogue",
             "c2-session",
             "c2-unknown-records",
             "c2-auth-expired",
@@ -1136,6 +1391,160 @@ mod tests {
         let path = concat!(
             env!("CARGO_MANIFEST_DIR"),
             "/fixtures/c1/context-files.json"
+        );
+        std::fs::write(path, text).expect("the expectation is written");
+    }
+
+    /// The caller-catalogue vector can fail: an expectation without the server's `--catalogue`
+    /// argument, or one offering a tool the catalogue does not name, is red (design amendment a40).
+    #[test]
+    fn a_caller_catalogue_expectation_that_differs_fails_its_vector() {
+        for (from, to) in [
+            ("\"--catalogue\"", "\"--workspace\""),
+            ("mcp__metaharness__fs_stat", "mcp__metaharness__tool_invoke"),
+        ] {
+            let mutated = CALLER_CATALOGUE.replacen(from, to, 1);
+            assert_ne!(mutated, CALLER_CATALOGUE, "the mutation found {from}");
+            let outcome = caller_catalogue_vector(&mutated);
+            assert!(!outcome.passed, "{from} -> {to} still passed");
+        }
+    }
+
+    /// The names the vector pins are the catalogue's, in its order, under the vendor's prefix.
+    #[test]
+    fn the_offered_names_are_the_catalogue_entries_and_nothing_else() {
+        assert_eq!(
+            catalogue_names(&synthetic_catalogue()),
+            vec!["mcp__metaharness__fs_read", "mcp__metaharness__fs_stat"]
+        );
+        assert_eq!(
+            CATALOGUE_OFFERED,
+            ["mcp__metaharness__fs_read", "mcp__metaharness__fs_stat"]
+        );
+    }
+
+    /// The expected names are written in the vector, not read off the document under test: a
+    /// document whose renderings give other names fails the vector, even with an expectation
+    /// regenerated from it.
+    #[test]
+    fn a_catalogue_publishing_other_names_than_the_vector_pins_fails_it() {
+        let mut catalogue = synthetic_catalogue();
+        catalogue["operations"][1]["renderings"]["mcp"] = json!("fs_info");
+        let regenerated = CALLER_CATALOGUE.replace("fs_stat", "fs_info");
+        assert_ne!(
+            regenerated, CALLER_CATALOGUE,
+            "the expectation names fs_stat"
+        );
+        let outcome = caller_catalogue_vector_of(&regenerated, catalogue);
+        assert!(
+            !outcome.passed,
+            "a renamed entry passed against its own expectation"
+        );
+        assert!(
+            outcome.detail.contains("mcp renderings give"),
+            "{}",
+            outcome.detail
+        );
+    }
+
+    /// The offered names are read off what the adapter plans. A plan whose scratch copy lost an
+    /// entry fails the vector at its offered check, even against an expectation regenerated from
+    /// that plan, because the expected names are written in the vector.
+    #[test]
+    fn a_plan_whose_copy_drops_an_entry_fails_the_offered_check() {
+        let (spec, context) = caller_catalogue_case_of(synthetic_catalogue());
+        let mut plan = plan_launch(&spec, &context).expect("the case plans");
+        let served = catalogue_path(&context.scratch_root);
+        let copy = plan
+            .scratch_files
+            .iter_mut()
+            .find(|file| file.path == served)
+            .expect("the plan writes the served copy");
+        copy.document["operations"]
+            .as_array_mut()
+            .expect("operations")
+            .remove(1);
+        let regenerated = caller_catalogue_expectation(&plan);
+        let outcome = caller_catalogue_outcome(&regenerated, &plan);
+        assert!(!outcome.passed, "a plan serving one entry passed");
+        assert!(
+            outcome.detail.contains("session.started offered"),
+            "{}",
+            outcome.detail
+        );
+        assert!(
+            outcome
+                .detail
+                .contains("mcp renderings give [\"mcp__metaharness__fs_read\"]"),
+            "{}",
+            outcome.detail
+        );
+    }
+
+    /// A plan whose server is told to serve no catalogue, or a catalogue the plan does not write,
+    /// fails the vector naming which.
+    #[test]
+    fn a_plan_that_serves_no_copy_fails_the_vector() {
+        let (spec, context) = caller_catalogue_case_of(synthetic_catalogue());
+        let plan = plan_launch(&spec, &context).expect("the case plans");
+
+        let mut unnamed = plan.clone();
+        let args = unnamed.mcp_config.as_mut().expect("an owned launch")["mcpServers"]
+            ["metaharness"]["args"]
+            .as_array_mut()
+            .expect("server arguments");
+        let at = args
+            .iter()
+            .position(|arg| arg == "--catalogue")
+            .expect("the server is told to serve the copy");
+        args.drain(at..=at + 1);
+        let outcome = caller_catalogue_outcome(CALLER_CATALOGUE, &unnamed);
+        assert!(!outcome.passed);
+        assert!(
+            outcome.detail.contains("told to serve no catalogue"),
+            "{}",
+            outcome.detail
+        );
+
+        let mut unwritten = plan;
+        let served = catalogue_path(&context.scratch_root);
+        unwritten.scratch_files.retain(|file| file.path != served);
+        let outcome = caller_catalogue_outcome(CALLER_CATALOGUE, &unwritten);
+        assert!(!outcome.passed);
+        assert!(
+            outcome.detail.contains("writes no scratch file there"),
+            "{}",
+            outcome.detail
+        );
+    }
+
+    /// The expectation `plan` would be recorded as: what the vector observes, with the names the
+    /// plan's copy offers.
+    fn caller_catalogue_expectation(plan: &LaunchPlan) -> String {
+        let copy = served_copy(plan).expect("the plan serves a copy");
+        let observed = json!({
+            "args": plan.args,
+            "mcp_config": plan.mcp_config,
+            "scratch_files": [{ "path": copy.path, "document": copy.document }],
+            "offered_tools": offered_after_init(&catalogue_names(&copy.document)),
+        });
+        let mut text = serde_json::to_string_pretty(&observed).expect("serializes");
+        text.push('\n');
+        text
+    }
+
+    /// Regenerate the `c1-caller-catalogue` expectation from the current plan (amendment a40).
+    /// `#[ignore]`d because it writes into the source tree; run it after a deliberate change to
+    /// the owned launch, then read the diff.
+    #[test]
+    #[ignore = "writes fixtures/c1/caller-catalogue.json from the current plan; run after a deliberate change, then read the diff"]
+    fn regenerate_the_caller_catalogue_expectation() {
+        let (spec, context) = caller_catalogue_case_of(synthetic_catalogue());
+        let plan = plan_launch(&spec, &context).expect("the case plans");
+        let text = caller_catalogue_expectation(&plan);
+        let path = concat!(
+            env!("CARGO_MANIFEST_DIR"),
+            "/fixtures/c1/caller-catalogue.json"
         );
         std::fs::write(path, text).expect("the expectation is written");
     }
