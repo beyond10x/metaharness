@@ -20,6 +20,10 @@ was amended and the amendment is named here.
 - `shell_quote`, `shell_quote_path` and `PathNotUtf8::escaped` in `metaharness-claude` and `metaharness-codex`; `HOOK_COMMAND_PLUGIN_VARIABLES` and `SCRATCH_PATH_NAMES_PLUGIN_VARIABLE` in `metaharness-claude`; `metaharness::SCRATCH_PATH_NOT_UTF8` and `metaharness::SCRATCH_PATH_NAMES_PLUGIN_VARIABLE` (a37).
 - The loopback's upstream TLS leg is tested against a rustls upstream on 127.0.0.1 under a CA the test generates; an untrusted certificate is refused before the credential is sent. Dev-dependency `rcgen` 0.14.
 
+### Security
+
+- Security: update rustls, rustls-webpki and webpki-roots.
+
 ## [0.11.0] — 2026-10-21
 
 ### Changed
