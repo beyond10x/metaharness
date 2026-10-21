@@ -134,7 +134,7 @@ fn the_changelog_names_the_audited_non_strict_b10x_run_whose_exit_moved_to_3() {
 
     let entry: String = CHANGELOG
         .split("\n- ")
-        .find(|item| item.contains("story:b10x-record-carries-the-loops-cwd"))
+        .find(|item| item.contains("(a30"))
         .expect("the CHANGELOG carries the a30 entry")
         .to_owned();
     assert!(

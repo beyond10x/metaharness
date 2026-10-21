@@ -2,7 +2,7 @@
 //!
 //! Amendment a29 (`docs/design/metaharness-protocol-v0.1.md`) says of the move to harness 0.15.0:
 //! "Two model-facing tool replies change (`dir_list` of a non-regular entry, a capped `find`)".
-//! `CHANGELOG.md` `[Unreleased]` describes the capped `find` change as `depth_bound_reached: false`.
+//! `CHANGELOG.md` `[0.11.0]` describes the capped `find` change as `depth_bound_reached: false`.
 //!
 //! These cases drive the served surface (`metaharness mcp-serve`'s `Server` over the catalogue)
 //! and compare each reply with the one harness 0.13.3 (`798325f0`, the base pin) gave for the same
@@ -58,12 +58,12 @@ fn amendment_a29() -> String {
     rest[..end].to_owned()
 }
 
-/// The `[Unreleased]` section of `CHANGELOG.md`.
-fn unreleased_changelog() -> String {
+/// The `[0.11.0]` section of `CHANGELOG.md`, the release that moved harness to 0.15.
+fn release_changelog() -> String {
     let changelog = workspace_file("CHANGELOG.md");
     let start = changelog
-        .find("## [Unreleased]")
-        .expect("the changelog has an [Unreleased] section");
+        .find("## [0.11.0]")
+        .expect("the changelog has a [0.11.0] section");
     let rest = &changelog[start + 2..];
     let end = rest.find("\n## [").map_or(rest.len(), |at| at + 1);
     rest[..end].to_owned()
@@ -131,13 +131,13 @@ fn a29_names_every_served_entry_whose_reply_moved_from_0_13_3() {
     );
 }
 
-/// The `[Unreleased]` entry says a capped `find` "answers `depth_bound_reached: false`". The same
+/// The 0.11.0 entry says a capped `find` "answers `depth_bound_reached: false`". The same
 /// change moved `truncated`: 0.13.3 set it on any file visited after the cap, 0.15.0 only on a
 /// further match. Exactly `max_results` matches followed by a file the glob does not name now
 /// answers `truncated: false` where it answered `true`.
 #[test]
 fn the_changelog_names_every_field_a_capped_find_changed() {
-    let changelog = unreleased_changelog();
+    let changelog = release_changelog();
 
     let dir = tempfile::tempdir().expect("a workspace");
     std::fs::write(dir.path().join("a.txt"), "a").expect("seed");
@@ -165,7 +165,7 @@ fn the_changelog_names_every_field_a_capped_find_changed() {
     }
     assert!(
         unnamed.is_empty(),
-        "CHANGELOG [Unreleased] describes the capped `find` change and does not name:\n{}",
+        "CHANGELOG [0.11.0] describes the capped `find` change and does not name:\n{}",
         unnamed.join("\n")
     );
 }

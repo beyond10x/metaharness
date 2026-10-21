@@ -55,7 +55,7 @@ never links this workspace.
 
 ## Status
 
-**Pre-v1. Tagged `0.10.1` (2026-10-20).** The design in `docs/design/` is binding: where this code
+**Pre-v1. Tagged `0.11.0` (2026-10-21).** The design in `docs/design/` is binding: where this code
 and that document disagree, the document is amended rather than the disagreement left in the code.
 
 | verb | state |
@@ -78,9 +78,9 @@ per-change record of what was verified and what it cost to learn is in
 
 The gate is **`task check`** — ESS specification validation, `cargo fmt --check`,
 `cargo clippy --workspace --all-targets -D warnings`, `cargo test --workspace`.
-Install ESS 0.66.0 first: `spec/ess-inputs.yaml` declares `requires: ess 0.66.0`, the gate validates with
+Install ESS 0.67.0 first: `spec/ess-inputs.yaml` declares `requires: ess 0.67.0`, the gate validates with
 `--strict-requires`, and CI installs `ess-cli` from that release's commit (`.github/workflows/gate.yml`).
-The tests execute 90 conformance scenarios (87 generated, 3 authored) and check suite
+The tests execute 103 conformance scenarios (100 generated, 3 authored) and check suite
 freshness; [spec/coverage.md](spec/coverage.md) records the coverage and hardening bounds.
 Green before any push.
 

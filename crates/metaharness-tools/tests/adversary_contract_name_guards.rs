@@ -1,6 +1,6 @@
 //! Adversary cases, wave 3 of 2026-10-20, unit `story:metaharness-tools-adopts-tool-contract`.
 //!
-//! Amendment a32 and `CHANGELOG.md` `[Unreleased]` say a `tool-contract/1` command name "stands
+//! Amendment a32 and `CHANGELOG.md` `[0.11.0]` say a `tool-contract/1` command name "stands
 //! for" the harness entry harness maps it to, and `metaharness mcp-serve` performs a `tool_invoke`
 //! naming one as that entry. The contract those names come from (tools `0.2.0`, `60d4d0e3`,
 //! `contracts/code-editor/v1alpha1/contract.yaml`) gives `code.write` and `code.edit` an optional

@@ -3,326 +3,46 @@
 What changed. The design document carries *why*; where code and design disagreed, the design
 was amended and the amendment is named here.
 
-## [Unreleased]
+## [0.11.0] — 2026-10-21
 
 ### Changed
 
-- `metaharness-b10x` pins harness **0.15.0** (design amendment a29; Atlas ADR 0097 point 2,
-  `story:b10x-adapter-on-harness-over-llm`): `PINNED_VERSIONS` `0.13.3` → `0.15.0` and
-  `HARNESS_REVISION` `798325f03cf5a18df8fadb346d31b314826136ec` →
-  `dd5c2a66218a5f2555c4a9fdab6fdfac8515cc6d`, the commit the annotated tag `0.15.0` points at
-  (reachable from harness `main`), never the tag object, because the AEP eval compares it with
-  `git rev-parse HEAD`. Every harness git pin in `crates/metaharness-b10x/Cargo.toml` and
-  `crates/metaharness-tools/Cargo.toml` moves to that commit together, so `Cargo.lock` holds one
-  harness revision (`b10x-harness-catalogue`, `-loop`, `-wire` at 0.15.0) and one tools revision
-  (`b10x-tool-contract`, `-fs`, `-code-editor`, `-toolchain` at tag 0.2.0, `60d4d0e3`, Apache-2.0,
-  which harness 0.15.0 pins); `b10x-harness-toolchain` leaves the lock. A unit test now holds the
-  constants, both manifests and the lock to that one revision and that release version.
-- `b10x-harness-tools`, which harness 0.15.0 deleted, is replaced by `b10x-harness-catalogue` in
-  both manifests, imported under its own lib name `harness_catalogue::` with no `package =`
-  rename; `entry_names` and the re-exported `Catalogue`, `Verbs`, `LocalOperations`,
-  `Operations`, the three verb names, `operation_of`, `subjects_of` and `Subject` are the same
-  symbols there. The two manifest comments that described the old crate are deleted.
-- What `metaharness mcp-serve` answers a model moves with the pin, because at 0.15.0 the files it
-  serves are read and written by the `tools` crates through harness's adapter. Harness's own
-  `[0.15.0]` entry names two reply changes and says a capped `find` leaves `paths` and `truncated`
-  unchanged; the same calls on both releases (70 calls, 17 moved; table and inputs in the research
-  page) show these moves, 0.13.3 → 0.15.0. None crosses the `metaharness.event/1` wire, where b10x
-  writes `content: null` on every `tool.result`.
-  - `dir_list`: a socket, FIFO or device was `kind: "file"` with the entry's length (`bytes: 0`
-    for a FIFO) and is `kind: "other"`, `bytes: null`.
-  - `find` capped by `max_results`: `depth_bound_reached` was `true` and is `false` when the cap
-    is reached before the walk would have gone on into a directory past the depth bound; and
-    `truncated` was `true` and is `false` when only files the glob does not match follow the cap
-    (0.13.3 set it on any file visited past the cap, 0.15.0 only on a further match).
-  - `find` with an empty `glob`: the refusal's *a find has to name* reads *a glob has to name*.
-  - `file_read` with `limit: 0` was an empty window (`"text": ""`, `truncated: true`) and is
-    refused: *`limit` is how many lines to read and 0 names none. `<path>` was not read.*
-  - `file_read` whose `max_bytes` equals a last line without a trailing newline cut that line and
-    answered `truncated: true`, and now returns it whole, `truncated: false`.
-  - `file_write` onto a directory or with an empty `path`: *`<path>`: Is a directory (os error 21)*
-    reads *`<path>` is not a regular file*. A new name spelled with a trailing `/` (`new.txt/`) was
-    written as `new.txt` and is refused with the same words.
-  - `file_edit` whose `old` overlaps itself (`aa` in `aaa`) was applied and is refused as
-    appearing 2 times; every `file_edit` refusal for an empty `old`, no match or several matches
-    gains ` (edit 0)`; a non-UTF-8 file's *`<path>`: stream did not contain valid UTF-8* reads
-    *`<path>` is not UTF-8 text; an edit needs text to find `old` in*; a directory's
-    *`<path>`: Is a directory (os error 21)* reads *`<path>` is not a regular file*.
-- The b10x golden loop record (`crates/metaharness-b10x/fixtures/golden/`) is re-recorded from
-  `b10x-harness 0.15.0` against harness's own `fake_responses.py` `flat-tool` scenario, on
-  loopback only and with no credential; `golden-version-pair` passes without its warning for the
-  first time since 0.10.2. The replayed stream changes in two fields of `session.started`
-  (`harness_version` `0.9.1` → `0.15.0`, `credential_source` `api-key:environment` → `none`);
-  `contract-result-b10x.json` reads `provider: "b10x 0.15.0"`; the native fixture expects
-  `0.15.0`. The four enforcement excerpts stay 0.9.1 captures.
-- **Behaviour change:** `metaharness run b10x --hermetic strict --cwd <copy> --scratch-cwd` now
-  exits **3** where it exited 0. A strict b10x run without `--cwd` moves the same way. So does
-  every b10x run with `--audit`, in any `--hermetic` mode including none (`--hermetic --audit`,
-  plain `--audit`), with or without a declared copy, because `--audit` judges the same floor. `--hermetic` without `--audit` owes no verdict and still exits 0. The
-  cause is design amendment a30 (`story:b10x-record-carries-the-loops-cwd`, Atlas ADR 0098
-  point 2): the b10x opening record's `cwd` is `null`, where it was metaharness's own planned
-  directory echoed back. The pinned release, harness 0.15.0, writes no working directory on its
-  `started` record. 0.15.1 writes a top-level `cwd`, and reading it is
-  `story:b10x-h7-from-the-loops-cwd`; until then this adapter ignores that key on purpose. The
-  floor's H7 row now reads `unk`, *"the loop did not report its working directory"*, on the
-  `direct_provider` class, before the attestation is read. Before, a declared copy read `ok` on
-  the plan, an a6 `--cwd` read `gap` and a metaharness-created directory read `ok`. A strict a6
-  `--cwd` run without the declaration still exits 1, on H11. The vendor kinds are unchanged.
-  `B10xSeams::new` drops its third (`cwd`) parameter. The b10x golden `loop.expected.jsonl`
-  line 1 changes in that one field (`"cwd":"/scratch/run/work"` → `"cwd":null`). The
-  `golden-loop-record` vector now fails a recording whose `started` line names a `cwd`, and
-  `checked` stays 7. *The next two entries move this again.*
-- `metaharness-b10x` pins harness **0.15.1** (design amendment a31,
-  `story:b10x-h7-from-the-loops-cwd`): `PINNED_VERSIONS` `0.15.0` → `0.15.1` and
-  `HARNESS_REVISION` `dd5c2a66218a5f2555c4a9fdab6fdfac8515cc6d` →
-  `f0870131e58df3e1119860d0a255f46589026d62`, the commit the annotated tag `0.15.1` (tag object
-  `a0a2dfdaf5b2702db5c77412c28f98b95f0c8794`) points at, reachable from harness `main`. Both
-  manifests and the lock move together: `b10x-harness-catalogue`, `-loop` and `-wire` at 0.15.1,
-  the tools crates unchanged at tag 0.2.0 (`60d4d0e3`), and no `b10x-llm-*` crate in the lock
-  (harness 0.15.1 moves llm to 0.8.1 in its model port, which this workspace does not link). What
-  `metaharness mcp-serve` answers does not move: `crates/harness-catalogue`, `crates/harness-wire`
-  and `crates/harness-substrate` are byte-identical from `dd5c2a66` to `f0870131`. The b10x golden
-  is re-recorded from `b10x-harness 0.15.1` with harness's `fake_responses.py` `flat-tool`, on
-  loopback only and with no credential, inside a private root that puts the workspace at
-  `/scratch/run/work`, so the `cwd` the `started` line now carries names no machine path.
-  `loop.expected.jsonl` line 1 moves in two fields (`harness_version` `0.15.0` → `0.15.1`, `cwd`
-  `null` → `"/scratch/run/work"`); `contract-result-b10x.json` reads `provider: "b10x 0.15.1"`
-  and `checked` stays 7; the native fixture expects `0.15.1`.
-- **Behaviour change, undoing most of the previous one:** the b10x opening record's `cwd` is the
-  working directory the loop reported — harness 0.15.1 writes it on `started`, the canonical root
-  its file tools act in — and `null` only when the record names none (design amendment a31,
-  `story:b10x-h7-from-the-loops-cwd`, Atlas ADR 0098 point 2). The floor's H7 row compares it with
-  the directory metaharness planned: `ok`, *which metaharness created*, for the directory
-  metaharness made; `ok`, *which was declared, not created*, for the copy `--cwd --scratch-cwd`
-  declared; `gap` for an a6 `--cwd` tree and for any other directory; `unk` when the record names
-  none. Directories are compared, not spellings: two names are one directory when they are equal
-  or when both are absolute and resolve (links followed) to the same path, so a `TMPDIR` reached
-  through a link does not turn the created directory into a `gap`. Nothing is resolved against
-  metaharness's own process: a relative name, and a name whose resolution reaches `/proc` or
-  `/dev/fd` at any step (`/proc/self/cwd`, `/proc/<pid>/cwd`, `/dev/fd/<n>`, a link into them), is
-  compared as spelled. `hermetic_floor` now reads the filesystem when it is called, so evaluated
-  after the directory is gone a record naming it under another spelling reads `gap`. So `metaharness run b10x --hermetic strict
-  --cwd <copy> --scratch-cwd`, a strict b10x run without `--cwd` and every b10x run with `--audit`
-  (`--hermetic --audit`, plain `--audit`), with or without a declared copy, exit **0** again when
-  the loop reports the created or declared directory, which the pinned loop does unless it runs
-  under `--substrate <socket>` or in a directory whose name is not UTF-8. They still exit **3**
-  when the record names no directory (`--substrate <socket>`, a root whose name is not UTF-8, a
-  binary older than 0.15.1) and exit **1** when it names another. A strict a6 `--cwd` run without the
-  declaration still exits 1; its H7 is `gap` again (*metaharness could not impose it*), beside
-  H11's `gap`. `metaharness project --from harness-json` now states the record's `cwd` on the
-  opening node. The directory comparison applies on every kind; no vendor-kind vector or fixture
-  moves. The `golden-loop-record` vector now fails a replay whose opening record does not state the
-  recorded `cwd`, where it failed a recording that named one.
-- The specification and the gate move to ESS **0.66.0** (`story:ess-pin-0-66-0`): both manifests
-  declare `requires: ess 0.66.0`, CI installs `ess-cli` at `145a1b9d5567a7601b95ee86e3a88f44dbdc0dd5`
-  (tag `0.66.0`), and `spec/conformance.json` is regenerated with `--scenarios spec`: 90 scenarios,
-  87 generated and 3 authored (`spec/scenarios/`). Two guards change because 0.66.0's per-child
-  witnessing (`ESS-SYNTH-022`) showed them wrong: `positive-terminal-record` reads
-  `is_error == false`, since under ESS's three-valued logic its `subtype == "success"` disjunct
-  could never select it, and `valid-finite-terms` drops the `cap_micro_usd > 0` its other two
-  conjuncts imply. The authored scenarios hold a budget word beside `is_error: false`,
-  `is_error: true` beside subtype `success`, and a charge above a positive cap. A terminal record
-  without `is_error` is outside what the specification decides; two tests beside
-  `Run::reason_from_record` pin production's answer for it (`error`, or `completed` for the legacy
-  subtype `success`) (`spec/coverage.md`).
-- `metaharness-claude` pins Claude Code **2.1.304 and 2.1.305** (design amendment a33,
-  `story:claude-code-2-1-304-declared`): `PINNED_VERSIONS` `["2.1.259"]` → `["2.1.304", "2.1.305"]`,
-  so H9 reads `ok` on a record of either, and the `contract_result` provider reads
-  `claude 2.1.304, 2.1.305`. Each binary is qualified credential-free: the native fixture ran the
-  production driver against each under `credentials: none` and, new, `credentials: loopback` (fake
-  custody token, owned stub upstream, loopback-only namespace). 2.1.303 stays off the pin. Surface,
-  method and what stays unverified: `docs/research/2026-10-21-claude-code-2.1.304-adapter-surface.md`.
-- `--strict-version` refuses an off-pin Claude binary **before the spawn**. The Claude launch never
-  read the flag, so the off-pin version was first seen in the opening record after the vendor had the
-  prompt; it now reads the `--version` of the binary on the child's `PATH`, with the plan's own
-  environment, and refuses with exit 2 when the version is unpinned or unreadable, or when
-  `--version` has not exited within 5 seconds (the child is killed and the refusal says so). A
-  synthetic runner has no binary to ask and is refused under the flag, as on b10x.
-- H1a admits the vendor's built-in plugins by name **and** source, per pinned version.
-  `metaharness-claude` declares the twelve plugins each pinned binary compiles in
-  (`BUILTIN_PLUGINS`, keyed by version and held to `PINNED_VERSIONS` by a test; read from each
-  binary) and their source `<name>@builtin`; the floor (`FloorInputs::builtin_plugins`,
-  `metaharness::builtin_plugins`) reads a record plugin `ok` only when it is a declared installed
-  plugin or a built-in of the version the record reports, by name and source, and the row names each
-  built-in it admitted. A plugin carrying a built-in's name with any other source, or no source, stays
-  `gap`; so does any built-in in a record on an unpinned version, and a plugin with no name, which the
-  comparison used to drop. A credential-free 2.1.304 or 2.1.305 run with no declared plugin therefore
-  reads H1a `ok` where it read `gap`; takt's operator-login list (`cc-plugin-sec-default`,
-  `-agents-md`, `-telemetry`, `-plugin-authoring`) reads `ok` and names all four.
-- H4 reads `ok` under `credentials: none` with a declared endpoint. The record names
-  `ANTHROPIC_API_KEY` there because the child holds the plan's own placeholder, and H4 called it an
-  undeclared operator key. The floor now recognises the placeholder from the run's attestation (the
-  exact H4 sentence the launch writes, `metaharness_claude::ENDPOINT_KEY_POSTURE`,
-  `FloorInputs::endpoint_key_posture`), never from the variable's name; an operator key reads as
-  before. The launch writes that sentence only when no Claude managed settings exist
-  (`metaharness_claude::MANAGED_SETTINGS_PATHS`: `/etc/claude-code/managed-settings.json`, its
-  `managed-settings.d`, and the WSL pair; `LaunchContext::managed_settings`), because their `env` or
-  `apiKeyHelper` can replace the placeholder past `--setting-sources ""`. With any present, H4 is
-  attested unavailable naming them and the floor reads `gap` with that reason.
-- `CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC=1` is set under `credentials: none` as well as
-  `loopback`, and still never under an operator login or an API key: it keeps the
-  `cc-plugin-telemetry` built-in and first-party analytics out of a run whose model traffic
-  metaharness directs, while under a real credential it also gates account-keyed behaviour no
-  credential-free probe can observe. The c1 launch fixtures do not move (both are credentialed).
-- H11's Claude wording follows the observation at both pins: with `--setting-sources ""` a canary of
-  every memory shape in the cwd and in an ancestor reached no request, while the same binary sent
-  every one with the project and local sources on. The ancestor walk still refuses; the refusal and
-  the `--cwd` attestation now say why (`fixtures/c1/memory-ancestor-refusal.json` moves with it).
-  The walk still looks for `CLAUDE.md` and `AGENTS.md` and nothing else. The loader also reads
-  `.claude/CLAUDE.md`, `CLAUDE.local.md`, `.claude/AGENTS.md` and `.claude/rules/**/*.md` from an
-  ancestor; the walk does not look for those (a33), and `story:claude-h11-memory-walk-shapes`
-  (decided: option C) covers them, because looking for them refused every scratch run whose
-  `TMPDIR` sits under a `HOME` holding `~/.claude/CLAUDE.md`.
-- `metaharness run codex --hermetic strict` still exits 3, now with **H1b `ok`** (design amendment
-  a34, `story:codex-strict-record-rows`, decision D1 = B: invariant 3 and amendment a13 stand, so no
-  record row is decided from the launch). The scratch `config.toml` sets `personality = "pragmatic"`,
-  the 0.153.4 binary's own default (`metaharness_codex::PERSONALITY`), and H1b compares the
-  personality the rollout's first `turn_context` records with it: `ok` when equal, `gap` when the
-  record names another, `unk` when it names none (`FloorInputs::planned_output_style`). The recorded
-  value is the session's record of the setting, not proof of what the model was told: with a managed
-  `features.personality = false` the session still recorded `"pragmatic"`. A launch that writes no
-  output style (Claude, b10x) reads H1b as before. Native, credential-free, through the built driver:
-  H1b `ok`, H1a, H4 and H5 `unk`, exit 3.
-- The Codex launch looks for the config layers a scratch `CODEX_HOME` does not reach, as the Claude
-  launch looks for managed settings: `/etc/codex/config.toml`, `/etc/codex/managed_config.toml`,
-  `/etc/codex/requirements.toml` (`metaharness_codex::CONFIG_LAYER_PATHS`) and, under `--cwd`, a
-  project `.codex/config.toml` in the cwd and each directory above it up to the nearest `.git`
-  (`LaunchContext::config_layers`). When any exists, H2 and H1b are attested unavailable naming them,
-  and H1b reads `unk` with that reason even when the record names the launch's personality. None
-  exists on the machine this was built on. The check covers file layers: the cloud layer sources the
-  binary names, `cloud_requirements` and `cloud_managed_config`, are not checked, and what they set
-  under a ChatGPT login is unverified; the H1b and H2 claims say so.
-- The Codex opening record is completed from the first `turn_context`. The rollout reader holds
-  `session.started`, and every event after it, from `session_meta` until that record and sets
-  `output_style` from its `personality`; any record other than the preamble ones 0.153.4 writes in
-  between (`task_started`, context messages, `world_state`) releases it unchanged, as does the end of
-  the record. Event order and every timestamp are unchanged; `session.started` arrives a few records
-  later. A hook request never waits for it: one that arrives during the hold releases the opening
-  record at once, without the personality (H1b `unk` on that run), and the call goes the run loop's
-  ordinary way — admitted, decided or deadlined, abandoned on a halt. The hold keeps only
-  `turn.started` and `opaque` events, so the reader's `finish` never returns a call (`Run::wind_up`
-  does not admit what `finish` returns). `metaharness project --from codex-rollout` cites each
-  held event's own record line (`RolloutReader::push_line_sourced`).
-  `fixtures/golden/rollout.expected.jsonl` moves on one line (`output_style` `null` →
-  `"pragmatic"`); three replay vectors are added, so
-  `conformance codex` checks 21 (`contract-result-codex.json`, 18 → 21).
-- H1a, H4 and H5 stay `unk` on Codex and now say why: the 0.153.4 rollout carries no plugin list,
-  credential source or MCP server list, and deciding them from what the launch imposed is open under
-  invariant 3 (`metaharness_codex::RECORD_SILENCES`, appended by the floor through
-  `FloorInputs::record_silences`; it decides nothing).
-- The Codex H2 attestation names only the file the launch writes, `{home}/config.toml`. It named
-  `{home}/hooks.json` as a source the launch wrote, and no launch writes one.
-- `--strict-version` refuses an off-pin Codex binary **before anything is written or spawned**. The
-  Codex launch never read the flag; it now runs the guard built for Claude, made generic
-  (`guard_strict_version`): `codex` resolved on the child's `PATH`, its `--version` read with the
-  plan's environment within 5 seconds, exit 2 when unpinned, unreadable or late. Observed: 0.153.4
-  admitted, codex-cli 0.160.0 refused with nothing reaching the fixture provider.
-- `--context <FILE>` (`RunSpec::context`, builder `with_context`) is **widened from b10x to every
-  kind** (design amendment a35, `story:session-request-carries-context-files`, Atlas ADR 0098). It
-  was refused on `claude` and `codex` as `ScopeUnsupported`, which now names `--write-scope` alone.
-  - **On b10x `--context` is narrowed, not widened.** It now requires `--cwd`, and it refuses an
-    absolute path, a path outside the tree, a file git does not track, a symbolic link, content
-    that is not text, and a list past either cap — every one of which the previous release passed
-    to the loop's own `--context` unchecked. A b10x caller that handed the loop such a file now gets
-    exit 2 before the spawn.
-  - The file is named relative to `--cwd`, which is required, opened beneath that tree with
-    `openat2` and `RESOLVE_BENEATH | RESOLVE_NO_SYMLINKS`, read once, and the same bytes are digested
-    and handed over. Claude Code and codex get them introduced as reference data, not instructions;
-    the b10x loop wraps them itself.
-  - **Claude Code gets the files as the value of `--append-system-prompt`**, and `-p` carries the
-    task alone; **codex gets them inline in the prompt**, ahead of the task. The list is wrapped in
-    `<context-files-N>` and each file sits between `<context-file-N path="…" bytes="…" sha256="…">`
-    and `</context-file-N>`; each `N` is the smallest index whose closing line the files do not
-    contain. The b10x loop gets metaharness's copy of the bytes, under the run's scratch root,
-    through its own `--context`.
-  - Refused before the spawn, exit 2, naming the path (`Refusal::ContextFile`): no `--cwd`; an
-    absolute path or one with `..`; a path that is or passes through a symbolic link; not a regular
-    file; not there; not UTF-8 text without a NUL; not tracked by git in the tree, through a `.git`
-    gitfile too (`git ls-files` with a constructed environment that fetches nothing:
-    `GIT_NO_LAZY_FETCH=1`, `protocol.allow=never`); more than 16 files; more than 65,536 bytes of
-    content and rendered path together.
-  - Every argument the Claude and codex launches build is measured against Linux's single-argument
-    limit (131,072 bytes with the NUL, `MAX_ARG_STRLEN`) and refused by name before the spawn —
-    the argument, its size and each context file with its size — instead of failing with `E2BIG`.
-    This applies to a run without `--context` too.
-  - `session.started.context_files` lists each file's `path`, `sha256`, `bytes` and `channel`:
-    `system-prompt` on Claude Code and on b10x, whose loop renders a `--context` file into its
-    standing instruction under `trust="operator"` (escaping `<` and `&`), and `user-prompt` on
-    codex. The key is absent when no file was declared, so no committed stream, fixture or trace
-    document changes.
-  - A file tracked in an initialised submodule of the tree is accepted: the tracked check runs
-    `git ls-files --recurse-submodules`, with the same exact match.
-  - Measured on Claude Code 2.1.304 and 2.1.305: an `@path` in the user turn (`-p`, stdin,
-    stream-json input) is read into the request as a synthesised Read result that no tool call, hook
-    or event shows; in `--append-system-prompt` and `--system-prompt` it stays text.
-    `metaharness_claude::MENTION_CANARIES` records it per pinned version, a test refuses a pin
-    without a row, and the native fixture, which `task check` does not run, re-measures each binary.
-    **The task text, which stays in `-p`, is still exposed**; a run's task should not hold an
-    `@path` it does not want read.
-  - One C1 vector per kind, `c1-context-files`: `contract-result-claude.json` 28 → 29,
-    `-codex.json` 21 → 22, `-b10x.json` 7 → 8. `metaharness.workspace.DeclareContextFiles` adds
-    thirteen ESS scenarios, one per refusal production raises and one accepted (90 → 103). The
-    Claude native fixture gains two cases, 7 → 9 per binary.
+- **Breaking:** b10x `--context` needs `--cwd` and refuses absolute, untracked, linked, non-text or oversized files, exit 2 (a35).
+- **Breaking:** b10x strict and `--audit` runs read H7 from the loop's recorded `cwd`: exit 3 if it names none, 1 if another (a30, a31).
+- **Breaking:** `--strict-version` refuses an off-pin or unreadable Claude or Codex binary before the spawn, exit 2.
+- **Breaking:** under `--tool-surface owned` a contract-named `tool_invoke` is decided as its entry, no longer denied (a32).
+- Specification and gate on ESS 0.67.0: `requires: ess 0.67.0`, CI `ess-cli` at the tag's commit, 103 scenarios, 3 authored.
+- harness pin 0.13.3 → 0.15.1 (`f0870131`): `b10x-harness-catalogue` replaces `b10x-harness-tools`; tools crates 0.2.0 (a29, a31).
+- `mcp-serve` replies follow harness 0.15: `dir_list` `kind: "other"`, `file_read` `limit: 0` refused, new refusal wordings.
+- A capped `find` sets `truncated` and `depth_bound_reached` only when a further match or directory follows the cap (harness 0.15).
+- b10x golden loop record re-recorded from harness 0.15.1, credential-free on loopback; its `cwd` is `/scratch/run/work`.
+- Claude Code pins 2.1.304 and 2.1.305 (a33), each qualified under `credentials: none` and `credentials: loopback`.
+- H1a admits each pinned Claude version's twelve built-in plugins by name and `@builtin` source; other sources stay `gap`.
+- H4 reads `ok` for the plan's placeholder key under `credentials: none`; `gap` naming any Claude managed settings file present.
+- `CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC=1` is set under `credentials: none` as well as `loopback`.
+- H11's Claude refusal and `--cwd` attestation say why the memory ancestor walk refuses (`memory-ancestor-refusal.json`).
+- Codex strict runs read H1b `ok` when the first `turn_context` records the launch's `personality = "pragmatic"`; still exit 3 (a34).
+- Codex launch checks `/etc/codex/*` and project `.codex/config.toml` layers; when present, H2 and H1b are attested unavailable.
+- Codex opening record takes `output_style` from the first `turn_context`; golden rollout moves one line; `conformance codex` 21.
+- Codex H1a, H4 and H5 stay `unk` and name the record silence behind each (`RECORD_SILENCES`).
+- Claude and Codex launch arguments over 131,072 bytes (`MAX_ARG_STRLEN`) are refused by name before the spawn, not `E2BIG`.
 
 ### Added
 
-- `docs/research/2026-10-21-codex-0.153.4-record-surface.md`: what the 0.153.4 record carries for
-  the floor, observed credential-free where a run can observe it and labelled unverified otherwise —
-  the default `personality` (`pragmatic`), the record order around the first `turn_context`, the
-  `apps`, `remote_plugin` and `plugins` features on by default in a scratch home, and which config
-  layers decide the recorded personality (`/etc/codex/config.toml` below the scratch file;
-  `/etc/codex/managed_config.toml` and a project's `.codex/config.toml` above it — under `read-only`
-  only a trusted project's, under the `workspace-write` sandbox every `--cwd` launch uses an
-  untrusted one's too).
+- `--context <FILE>` on `claude` (`--append-system-prompt`) and `codex` (inline before the task), read beneath `--cwd` (a35).
+- `session.started.context_files` lists each context file's `path`, `sha256`, `bytes` and `channel`.
+- `metaharness_claude::MENTION_CANARIES`: per pinned version, whether an `@path` in the user turn is read into the request.
+- `fs.read`, `fs.list`, `fs.glob`, `code.write` and `code.edit` accepted for their harness entries; `expected_sha256` refused (a32).
+- `c1-context-files` vector per kind (Claude 29, Codex 22, b10x 8) and 13 `DeclareContextFiles` ESS scenarios.
+- Research pages under `docs/research/`: Claude Code 2.1.304, Codex 0.153.4, harness 0.15.0 and 0.15.1 adapter surfaces.
 
-- metaharness's own tool surface accepts the `tool-contract/1` command names harness maps
-  wherever a verb names an entry. `fs.read`, `fs.list`, `fs.glob`, `code.write` and `code.edit`
-  stand for `file_read`, `dir_list`, `find`, `file_write` and `file_edit` (design amendment a32,
-  `story:metaharness-tools-adopts-tool-contract`, Atlas ADR 0095 point 2).
-  - The mapping's source is harness's own `harness_catalogue::harness_operation` at 0.15.1
-    (`f0870131`, `crates/harness-catalogue/src/local.rs:118-143`). metaharness keeps no name table
-    and takes no `tools` dependency.
-  - `metaharness mcp-serve` performs a `tool_invoke`, and answers a `tool_describe`, that names one
-    of these as its entry.
-  - `resolve_verb` and `subjects_of_verb` take a new `VerbSurface` argument, `Served` or
-    `HarnessLoop`, and translate contract names only for `Served`. The run passes `Served` under
-    `--tool-surface owned` and `HarnessLoop` for a b10x record, and gives both functions the same
-    value. So on the owned surface a step's subject scope refuses a contract name on a path outside
-    it exactly as it refuses the entry. On a b10x record, where the pinned loop's verbs answer
-    harness names only and refused the call, a contract name still reads as no operation and no
-    subject.
-  - Harness names are still accepted. A dotted name harness does not map (`code.delete`,
-    `process.run`) stays unknown. The served catalogue (`tools/list`, `tool_search`) keeps
-    harness's names.
-  - **Behaviour change:** under `--tool-surface owned` with a frame, such a `tool_invoke` used to be
-    denied as outside the operation vocabulary, with an `UNCOVERED_TOOL` warning and empty
-    `operations`. It is now decided as its entry, and its `tool.requested` carries the entry's
-    operation and subject.
-  - A contract-named `tool_invoke` that carries `expected_sha256` (any value, `null` included) is
-    refused with `isError: true` and nothing changes. tool-contract/1 makes that field a precondition
-    of `code.write` and `code.edit`, answered by `precondition-failed`. Harness 0.15.1 performs both
-    entries without reading it (`local.rs:520,543`, `catalogue.rs:476-483`), so the refusal names
-    `precondition-failed` and says the served implementation does not run that check yet.
-  - A harness-named call is unchanged: a `file_write` or `file_edit` carrying the field is still
-    performed with the field ignored, although its schema says `additionalProperties: false`.
-- `docs/research/2026-10-20-b10x-harness-0.15.1-adapter-surface.md`: every adapter claim about
-  the binary, verified or labelled unverified against 0.15.1 — the `started` record's `cwd`
-  observed in the golden recording and through the native fixture (including a run whose `TMPDIR`
-  passes through a link, where the loop records the canonical directory), the served surface read
-  as unchanged at source, and the 0.15.1 changes the adapter does not read.
+### Fixed
 
-- `docs/research/2026-10-20-b10x-harness-0.15.0-adapter-surface.md`: every adapter claim about
-  the binary, verified or labelled unverified against 0.15.0, from the golden recording, the
-  credential-free native fixture, a two-release probe of the served replies and a source read at
-  `dd5c2a66`; among them that the `started` record names no working directory, and the 0.13.3
-  and 0.15.0 reply of every served call that moved.
-- Found after the 70 calls (research page, second table): a missing path outside the workspace is
-  now refused with the same text as an existing one, where 0.13.3 said *No such file or directory*
-  and so told a model whether it exists; `file_edit` of `plain.txt/` and `file_edit` or
-  `file_write` of a link spelled with a trailing `/` are now applied to the file, through the link,
-  where 0.13.3 refused them only because the OS answered ENOTDIR. That is the tools code-editor
-  contract (`link/` is `link`, a link landing inside the workspace is followed), an intended
-  difference, not a regression. Every target stays inside the workspace.
+- Codex H2 attestation no longer names `{home}/hooks.json`, which no launch writes.
+
+### Security
+
+- `mcp-serve` refuses a missing path outside the workspace with the same text as an existing one (harness 0.15).
 
 ## [0.10.1] — 2026-10-20
 
