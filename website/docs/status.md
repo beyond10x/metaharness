@@ -47,7 +47,12 @@ is a driven fact about 0.144.0 and an inference about 0.145.0 until one machine 
 That is the claim the whole design exists to be able to make, and it is the one thing no free test
 tier can reach.
 
-Live runs cost money, sit behind `METAHARNESS_LIVE=1`, and are **never** part of `task check`.
+Live runs cost money and are **never** part of `task check`. `METAHARNESS_LIVE=1` is checked by
+`metaharness aep drive run` and `metaharness aep drive resume` for a step map with an `llm` step, by
+`metaharness aep drive eval run` without `--stream`, by the repository's `aep-eval` runner with
+`--spend`, and by its ignored live tests. A plain `metaharness run` does not check
+`METAHARNESS_LIVE`: it spawns the harness with the operator's credentials whatever the variable
+holds.
 
 ## Not built — and refusing by name
 

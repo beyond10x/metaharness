@@ -3,6 +3,12 @@
 What changed. The design document carries *why*; where code and design disagreed, the design
 was amended and the amendment is named here.
 
+## [Unreleased]
+
+### Changed
+
+- `README.md`, the status page and the quickstart scope `METAHARNESS_LIVE=1` to the commands that check it (`metaharness aep drive run`, `resume` and `eval run`, the `aep-eval` runner with `--spend`, the ignored live tests) and say that a plain `metaharness run` does not check it; `crates/metaharness-cli/tests/live_scope_documented.rs` holds every page that names the variable to that.
+
 ## [0.12.0] — 2026-10-21
 
 ### Changed

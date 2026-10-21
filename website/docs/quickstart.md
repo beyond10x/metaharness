@@ -52,6 +52,11 @@ Use `metaharness aep drive resume RUN_ID` with the same live opt-in for a compat
 model-backed run. A resume may narrow its recorded budget, never raise it. Use `--aep-binary`
 when the planning executable must be selected explicitly. Live evaluation is
 `metaharness aep drive eval run`; `aep drive eval run --stream` reads recorded evidence offline.
+
+`METAHARNESS_LIVE=1` is checked by `metaharness aep drive run` and `metaharness aep drive resume`
+for a step map with an `llm` step, and by `metaharness aep drive eval run` without `--stream`. A
+plain `metaharness run` does not check `METAHARNESS_LIVE`: it spawns the harness with the
+operator's credentials whatever the variable holds.
 See the [AEP integration guide](https://beyond10x.github.io/docs/aep/guides/integrate-a-harness/)
 for step maps, operator pauses and native transition hooks.
 
