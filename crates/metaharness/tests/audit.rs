@@ -10,10 +10,10 @@ use metaharness::protocol::{
     TranscriptRef, UnavailableControl, Verdict, WithheldTool,
 };
 use metaharness::{
-    AuditReport, AuditorRun, FakeAuditor, FloorInputs, Input, ManualClock, Metaharness, Refusal,
-    RunExit, ScriptStep, ScriptedLog, ScriptedRunner, ScriptedSeams, auditor_argv,
-    count_verdict_rows, decision_census, exit_without_audit, hermetic_floor, run_auditor,
-    withheld_tools,
+    AuditReport, AuditorRun, BuiltinPlugin, ClaudeSeams, FakeAuditor, FloorInputs, Input,
+    ManualClock, Metaharness, Refusal, RunExit, ScriptStep, ScriptedLog, ScriptedRunner,
+    ScriptedSeams, auditor_argv, builtin_plugins, count_verdict_rows, decision_census,
+    exit_without_audit, hermetic_floor, run_auditor, withheld_tools,
 };
 
 /// An opening record whose every observable field is present and correct.
@@ -78,6 +78,8 @@ fn inputs<'a>(spec: &'a RunSpec, pins: &'a [String], plugins: &'a [String]) -> F
         pinned_versions: pins,
         planned_cwd: Some("/scratch/work"),
         declared_plugins: plugins,
+        builtin_plugins: &[],
+        endpoint_key_posture: None,
         planned_mcp_servers: &[],
     }
 }
@@ -310,6 +312,277 @@ fn a_plugin_the_run_did_not_declare_is_a_gap() {
     );
 }
 
+// ------------------------------------------------- built-in plugins (amendment a33)
+
+/// A plugin entry as a vendor opening record spells it: a name and a source, no version.
+fn plugin(name: &str, source: Option<&str>) -> PluginRef {
+    PluginRef {
+        name: Some(name.to_string()),
+        source: source.map(ToString::to_string),
+        version: None,
+    }
+}
+
+/// The four plugins takt's operator-login session on Claude Code 2.1.304 opened with, in the
+/// order its `system/init` record listed them (relayed 2026-10-20; the story's *Observed in an
+/// operator-login session*).
+fn operator_login_builtins() -> Vec<PluginRef> {
+    [
+        "cc-plugin-sec-default",
+        "cc-plugin-agents-md",
+        "cc-plugin-telemetry",
+        "cc-plugin-plugin-authoring",
+    ]
+    .into_iter()
+    .map(|name| plugin(name, Some(&format!("{name}@builtin"))))
+    .collect()
+}
+
+/// An opening record on the first pinned Claude version carrying these plugins: the built-in lists
+/// are keyed by the version the record reports.
+fn with_plugins(plugins: Vec<PluginRef>) -> Event {
+    with_plugins_on(metaharness_claude::PINNED_VERSIONS[0], plugins)
+}
+
+fn with_plugins_on(version: &str, plugins: Vec<PluginRef>) -> Event {
+    with_record(good_record(), |record| {
+        if let Event::SessionStarted {
+            plugins: list,
+            harness_version,
+            ..
+        } = record
+        {
+            *list = Some(plugins);
+            *harness_version = Some(version.to_string());
+        }
+    })
+}
+
+fn h1a(record: Event, declared: &[String], builtins: &[BuiltinPlugin]) -> (Verdict, String) {
+    let spec = RunSpec::new(Kind::Claude);
+    let rows = hermetic_floor(
+        &[record],
+        &FloorInputs {
+            builtin_plugins: builtins,
+            ..inputs(&spec, &pins(), declared)
+        },
+    );
+    let row = rows
+        .iter()
+        .find(|row| row.row == HermeticRow::H1a)
+        .expect("H1a is evaluated");
+    (row.verdict, row.detail.clone())
+}
+
+#[test]
+fn the_claude_adapter_declares_every_builtin_of_each_pinned_version_with_the_builtin_source() {
+    let builtins = builtin_plugins(Kind::Claude);
+    let mut expected = Vec::new();
+    for version in metaharness_claude::PINNED_VERSIONS {
+        let names = metaharness_claude::builtin_plugins(version).expect("every pin has a list");
+        assert!(!names.is_empty(), "{version}");
+        for name in names {
+            expected.push(BuiltinPlugin {
+                version: version.to_string(),
+                name: (*name).to_string(),
+                source: format!("{name}@builtin"),
+            });
+        }
+    }
+    assert_eq!(builtins, expected);
+    assert_eq!(builtin_plugins(Kind::Codex), Vec::<BuiltinPlugin>::new());
+    assert_eq!(builtin_plugins(Kind::B10x), Vec::<BuiltinPlugin>::new());
+}
+
+/// The lists are keyed by version: a record on a version the adapter does not pin carries
+/// plugins nobody declared a list for, whatever their source says.
+#[test]
+fn a_builtin_in_a_record_on_an_unpinned_version_is_a_gap_and_on_each_pinned_one_is_ok() {
+    for version in metaharness_claude::PINNED_VERSIONS {
+        let (verdict, detail) = h1a(
+            with_plugins_on(version, operator_login_builtins()),
+            &[],
+            &builtin_plugins(Kind::Claude),
+        );
+        assert_eq!(verdict, Verdict::Ok, "{version}: {detail}");
+    }
+    let (verdict, detail) = h1a(
+        with_plugins_on("2.1.303", operator_login_builtins()),
+        &[],
+        &builtin_plugins(Kind::Claude),
+    );
+    assert_eq!(verdict, Verdict::Gap, "{detail}");
+}
+
+/// The vector built from takt's operator-login list: four built-ins, each matched on its name
+/// **and** its `@builtin` source, and the row names every one it saw.
+#[test]
+fn an_operator_login_record_carrying_the_four_builtins_the_pin_compiles_is_ok_and_names_each() {
+    let (verdict, detail) = h1a(
+        with_plugins(operator_login_builtins()),
+        &[],
+        &builtin_plugins(Kind::Claude),
+    );
+    assert_eq!(verdict, Verdict::Ok, "{detail}");
+    for name in [
+        "cc-plugin-sec-default",
+        "cc-plugin-agents-md",
+        "cc-plugin-telemetry",
+        "cc-plugin-plugin-authoring",
+    ] {
+        assert!(
+            detail.contains(&format!("{name}@builtin")),
+            "the row names {name}: {detail}"
+        );
+    }
+}
+
+/// The safety fact: an ambient plugin that borrows a built-in's name and arrives from anywhere
+/// else is a plugin nobody declared. A comparison on the name alone would pass it.
+#[test]
+fn an_ambient_plugin_named_like_a_builtin_with_another_source_is_a_gap() {
+    let mut plugins = operator_login_builtins();
+    plugins[2] = plugin(
+        "cc-plugin-telemetry",
+        Some("cc-plugin-telemetry@some-marketplace"),
+    );
+    let (verdict, detail) = h1a(with_plugins(plugins), &[], &builtin_plugins(Kind::Claude));
+    assert_eq!(verdict, Verdict::Gap, "{detail}");
+    assert!(
+        detail.contains("cc-plugin-telemetry@some-marketplace"),
+        "the row names the foreign source: {detail}"
+    );
+}
+
+#[test]
+fn a_builtin_name_with_no_source_is_a_gap_because_a_name_alone_matches_nothing() {
+    let (verdict, detail) = h1a(
+        with_plugins(vec![plugin("cc-plugin-agents-md", None)]),
+        &[],
+        &builtin_plugins(Kind::Claude),
+    );
+    assert_eq!(verdict, Verdict::Gap, "{detail}");
+}
+
+#[test]
+fn a_builtin_source_the_pinned_binary_does_not_compile_is_a_gap() {
+    let (verdict, detail) = h1a(
+        with_plugins(vec![plugin(
+            "cc-plugin-not-in-this-binary",
+            Some("cc-plugin-not-in-this-binary@builtin"),
+        )]),
+        &[],
+        &builtin_plugins(Kind::Claude),
+    );
+    assert_eq!(verdict, Verdict::Gap, "{detail}");
+}
+
+/// Name and source are one pair: a compiled name carrying another built-in's source is neither.
+#[test]
+fn a_builtin_name_carrying_another_builtins_source_is_a_gap() {
+    let (verdict, detail) = h1a(
+        with_plugins(vec![plugin(
+            "cc-plugin-agents-md",
+            Some("cc-plugin-telemetry@builtin"),
+        )]),
+        &[],
+        &builtin_plugins(Kind::Claude),
+    );
+    assert_eq!(verdict, Verdict::Gap, "{detail}");
+}
+
+/// Built-ins widen what the record may carry; they never stand in for a declared plugin.
+#[test]
+fn a_declared_plugin_beside_builtins_is_ok_and_one_missing_beside_them_is_still_a_gap() {
+    let declared = vec!["mine".to_string()];
+    let mut plugins = operator_login_builtins();
+    plugins.push(plugin("mine", Some("mine@inline")));
+    let (verdict, detail) = h1a(
+        with_plugins(plugins),
+        &declared,
+        &builtin_plugins(Kind::Claude),
+    );
+    assert_eq!(verdict, Verdict::Ok, "{detail}");
+    assert!(detail.contains("mine"), "{detail}");
+
+    let (verdict, detail) = h1a(
+        with_plugins(operator_login_builtins()),
+        &declared,
+        &builtin_plugins(Kind::Claude),
+    );
+    assert_eq!(verdict, Verdict::Gap, "{detail}");
+}
+
+/// A kind that declares no built-in admits none, whatever the source says.
+#[test]
+fn a_builtin_source_on_a_kind_that_declares_no_builtins_is_a_gap() {
+    let (verdict, detail) = h1a(with_plugins(operator_login_builtins()), &[], &[]);
+    assert_eq!(verdict, Verdict::Gap, "{detail}");
+}
+
+/// A plugin entry with no name is a plugin the record carried and nobody declared, not a plugin
+/// the comparison may skip.
+#[test]
+fn a_plugin_the_record_gives_no_name_is_a_gap_and_is_not_dropped() {
+    let nameless = PluginRef {
+        name: None,
+        source: Some("somewhere@inline".to_string()),
+        version: None,
+    };
+    let (verdict, detail) = h1a(
+        with_plugins(vec![nameless]),
+        &[],
+        &builtin_plugins(Kind::Claude),
+    );
+    assert_eq!(verdict, Verdict::Gap, "{detail}");
+}
+
+/// takt's opening record read by the Claude adapter's own reader and judged with the adapter's own
+/// pin and built-in list: H1a and H9 both read what the record observed.
+#[test]
+fn takts_operator_login_init_record_read_by_the_claude_reader_passes_h1a_and_h9() {
+    let init = r#"{"type":"system","subtype":"init","claude_code_version":"2.1.304","cwd":"/scratch/work","tools":["Bash"],"mcp_servers":[],"output_style":"default","apiKeySource":"none","plugins":[{"name":"cc-plugin-sec-default","source":"cc-plugin-sec-default@builtin"},{"name":"cc-plugin-agents-md","source":"cc-plugin-agents-md@builtin"},{"name":"cc-plugin-telemetry","source":"cc-plugin-telemetry@builtin"},{"name":"cc-plugin-plugin-authoring","source":"cc-plugin-plugin-authoring@builtin"}]}"#;
+    let mut reader = metaharness_claude::TranscriptReader::new(
+        TranscriptRef {
+            path: Some("/scratch/transcript.jsonl".to_string()),
+            digest: Some(Digest::of(b"bytes")),
+            bytes: Some(1),
+        },
+        attestation_imposing(&[HermeticRow::H2, HermeticRow::H3, HermeticRow::H8]),
+    );
+    let events: Vec<Event> = reader
+        .push_line(init)
+        .into_iter()
+        .map(|emission| emission.event)
+        .collect();
+    let spec = RunSpec::new(Kind::Claude);
+    let pins: Vec<String> = metaharness_claude::PINNED_VERSIONS
+        .iter()
+        .map(ToString::to_string)
+        .collect();
+    let builtins = builtin_plugins(Kind::Claude);
+    let rows = hermetic_floor(
+        &events,
+        &FloorInputs {
+            builtin_plugins: &builtins,
+            ..inputs(&spec, &pins, &[])
+        },
+    );
+    let row = |which| rows.iter().find(|row| row.row == which).expect("evaluated");
+    assert_eq!(
+        row(HermeticRow::H1a).verdict,
+        Verdict::Ok,
+        "{}",
+        row(HermeticRow::H1a).detail
+    );
+    assert_eq!(
+        row(HermeticRow::H9).verdict,
+        Verdict::Ok,
+        "{}",
+        row(HermeticRow::H9).detail
+    );
+}
+
 #[test]
 fn a_credential_source_the_run_did_not_declare_is_a_gap() {
     let spec = RunSpec::new(Kind::Claude); // defaults to operator-login
@@ -374,6 +647,95 @@ fn an_operator_login_reporting_no_api_key_source_is_exactly_what_h4_wants() {
         ),
         Verdict::Ok
     );
+}
+
+/// A credential-free run with a declared endpoint, whose record names the API-key variable and
+/// whose launch attested H4 with `how` (design amendment a33).
+fn endpoint_record(how: &str) -> Event {
+    with_record(good_record(), |record| {
+        if let Event::SessionStarted {
+            credential_source,
+            hermetic,
+            ..
+        } = record
+        {
+            *credential_source = Some("ANTHROPIC_API_KEY".to_string());
+            hermetic
+                .imposed
+                .retain(|control| control.row != HermeticRow::H4);
+            hermetic.imposed.push(ImposedControl {
+                row: HermeticRow::H4,
+                how: how.to_string(),
+            });
+        }
+    })
+}
+
+fn h4_of(record: Event, posture: Option<&str>) -> (Verdict, String) {
+    let spec = RunSpec {
+        credentials: CredentialSource::None,
+        model_endpoint: Some("http://127.0.0.1:1".to_string()),
+        ..RunSpec::new(Kind::Claude)
+    };
+    let rows = hermetic_floor(
+        &[record],
+        &FloorInputs {
+            endpoint_key_posture: posture,
+            ..inputs(&spec, &pins(), &[])
+        },
+    );
+    let row = rows
+        .iter()
+        .find(|row| row.row == HermeticRow::H4)
+        .expect("H4 is evaluated");
+    (row.verdict, row.detail.clone())
+}
+
+/// The key the record names is the launch's own endpoint placeholder, and the launch's attestation
+/// — not the variable's name — is what says so (design amendment a33).
+#[test]
+fn h4_reads_the_launchs_own_endpoint_placeholder_as_no_operator_key() {
+    let posture = metaharness_claude::ENDPOINT_KEY_POSTURE;
+    let (verdict, detail) = h4_of(endpoint_record(posture), Some(posture));
+    assert_eq!(verdict, Verdict::Ok, "{detail}");
+    assert!(detail.contains("placeholder"), "{detail}");
+}
+
+/// The same record without that attestation is the undeclared key it always was: the name alone
+/// proves nothing, and neither does a posture sentence on a kind that declares none.
+#[test]
+fn h4_still_reads_a_key_the_launch_did_not_attest_as_its_placeholder_as_a_gap() {
+    let posture = metaharness_claude::ENDPOINT_KEY_POSTURE;
+    let (verdict, detail) = h4_of(
+        endpoint_record("ANTHROPIC_API_KEY is absent from the child environment"),
+        Some(posture),
+    );
+    assert_eq!(verdict, Verdict::Gap, "{detail}");
+    let (verdict, detail) = h4_of(endpoint_record(posture), None);
+    assert_eq!(verdict, Verdict::Gap, "{detail}");
+}
+
+/// When the launch could not make the placeholder claim — managed settings, which
+/// `--setting-sources ""` does not switch off, were present — H4 reads the key the record names
+/// as it did before a33, and its reason carries what the launch said (design amendment a33).
+#[test]
+fn h4_over_an_endpoint_run_beside_managed_settings_is_a_gap_that_names_them() {
+    let why = "managed settings exist at /etc/claude-code/managed-settings.json, which \
+               --setting-sources \"\" does not switch off";
+    let record = with_record(endpoint_record("unused"), |record| {
+        if let Event::SessionStarted { hermetic, .. } = record {
+            hermetic
+                .imposed
+                .retain(|control| control.row != HermeticRow::H4);
+            hermetic.unavailable.push(UnavailableControl {
+                row: HermeticRow::H4,
+                why: why.to_string(),
+            });
+        }
+    });
+    let (verdict, detail) = h4_of(record, Some(metaharness_claude::ENDPOINT_KEY_POSTURE));
+    assert_eq!(verdict, Verdict::Gap, "{detail}");
+    assert!(detail.contains("managed settings"), "{detail}");
 }
 
 /// The other half of the same live failure: a run that pins no input tree has no governing
@@ -1360,6 +1722,56 @@ fn a_run_goes_from_spec_through_plan_and_transcript_to_a_judged_verdict() {
     // the point: absence of evidence is not hermeticity. H10 passes, because a run that pinned
     // no tree has none that could move (amendment a4).
     assert_eq!(run.exit(Some(&report)), RunExit::NoVerdict);
+}
+
+/// The launch hands the floor the adapter's built-in list (amendment a33): a Claude run whose
+/// opening record carries takt's four built-ins reads H1a `ok` through the run, and one whose
+/// record carries an ambient plugin under a built-in's name reads `gap`.
+#[test]
+fn a_claude_run_judges_builtins_against_the_list_its_launch_declared() {
+    let judge = |telemetry_source: &str| {
+        let init = format!(
+            r#"{{"type":"system","subtype":"init","claude_code_version":"{}","tools":[],"mcp_servers":[],"output_style":"default","apiKeySource":"none","plugins":[{{"name":"cc-plugin-sec-default","source":"cc-plugin-sec-default@builtin"}},{{"name":"cc-plugin-agents-md","source":"cc-plugin-agents-md@builtin"}},{{"name":"cc-plugin-telemetry","source":"{telemetry_source}"}},{{"name":"cc-plugin-plugin-authoring","source":"cc-plugin-plugin-authoring@builtin"}}]}}"#,
+            metaharness_claude::PINNED_VERSIONS[0]
+        );
+        let mut runner = ScriptedRunner::new(
+            vec![
+                ScriptStep::line(init),
+                ScriptStep::line(r#"{"type":"result","subtype":"success","is_error":false}"#),
+            ],
+            ScriptedLog::new(),
+        );
+        let mut run = Metaharness::new(Kind::Claude)
+            .with_audit(true)
+            .start_with_clock(
+                Input::Prompt("do it".to_string()),
+                &mut runner,
+                &mut ClaudeSeams,
+                Box::new(ManualClock::new()),
+            )
+            .expect("starts");
+        run.drain().expect("drains");
+        let rows = run.hermetic_floor();
+        let row = |which| {
+            rows.iter()
+                .find(|row| row.row == which)
+                .cloned()
+                .expect("evaluated")
+        };
+        (row(HermeticRow::H1a), row(HermeticRow::H9))
+    };
+
+    let (h1a, h9) = judge("cc-plugin-telemetry@builtin");
+    assert_eq!(h1a.verdict, Verdict::Ok, "{}", h1a.detail);
+    assert!(
+        h1a.detail.contains("cc-plugin-sec-default@builtin"),
+        "{}",
+        h1a.detail
+    );
+    assert_eq!(h9.verdict, Verdict::Ok, "{}", h9.detail);
+
+    let (h1a, _) = judge("cc-plugin-telemetry@some-marketplace");
+    assert_eq!(h1a.verdict, Verdict::Gap, "{}", h1a.detail);
 }
 
 #[test]

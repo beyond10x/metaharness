@@ -731,6 +731,8 @@ fn start_b10x(
     let launch = LaunchFacts {
         planned_cwd: Some(cwd.display().to_string()),
         declared_plugins: Vec::new(),
+        builtin_plugins: crate::vectors::builtin_plugins(Kind::B10x),
+        endpoint_key_posture: None,
         // The b10x loop binds its tools in-process; there is no MCP server to configure and
         // nothing for one to be compared against.
         planned_mcp_servers: Vec::new(),
@@ -851,6 +853,9 @@ fn start_claude(
             marketplace_plugins: marketplace_plugins(&spec)?,
             loopback: loopback_params(loopback.as_ref()),
             tool_server: tool_server(),
+            // The managed settings the H4 placeholder claim depends on (a33): read here, decided
+            // in the plan.
+            managed_settings: claude_managed_settings(),
         };
         let mut plan = metaharness_claude::plan_launch(&spec, &context).map_err(|refusal| {
             Refusal::Launch {
@@ -858,6 +863,9 @@ fn start_claude(
             }
         })?;
         list_declared_copy_memory_files(&spec, &plan.cwd, &mut plan.attestation);
+        // Before any file is written for the child and before the runner sees the plan: a strict
+        // run off the pin spawns nothing (a33).
+        guard_claude_strict_version(&spec, runner, &plan)?;
 
         // The plan names four pieces of I/O and performs none of them, because a pure function
         // that wrote to a disk would be a pure function nobody could test. This is where they
@@ -902,6 +910,12 @@ fn start_claude(
             // plugin list against what metaharness says it installed, and a declared set taken
             // from the spec would still name a plugin whose copy never happened.
             declared_plugins: declared_plugins(&plan.attestation),
+            // The adapter's own list for its pin (amendment a33): a built-in in the record passes
+            // H1a only on its name **and** its built-in source, and the row names each one.
+            builtin_plugins: crate::vectors::builtin_plugins(Kind::Claude),
+            // The sentence this launch attests on H4 when it hands the child its own endpoint
+            // placeholder, so the floor reads that key from the attestation (a33).
+            endpoint_key_posture: Some(metaharness_claude::ENDPOINT_KEY_POSTURE),
             // Read off the document the launch actually wrote, so H5 compares the record against
             // the file the vendor was handed rather than against a second guess at its contents.
             planned_mcp_servers: configured_mcp_servers(plan.mcp_config.as_ref()),
@@ -1145,6 +1159,8 @@ fn start_codex(
         // plugin list the record does not carry leaves H1a `unk` — which is the honest verdict
         // for an installation nobody has watched the vendor pick up.
         declared_plugins: declared_plugins(&plan.attestation),
+        builtin_plugins: crate::vectors::builtin_plugins(Kind::Codex),
+        endpoint_key_posture: None,
         // The codex config writes an empty `[mcp_servers]` table by name, so the launch gives one
         // and H5 compares against nothing — which is what the table says.
         planned_mcp_servers: Vec::new(),
@@ -1935,10 +1951,17 @@ fn credentials_file(spec: &RunSpec) -> Option<PathBuf> {
 /// Every memory file discoverable above the scratch working directory (design § 8.1 H11).
 ///
 /// Walked and handed to the adapter rather than checked here, because H11's verdict is the
-/// adapter's launch assertion: on Claude Code auto-discovery is on in every run that is not
-/// `--bare`, and H8 forbids `--bare`; on codex the root-to-cwd `AGENTS.md` walk is native and has
-/// no switch at all. Either way a memory file in an ancestor enters the context of a run this
-/// design calls hermetic.
+/// adapter's launch assertion. On codex the root-to-cwd `AGENTS.md` walk is native and has no
+/// switch at all. On Claude Code 2.1.304 and 2.1.305 discovery is gated on the project and local
+/// setting sources, which the launch's `--setting-sources ""` switches off — observed in the
+/// native fixture, and the pinned binary's behaviour rather than a control metaharness holds
+/// (design amendment a33) — so the walk still decides the row on both vendors.
+///
+/// The walk looks for `CLAUDE.md` and `AGENTS.md` and nothing else. Those two pinned binaries
+/// also read `.claude/CLAUDE.md`, `CLAUDE.local.md`, `.claude/AGENTS.md` and
+/// `.claude/rules/**/*.md` from a directory above the cwd once a source is on (a33); this walk does
+/// not look for those shapes, and `story:claude-h11-memory-walk-shapes` (decided: option C) covers
+/// them.
 fn memory_ancestors(cwd: &std::path::Path) -> Vec<PathBuf> {
     let mut found = Vec::new();
     for ancestor in cwd.ancestors().skip(1) {
@@ -1960,7 +1983,8 @@ fn memory_ancestors(cwd: &std::path::Path) -> Vec<PathBuf> {
 /// in context by its own declaration. The record still has to name it — an input the run had and
 /// nobody listed is the reading § 8.1 refuses — so it goes into `ambient_inputs`, the list of
 /// inputs metaharness reports and does not claim to have removed. Nothing is listed when nothing
-/// was declared: under a6 the operator's tree is theirs, memory files and all.
+/// was declared: under a6 the operator's tree is theirs, and metaharness claims nothing about what
+/// is in it.
 fn list_declared_copy_memory_files(
     spec: &RunSpec,
     cwd: &std::path::Path,
@@ -1978,6 +2002,161 @@ fn list_declared_copy_memory_files(
             ));
         }
     }
+}
+
+/// How long `--strict-version` waits for `claude --version` before it kills the child and refuses
+/// (design amendment a33). `--version` answers in well under a second; a binary that does not exit
+/// in this long is not one a strict run should start.
+const VERSION_PROBE_DEADLINE: std::time::Duration = std::time::Duration::from_secs(5);
+
+/// What asking a Claude Code binary for its `--version` produced.
+#[derive(Debug, Clone, PartialEq, Eq)]
+enum VersionProbe {
+    /// The version token it printed.
+    Reported(String),
+    /// It could not be run, failed, or printed nothing that reads as a version.
+    Unreadable,
+    /// It did not exit within this deadline, and was killed.
+    TimedOut(std::time::Duration),
+}
+
+/// The version a Claude Code binary reports for `--version`, read without a model call and within
+/// `deadline` (a33).
+///
+/// Run with the plan's own constructed environment, so the probe reads no operator config home and
+/// holds no credential. `2.1.304 (Claude Code)` reduces to its first token that starts with a
+/// digit, as `doctor` reduces it. A child still running at the deadline is killed and reaped.
+fn claude_version(
+    program: &std::path::Path,
+    env: &BTreeMap<String, String>,
+    deadline: std::time::Duration,
+) -> VersionProbe {
+    use std::io::Read as _;
+    let Ok(mut child) = std::process::Command::new(program)
+        .arg("--version")
+        .env_clear()
+        .envs(env)
+        .stdin(std::process::Stdio::null())
+        .stdout(std::process::Stdio::piped())
+        .stderr(std::process::Stdio::null())
+        .spawn()
+    else {
+        return VersionProbe::Unreadable;
+    };
+    let started = std::time::Instant::now();
+    let status = loop {
+        match child.try_wait() {
+            Ok(Some(status)) => break status,
+            Ok(None) if started.elapsed() >= deadline => {
+                let _ = child.kill();
+                let _ = child.wait();
+                return VersionProbe::TimedOut(deadline);
+            }
+            Ok(None) => std::thread::sleep(std::time::Duration::from_millis(10)),
+            Err(_) => {
+                let _ = child.kill();
+                let _ = child.wait();
+                return VersionProbe::Unreadable;
+            }
+        }
+    };
+    let mut stdout = String::new();
+    if !status.success()
+        || child
+            .stdout
+            .take()
+            .is_none_or(|mut pipe| pipe.read_to_string(&mut stdout).is_err())
+    {
+        return VersionProbe::Unreadable;
+    }
+    stdout
+        .split_whitespace()
+        .find(|word| word.starts_with(|character: char| character.is_ascii_digit()))
+        .map_or(VersionProbe::Unreadable, |version| {
+            VersionProbe::Reported(version.to_owned())
+        })
+}
+
+/// `--strict-version`'s refusal for a Claude binary whose probe came back as `probe`, or `None`
+/// when it is on the pin. No readable version, and no answer in time, are refusals too: the flag
+/// asks for evidence, and its absence is not evidence (invariant 3).
+fn claude_version_refusal(probe: &VersionProbe, program: &str) -> Option<Refusal> {
+    let observed = match probe {
+        VersionProbe::Reported(version)
+            if metaharness_claude::PINNED_VERSIONS.contains(&version.as_str()) =>
+        {
+            return None;
+        }
+        VersionProbe::Reported(version) => version.clone(),
+        VersionProbe::Unreadable => "no readable version".to_string(),
+        VersionProbe::TimedOut(deadline) => format!(
+            "nothing: its --version did not exit within {} ms and was killed",
+            deadline.as_millis()
+        ),
+    };
+    Some(Refusal::Launch {
+        detail: format!(
+            "--strict-version requires one of {:?}; {program} reported {observed}, so the run is \
+             refused before the spawn",
+            metaharness_claude::PINNED_VERSIONS,
+        ),
+    })
+}
+
+/// `--strict-version` over a Claude launch, before anything is spawned (a33).
+///
+/// The binary is resolved on the child's own `PATH`, the way the spawn resolves it, and asked for
+/// its version with the plan's environment, within [`VERSION_PROBE_DEADLINE`]. A runner that
+/// launches no executable — synthetic replay — has no binary to ask, so it reports no version and
+/// strict refuses, as the b10x launch does.
+fn guard_claude_strict_version(
+    spec: &RunSpec,
+    runner: &dyn ProcessRunner,
+    plan: &metaharness_claude::LaunchPlan,
+) -> Result<(), Refusal> {
+    if !spec.strict_version {
+        return Ok(());
+    }
+    let (program, probe) = if runner.requires_executable() {
+        let child_path = plan.env.get("PATH").map_or("", String::as_str);
+        match crate::doctor::resolve_on(&plan.program, child_path) {
+            Ok(program) => {
+                let probe = claude_version(&program, &plan.env, VERSION_PROBE_DEADLINE);
+                (program.display().to_string(), probe)
+            }
+            Err(_) => (
+                format!("{} (not on {child_path})", plan.program),
+                VersionProbe::Unreadable,
+            ),
+        }
+    } else {
+        (plan.program.clone(), VersionProbe::Unreadable)
+    };
+    match claude_version_refusal(&probe, &program) {
+        Some(refusal) => Err(refusal),
+        None => Ok(()),
+    }
+}
+
+/// The managed-settings sources out of `candidates` that exist on this machine (a33).
+///
+/// A file or a directory counts by existing: a drop-in directory holding no file today is still
+/// one the binary reads, and the launch decides what it claims before the child starts.
+fn managed_settings_found(candidates: &[PathBuf]) -> Vec<PathBuf> {
+    candidates
+        .iter()
+        .filter(|candidate| candidate.exists())
+        .cloned()
+        .collect()
+}
+
+/// [`managed_settings_found`] over the paths the pinned Claude binaries read on Linux.
+fn claude_managed_settings() -> Vec<PathBuf> {
+    let candidates: Vec<PathBuf> = metaharness_claude::MANAGED_SETTINGS_PATHS
+        .iter()
+        .map(PathBuf::from)
+        .collect();
+    managed_settings_found(&candidates)
 }
 
 #[cfg(test)]
@@ -3673,5 +3852,116 @@ mod scratch_cwd_tests {
             named.scratch_cwd = true;
             assert!(check_spec(&named).is_ok(), "{kind:?}: the pair is admitted");
         }
+    }
+}
+
+#[cfg(test)]
+mod claude_version_tests {
+    //! Amendment a33: `--strict-version` reads the resolved Claude binary's version before the
+    //! spawn, within a deadline, and the launch looks for the managed settings its H4 claim
+    //! depends on. No vendor process and no real `/etc`: the probes run scripts and read paths this
+    //! test writes.
+
+    use std::collections::BTreeMap;
+    use std::path::{Path, PathBuf};
+    use std::time::{Duration, Instant};
+
+    use super::{VersionProbe, claude_version, claude_version_refusal, managed_settings_found};
+
+    /// A script standing in for the vendor binary.
+    fn fake_claude(dir: &Path, body: &str) -> PathBuf {
+        use std::os::unix::fs::PermissionsExt as _;
+        let path = dir.join("claude");
+        std::fs::write(&path, format!("#!/bin/sh\n{body}\n")).expect("the script");
+        std::fs::set_permissions(&path, std::fs::Permissions::from_mode(0o700))
+            .expect("executable");
+        path
+    }
+
+    fn env() -> BTreeMap<String, String> {
+        BTreeMap::from([("PATH".to_string(), "/usr/bin:/bin".to_string())])
+    }
+
+    /// Run the probe, retrying the one transient a freshly written script can raise when another
+    /// test thread forks while it is still open (`ETXTBSY`), which reads as unreadable.
+    fn probe(program: &Path, deadline: Duration) -> VersionProbe {
+        let mut last = VersionProbe::Unreadable;
+        for _ in 0..20 {
+            last = claude_version(program, &env(), deadline);
+            if last != VersionProbe::Unreadable {
+                break;
+            }
+            std::thread::sleep(Duration::from_millis(25));
+        }
+        last
+    }
+
+    /// `--strict-version` refuses a binary off the pin — 2.1.303, kept out — and one that reports
+    /// nothing readable, and admits each pinned version. The version is read from `--version`, the
+    /// way `doctor` and the b10x launch read theirs: no model call.
+    #[test]
+    fn strict_version_reads_the_resolved_binary_and_refuses_one_off_the_pin() {
+        let dir = tempfile::tempdir().expect("a directory");
+        let program = fake_claude(dir.path(), "echo '2.1.303 (Claude Code)'");
+        let probed = probe(&program, Duration::from_secs(5));
+        assert_eq!(probed, VersionProbe::Reported("2.1.303".to_string()));
+
+        let refusal = claude_version_refusal(&probed, "claude")
+            .expect("2.1.303 is off the pin")
+            .to_string();
+        assert!(refusal.contains("--strict-version"), "{refusal}");
+        assert!(refusal.contains("2.1.303"), "{refusal}");
+        assert!(claude_version_refusal(&VersionProbe::Unreadable, "claude").is_some());
+        for pinned in metaharness_claude::PINNED_VERSIONS {
+            assert!(
+                claude_version_refusal(&VersionProbe::Reported(pinned.to_string()), "claude")
+                    .is_none(),
+                "{pinned}"
+            );
+        }
+    }
+
+    /// A binary whose `--version` never exits is killed at the deadline, and strict refuses it by
+    /// name rather than waiting on it (design amendment a33).
+    #[test]
+    fn a_version_probe_that_does_not_exit_is_killed_at_its_deadline_and_refused_by_name() {
+        let dir = tempfile::tempdir().expect("a directory");
+        let program = fake_claude(dir.path(), "exec sleep 30");
+        let started = Instant::now();
+        let probed = probe(&program, Duration::from_millis(300));
+        assert!(
+            started.elapsed() < Duration::from_secs(10),
+            "the probe waited {:?}",
+            started.elapsed()
+        );
+        assert_eq!(probed, VersionProbe::TimedOut(Duration::from_millis(300)));
+        let refusal = claude_version_refusal(&probed, "claude")
+            .expect("a timed-out probe is refused")
+            .to_string();
+        assert!(
+            refusal.contains("--strict-version") && refusal.contains("did not exit"),
+            "{refusal}"
+        );
+    }
+
+    /// The launch's managed-settings check reports exactly the candidates that exist — a file, or a
+    /// drop-in directory — given an injected candidate set; a missing path is no finding.
+    #[test]
+    fn managed_settings_found_reports_each_existing_candidate_and_nothing_else() {
+        let root = tempfile::tempdir().expect("a root");
+        let file = root.path().join("etc/claude-code/managed-settings.json");
+        let drop_in = root.path().join("etc/claude-code/managed-settings.d");
+        let missing = root
+            .path()
+            .join("mnt/c/Program Files/ClaudeCode/managed-settings.json");
+        std::fs::create_dir_all(&drop_in).expect("the drop-in directory");
+        std::fs::write(&file, "{}").expect("the managed file");
+        let candidates = [file.clone(), drop_in.clone(), missing];
+        assert_eq!(managed_settings_found(&candidates), vec![file, drop_in]);
+        let empty = tempfile::tempdir().expect("an empty root");
+        assert_eq!(
+            managed_settings_found(&[empty.path().join("managed-settings.json")]),
+            Vec::<PathBuf>::new()
+        );
     }
 }

@@ -26,6 +26,7 @@ pub fn context() -> LaunchContext {
         marketplace_plugins: Vec::new(),
         loopback: None,
         tool_server: Some(PathBuf::from("/usr/local/bin/metaharness")),
+        managed_settings: Vec::new(),
     }
 }
 

@@ -23,7 +23,7 @@ use std::path::{Component, Path, PathBuf};
 
 use metaharness_protocol::{
     Assertion, CloseReason, CredentialSource, DecidedBy, Decision, DecisionCensus, Event,
-    HermeticAttestation, HermeticRow, InstalledPlugin, RowVerdict, RunSpec, Severity,
+    HermeticAttestation, HermeticRow, InstalledPlugin, PluginRef, RowVerdict, RunSpec, Severity,
     StreamCompleteness, Verdict, WithheldTool, stream_completeness,
 };
 
@@ -42,9 +42,35 @@ pub struct FloorInputs<'a> {
     pub planned_cwd: Option<&'a str>,
     /// The plugin directories the run declared, for H1a's comparison.
     pub declared_plugins: &'a [String],
+    /// The plugins compiled into each pinned vendor binary, each with the version it belongs to and
+    /// the one source its opening record gives it, for H1a's comparison (amendment a33). Empty for
+    /// a kind that declares none.
+    pub builtin_plugins: &'a [BuiltinPlugin],
+    /// The exact H4 `how` this kind's launch attests when the child's API-key variable holds the
+    /// launch's own placeholder for a declared endpoint, for H4's comparison (amendment a33).
+    /// `None` for a kind whose launch never does that.
+    pub endpoint_key_posture: Option<&'a str>,
     /// The MCP servers this launch configured, for H5's comparison. Empty on every surface but
     /// `owned`, where it is metaharness's own tool server.
     pub planned_mcp_servers: &'a [String],
+}
+
+/// One plugin compiled into a pinned vendor binary, as the adapter says that binary's opening
+/// record spells it (amendment a33).
+///
+/// **H1a matches all three fields.** The version is the binary the list was read from, so a record
+/// on any other version has no list; the name is what the record calls the plugin; the source is
+/// the adapter's statement of where a compiled-in one comes from. A record plugin that carries the
+/// name with any other source — or with none — is not this built-in: an ambient plugin can be called
+/// anything, so a name alone would let one pass as a plugin nobody installed.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct BuiltinPlugin {
+    /// The pinned version whose binary compiles this plugin in.
+    pub version: String,
+    /// The plugin's name, as the vendor's record reports it.
+    pub name: String,
+    /// The exact source the vendor's record reports for it.
+    pub source: String,
 }
 
 /// How the exit code came out.
@@ -441,28 +467,12 @@ pub fn hermetic_floor(events: &[Event], inputs: &FloorInputs<'_>) -> Vec<RowVerd
             Verdict::Unk,
             "the opening record carries no plugin list, and a missing list is not an empty one",
         ),
-        (_, Some(loaded)) => {
-            let mut names: Vec<String> = loaded
-                .iter()
-                .filter_map(|plugin| plugin.name.clone())
-                .collect();
-            names.sort();
-            let mut declared = inputs.declared_plugins.to_vec();
-            declared.sort();
-            if names == declared {
-                row(
-                    HermeticRow::H1a,
-                    Verdict::Ok,
-                    format!("loaded exactly the declared set: {names:?}"),
-                )
-            } else {
-                row(
-                    HermeticRow::H1a,
-                    Verdict::Gap,
-                    format!("declared {declared:?} and the record says {names:?}"),
-                )
-            }
-        }
+        (_, Some(loaded)) => plugin_row(
+            loaded,
+            harness_version.as_deref(),
+            inputs.declared_plugins,
+            inputs.builtin_plugins,
+        ),
     });
 
     // H1b — the output style is the default.
@@ -519,14 +529,43 @@ pub fn hermetic_floor(events: &[Event], inputs: &FloorInputs<'_>) -> Vec<RowVerd
             // use, and neither of those is the string "operator-login".
             let names_a_key = normalized.contains("api") || normalized.contains("key");
             let declared_a_key = inputs.spec.credentials == CredentialSource::ApiKey;
+            // The one key that is not the operator's: the launch's own placeholder for a declared
+            // endpoint (amendment a33). Recognised from the run's attestation — the exact sentence
+            // this kind's launch writes when it put the placeholder there — and never from the
+            // variable's name, which an operator's key shares.
+            let placeholder = inputs.endpoint_key_posture.filter(|posture| {
+                hermetic
+                    .imposed
+                    .iter()
+                    .any(|control| control.row == HermeticRow::H4 && control.how == *posture)
+            });
             match (declared_a_key, names_a_key) {
+                (false, true) if placeholder.is_some() => row(
+                    HermeticRow::H4,
+                    Verdict::Ok,
+                    format!(
+                        "the record says {observed:?}, and the launch attests that variable holds \
+                         its own placeholder for the declared endpoint, not an operator key: {}",
+                        placeholder.unwrap_or_default()
+                    ),
+                ),
                 (false, true) => row(
                     HermeticRow::H4,
                     Verdict::Gap,
                     format!(
                         "the run declared no API key and the record says {observed:?}; an \
                          exported key takes precedence over the operator login and may point at \
-                         an account with no credits"
+                         an account with no credits{}",
+                        // What the launch said it could not impose, when it said so — managed
+                        // settings beside an endpoint run (a33) — so the reason is in the row.
+                        hermetic
+                            .unavailable
+                            .iter()
+                            .find(|control| control.row == HermeticRow::H4)
+                            .map_or_else(String::new, |control| format!(
+                                "; the launch attested H4 unavailable: {}",
+                                control.why
+                            ))
                     ),
                 ),
                 (true, false) => row(
@@ -737,6 +776,82 @@ pub fn hermetic_floor(events: &[Event], inputs: &FloorInputs<'_>) -> Vec<RowVerd
     rows
 }
 
+/// H1a over a plugin list the record carried: exactly the declared set, beside the vendor's own
+/// compiled-in plugins (amendment a33).
+///
+/// Every plugin in the record is one of two things or the row is a `gap`:
+///
+/// * **a built-in of the binary the record reports** — the record's version, the plugin's name
+///   **and** its source equal one [`BuiltinPlugin`]. Never the name alone: an ambient plugin can
+///   borrow any name, and the source is what says it was compiled in; and never another version's
+///   list, because which plugins a binary compiles in is read per binary;
+/// * **a declared plugin** — compared by name against what metaharness installed, as before a33.
+///
+/// A plugin the record gives no name is neither, and is a `gap` rather than a plugin the comparison
+/// skips. The row names every built-in it admitted, so a reader sees what the vendor brought along
+/// as well as what the run declared.
+fn plugin_row(
+    loaded: &[PluginRef],
+    version: Option<&str>,
+    declared: &[String],
+    builtins: &[BuiltinPlugin],
+) -> RowVerdict {
+    let mut admitted: Vec<String> = Vec::new();
+    let mut names: Vec<String> = Vec::new();
+    let mut unmatched: Vec<String> = Vec::new();
+    let mut nameless = false;
+    for plugin in loaded {
+        let builtin = builtins.iter().find(|builtin| {
+            version == Some(builtin.version.as_str())
+                && plugin.name.as_deref() == Some(builtin.name.as_str())
+                && plugin.source.as_deref() == Some(builtin.source.as_str())
+        });
+        if let Some(builtin) = builtin {
+            admitted.push(builtin.source.clone());
+            continue;
+        }
+        let name = plugin.name.clone();
+        nameless |= name.is_none();
+        unmatched.push(format!(
+            "{} ({})",
+            name.as_deref().unwrap_or("no name"),
+            plugin.source.as_deref().unwrap_or("no source")
+        ));
+        names.extend(name);
+    }
+    admitted.sort();
+    names.sort();
+    unmatched.sort();
+    let mut declared = declared.to_vec();
+    declared.sort();
+    let version = version.unwrap_or("an unstated version");
+    let beside = if admitted.is_empty() {
+        String::new()
+    } else {
+        format!(
+            ", beside {} built-in plugin(s) the pinned {version} binary compiles in, each matched on \
+             its name and its source: {admitted:?}",
+            admitted.len()
+        )
+    };
+    if !nameless && names == declared {
+        row(
+            HermeticRow::H1a,
+            Verdict::Ok,
+            format!("loaded exactly the declared set: {names:?}{beside}"),
+        )
+    } else {
+        row(
+            HermeticRow::H1a,
+            Verdict::Gap,
+            format!(
+                "declared {declared:?} and the record says {unmatched:?}, none of which is a \
+                 built-in the adapter declares for {version} by name and source{beside}"
+            ),
+        )
+    }
+}
+
 /// Whether the directory the record names is the directory metaharness planned (H7, a31).
 ///
 /// **Two names are one directory when they are byte-equal, or when both are absolute and resolve
@@ -934,6 +1049,8 @@ impl crate::run::Run {
                 pinned_versions: &launch.pinned_versions,
                 planned_cwd: launch.planned_cwd.as_deref(),
                 declared_plugins: &launch.declared_plugins,
+                builtin_plugins: &launch.builtin_plugins,
+                endpoint_key_posture: launch.endpoint_key_posture,
                 planned_mcp_servers: &launch.planned_mcp_servers,
             },
         )

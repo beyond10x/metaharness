@@ -6,13 +6,13 @@ sidebar_position: 1
 
 # The `claude` adapter
 
-Pinned to **2.1.240**. Adapter class: `harness` — the vendor keeps its loop, its sessions, its
+Pinned to **2.1.304** and **2.1.305**. Adapter class: `harness` — the vendor keeps its loop, its sessions, its
 tools, its authentication and its credential custody; metaharness drives its documented outside
 surface.
 
 ```bash
 metaharness run claude --hermetic -p "…"
-metaharness conformance claude    # 20 vectors, no model / no network / no credential
+metaharness conformance claude    # 28 vectors, no model / no network / no credential
 metaharness doctor claude
 ```
 
@@ -23,6 +23,31 @@ metaharness doctor claude
 3. Streams the session out as protocol events on stdout; takes steering on stdin.
 4. Retains the raw transcript.
 5. Exits on the [hermetic floor's](../hermetic.md) verdict.
+
+## Built-in plugins
+
+Claude Code compiles plugins into its binary, so no scratch config home can remove them. 2.1.304
+and 2.1.305 each compile in the same twelve, and the adapter declares each one per version, by name,
+with the source a record gives it, `<name>@builtin`. H1a reads a plugin in the opening record as
+`ok` only when it is a plugin the run declared or one of the twelve the reported version compiles
+in, **by name and source**, and the row names every built-in it saw. A plugin that borrows a
+built-in's name from anywhere else stays a `gap`, and so does any built-in in a record on an
+unpinned version.
+
+| Credential mode | Built-ins in a 2.1.304 or 2.1.305 opening record | What the launch does |
+|---|---|---|
+| `none`, `loopback` | `cc-plugin-agents-md`, `cc-plugin-plugin-authoring` (observed on both) | sets `CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC`, which keeps `cc-plugin-telemetry` out |
+| operator login | also `cc-plugin-telemetry` and, for Team and Enterprise organizations, `cc-plugin-sec-default` (relayed for 2.1.304, not driven here) | admits them by name and `@builtin` source; the traffic switch is not set under a real credential |
+
+`--strict-version` reads the resolved binary's `--version` before the spawn and refuses one that is
+not pinned; 2.1.303 is refused.
+
+Memory files: at both pins no memory file in the working directory or above it reached the model
+under the launch's `--setting-sources ""` — `CLAUDE.md`, `.claude/CLAUDE.md`, `CLAUDE.local.md`,
+`.claude/rules/*.md`, `AGENTS.md` or `.claude/AGENTS.md`. The ancestor walk still refuses a scratch
+run with a `CLAUDE.md` or `AGENTS.md` above it, because that is the binary's behaviour, not a control
+metaharness holds; it does not look for the other four shapes yet. Design amendment **a33**; evidence in
+`docs/research/2026-10-21-claude-code-2.1.304-adapter-surface.md`.
 
 ## Declared capabilities
 

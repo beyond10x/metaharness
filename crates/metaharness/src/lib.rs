@@ -69,7 +69,7 @@ mod viewer;
 pub use metaharness_protocol as protocol;
 
 pub use audit::{
-    AuditReport, FloorInputs, RunExit, anything_was_adjudicated, decision_census,
+    AuditReport, BuiltinPlugin, FloorInputs, RunExit, anything_was_adjudicated, decision_census,
     exit_without_audit, hermetic_floor, withheld_tools,
 };
 pub use auditor::{
@@ -106,8 +106,8 @@ pub use metaharness_protocol::{HarnessSeam, SeamFactory};
 pub use spawn_codex_vectors::spawn_vectors as codex_spawn_vectors;
 pub use spawn_vectors::spawn_vectors;
 pub use vectors::{
-    all_passed, capabilities, conformance_vectors, contract_obligations, contract_result,
-    control_vectors,
+    all_passed, builtin_plugins, capabilities, conformance_vectors, contract_obligations,
+    contract_result, control_vectors,
 };
 pub use viewer::{
     AlignmentRule, TRACE_IR_FORM, VendorSource, project_file, project_vendor_record, render_page,

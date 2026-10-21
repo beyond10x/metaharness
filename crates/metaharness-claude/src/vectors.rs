@@ -627,6 +627,8 @@ fn base_context() -> LaunchContext {
         .map(|(key, value)| (key.to_string(), value.to_string()))
         .collect(),
         tool_server: Some(PathBuf::from("/usr/local/bin/metaharness")),
+        // No managed settings: a synthetic machine with no `/etc/claude-code`.
+        managed_settings: Vec::new(),
         memory_ancestors: Vec::new(),
         inputs_digest: Some(Digest::of(b"the copied input tree")),
         // No plugin unless a case says so. A synthetic tree, like everything else here: the

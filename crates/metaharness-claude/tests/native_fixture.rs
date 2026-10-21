@@ -13,13 +13,42 @@ use std::os::unix::process::CommandExt;
 use std::path::{Path, PathBuf};
 use std::process::{Child, Command, Stdio};
 use std::sync::atomic::{AtomicBool, Ordering};
-use std::sync::{Arc, Mutex};
+use std::sync::{Arc, Mutex, OnceLock};
 use std::thread;
 use std::time::{Duration, Instant};
 
 const MODEL: &str = "claude-sonnet-4-5-20250929";
 const ANSWER: &str = "native-claude-fixture-final";
+/// The token the `loopback` fixture puts in custody: written by this test into its own scratch
+/// HOME, issued by no account, and worth nothing anywhere.
+const CUSTODY_TOKEN: &str = "native-fixture-custody-token-issued-by-no-account";
+/// The placeholder `credentials: none` hands the child for a declared endpoint.
+const ENDPOINT_PLACEHOLDER: &str = "metaharness-model-endpoint";
+/// The built-ins a 2.1.304 session opens with under either credential-free mode, observed: the
+/// launch sets `CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC` in both, which keeps
+/// `cc-plugin-telemetry` out (design amendment a33).
+const BUILTINS_SEEN: [&str; 2] = ["cc-plugin-agents-md", "cc-plugin-plugin-authoring"];
 static NATIVE_RUN: Mutex<()> = Mutex::new(());
+
+/// The two credential-free modes the fixture drives. Neither puts an operator credential anywhere:
+/// `none` hands the child a placeholder for the stub, and `loopback` puts this test's own fake
+/// token in custody behind metaharness's proxy, whose upstream is the stub.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+enum Credentials {
+    None,
+    Loopback,
+}
+
+impl Credentials {
+    const ALL: [Self; 2] = [Self::None, Self::Loopback];
+
+    fn flag(self) -> &'static str {
+        match self {
+            Self::None => "none",
+            Self::Loopback => "loopback",
+        }
+    }
+}
 
 #[derive(Clone, Copy)]
 enum Mode {
@@ -39,7 +68,7 @@ struct Provider {
 }
 
 impl Provider {
-    fn start(mode: Mode) -> Self {
+    fn start(mode: Mode, credentials: Credentials) -> Self {
         let listener = TcpListener::bind(("127.0.0.1", 0)).unwrap();
         listener.set_nonblocking(true).unwrap();
         let endpoint = format!("http://{}", listener.local_addr().unwrap());
@@ -54,7 +83,9 @@ impl Provider {
             while !stop.load(Ordering::SeqCst) {
                 match listener.accept() {
                     Ok((stream, _)) => {
-                        if let Err(error) = serve(stream, mode, &mut turn, &seen, &stop) {
+                        if let Err(error) =
+                            serve(stream, mode, credentials, &mut turn, &seen, &stop)
+                        {
                             problems.lock().unwrap().push(error.to_string());
                         }
                     }
@@ -121,6 +152,7 @@ fn request(stream: &TcpStream) -> io::Result<Value> {
     let mut placeholder = false;
     let mut key_present = false;
     let mut authorization = false;
+    let mut custody = false;
     for line in &headers[1..] {
         if let Some((name, value)) = line.split_once(':') {
             match name.to_ascii_lowercase().as_str() {
@@ -132,9 +164,12 @@ fn request(stream: &TcpStream) -> io::Result<Value> {
                 }
                 "x-api-key" => {
                     key_present = true;
-                    placeholder = value.trim() == "metaharness-model-endpoint";
+                    placeholder = value.trim() == ENDPOINT_PLACEHOLDER;
                 }
-                "authorization" => authorization = true,
+                "authorization" => {
+                    authorization = true;
+                    custody = value.trim() == format!("Bearer {CUSTODY_TOKEN}");
+                }
                 _ => {}
             }
         }
@@ -168,13 +203,14 @@ fn request(stream: &TcpStream) -> io::Result<Value> {
     };
     // Retain only credential predicates, never an unexpected header's value.
     Ok(
-        json!({"request": request, "placeholder": placeholder, "key_present": key_present, "authorization_present": authorization, "body": body}),
+        json!({"request": request, "placeholder": placeholder, "key_present": key_present, "authorization_present": authorization, "custody_bearer": custody, "body": body}),
     )
 }
 
 fn serve(
     mut stream: TcpStream,
     mode: Mode,
+    credentials: Credentials,
     turn: &mut usize,
     seen: &Mutex<Vec<Value>>,
     stopping: &AtomicBool,
@@ -184,14 +220,32 @@ fn serve(
     let request = observed["request"].as_str().unwrap();
     let placeholder = observed["placeholder"] == true;
     let authorization = observed["authorization_present"] == true;
+    let key_present = observed["key_present"] == true;
+    let custody = observed["custody_bearer"] == true;
     let body = &observed["body"];
-    if request == "HEAD /api/hello HTTP/1.1" && observed["key_present"] == false && !authorization {
-        return reply(&mut stream, "200 OK", "application/json", "");
-    }
-    if !placeholder || authorization {
-        return Err(io::Error::other(format!(
-            "unexpected credential source on {request}"
-        )));
+    match credentials {
+        Credentials::None => {
+            if request == "HEAD /api/hello HTTP/1.1" && !key_present && !authorization {
+                return reply(&mut stream, "200 OK", "application/json", "");
+            }
+            if !placeholder || authorization {
+                return Err(io::Error::other(format!(
+                    "unexpected credential source on {request}"
+                )));
+            }
+        }
+        // Everything arrives through metaharness's proxy, which strips the child's placeholder and
+        // attaches the custody bearer: so the stub admits exactly that bearer and no key at all.
+        Credentials::Loopback => {
+            if !custody || key_present {
+                return Err(io::Error::other(format!(
+                    "unexpected credential source on {request}"
+                )));
+            }
+            if request == "HEAD /api/hello HTTP/1.1" {
+                return reply(&mut stream, "200 OK", "application/json", "");
+            }
+        }
     }
     if request.contains("/count_tokens") {
         return reply(
@@ -359,32 +413,103 @@ fn event_lines(root: &Path) -> Vec<Value> {
         .collect()
 }
 
-fn run(mode: Mode) -> (PathBuf, Vec<Value>, i32) {
-    require_isolation();
+fn run(mode: Mode, credentials: Credentials) -> (PathBuf, Vec<Value>, i32) {
+    run_in(mode, credentials, &[], |_| {})
+}
+
+/// What a Claude binary prints for `--version`, reduced to its version token, read in a scratch
+/// home of its own with nothing inherited. No model call.
+fn version_of(binary: &Path, evidence: &Path) -> String {
+    let home = evidence.join("version-probe-home");
+    fs::create_dir_all(home.join("config")).unwrap();
+    let output = Command::new(binary)
+        .arg("--version")
+        .env_clear()
+        .env("HOME", &home)
+        .env("CLAUDE_CONFIG_DIR", home.join("config"))
+        .env("PATH", "/usr/bin:/bin")
+        .stdin(Stdio::null())
+        .output()
+        .unwrap();
+    assert!(output.status.success(), "{} --version", binary.display());
+    String::from_utf8_lossy(&output.stdout)
+        .split_whitespace()
+        .next()
+        .expect("a version token")
+        .to_owned()
+}
+
+/// The version of the binary under test, read once. It must be one the adapter pins: the lane is
+/// run once per pinned binary, and every opening record it produces must report this version.
+fn vendor_version() -> &'static str {
+    static VERSION: OnceLock<String> = OnceLock::new();
+    VERSION.get_or_init(|| {
+        let (vendor, evidence) = vendor_and_evidence();
+        let version = version_of(&vendor, &evidence);
+        assert!(
+            metaharness_claude::PINNED_VERSIONS.contains(&version.as_str()),
+            "the binary under test reports {version}, which the adapter does not pin"
+        );
+        version
+    })
+}
+
+/// The explicit vendor binary and the private evidence root, both absolute.
+fn vendor_and_evidence() -> (PathBuf, PathBuf) {
     let vendor = PathBuf::from(
         std::env::var_os("METAHARNESS_NATIVE_CLAUDE").expect("explicit installed vendor"),
-    );
-    let driver = PathBuf::from(
-        std::env::var_os("METAHARNESS_NATIVE_DRIVER").expect("explicit production driver"),
     );
     let evidence = PathBuf::from(
         std::env::var_os("METAHARNESS_NATIVE_EVIDENCE").expect("private evidence root"),
     );
-    assert!(vendor.is_absolute() && driver.is_absolute() && evidence.is_absolute());
+    assert!(vendor.is_absolute() && evidence.is_absolute());
     fs::create_dir_all(&evidence).unwrap();
+    (vendor, evidence)
+}
+
+/// A fresh run root under the evidence directory: `home/` with the vendor on its `PATH`, `work/`,
+/// `tmp/`, and — under `loopback` — this test's own fake login in `home/.claude/`.
+fn fresh_root(vendor: &Path, evidence: &Path, credentials: Credentials) -> PathBuf {
     let root = tempfile::Builder::new()
-        .prefix("claude-")
-        .tempdir_in(&evidence)
+        .prefix(&format!("claude-{}-", credentials.flag()))
+        .tempdir_in(evidence)
         .unwrap()
         .keep();
     let home = root.join("home");
-    let cwd = root.join("work");
     fs::create_dir_all(home.join(".local/bin")).unwrap();
-    fs::create_dir_all(&cwd).unwrap();
+    fs::create_dir_all(root.join("work")).unwrap();
     fs::create_dir_all(root.join("tmp")).unwrap();
     std::os::unix::fs::symlink(vendor, home.join(".local/bin/claude")).unwrap();
-    let provider = Provider::start(mode);
-    let mut command = driver_command(&driver, &root, &provider.endpoint, mode);
+    if credentials == Credentials::Loopback {
+        fs::create_dir_all(home.join(".claude")).unwrap();
+        fs::write(
+            home.join(".claude/.credentials.json"),
+            json!({"claudeAiOauth": {"accessToken": CUSTODY_TOKEN}}).to_string(),
+        )
+        .unwrap();
+    }
+    root
+}
+
+/// One production-driver run: `plant` writes into the fresh root before the spawn, and `extra`
+/// is appended to the driver's argv.
+fn run_in(
+    mode: Mode,
+    credentials: Credentials,
+    extra: &[&str],
+    plant: impl FnOnce(&Path),
+) -> (PathBuf, Vec<Value>, i32) {
+    require_isolation();
+    let driver = PathBuf::from(
+        std::env::var_os("METAHARNESS_NATIVE_DRIVER").expect("explicit production driver"),
+    );
+    assert!(driver.is_absolute());
+    let (vendor, evidence) = vendor_and_evidence();
+    let root = fresh_root(&vendor, &evidence, credentials);
+    plant(&root);
+    let provider = Provider::start(mode, credentials);
+    let mut command = driver_command(&driver, &root, &provider.endpoint, mode, credentials);
+    command.args(extra);
     let mut child = NativeChild {
         child: command.spawn().unwrap(),
         reaped: false,
@@ -443,11 +568,17 @@ fn run(mode: Mode) -> (PathBuf, Vec<Value>, i32) {
         );
         thread::sleep(Duration::from_millis(20));
     };
-    let events = collect_evidence(&root, &provider);
+    let events = collect_evidence(&root, &provider, credentials);
     (root, events, status.code().unwrap_or(-1))
 }
 
-fn driver_command(driver: &Path, root: &Path, endpoint: &str, mode: Mode) -> Command {
+fn driver_command(
+    driver: &Path,
+    root: &Path,
+    endpoint: &str,
+    mode: Mode,
+    credentials: Credentials,
+) -> Command {
     let home = root.join("home");
     let cwd = root.join("work");
     let mut command = Command::new(driver);
@@ -456,7 +587,7 @@ fn driver_command(driver: &Path, root: &Path, endpoint: &str, mode: Mode) -> Com
             "run",
             "claude",
             "--credentials",
-            "none",
+            credentials.flag(),
             "--decisions",
             "ask",
             "--model",
@@ -489,7 +620,7 @@ fn driver_command(driver: &Path, root: &Path, endpoint: &str, mode: Mode) -> Com
     command
 }
 
-fn collect_evidence(root: &Path, provider: &Provider) -> Vec<Value> {
+fn collect_evidence(root: &Path, provider: &Provider, credentials: Credentials) -> Vec<Value> {
     retain_provider(root, provider);
     let requests = provider.requests.lock().unwrap().clone();
     let errors = provider.errors.lock().unwrap().clone();
@@ -499,9 +630,17 @@ fn collect_evidence(root: &Path, provider: &Provider) -> Vec<Value> {
         "native process never reached fixture: {}",
         root.display()
     );
-    assert!(requests.iter().all(|r| (r["placeholder"] == true
-        || (r["request"] == "HEAD /api/hello HTTP/1.1" && r["key_present"] == false))
-        && r["authorization_present"] == false));
+    match credentials {
+        Credentials::None => assert!(requests.iter().all(|r| (r["placeholder"] == true
+            || (r["request"] == "HEAD /api/hello HTTP/1.1" && r["key_present"] == false))
+            && r["authorization_present"] == false)),
+        Credentials::Loopback => assert!(
+            requests
+                .iter()
+                .all(|r| r["custody_bearer"] == true && r["key_present"] == false),
+            "every request reached the stub through the proxy, carrying custody and no key"
+        ),
+    }
     let text = fs::read_to_string(root.join("events.jsonl")).unwrap();
     let events: Vec<Value> = text
         .lines()
@@ -511,7 +650,9 @@ fn collect_evidence(root: &Path, provider: &Provider) -> Vec<Value> {
         events
             .iter()
             .any(|event| event["event"] == "session.started"
-                && event["harness_version"] == "2.1.288")
+                && event["harness_version"] == vendor_version()),
+        "the opening record reports the version of the binary under test: {}",
+        root.display()
     );
     let closure = events.last().unwrap();
     assert_eq!(closure["event"], "stream.closed");
@@ -545,27 +686,31 @@ fn native_success_failure_model_usage_and_extension_inventory() {
     let _lease = NATIVE_RUN
         .lock()
         .unwrap_or_else(std::sync::PoisonError::into_inner);
-    for failed in [false, true] {
-        let (_, events, exit) = run(if failed { Mode::Refusal } else { Mode::Text });
+    for (credentials, failed) in Credentials::ALL
+        .into_iter()
+        .flat_map(|credentials| [(credentials, false), (credentials, true)])
+    {
+        let (_, events, exit) = run(if failed { Mode::Refusal } else { Mode::Text }, credentials);
         let started = events
             .iter()
             .find(|e| e["event"] == "session.started")
             .unwrap();
         assert_eq!(started["model"], MODEL);
-        // Native built-ins are observed, not silently removed to make H1a look satisfied.
+        // Native built-ins are observed, not silently removed to make H1a look satisfied: the
+        // traffic switch keeps `cc-plugin-telemetry` out, and the two that remain are compiled in.
         let names: BTreeSet<&str> = started["plugins"]
             .as_array()
             .unwrap()
             .iter()
             .map(|p| p["name"].as_str().unwrap())
             .collect();
-        assert_eq!(
-            names,
-            BTreeSet::from([
-                "cc-plugin-agents-md",
-                "cc-plugin-telemetry",
-                "cc-plugin-plugin-authoring"
-            ])
+        assert_eq!(names, BTreeSet::from(BUILTINS_SEEN), "{credentials:?}");
+        assert!(
+            names
+                .iter()
+                .all(|name| metaharness_claude::builtin_plugins(vendor_version())
+                    .is_some_and(|listed| listed.contains(name))),
+            "every plugin seen is one the adapter declares for its pin"
         );
         assert!(
             started["plugins"]
@@ -573,7 +718,7 @@ fn native_success_failure_model_usage_and_extension_inventory() {
                 .unwrap()
                 .iter()
                 .all(|plugin| plugin["source"]
-                    == format!("{}@builtin", plugin["name"].as_str().unwrap()))
+                    == metaharness_claude::builtin_plugin_source(plugin["name"].as_str().unwrap()))
         );
         assert_eq!(started["mcp_servers"], json!([]));
         let terminal = events
@@ -612,9 +757,12 @@ fn native_hook_allows_and_denies_the_real_marker_effect() {
     let _lease = NATIVE_RUN
         .lock()
         .unwrap_or_else(std::sync::PoisonError::into_inner);
-    for deny in [false, true] {
-        let (root, events, exit) = run(Mode::Tool { deny });
-        assert_eq!(exit, 0);
+    for (credentials, deny) in Credentials::ALL
+        .into_iter()
+        .flat_map(|credentials| [(credentials, false), (credentials, true)])
+    {
+        let (root, events, exit) = run(Mode::Tool { deny }, credentials);
+        assert_eq!(exit, 0, "{credentials:?}");
         assert_eq!(root.join("work/native-fixture-marker").exists(), !deny);
         assert!(events.iter().any(|e| e["event"] == "tool.decided"
             && e["decision"]["decision"] == if deny { "deny" } else { "allow" }));
@@ -632,9 +780,12 @@ fn native_interrupt_and_halt_close_a_waiting_provider_run() {
     let _lease = NATIVE_RUN
         .lock()
         .unwrap_or_else(std::sync::PoisonError::into_inner);
-    for command in ["interrupt", "halt"] {
-        let (_, events, exit) = run(Mode::Hang { command });
-        assert_ne!(exit, 0);
+    for (credentials, command) in Credentials::ALL
+        .into_iter()
+        .flat_map(|credentials| [(credentials, "interrupt"), (credentials, "halt")])
+    {
+        let (_, events, exit) = run(Mode::Hang { command }, credentials);
+        assert_ne!(exit, 0, "{credentials:?}");
         assert!(events.iter().any(|e| e["event"] == "command.result"
             && e["id"] == "fixture-cancel"
             && e["outcome"]["result"] == "ok"));
@@ -648,12 +799,301 @@ fn native_max_turns_stops_a_fixture_that_keeps_requesting_tools() {
     let _lease = NATIVE_RUN
         .lock()
         .unwrap_or_else(std::sync::PoisonError::into_inner);
-    let (_, events, exit) = run(Mode::RepeatTool);
-    assert_ne!(exit, 0);
-    let terminal = events
+    for credentials in Credentials::ALL {
+        let (_, events, exit) = run(Mode::RepeatTool, credentials);
+        assert_ne!(exit, 0, "{credentials:?}");
+        let terminal = events
+            .iter()
+            .find(|e| e["event"] == "session.ended")
+            .unwrap();
+        assert_eq!(terminal["subtype"], "error_max_turns");
+        assert_eq!(terminal["is_error"], true);
+    }
+}
+
+/// The floor reads the pin, the credential and the built-ins from what the record of the binary
+/// under test carried (design amendment a33): `--strict-version` lets the pinned binary through,
+/// H9 is `ok` on its version, H4 is `ok` under both credential-free modes — under `none` the record
+/// names the API-key variable, which holds the launch's own attested placeholder — and H1a is `ok`
+/// naming each built-in it admitted.
+///
+/// Only those rows are asserted. The fixture names its own `--cwd`, so H7 and H11 are attested
+/// unavailable by design (amendment a6) and the run's exit is not the question here.
+#[test]
+#[ignore = "actual Claude and production driver; explicit binaries/evidence and isolated loopback network namespace required"]
+fn native_audit_reads_the_pin_and_names_each_builtin_it_admitted() {
+    let _lease = NATIVE_RUN
+        .lock()
+        .unwrap_or_else(std::sync::PoisonError::into_inner);
+    for credentials in Credentials::ALL {
+        let (root, _, _) = run_in(
+            Mode::Text,
+            credentials,
+            &["--audit", "--strict-version"],
+            |_| {},
+        );
+        let report = fs::read_to_string(root.join("stderr.log")).unwrap();
+        let row = |id: &str| {
+            report
+                .lines()
+                .find(|line| line.trim_start().starts_with(&format!("{id} ")))
+                .unwrap_or_else(|| panic!("no {id} row in {}", root.display()))
+                .to_owned()
+        };
+        let h9 = row("H9");
+        assert!(
+            h9.split_whitespace().nth(1) == Some("ok") && h9.contains(vendor_version()),
+            "{credentials:?}: {h9}"
+        );
+        let h4 = row("H4");
+        assert_eq!(
+            h4.split_whitespace().nth(1),
+            Some("ok"),
+            "{credentials:?}: {h4}"
+        );
+        let h1a = row("H1a");
+        assert_eq!(
+            h1a.split_whitespace().nth(1),
+            Some("ok"),
+            "{credentials:?}: {h1a}"
+        );
+        for name in BUILTINS_SEEN {
+            assert!(
+                h1a.contains(&metaharness_claude::builtin_plugin_source(name)),
+                "{credentials:?}: H1a names {name}: {h1a}"
+            );
+        }
+    }
+}
+
+/// `--strict-version` refuses a binary off the pin before anything is spawned (design amendment
+/// a33): the driver asks the binary on the child's `PATH` for its `--version`, no model request
+/// reaches the stub, no session opens, and the refusal names the version it read. Run against
+/// `METAHARNESS_NATIVE_CLAUDE_OFF_PIN` — 2.1.303 on this machine, kept off the pin.
+#[test]
+#[ignore = "actual Claude and production driver; explicit binaries/evidence and isolated loopback network namespace required"]
+fn native_strict_version_refuses_an_off_pin_binary_before_the_spawn() {
+    let _lease = NATIVE_RUN
+        .lock()
+        .unwrap_or_else(std::sync::PoisonError::into_inner);
+    require_isolation();
+    let off_pin = PathBuf::from(
+        std::env::var_os("METAHARNESS_NATIVE_CLAUDE_OFF_PIN").expect("an explicit off-pin vendor"),
+    );
+    let driver = PathBuf::from(
+        std::env::var_os("METAHARNESS_NATIVE_DRIVER").expect("explicit production driver"),
+    );
+    assert!(off_pin.is_absolute() && driver.is_absolute());
+    let (_, evidence) = vendor_and_evidence();
+    let reported = version_of(&off_pin, &evidence);
+    assert!(
+        !metaharness_claude::PINNED_VERSIONS.contains(&reported.as_str()),
+        "the off-pin binary reports {reported}, which is pinned"
+    );
+    for credentials in Credentials::ALL {
+        let root = fresh_root(&off_pin, &evidence, credentials);
+        let provider = Provider::start(Mode::Text, credentials);
+        let mut command =
+            driver_command(&driver, &root, &provider.endpoint, Mode::Text, credentials);
+        command.arg("--strict-version");
+        let mut child = NativeChild {
+            child: command.spawn().unwrap(),
+            reaped: false,
+        };
+        let deadline = Instant::now() + Duration::from_secs(45);
+        let status = loop {
+            if let Some(status) = child.child.try_wait().unwrap() {
+                child.reaped = true;
+                break status;
+            }
+            assert!(Instant::now() < deadline, "{}", root.display());
+            thread::sleep(Duration::from_millis(20));
+        };
+        retain_provider(&root, &provider);
+        let stderr = fs::read_to_string(root.join("stderr.log")).unwrap();
+        assert_eq!(status.code(), Some(2), "{credentials:?}: {stderr}");
+        assert!(
+            stderr.contains("--strict-version") && stderr.contains(&reported),
+            "{credentials:?}: {stderr}"
+        );
+        assert!(
+            provider.requests.lock().unwrap().is_empty(),
+            "{credentials:?}: nothing reached the stub"
+        );
+        let events = fs::read_to_string(root.join("events.jsonl")).unwrap();
+        assert!(
+            !events.contains("session.started"),
+            "{credentials:?}: no session opened: {events}"
+        );
+    }
+}
+
+/// The memory shapes the pinned loader reads from a directory once a project or local source is
+/// on, read from its own list of memory files (design amendment a33), less the two `AGENTS.md`
+/// shapes, which the next constant holds. The H11 walk counts only `CLAUDE.md` and `AGENTS.md`;
+/// the rest are `story:claude-h11-memory-walk-shapes`.
+const LOADED_SHAPES: [&str; 4] = [
+    "CLAUDE.md",
+    ".claude/CLAUDE.md",
+    "CLAUDE.local.md",
+    ".claude/rules/canary.md",
+];
+
+/// The two `AGENTS.md` shapes, read by the `cc-plugin-agents-md` built-in where a project has no
+/// `CLAUDE.md` of its own.
+const AGENTS_SHAPES: [&str; 2] = ["AGENTS.md", ".claude/AGENTS.md"];
+
+/// The text a canary memory file carries, unique per place and shape so a hit names the file that
+/// leaked.
+fn canary(place: &str, shape: &str) -> String {
+    format!(
+        "native-canary-{place}-{}-7d1f3a",
+        shape.replace(['/', '.'], "-")
+    )
+}
+
+/// Plant one canary of each shape in the run's working directory and one in its parent, which is
+/// an ancestor the vendor's walk from the cwd passes through.
+fn plant_canaries(root: &Path, shapes: &[&str]) {
+    for shape in shapes {
+        for (place, directory) in [("cwd", root.join("work")), ("ancestor", root.to_path_buf())] {
+            let path = directory.join(shape);
+            fs::create_dir_all(path.parent().unwrap()).unwrap();
+            fs::write(path, canary(place, shape)).unwrap();
+        }
+    }
+}
+
+/// Every canary of these shapes found in any request body the stub recorded, in plant order.
+fn canaries_in_requests(root: &Path, shapes: &[&str]) -> Vec<String> {
+    let requests = fs::read_to_string(root.join("requests.json")).unwrap();
+    shapes
         .iter()
-        .find(|e| e["event"] == "session.ended")
-        .unwrap();
-    assert_eq!(terminal["subtype"], "error_max_turns");
-    assert_eq!(terminal["is_error"], true);
+        .flat_map(|shape| ["cwd", "ancestor"].map(|place| canary(place, shape)))
+        .filter(|text| requests.contains(text.as_str()))
+        .collect()
+}
+
+/// The positive control: the same vendor, the same world, run directly **with** the project and
+/// local setting sources, which the pinned loader gates memory discovery on. A probe that cannot
+/// see a canary the vendor loads would make the negative result below worth nothing (invariant 3).
+fn vendor_with_project_and_local_sources(shapes: &[&str]) -> Vec<String> {
+    let (vendor, evidence) = vendor_and_evidence();
+    let root = fresh_root(&vendor, &evidence, Credentials::None);
+    plant_canaries(&root, shapes);
+    let provider = Provider::start(Mode::Text, Credentials::None);
+    let config = root.join("home/.claude-config");
+    fs::create_dir_all(&config).unwrap();
+    let mut command = Command::new(&vendor);
+    command
+        .args([
+            "-p",
+            "Return the fixture answer.",
+            "--output-format",
+            "stream-json",
+            "--verbose",
+            "--model",
+            MODEL,
+            "--max-turns",
+            "1",
+            "--strict-mcp-config",
+            "--setting-sources",
+            "project,local",
+        ])
+        .env_clear()
+        .env("HOME", root.join("home"))
+        .env("CLAUDE_CONFIG_DIR", &config)
+        .env("PATH", "/usr/local/bin:/usr/bin:/bin")
+        .env("LANG", "C.UTF-8")
+        .env("TMPDIR", root.join("tmp"))
+        .env("ANTHROPIC_BASE_URL", &provider.endpoint)
+        .env("ANTHROPIC_API_KEY", ENDPOINT_PLACEHOLDER)
+        .env("CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC", "1")
+        .current_dir(root.join("work"))
+        .stdin(Stdio::null())
+        .stdout(fs::File::create(root.join("vendor-stdout.jsonl")).unwrap())
+        .stderr(fs::File::create(root.join("stderr.log")).unwrap())
+        .process_group(0);
+    let mut child = NativeChild {
+        child: command.spawn().unwrap(),
+        reaped: false,
+    };
+    let deadline = Instant::now() + Duration::from_secs(45);
+    while child.child.try_wait().unwrap().is_none() {
+        assert!(
+            Instant::now() < deadline,
+            "the control exceeded 45 seconds: {}",
+            root.display()
+        );
+        thread::sleep(Duration::from_millis(20));
+    }
+    child.reaped = true;
+    retain_provider(&root, &provider);
+    canaries_in_requests(&root, shapes)
+}
+
+/// H11's re-probe (design amendment a33): a canary of each memory shape in the working directory
+/// and in an ancestor, then the request bodies the stub recorded.
+///
+/// * **`CLAUDE.md`, `.claude/CLAUDE.md`, `CLAUDE.local.md`, a `.claude/rules` file** — run directly
+///   with the project and local sources, the vendor sends every canary, from the cwd and from the
+///   ancestor; through the production launch, which passes `--setting-sources ""`, none reaches any
+///   request, under `none` or `loopback`. The control is what makes the negative an observation.
+/// * **`AGENTS.md`, `.claude/AGENTS.md`** — the same, planted where no `CLAUDE.md`-family file sits
+///   in the cwd or above it: the `cc-plugin-agents-md` built-in loads them only for a project with
+///   no `CLAUDE.md` of its own, which is why a world with any such file above it (the operator's own
+///   `~/.claude/CLAUDE.md`, for one) sends none even with the sources on. The lane therefore runs
+///   with an empty directory bound over `$HOME/.claude`.
+#[test]
+#[ignore = "actual Claude and production driver; explicit binaries/evidence and isolated loopback network namespace required"]
+fn native_memory_canaries_in_the_cwd_and_an_ancestor_never_reach_the_model() {
+    let _lease = NATIVE_RUN
+        .lock()
+        .unwrap_or_else(std::sync::PoisonError::into_inner);
+    require_isolation();
+    let (_, evidence) = vendor_and_evidence();
+    let above: Vec<PathBuf> = evidence
+        .ancestors()
+        .flat_map(|dir| {
+            LOADED_SHAPES
+                .iter()
+                .chain(&AGENTS_SHAPES)
+                .map(move |file| dir.join(file))
+        })
+        .filter(|path| path.is_file())
+        .collect();
+    assert!(
+        above.is_empty(),
+        "memory files above the evidence root change what the control loads; run the lane with \
+         them hidden: {above:?}"
+    );
+    for shapes in [&LOADED_SHAPES[..], &AGENTS_SHAPES[..]] {
+        let control = vendor_with_project_and_local_sources(shapes);
+        let expected: Vec<String> = shapes
+            .iter()
+            .flat_map(|shape| ["cwd", "ancestor"].map(|place| canary(place, shape)))
+            .collect();
+        assert_eq!(
+            control, expected,
+            "the control with the project and local sources: {shapes:?}"
+        );
+        for credentials in Credentials::ALL {
+            let (root, events, _) = run_in(Mode::Text, credentials, &[], |root| {
+                plant_canaries(root, shapes);
+            });
+            assert!(
+                events
+                    .iter()
+                    .any(|e| e["event"] == "text" && e["text"] == ANSWER),
+                "the run reached the model: {}",
+                root.display()
+            );
+            assert_eq!(
+                canaries_in_requests(&root, shapes),
+                Vec::<String>::new(),
+                "{credentials:?} {shapes:?}: {}",
+                root.display()
+            );
+        }
+    }
 }

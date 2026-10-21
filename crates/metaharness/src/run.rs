@@ -216,6 +216,10 @@ pub(crate) struct LaunchFacts {
     /// hermetic breach.
     pub(crate) planned_mcp_servers: Vec<String>,
     pub(crate) declared_plugins: Vec<String>,
+    /// The plugins compiled into the pinned binary, for H1a (amendment a33).
+    pub(crate) builtin_plugins: Vec<crate::audit::BuiltinPlugin>,
+    /// The H4 sentence this kind's launch attests over its own endpoint placeholder (a33).
+    pub(crate) endpoint_key_posture: Option<&'static str>,
     pub(crate) pinned_versions: Vec<String>,
     pub(crate) transcript: TranscriptRef,
 }

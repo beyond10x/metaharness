@@ -188,9 +188,25 @@ pub struct LaunchContext {
     /// child however it got into this map (design § 8.1 H3).
     pub inherited_env: BTreeMap<String, String>,
     /// What an ancestor walk from [`LaunchContext::cwd`] found. A non-empty walk is a **refusal
-    /// before the run** and not a warning: `CLAUDE.md` auto-discovery is on in every run that is
-    /// not `--bare`, and H8 forbids `--bare`, so a memory file in any ancestor enters the
-    /// context of a run this design calls hermetic (design § 8.1 H11, finding F14).
+    /// before the run** and not a warning (design § 8.1 H11, finding F14).
+    ///
+    /// **The walk looks for `CLAUDE.md` and `AGENTS.md` in each directory above the cwd, and for
+    /// nothing else.** The 2.1.304 and 2.1.305 loader also reads `.claude/CLAUDE.md`,
+    /// `CLAUDE.local.md`, `.claude/AGENTS.md` and every `.md` file under `.claude/rules` from those
+    /// directories once a source is on (design amendment a33); the walk does not look for those
+    /// shapes, and `story:claude-h11-memory-walk-shapes` (decided: option C) covers them.
+    ///
+    /// What a memory file does is observed per pin, not assumed. At 2.1.304 and 2.1.305
+    /// project-memory discovery is gated on the `projectSettings` source (`CLAUDE.local.md` on
+    /// `localSettings`), which `--setting-sources ""` (H2) switches off: in the native fixture a
+    /// canary of each shape in the cwd and in an ancestor reached no request the model was sent,
+    /// under `credentials: none` and `loopback`, while the same binary sent every one with the
+    /// project and local sources on (the `AGENTS.md` shapes where no `CLAUDE.md`-family file sat in
+    /// or above the cwd, the only case their built-in loads them). The older reading here —
+    /// *auto-discovery is on in every run that is not `--bare`* — is superseded for those pins. The
+    /// walk still refuses: the observation is the binary's behaviour, and a binary that loaded
+    /// memory regardless of the source would put the file in context with nothing in the record to
+    /// say so.
     pub memory_ancestors: Vec<PathBuf>,
     /// The digest of the copied input tree, carried into `session.started.inputs_digest` — the
     /// evidence for H10. `None` means the caller pinned nothing, and the attestation says so
@@ -204,6 +220,15 @@ pub struct LaunchContext {
     /// nothing to replace them: that child has no tools at all, and would spend the whole run
     /// explaining that it cannot read a file.
     pub tool_server: Option<PathBuf>,
+    /// The managed-settings sources the caller found on this machine, out of
+    /// [`crate::MANAGED_SETTINGS_PATHS`] (design amendment a33).
+    ///
+    /// The caller's to supply, on the same division as [`LaunchContext::memory_ancestors`]: it
+    /// reads the filesystem, this function decides what the plan may claim. Managed settings are a
+    /// source `--setting-sources ""` does not switch off, and their `env` or `apiKeyHelper` can
+    /// replace the key the launch hands the child — so while any is present the launch does not
+    /// attest that the child's `ANTHROPIC_API_KEY` is its own endpoint placeholder.
+    pub managed_settings: Vec<PathBuf>,
     /// Every directory `spec.plugin_dir` named, **as the caller read it** (crossing #4).
     ///
     /// The caller does the walk and the per-file digests, on the same division as
@@ -385,8 +410,8 @@ pub enum LaunchRefusal {
         scratch_root: PathBuf,
     },
     /// The ancestor walk found memory files above the scratch working directory (H11). A
-    /// refusal and not a warning, because those files enter the context of a run this design
-    /// calls hermetic.
+    /// refusal and not a warning, because whether those files enter the context is the pinned
+    /// binary's behaviour rather than a control metaharness holds (design amendment a33).
     MemoryAncestorsFound {
         /// What the walk found, in the order it found them.
         found: Vec<PathBuf>,
@@ -496,6 +521,19 @@ impl LaunchRefusal {
     }
 }
 
+/// [`LaunchRefusal::MemoryAncestorsFound`] in words: what the walk found, and why a memory file
+/// above the scratch cwd is refused whatever the pinned binary does with it (design amendment a33).
+fn memory_refusal(f: &mut fmt::Formatter<'_>, found: &[PathBuf]) -> fmt::Result {
+    write!(
+        f,
+        "H11: the ancestor walk found {}; a memory file above the scratch cwd is refused whatever \
+         the pinned binary loads, because what --setting-sources \"\" keeps out (the CLAUDE.md \
+         shapes, observed at 2.1.304 and 2.1.305) is the pinned binary's behaviour and not a \
+         control metaharness holds",
+        join_paths(found)
+    )
+}
+
 impl fmt::Display for LaunchRefusal {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
@@ -520,12 +558,7 @@ impl fmt::Display for LaunchRefusal {
                 cwd.display(),
                 scratch_root.display()
             ),
-            LaunchRefusal::MemoryAncestorsFound { found } => write!(
-                f,
-                "H11: the ancestor walk found {}, and memory-file discovery is on in every run \
-                 that is not --bare",
-                join_paths(found)
-            ),
+            LaunchRefusal::MemoryAncestorsFound { found } => memory_refusal(f, found),
             LaunchRefusal::CredentialFileMissing => f.write_str(
                 "the run's credential source needs the operator's credential file and none was \
                  named: an operator login has nothing to copy into the scratch home, and a \
@@ -1213,8 +1246,29 @@ fn build_env(
             ENDPOINT_PLACEHOLDER_KEY.to_string(),
         );
     }
+    if credential_free(spec) {
+        env.insert(DISABLE_NONESSENTIAL_TRAFFIC.to_string(), "1".to_string());
+    }
     guard_environment(&env, spec)?;
     Ok(env)
+}
+
+/// Whether nothing of the operator's reaches the child: `credentials: none` or `loopback`.
+///
+/// These are the runs that get [`DISABLE_NONESSENTIAL_TRAFFIC`] (design amendment a33), for two
+/// reasons that hold only here. The child's model traffic goes where metaharness pointed it — a
+/// declared endpoint, the loopback proxy, or nowhere — so first-party analytics to
+/// `api.anthropic.com` would be the one request that bypasses it; and it is the switch that keeps
+/// the `cc-plugin-telemetry` built-in out of the session, observed at 2.1.304 and 2.1.305. Under
+/// an operator login or an API key the switch is **not** set: it also gates server-side behaviour
+/// keyed on the account (the served model catalog's published path, claude.ai downloads), none of
+/// which a credential-free probe can observe, so the built-in is admitted by name and `@builtin`
+/// source there instead.
+fn credential_free(spec: &RunSpec) -> bool {
+    matches!(
+        spec.credentials,
+        CredentialSource::None | CredentialSource::Loopback
+    )
 }
 
 /// The three variables a loopback child runs on, and the one it must not have.
@@ -1324,6 +1378,10 @@ fn guard_environment(env: &BTreeMap<String, String>, spec: &RunSpec) -> Result<(
 /// *unconditionally*, including beside a declared model endpoint, because the endpoint under
 /// `loopback` is the **proxy's upstream** and the child authenticates with the placeholder bearer
 /// alone — a second credential variable would put a second spelling on the wire for no reason.
+///
+/// `CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC` is relaxed under `credentials: none` as well
+/// (design amendment a33, [`credential_free`]); it is still this plan's own value there and never
+/// the operator's, by the same allowlist.
 fn is_scrubbed(key: &str, spec: &RunSpec) -> bool {
     let credentials = spec.credentials;
     let loopback = credentials == CredentialSource::Loopback;
@@ -1334,8 +1392,11 @@ fn is_scrubbed(key: &str, spec: &RunSpec) -> bool {
     if key == "ANTHROPIC_BASE_URL" {
         return !loopback && spec.model_endpoint.is_none();
     }
-    if key == "ANTHROPIC_AUTH_TOKEN" || key == DISABLE_NONESSENTIAL_TRAFFIC {
+    if key == "ANTHROPIC_AUTH_TOKEN" {
         return !loopback;
+    }
+    if key == DISABLE_NONESSENTIAL_TRAFFIC {
+        return !credential_free(spec);
     }
     key.starts_with("ANTHROPIC_")
         || key.starts_with("CLAUDE_CODE_")
@@ -1491,7 +1552,6 @@ fn attest(
                 INHERITED_KEYS.len()
             ),
         ),
-        control_imposed(HermeticRow::H4, api_key_posture(spec)),
         control_imposed(HermeticRow::H5, "--strict-mcp-config"),
         control_imposed(
             HermeticRow::H8,
@@ -1507,6 +1567,13 @@ fn attest(
             PINNED_VERSIONS.join(", ")
         ),
     )];
+    // H4: the placeholder posture is a claim about the child's key, and managed settings can
+    // replace that key from a source the launch cannot switch off (a33). Present, they turn the
+    // claim into an unavailable row naming them; absent, the claim stands.
+    match managed_key_override(spec, context) {
+        Some(why) => unavailable.push(control_unavailable(HermeticRow::H4, why)),
+        None => imposed.push(control_imposed(HermeticRow::H4, api_key_posture(spec))),
+    }
 
     // H7 and H11 are impositions only over a scratch cwd. An operator-named directory
     // (amendment a6) is real work in a real tree: the rows are attested unavailable with the
@@ -1558,8 +1625,11 @@ fn attest(
         unavailable.push(control_unavailable(
             HermeticRow::H11,
             format!(
-                "the ancestor walk from the operator's directory found {} memory file(s), and \
-                 the operator declared the tree as the run's context by naming it",
+                "the ancestor walk from the operator's directory found {} memory file(s) above \
+                 it, and the tree is the operator's, so metaharness claims nothing about it; \
+                 --setting-sources \"\" kept memory files in and above the cwd out of every \
+                 request at 2.1.304 and 2.1.305 (a33), which is the pinned binary's behaviour \
+                 and not a control metaharness holds",
                 context.memory_ancestors.len()
             ),
         ));
@@ -1689,15 +1759,46 @@ fn plugin_posture(
 const LOOPBACK_POSTURE: &str = "no operator credential in the child; a placeholder authenticates \
                                 to metaharness's loopback proxy, which holds custody";
 
+/// H4's attested `how` when the child's `ANTHROPIC_API_KEY` is this plan's own endpoint
+/// placeholder, written once so the floor can recognise it (design amendment a33).
+///
+/// The record of such a run names the variable — 2.1.304 and 2.1.305 report `apiKeySource:
+/// "ANTHROPIC_API_KEY"` — and a floor reading the name alone would call the plan's placeholder an
+/// operator key. The floor reads this exact sentence in the run's own attestation instead: the
+/// launch's statement of what it put there, never an inference from the variable's name.
+pub const ENDPOINT_KEY_POSTURE: &str = "ANTHROPIC_API_KEY carries this plan's own placeholder for \
+                                        the declared model endpoint; no operator credential is in \
+                                        the child at all";
+
+/// Why the endpoint placeholder posture cannot be attested, or `None` when it can (a33).
+///
+/// Only the endpoint run makes that claim — its child's `ANTHROPIC_API_KEY` is the plan's own
+/// placeholder — and only managed settings can falsify it without the launch seeing: they are not
+/// a setting source `--setting-sources ""` names, and their `env` or `apiKeyHelper` puts a key in
+/// the child. Every other posture is about the absence or the declared presence of a key, which
+/// the record's `apiKeySource` already shows.
+fn managed_key_override(spec: &RunSpec, context: &LaunchContext) -> Option<String> {
+    let placeholder_claim =
+        spec.credentials != CredentialSource::Loopback && spec.model_endpoint.is_some();
+    if !placeholder_claim || context.managed_settings.is_empty() {
+        return None;
+    }
+    Some(format!(
+        "ANTHROPIC_API_KEY carries this plan's own placeholder for the declared model endpoint, \
+         but managed settings exist at {}: --setting-sources \"\" does not switch them off and \
+         their env or apiKeyHelper can replace that key, so the launch does not claim the key the \
+         record names is its placeholder",
+        join_paths(&context.managed_settings)
+    ))
+}
+
 fn api_key_posture(spec: &RunSpec) -> String {
     if spec.credentials == CredentialSource::Loopback {
         // Checked before the endpoint row: under loopback a declared endpoint is the proxy's
         // upstream, and saying the child holds a placeholder *key* would name the wrong variable.
         format!("ANTHROPIC_API_KEY is absent from the child environment — {LOOPBACK_POSTURE}")
     } else if spec.model_endpoint.is_some() {
-        "ANTHROPIC_API_KEY carries this plan's own placeholder for the declared model endpoint; \
-         no operator credential is in the child at all"
-            .to_string()
+        ENDPOINT_KEY_POSTURE.to_string()
     } else if spec.credentials == CredentialSource::ApiKey {
         "ANTHROPIC_API_KEY is in the child environment because the run declared credentials: \
          api-key"
@@ -1781,6 +1882,7 @@ mod tests {
             marketplace_plugins: Vec::new(),
             loopback: None,
             tool_server: Some(PathBuf::from("/usr/local/bin/metaharness")),
+            managed_settings: Vec::new(),
         }
     }
 
@@ -2071,6 +2173,97 @@ mod tests {
             effort.is_some_and(|at| plan.args.get(at + 1).map(String::as_str) == Some("medium")),
             "{:?}",
             plan.args
+        );
+    }
+
+    /// The endpoint run the native fixture drives, planned against an injected set of managed
+    /// settings the caller found (design amendment a33). No real `/etc` is read.
+    fn endpoint_plan(managed: &[&str]) -> LaunchPlan {
+        let mut spec = spec();
+        spec.credentials = CredentialSource::None;
+        spec.model_endpoint = Some("http://127.0.0.1:9".to_string());
+        let mut context = context();
+        context.managed_settings = managed.iter().map(PathBuf::from).collect();
+        plan_launch(&spec, &context).expect("the endpoint launch plans")
+    }
+
+    /// With no managed settings on the machine, the placeholder posture is attested on H4: the
+    /// child's key is the plan's own and nothing the launch cannot switch off can replace it.
+    #[test]
+    fn with_no_managed_settings_the_endpoint_placeholder_is_attested_on_h4() {
+        let plan = endpoint_plan(&[]);
+        let h4: Vec<&str> = plan
+            .attestation
+            .imposed
+            .iter()
+            .filter(|control| control.row == HermeticRow::H4)
+            .map(|control| control.how.as_str())
+            .collect();
+        assert_eq!(h4, [ENDPOINT_KEY_POSTURE]);
+        assert!(
+            !plan
+                .attestation
+                .unavailable
+                .iter()
+                .any(|control| control.row == HermeticRow::H4)
+        );
+    }
+
+    /// Managed settings are a source `--setting-sources ""` does not switch off, and their `env`
+    /// or `apiKeyHelper` can replace the placeholder. With any of them present the posture
+    /// sentence is **not** attested: H4 is unavailable, naming each source, so the floor reads the
+    /// key the record names as it did before a33.
+    #[test]
+    fn with_managed_settings_present_the_placeholder_is_not_attested_and_h4_names_them() {
+        for managed in [
+            &["/etc/claude-code/managed-settings.json"][..],
+            &["/etc/claude-code/managed-settings.d"][..],
+            &[
+                "/etc/claude-code/managed-settings.json",
+                "/etc/claude-code/managed-settings.d",
+            ][..],
+        ] {
+            let plan = endpoint_plan(managed);
+            assert!(
+                !plan
+                    .attestation
+                    .imposed
+                    .iter()
+                    .any(|control| control.row == HermeticRow::H4),
+                "{managed:?}"
+            );
+            let why = plan
+                .attestation
+                .unavailable
+                .iter()
+                .find(|control| control.row == HermeticRow::H4)
+                .map(|control| control.why.clone())
+                .expect("H4 is unavailable");
+            assert!(why.contains("managed settings"), "{why}");
+            for path in managed {
+                assert!(why.contains(path), "{path}: {why}");
+            }
+            assert_eq!(
+                plan.env.get("ANTHROPIC_API_KEY").map(String::as_str),
+                Some(ENDPOINT_PLACEHOLDER_KEY),
+                "the launch itself is unchanged; only what it claims is"
+            );
+        }
+    }
+
+    /// Every managed-settings path the pinned binary reads on Linux is one the caller is told to
+    /// look for: the system directory's file and drop-in directory, and the Windows policy
+    /// directory WSL reads through `DrvFs`.
+    #[test]
+    fn the_managed_settings_paths_are_the_pinned_binarys_own() {
+        assert_eq!(
+            crate::MANAGED_SETTINGS_PATHS,
+            [
+                "/etc/claude-code/managed-settings.json",
+                "/etc/claude-code/managed-settings.d",
+                "/mnt/c/Program Files/ClaudeCode/managed-settings.json",
+                "/mnt/c/Program Files/ClaudeCode/managed-settings.d",
+            ]
         );
     }
 
@@ -2466,8 +2659,9 @@ mod tests {
         );
     }
 
-    /// A memory file above the scratch cwd enters the context of a run this design calls
-    /// hermetic, so the walk's result is a refusal and never a warning (H11, finding F14).
+    /// A memory file above the scratch cwd is refused before the run and never warned about (H11,
+    /// finding F14): whether it would enter the context is the pinned binary's behaviour, not a
+    /// control metaharness holds (design amendment a33).
     #[test]
     fn a_non_empty_ancestor_walk_is_a_refusal_before_the_run() {
         let mut context = context();
