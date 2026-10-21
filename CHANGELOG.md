@@ -9,6 +9,10 @@ was amended and the amendment is named here.
 
 - `metaharness project --to trace-ir-summary`, with or without `--from`, writes `trace-ir-summary/1`, the one projection of a `trace-ir/1` document that takt's harness-step rows and Loom's jsonl read; `metaharness_protocol::summarize`, `TraceIrSummary`, `SummarizedToolCall`, `SummarizedModel`, `TokensBasis`, `SUMMARY_FORMAT`, `metaharness::ProjectionForm`, `metaharness::TRACE_IR_SUMMARY_FORM` and `metaharness::Refusal::SummaryStreamCount` for a summary asked of other than one event stream (a42).
 
+### Changed
+
+- `README.md`, the status page and the quickstart scope `METAHARNESS_LIVE=1` to the commands that check it (`metaharness aep drive run`, `resume` and `eval run`, the `aep-eval` runner with `--spend`, the ignored live tests) and say that a plain `metaharness run` does not check it; `crates/metaharness-cli/tests/live_scope_documented.rs` holds every page that names the variable to that.
+
 ## [0.12.0] — 2026-10-21
 
 ### Changed

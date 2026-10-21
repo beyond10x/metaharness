@@ -70,8 +70,12 @@ and that document disagree, the document is amended rather than the disagreement
 | `run --audit` | prints the hermetic floor, the decision census, and one `stream:` line — a stream with no closing marker is named `TRUNCATED` rather than read as a run that did nothing |
 | `audit` over a foreign transcript | refuses with exit 2 |
 
-The live runs cost money, sit behind `METAHARNESS_LIVE=1`, and are never part of `task check`. The
-per-change record of what was verified and what it cost to learn is in
+The live runs cost money and are never part of `task check`. `METAHARNESS_LIVE=1` is checked by
+`metaharness aep drive run` and `metaharness aep drive resume` for a step map with an `llm` step, by
+`metaharness aep drive eval run` without `--stream`, by `aep-eval native --spend` and
+`aep-eval driven --spend`, and by the ignored live tests in `crates/metaharness/tests/`. A plain
+`metaharness run` does not check `METAHARNESS_LIVE`: it spawns the harness with the operator's
+credentials whatever the variable holds. The per-change record of what was verified and what it cost to learn is in
 [`CHANGELOG.md`](CHANGELOG.md).
 
 ## Build, test, run
@@ -107,7 +111,7 @@ each supported shell call; unsupported operations are denied. These offline-test
 do not qualify newer vendor versions. See the
 [compatibility inventory](docs/research/2026-10-03-adapter-compatibility.md).
 
-Model execution still requires `METAHARNESS_LIVE=1`. Finite spending uses
+A step map with an `llm` step still requires `METAHARNESS_LIVE=1` on `run` and `resume`. Finite spending uses
 `--budget-usd <amount> --assume-usd-per-run <amount>`. To explicitly authorize uncapped spending,
 replace both finite options with `--uncapped-budget --spend-authorization <reference>`, where the
 reference identifies the operator's authorization. Omitting a budget never selects uncapped
