@@ -67,7 +67,7 @@ impl Fake {
 
         // The real program, rendered by the real adapter. A vector that wrote its own stand-in
         // would be testing the stand-in.
-        let program = metaharness_codex::hook_program(&channel);
+        let program = metaharness_codex::hook_program(&channel).map_err(std::io::Error::other)?;
         let hook = metaharness_codex::hook_program_path(fake.path());
         std::fs::write(&hook, program)?;
         set_executable(&hook)?;
@@ -533,7 +533,8 @@ mod tests {
     fn an_unanswered_call_falls_through_to_the_hooks_own_fail_closed_backstop() {
         let program = metaharness_codex::hook_program(&metaharness_codex::HookChannelPaths::under(
             Path::new("/nonexistent-channel-root"),
-        ));
+        ))
+        .expect("a UTF-8 channel");
         assert!(program.contains(r#""permissionDecision":"deny""#));
         assert!(program.contains("could not be reached over its decision channel"));
     }

@@ -52,11 +52,13 @@ mod transcript;
 mod vectors;
 
 pub use bridge::{ClaudeSeam, ClaudeSeams};
-pub use hook::{HOOK_WAIT_SECONDS, HookChannelPaths, hook_program};
+pub use hook::{
+    HOOK_WAIT_SECONDS, HookChannelPaths, PathNotUtf8, hook_program, shell_quote, shell_quote_path,
+};
 pub use launch::{
-    CredentialCopy, ENDPOINT_KEY_POSTURE, HOOK_TIMEOUT_SECONDS, LaunchContext, LaunchPlan,
-    LaunchRefusal, LoopbackParams, ScratchFile, child_path, hook_program_path, mcp_config_path,
-    plan_launch, settings_path,
+    CredentialCopy, ENDPOINT_KEY_POSTURE, HOOK_COMMAND_PLUGIN_VARIABLES, HOOK_TIMEOUT_SECONDS,
+    LaunchContext, LaunchPlan, LaunchRefusal, LoopbackParams, SCRATCH_PATH_NAMES_PLUGIN_VARIABLE,
+    ScratchFile, child_path, hook_program_path, mcp_config_path, plan_launch, settings_path,
 };
 pub use marketplace::{
     INSTALLED_PLUGINS, KNOWN_MARKETPLACES, MARKETPLACES_HOME, MarketplaceMatch, MarketplaceRefusal,

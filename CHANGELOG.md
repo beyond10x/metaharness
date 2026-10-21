@@ -10,6 +10,14 @@ was amended and the amendment is named here.
 - **Breaking:** Claude H11 rests on `--setting-sources ""` and the scratch config home, `gap` on a version without a clean memory canary; the walk finds all six memory shapes and reports them instead of refusing (a36).
 - `website/` drops its leftover npm `.npmrc` and Docusaurus ignore entries; `website/.gitignore` keeps only `/build`, the `task docs:build` output. The published files are unchanged.
 - The specification decides every terminal record, any optional field absent: `CloseUnsteeredStream` guards use `coalesce` (`ess/29`), 216 of 216 shapes as production closes them.
+- **Breaking:** a scratch root that is not UTF-8 is refused before the spawn on every kind, `scratch-path-not-utf8`, exit 2; it was rendered lossily. A Claude scratch root containing `${CLAUDE_PLUGIN_ROOT}` or `${CLAUDE_PLUGIN_DATA}` is refused before the spawn, `scratch-path-names-plugin-variable`, exit 2; the pinned Claude Code would not run that hook (a37).
+- The Claude and Codex hook programs and vendor hook `command` carry paths as POSIX single-quoted words; the Codex C1 fixtures move by two bytes each (a37).
+- Codex `config.toml` strings escape every control character by TOML basic-string rules (a37).
+- `hook_program` returns `Result<String, PathNotUtf8>`; both `LaunchRefusal`s gain `PathNotUtf8`, the Claude one also `ScratchPathNamesPluginVariable`; `Refusal` gains `ScratchPathNotUtf8` and `ScratchPathNamesPluginVariable` (a37).
+
+### Added
+
+- `shell_quote`, `shell_quote_path` and `PathNotUtf8::escaped` in `metaharness-claude` and `metaharness-codex`; `HOOK_COMMAND_PLUGIN_VARIABLES` and `SCRATCH_PATH_NAMES_PLUGIN_VARIABLE` in `metaharness-claude`; `metaharness::SCRATCH_PATH_NOT_UTF8` and `metaharness::SCRATCH_PATH_NAMES_PLUGIN_VARIABLE` (a37).
 
 ## [0.11.0] — 2026-10-21
 

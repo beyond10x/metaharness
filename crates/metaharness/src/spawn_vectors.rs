@@ -57,7 +57,7 @@ impl Fake {
 
         // The real program, rendered by the real adapter. A vector that wrote its own stand-in
         // would be testing the stand-in.
-        let program = metaharness_claude::hook_program(&channel);
+        let program = metaharness_claude::hook_program(&channel).map_err(std::io::Error::other)?;
         let hook = metaharness_claude::hook_program_path(fake.path());
         std::fs::write(&hook, program)?;
         set_executable(&hook)?;

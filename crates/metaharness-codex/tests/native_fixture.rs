@@ -254,7 +254,7 @@ fn launch(root: &Path, endpoint: &str, mode: Mode) -> LaunchPlan {
     fs::create_dir_all(&channel.responses).unwrap();
     let hook = hook_program_path(root);
     fs::create_dir_all(hook.parent().unwrap()).unwrap();
-    fs::write(&hook, hook_program(&channel)).unwrap();
+    fs::write(&hook, hook_program(&channel).unwrap()).unwrap();
     fs::set_permissions(hook, fs::Permissions::from_mode(0o700)).unwrap();
     plan
 }

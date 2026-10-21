@@ -3181,3 +3181,142 @@ planted above the copy, so the outcome is told apart from `strict-admits-the-dec
 observation and not by the probe. The scenario is Claude-only, as before (the target runs
 `Kind::Claude`), and the suite keeps 103 scenarios. No event or frame wire change.
 `FloorInputs` gains `memory_canaries`; `LaunchRefusal` loses a variant.
+
+### Amendment a37 — channel paths are quoted for the shell, escaped for TOML, and refused when not UTF-8 or naming a Claude plugin variable (2026-10-21)
+
+`story:hook-program-quotes-channel-paths` (Atlas ADR 0096). **Decision D1** (the wave's
+coordinator, 2026-10-21): POSIX single-quote quoting at every site, plus a refusal by name for a path
+that cannot be rendered faithfully. Until now the `PreToolUse` program carried
+`REQUESTS='{requests}'` and `RESPONSES='{responses}'` with each path's display form between single
+quotes and nothing escaped, and the vendor hook `command` was the bare path. A scratch root is
+`$TMPDIR/.tmpXXXXXX`, so the caller's `TMPDIR` decides every byte of it but the last nine. One `'` in
+it ended the quoted string early: the scope run (bash as `/bin/sh`, a cut-down program) saw a
+program that denies every call with exit 0, one that runs the rest of the path as commands, and
+one that is a syntax error with exit 2. The § 7 seam assumes that the hook program parses, and that
+assumption did not hold.
+
+**1. The shell quoting rule.** Wherever a path goes into a shell program or a shell command string,
+it is written as one POSIX single-quoted word: `'` is replaced with `'\''`, and the whole value is
+wrapped in `'…'`. Inside single quotes the shell interprets no byte, so `"`, `$`, a backtick, a
+backslash, a space and a newline all arrive as written. The rule applies at four sites: the two
+assignments in each adapter's hook program (`REQUESTS=…`, `RESPONSES=…`; Claude and Codex) and each
+adapter's vendor hook `command`, which is now the quoted program path, not the bare one. Each
+adapter crate has its own copy of the helper (`shell_quote`). Invariant 2 puts vendor rendering in
+the adapter, and the protocol crate takes no dependency for it. The `command` is quoted because both
+pinned vendors run it through a shell. Claude Code 2.1.304 and 2.1.305 spawn a settings hook's
+`command` in shell form (no `args`) with `shell: true`, which off Windows is `/bin/sh -c`. Codex
+0.153.4 carries `hooks/src/engine/command_runner.rs` with the string `-lc` beside it. These readings
+come from the strings of the installed pinned binaries, not from a driven vendor. The evidence is
+in the wave's scratch record and is not committed: the adversary pass's `claude-2.1.304.strings`,
+`claude-hook-runner.txt` and `codex-0.153.4.strings`, and `fix1-claude-hook-spawn.txt` for the
+spawn call at both Claude pins. A vendor that executed `command` without a shell would read the
+quotes as part of the file name, and this amendment would turn that into a hook that is never
+found. A pin move re-reads this.
+
+**Unverified (invariant 4): which shell Codex puts in front of `-lc`.** The POSIX rule holds only
+if that shell is POSIX. If it is the operator's login shell and that is fish, the rule breaks for
+roots containing `\\` or `\'`; a lone backslash before any other character reads the same in both
+shells (adversary pass 2, `fish-probe.txt`). A probe with fish 4.9.1 against `/bin/sh` (`fix1-probe-shells.txt`)
+gave these results. `'it'\''s'` reads as `it's` in both shells. `'a\\b'` is `a\\b` in `sh` and `a\b`
+in fish, so a root containing `\\` names a different path. `'x\'\''y'` is `x\'y` in `sh` (exit 0)
+and an unbalanced quote in fish (exit 127), so a root with `\` before `'` does not parse. A root
+with `'` and no backslash parses the same in both. The base build wrote the path bare, so it broke
+on these roots too. Nothing here shows that Codex uses the login shell, and nothing shows that it
+does not.
+
+**2. TOML strings escape control characters.** The Codex `config.toml` writer's basic-string
+quoting escaped only `\` and `"`. It now also escapes `\b`, `\t`, `\n`, `\f` and `\r`, and writes
+every other control character (U+0000–U+001F, U+007F) as `\uXXXX`. These are TOML's basic-string
+rules. A root with a newline in it therefore yields a config that parses, and its `command` value
+parses back to exactly the quoted program path. A test parses the document with the `toml` crate,
+which is a dev-dependency of `metaharness-codex` only. The written document still comes from the
+hand renderer.
+
+**3. A scratch root that is not UTF-8 is refused by name before anything runs.** The settings
+document is JSON, the Codex config is TOML, and the program is text. A path that is not UTF-8 has no
+faithful rendering in any of them, and the display form would replace bytes with U+FFFD. The
+program would then name a directory that does not exist, and the vendor would be pointed at a
+settings file, a config home and a hook that are not there. So `Refusal::ScratchPathNotUtf8 { path }`,
+code **`scratch-path-not-utf8`**, exit `2`, is raised by `start_claude`, `start_codex` and
+`start_b10x` immediately after the scratch directory is created. That is before the working
+directory is resolved, before a context file is read, before a loopback proxy binds, before the
+plan, and before any file is written or anything is spawned; the scratch directory itself is removed
+when the refusal drops it. The message begins with the code, which is also exported as the constant
+`metaharness::SCRATCH_PATH_NOT_UTF8`. It names the path through Rust's `escape_ascii`, never
+through the display form. Printable ASCII is written as it is, except `'`, `"` and `\`, which
+each get a backslash in front. `\t`, `\r` and `\n` are written as those escapes, and every other
+byte as `\xNN` (`\xff`). Escaping `\` keeps the rendering unambiguous: a `\` in the message always
+starts an escape. It is not a protocol `RefusalCode`, because those codes answer "what happened to
+this command" (§ 6.1), and this refusal is about the run's setup.
+
+The b10x kind is guarded as well, although it installs no hook program and writes no channel. It
+renders paths under the same root into its argv and environment (`--workspace` for a scratch cwd,
+`--context` for the handed copies, `XDG_CONFIG_HOME`), each through the display form. Decision D1
+refuses a lossy rendering of any path under the scratch root. It does not cover paths outside the
+scratch root, and those still reach the child through the display form. They are `--cwd`, as the
+b10x loop's `--workspace` (`B10xLaunch::new` in `metaharness-b10x`) and as the Claude tool
+server's `mcp-serve --workspace` (`build_mcp_config`); the tool server's own program path, the
+`command` of that MCP entry (`build_mcp_config`); and on the b10x arm `--hooks`, `--driver`,
+`--plugin-dir`, `--prices`, `--cgroup-root`, `--subscription-token-file`, the `--substrate`
+socket and the `--substrate-embedded` root (`b10x_launch` in the builder, rendered there or by the
+`B10xLaunch` setters). They are outside this amendment and unchanged. The adapters also refuse
+such a path
+themselves, so a library caller of the pure functions gets a named answer and never a lossy one.
+`hook_program` returns `Err(PathNotUtf8)`, and `plan_launch` returns `LaunchRefusal::PathNotUtf8`
+for the hook `command`. When the call comes through the builder, the core refusal fires first.
+
+**4. What this changes for a caller.** Before this amendment, a run whose `TMPDIR` was not UTF-8 was
+not refused by metaharness. It was planned with lossy paths and spawned, and the vendor was handed a
+`--settings` path, a `CLAUDE_CONFIG_DIR` or `CODEX_HOME`, and a hook `command` that named nothing on
+disk; the b10x loop was handed an `XDG_CONFIG_HOME` that named nothing, which reads the same as the
+empty scratch config it stands for. What either vendor or the loop then did was not measured. That
+run is now refused with exit `2`, and the CHANGELOG marks it **Breaking**: nothing measured says
+such a run failed before, and a b10x run with `--cwd` and no `--context` plausibly completed. For every
+other root, the vendor hook `command` in the Claude settings and in the Codex config carries the
+path in single quotes. The Codex C1 fixtures move by those two bytes. No event or frame wire
+changes. `Refusal` gains a variant, both `LaunchRefusal`s gain `PathNotUtf8`, and
+`hook_program` returns a `Result`.
+
+**5. Not driven: what each vendor does with a hook that fails to parse.** If a non-zero exit other
+than `2` lets the call proceed, a guard that fails to parse fails open (Q4, § 12). This amendment
+removes the cause; nothing here drove either vendor. For Claude the vendor's own schema answers the
+question, read from the strings of both pinned binaries and not from a driven run (adversary pass
+2, `claude-2.1.304-runner-ctx.txt`): a settings hook's `onFailure` defaults to `continue`, "the
+failure is reported and the action goes ahead", and the runner blocks only on `onFailure: "block"`.
+`build_hook` sets no `onFailure`, so a Claude seam hook that cannot start, times out, exits other
+than `0` or `2`, or prints invalid JSON lets the call proceed undecided. That predates this
+amendment and is not changed by it; closing it changes the § 7 seam and is its own amendment.
+
+**6. A Claude hook `command` that names a plugin variable is refused by name (adversary pass 1,
+decision F1).** Quoting does not protect the `command` from every reader. Claude Code 2.1.304 and
+2.1.305 check a settings hook's `command` before any shell sees it. If it contains the literal
+`${CLAUDE_PLUGIN_ROOT}` or `${CLAUDE_PLUGIN_DATA}` and the hook is not a plugin's, the hook runner
+throws "Hook command references ${…} but the hook is not associated with a plugin" and spawns
+nothing (`fix1-claude-plugin-variable-check.txt`, both pins). The check reads the raw string, so
+the single quotes do not help, and the § 7 seam is never consulted. What the vendor then does with
+the call was not driven (§ 5 above reads the default). For the hook `command`, on the pins, these
+two literals are the whole class. Claude also expands `${…}` in the `--mcp-config` document, so
+under `--tool-surface owned` a `${…}` in a scratch root reaching the tool server's `--workspace`
+would be expanded; that is read from the strings, not driven, and is outside this amendment. Between the runner's
+first read of `command` and the spawn, the other reads of a shell-form settings hook's `command` off
+Windows are: a warning for exec form (`args`), PowerShell handling, a `${user_config.*}` check that
+runs for plugin hooks only, and the `CLAUDE_CODE_SHELL_PREFIX` wrapper, which wraps the command
+and does not refuse it.
+
+So `plan_launch` refuses a hook `command` that contains either literal, with
+`LaunchRefusal::ScratchPathNamesPluginVariable { path, variable }`. The builder maps that to
+`Refusal::ScratchPathNamesPluginVariable`, code **`scratch-path-names-plugin-variable`**, exit `2`,
+and its message begins with the code. The code and the list of literals live in `metaharness-claude`
+(`SCRATCH_PATH_NAMES_PLUGIN_VARIABLE`, `HOOK_COMMAND_PLUGIN_VARIABLES`), and the core re-exports the
+code as `metaharness::SCRATCH_PATH_NAMES_PLUGIN_VARIABLE`. The check reads the rendered `command`,
+which is the string the vendor reads. It runs in `plan_launch`, so it comes after the scratch root,
+the working directory, the context files and any loopback proxy exist. It comes before anything is
+written for the child or spawned. The proxy and the scratch directory are removed when the refusal
+drops them. A near miss plans as before: `$CLAUDE_PLUGIN_ROOT` without braces, an unclosed brace, or
+`${CLAUDE_PROJECT_DIR}`, which the shell form neither substitutes nor checks.
+
+Codex and b10x are not refused. Nothing found shows that either reads these literals in a hook
+`command`. Codex 0.153.4 does carry both names next to its hooks code (`codex-0.153.4.strings`),
+and what it does with them is unverified. A Claude run under such a root used to be spawned with a
+hook the vendor would not run, and now it is refused. The CHANGELOG marks that **Breaking**.
+`Refusal` and the Claude `LaunchRefusal` each gain a variant.
