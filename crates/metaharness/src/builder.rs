@@ -510,6 +510,7 @@ fn start_b10x(
     }
 
     let scratch = tempfile::TempDir::new()?;
+    guard_scratch_path(scratch.path())?;
     let confined = spec.substrate.is_some() || spec.substrate_embedded;
     let cwd = resolve_cwd_named(
         &spec,
@@ -846,6 +847,7 @@ fn start_claude(
         }
 
         let scratch = tempfile::TempDir::new()?;
+        guard_scratch_path(scratch.path())?;
         let cwd = resolve_cwd(&spec, scratch.path())?;
         // Read once, beneath the tree, before the proxy starts (amendment a35); the plan renders
         // these bytes and the record digests the same ones.
@@ -878,11 +880,8 @@ fn start_claude(
             // in the plan.
             managed_settings: claude_managed_settings(),
         };
-        let mut plan = metaharness_claude::plan_launch(&spec, &context).map_err(|refusal| {
-            Refusal::Launch {
-                detail: refusal.to_string(),
-            }
-        })?;
+        let mut plan = metaharness_claude::plan_launch(&spec, &context)
+            .map_err(Refusal::from_claude_launch)?;
         list_declared_copy_memory_files(&spec, &plan.cwd, &mut plan.attestation);
         // Before any file is written for the child and before the runner sees the plan: a strict
         // run off the pin spawns nothing (a33).
@@ -1128,6 +1127,7 @@ fn start_codex(
     }
 
     let scratch = tempfile::TempDir::new()?;
+    guard_scratch_path(scratch.path())?;
     let cwd = resolve_cwd(&spec, scratch.path())?;
     // As on the claude path (amendment a35): read once, rendered and digested from these bytes.
     let context_files = crate::context::read_declared(&spec, &cwd)?;
@@ -1295,7 +1295,8 @@ fn materialise_codex(
     }
     let program = metaharness_codex::hook_program(&metaharness_codex::HookChannelPaths::at_root(
         channel.root(),
-    ));
+    ))
+    .map_err(|refusal| Refusal::ScratchPathNotUtf8 { path: refusal.path })?;
     std::fs::write(&program_path, program.as_bytes())?;
     make_executable(&program_path)?;
     Ok(())
@@ -1379,7 +1380,8 @@ fn materialise(
     }
     let program = metaharness_claude::hook_program(&metaharness_claude::HookChannelPaths::at_root(
         channel.root(),
-    ));
+    ))
+    .map_err(|refusal| Refusal::ScratchPathNotUtf8 { path: refusal.path })?;
     std::fs::write(&program_path, program.as_bytes())?;
     make_executable(&program_path)?;
     Ok(())
@@ -1628,6 +1630,22 @@ pub fn start_refusals(capabilities: &Capabilities, spec: &RunSpec) -> Vec<(Strin
             )
         })
         .collect()
+}
+
+/// Refuse a scratch root that is not UTF-8 before anything is read, started, written or spawned
+/// under it (design amendment a37).
+///
+/// Every kind calls this. Claude and Codex render paths under the root into a hook program, a hook
+/// `command` and a settings document; b10x renders them into its argv and environment
+/// (`--workspace`, `--context`, `XDG_CONFIG_HOME`), and a display form there names a directory that
+/// does not exist just as surely.
+fn guard_scratch_path(scratch_root: &std::path::Path) -> Result<(), Refusal> {
+    if scratch_root.to_str().is_none() {
+        return Err(Refusal::ScratchPathNotUtf8 {
+            path: scratch_root.to_path_buf(),
+        });
+    }
+    Ok(())
 }
 
 /// The child's working directory: the operator's, or a scratch one made here.

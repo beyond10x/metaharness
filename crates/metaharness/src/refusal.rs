@@ -216,11 +216,63 @@ pub enum Refusal {
         /// The kind with no marketplace.
         kind: Kind,
     },
+    /// The run's scratch root is not UTF-8 (design amendment a37).
+    ///
+    /// The hook program, the hook `command`, the Codex `config.toml` and the b10x loop's argv and
+    /// environment all carry paths under it, and a path that is not UTF-8 has no faithful
+    /// rendering in any of them. Raised on every kind. Refused before the
+    /// spawn rather than rendered through the lossy display form, which would name a directory
+    /// that does not exist. Its code string is [`SCRATCH_PATH_NOT_UTF8`].
+    ScratchPathNotUtf8 {
+        /// The scratch root as the platform handed it over.
+        path: PathBuf,
+    },
+    /// The Claude hook `command` contains `${CLAUDE_PLUGIN_ROOT}` or `${CLAUDE_PLUGIN_DATA}`
+    /// (design amendment a37 § 6).
+    ///
+    /// The pinned Claude Code refuses to spawn such a settings hook before any shell reads it, so
+    /// the run would go ahead with no seam. Raised on the Claude kind only. Its code string is
+    /// [`SCRATCH_PATH_NAMES_PLUGIN_VARIABLE`].
+    ScratchPathNamesPluginVariable {
+        /// The hook program's path, which the `command` quotes.
+        path: PathBuf,
+        /// The literal the `command` contains.
+        variable: &'static str,
+    },
     /// Something the platform refused.
     Io {
         /// What it said.
         detail: String,
     },
+}
+
+/// The stable code string [`Refusal::ScratchPathNotUtf8`] carries in its message (design
+/// amendment a37).
+///
+/// A launch-condition code, not a protocol [`RefusalCode`]: those answer *"what happened to this
+/// command"*, and this refusal happens before any command exists.
+pub const SCRATCH_PATH_NOT_UTF8: &str = "scratch-path-not-utf8";
+
+/// The stable code string [`Refusal::ScratchPathNamesPluginVariable`] carries in its message
+/// (design amendment a37 § 6). Defined by the Claude adapter, whose vendor reads the literals.
+pub use metaharness_claude::SCRATCH_PATH_NAMES_PLUGIN_VARIABLE;
+
+impl Refusal {
+    /// The Claude adapter's launch refusal, as one of these.
+    ///
+    /// A refusal with its own code keeps it; every other one is [`Refusal::Launch`] in the
+    /// adapter's words.
+    pub(crate) fn from_claude_launch(refusal: metaharness_claude::LaunchRefusal) -> Self {
+        match refusal {
+            metaharness_claude::LaunchRefusal::ScratchPathNamesPluginVariable {
+                path,
+                variable,
+            } => Refusal::ScratchPathNamesPluginVariable { path, variable },
+            other => Refusal::Launch {
+                detail: other.to_string(),
+            },
+        }
+    }
 }
 
 /// Why a `--context` file is refused (design amendment a35), one variant per refusal the story's
@@ -529,6 +581,23 @@ impl fmt::Display for Refusal {
                  resolve one from. Refused by name rather than ignored: an operator who declared a \
                  plugin would otherwise believe the run had one",
                 kind.as_str()
+            ),
+            Refusal::ScratchPathNotUtf8 { path } => write!(
+                f,
+                "{SCRATCH_PATH_NOT_UTF8}: the scratch root {} is not UTF-8, so the hook \
+                 program, the hook command, the vendor's settings and the loop's arguments have \
+                 no faithful way to name it (design amendment a37). Run with a TMPDIR whose path \
+                 is UTF-8",
+                path.as_os_str().as_encoded_bytes().escape_ascii()
+            ),
+            Refusal::ScratchPathNamesPluginVariable { path, variable } => write!(
+                f,
+                "{SCRATCH_PATH_NAMES_PLUGIN_VARIABLE}: the Claude hook program path {} contains \
+                 {variable}, and the pinned Claude Code refuses to spawn a settings hook whose \
+                 command names a plugin variable when the hook is not a plugin's, so the seam \
+                 would never be consulted (design amendment a37). Run with a TMPDIR whose path \
+                 does not contain it",
+                path.display()
             ),
             Refusal::Io { detail } => write!(f, "the platform refused: {detail}"),
         }

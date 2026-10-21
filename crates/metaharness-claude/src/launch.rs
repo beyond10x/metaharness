@@ -524,7 +524,40 @@ pub enum LaunchRefusal {
         /// Every context file the run declared, with its size in bytes.
         files: Vec<(String, usize)>,
     },
+    /// A path the launch renders into the settings document or the hook program is not UTF-8
+    /// (design amendment a37).
+    ///
+    /// Refused rather than rendered lossily: the display form replaces the offending bytes, so the
+    /// hook `command` would name a program that does not exist and the vendor would be left to
+    /// decide what a hook it cannot start means.
+    PathNotUtf8 {
+        /// The path as it was handed over.
+        path: PathBuf,
+    },
+    /// The hook `command` contains a literal of [`HOOK_COMMAND_PLUGIN_VARIABLES`] (design
+    /// amendment a37 § 6).
+    ///
+    /// The pinned binaries refuse to spawn a settings hook whose `command` names a plugin variable
+    /// when the hook is not a plugin's, before any shell reads it, so quoting does not help and the
+    /// § 7 seam would never be consulted. Its words begin with
+    /// [`SCRATCH_PATH_NAMES_PLUGIN_VARIABLE`].
+    ScratchPathNamesPluginVariable {
+        /// The hook program's path, which the `command` quotes.
+        path: PathBuf,
+        /// The first literal of [`HOOK_COMMAND_PLUGIN_VARIABLES`] the `command` contains.
+        variable: &'static str,
+    },
 }
+
+/// The code a [`LaunchRefusal::ScratchPathNamesPluginVariable`] message begins with (design
+/// amendment a37 § 6). The core re-exports it as the code of its own refusal.
+pub const SCRATCH_PATH_NAMES_PLUGIN_VARIABLE: &str = "scratch-path-names-plugin-variable";
+
+/// The literals Claude Code 2.1.304 and 2.1.305 refuse in the `command` of a settings hook that is
+/// not a plugin's (design amendment a37 § 6), read from each binary's hook runner. The runner
+/// checks the raw string, so a literal inside single quotes is refused all the same.
+pub const HOOK_COMMAND_PLUGIN_VARIABLES: [&str; 2] =
+    ["${CLAUDE_PLUGIN_ROOT}", "${CLAUDE_PLUGIN_DATA}"];
 
 impl LaunchRefusal {
     /// The protocol refusal code this maps to, where one applies.
@@ -658,8 +691,40 @@ impl fmt::Display for LaunchRefusal {
             LaunchRefusal::ContextFilesUnread { .. } | LaunchRefusal::ArgumentTooLong { .. } => {
                 context_words(self, f)
             }
+            LaunchRefusal::PathNotUtf8 { .. }
+            | LaunchRefusal::ScratchPathNamesPluginVariable { .. } => path_words(self, f),
         }
     }
+}
+
+/// The two scratch-path refusals in words (design amendment a37).
+fn path_words(refusal: &LaunchRefusal, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+    match refusal {
+        LaunchRefusal::PathNotUtf8 { path } => not_utf8_words(path, f),
+        // The path is UTF-8 by the time this check runs, so its display form is faithful.
+        LaunchRefusal::ScratchPathNamesPluginVariable { path, variable } => write!(
+            f,
+            "{SCRATCH_PATH_NAMES_PLUGIN_VARIABLE}: the hook program path {} contains {variable}, \
+             and the pinned Claude Code refuses to spawn a settings hook whose command names a \
+             plugin variable when the hook is not a plugin's, so the seam would never be \
+             consulted (design amendment a37). Run with a TMPDIR whose path does not contain it",
+            path.display()
+        ),
+        _ => unreachable!("only the scratch-path refusals are worded here"),
+    }
+}
+
+/// [`LaunchRefusal::PathNotUtf8`]'s words, in the adapter's one escaped form of the path.
+fn not_utf8_words(path: &Path, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+    let escaped = crate::PathNotUtf8 {
+        path: path.to_path_buf(),
+    }
+    .escaped();
+    write!(
+        f,
+        "the scratch path {escaped} is not UTF-8, so it has no faithful rendering in the settings \
+         document or the hook program (design amendment a37)"
+    )
 }
 
 impl std::error::Error for LaunchRefusal {}
@@ -699,6 +764,13 @@ pub fn plan_launch(spec: &RunSpec, context: &LaunchContext) -> Result<LaunchPlan
         return Err(LaunchRefusal::NoPrompt);
     };
     guard_decision_mode(spec)?;
+    // Every path the settings document and the hook program carry is under the scratch root, so
+    // one check here covers them all (design amendment a37).
+    if context.scratch_root.to_str().is_none() {
+        return Err(LaunchRefusal::PathNotUtf8 {
+            path: context.scratch_root.clone(),
+        });
+    }
     // An operator-named cwd (amendment a6) is a declaration, not a defect: the refusal below
     // exists to keep a *scratch* cwd honest, and a run the operator pointed at a real tree
     // instead loses rows H7 and H11 in the attestation rather than being refused here. A memory
@@ -758,7 +830,7 @@ pub fn plan_launch(spec: &RunSpec, context: &LaunchContext) -> Result<LaunchPlan
     guard_argument_lengths(&args, &context.context_files)?;
     guard_shadowing(spec, &args)?;
     let env = build_env(spec, context, &config_home)?;
-    let hook = build_hook(&context.scratch_root.join(HOOK_FILE));
+    let hook = build_hook(&context.scratch_root.join(HOOK_FILE))?;
 
     Ok(LaunchPlan {
         program: ADAPTER_ID.to_string(),
@@ -1540,15 +1612,31 @@ fn bare_allowed_tools(args: &[String]) -> Vec<String> {
 /// `async` hook *"runs in background without blocking"*, so a hook that matched everything and
 /// declared itself `async` would be a guard that has already stopped guarding (finding F6,
 /// design § 7.8).
-fn build_hook(hook_path: &Path) -> Value {
-    json!({
+///
+/// The `command` is the program's path as one single-quoted shell word (amendment a37): the
+/// pinned binary hands the string to a shell, so an unquoted root with a space in it would run
+/// the wrong program.
+fn build_hook(hook_path: &Path) -> Result<Value, LaunchRefusal> {
+    let command = crate::shell_quote_path(hook_path)
+        .map_err(|refusal| LaunchRefusal::PathNotUtf8 { path: refusal.path })?;
+    // The rendered string is what the vendor's hook runner reads (amendment a37 § 6).
+    if let Some(variable) = HOOK_COMMAND_PLUGIN_VARIABLES
+        .into_iter()
+        .find(|variable| command.contains(variable))
+    {
+        return Err(LaunchRefusal::ScratchPathNamesPluginVariable {
+            path: hook_path.to_path_buf(),
+            variable,
+        });
+    }
+    Ok(json!({
         "matcher": "",
         "hooks": [{
             "type": "command",
-            "command": hook_path.display().to_string(),
+            "command": command,
             "timeout": HOOK_TIMEOUT_SECONDS,
         }],
-    })
+    }))
 }
 
 /// The settings document the argv's `--settings` names.
@@ -2948,6 +3036,108 @@ mod tests {
         assert!(entry.get("async").is_none());
         assert!(entry.get("asyncRewake").is_none());
         assert_eq!(plan.settings["hooks"]["PreToolUse"][0], plan.hook);
+    }
+
+    /// The words `/bin/sh -c` splits a command string into, NUL-separated so a newline survives.
+    fn shell_words(command: &str) -> Vec<String> {
+        let output = std::process::Command::new("/bin/sh")
+            .arg("-c")
+            .arg(format!("printf '%s\\0' {command}"))
+            .env_clear()
+            .env("PATH", "/usr/bin:/bin")
+            .output()
+            .expect("sh runs");
+        assert!(
+            output.status.success(),
+            "sh -c failed on {command:?}: {}",
+            String::from_utf8_lossy(&output.stderr)
+        );
+        String::from_utf8(output.stdout)
+            .expect("UTF-8 words")
+            .split_terminator('\0')
+            .map(str::to_owned)
+            .collect()
+    }
+
+    /// Amendment a37: the vendor runs the hook `command` through a shell, so a scratch root
+    /// carrying a quote, a parameter, a backtick, a space and a newline must still name exactly
+    /// one word, and that word is the program the launch installs.
+    #[test]
+    fn the_vendor_hook_command_is_one_shell_word_naming_the_program() {
+        let root = PathBuf::from("/scratch/it's \"q\" $HOME `true` a b\nc");
+        let mut world = context();
+        world.scratch_root.clone_from(&root);
+        world.cwd = root.join("work");
+        let plan = plan_launch(&spec(), &world).expect("the run plans");
+        let command = plan.hook["hooks"][0]["command"]
+            .as_str()
+            .expect("a command string");
+        assert_eq!(
+            shell_words(command),
+            vec![
+                hook_program_path(&root)
+                    .to_str()
+                    .expect("a UTF-8 path")
+                    .to_owned()
+            ]
+        );
+        assert_eq!(plan.settings["hooks"]["PreToolUse"][0], plan.hook);
+    }
+
+    /// Amendment a37: a scratch root that is not UTF-8 has no faithful rendering in the settings
+    /// document, so the plan refuses it by name rather than writing a lossy path.
+    #[test]
+    fn a_scratch_root_that_is_not_utf8_is_refused_by_name() {
+        use std::os::unix::ffi::OsStrExt as _;
+        let root = PathBuf::from(std::ffi::OsStr::from_bytes(b"/scratch/run-\xff"));
+        let mut world = context();
+        world.scratch_root.clone_from(&root);
+        world.cwd = root.join("work");
+        let refusal = plan_launch(&spec(), &world).expect_err("a non-UTF-8 root is refused");
+        assert!(refusal.to_string().contains("not UTF-8"), "{refusal}");
+    }
+
+    /// Amendment a37 § 3: the pinned hook runner reads exactly `${CLAUDE_PLUGIN_ROOT}` and
+    /// `${CLAUDE_PLUGIN_DATA}` in a settings hook's `command`, so a root carrying either is
+    /// refused by name, and a root that only resembles one plans with its text intact.
+    #[test]
+    fn a_root_naming_a_plugin_variable_is_refused_and_its_near_misses_plan() {
+        for (name, variable) in [
+            ("root", "${CLAUDE_PLUGIN_ROOT}"),
+            ("data", "${CLAUDE_PLUGIN_DATA}"),
+            ("both", "${CLAUDE_PLUGIN_DATA}-${CLAUDE_PLUGIN_ROOT}"),
+        ] {
+            let root = PathBuf::from(format!("/scratch/{variable}/.tmpAbC123"));
+            let mut world = context();
+            world.scratch_root.clone_from(&root);
+            world.cwd = root.join("work");
+            let refusal = plan_launch(&spec(), &world).expect_err(name);
+            let words = refusal.to_string();
+            assert!(
+                words.starts_with("scratch-path-names-plugin-variable: "),
+                "{name}: {words}"
+            );
+            assert!(words.contains("${CLAUDE_PLUGIN_"), "{name}: {words}");
+        }
+        for near in [
+            "$CLAUDE_PLUGIN_ROOT",
+            "${CLAUDE_PLUGIN_ROOT",
+            "{CLAUDE_PLUGIN_DATA}",
+            "${CLAUDE_PROJECT_DIR}",
+            "${claude_plugin_root}",
+        ] {
+            let root = PathBuf::from(format!("/scratch/{near}/.tmpAbC123"));
+            let mut world = context();
+            world.scratch_root.clone_from(&root);
+            world.cwd = root.join("work");
+            let plan = plan_launch(&spec(), &world).unwrap_or_else(|refusal| {
+                panic!("{near}: {refusal}");
+            });
+            let command = plan.hook["hooks"][0]["command"]
+                .as_str()
+                .expect("a command string");
+            assert!(command.contains(near), "{near}: {command}");
+        }
     }
 
     /// The settings document goes beside the config home and not inside it: inside, it would be

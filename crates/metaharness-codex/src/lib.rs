@@ -63,7 +63,9 @@ mod vectors;
 pub mod conformance;
 
 pub use bridge::{CodexSeam, CodexSeams, hook_request_line};
-pub use hook::{HOOK_WAIT_SECONDS, HookChannelPaths, hook_program};
+pub use hook::{
+    HOOK_WAIT_SECONDS, HookChannelPaths, PathNotUtf8, hook_program, shell_quote, shell_quote_path,
+};
 pub use launch::{
     CONFIG_LAYER_PATHS, CodexLogin, CredentialCopy, HOOK_TIMEOUT_SECONDS, LOOPBACK_ENV_KEY,
     LaunchContext, LaunchPlan, LaunchRefusal, LoopbackParams, PERSONALITY, child_path, config_path,

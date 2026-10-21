@@ -522,6 +522,16 @@ pub enum LaunchRefusal {
         /// Every context file the run declared, with its size in bytes.
         files: Vec<(String, usize)>,
     },
+    /// A path the launch renders into `config.toml` or the hook program is not UTF-8 (design
+    /// amendment a37).
+    ///
+    /// Refused rather than rendered lossily: the display form replaces the offending bytes, so the
+    /// hook `command` would name a program that does not exist and the vendor would be left to
+    /// decide what a hook it cannot start means.
+    PathNotUtf8 {
+        /// The path as it was handed over.
+        path: PathBuf,
+    },
 }
 
 impl LaunchRefusal {
@@ -655,8 +665,22 @@ impl fmt::Display for LaunchRefusal {
             LaunchRefusal::ContextFilesUnread { .. } | LaunchRefusal::ArgumentTooLong { .. } => {
                 context_words(self, f)
             }
+            LaunchRefusal::PathNotUtf8 { path } => not_utf8_words(path, f),
         }
     }
+}
+
+/// [`LaunchRefusal::PathNotUtf8`]'s words, in the adapter's one escaped form of the path.
+fn not_utf8_words(path: &Path, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+    let escaped = crate::PathNotUtf8 {
+        path: path.to_path_buf(),
+    }
+    .escaped();
+    write!(
+        f,
+        "the scratch path {escaped} is not UTF-8, so it has no faithful rendering in config.toml \
+         or the hook program (design amendment a37)"
+    )
 }
 
 impl std::error::Error for LaunchRefusal {}
@@ -689,6 +713,13 @@ pub fn plan_launch(spec: &RunSpec, context: &LaunchContext) -> Result<LaunchPlan
     };
     guard_decision_mode(spec)?;
     unsupported_options(spec)?;
+    // Every path `config.toml` and the hook program carry is under the scratch root, so one check
+    // here covers them all (design amendment a37).
+    if context.scratch_root.to_str().is_none() {
+        return Err(LaunchRefusal::PathNotUtf8 {
+            path: context.scratch_root.clone(),
+        });
+    }
     // An operator-named cwd (amendment a6) is a declaration, not a defect: the two refusals below
     // keep a *scratch* cwd honest, and a run the operator pointed at a real tree loses rows H7 and
     // H11 in the attestation instead of being refused here.
@@ -738,7 +769,7 @@ pub fn plan_launch(spec: &RunSpec, context: &LaunchContext) -> Result<LaunchPlan
     guard_arguments(&args)?;
     guard_argument_lengths(&args, &context.context_files)?;
     let env = build_env(spec, context, &config_home)?;
-    let hook = build_hook(&hook_program_path(&context.scratch_root));
+    let hook = build_hook(&hook_program_path(&context.scratch_root))?;
 
     Ok(LaunchPlan {
         program: ADAPTER_ID.to_string(),
@@ -1136,7 +1167,13 @@ fn needs_call_seam(spec: &RunSpec) -> bool {
 /// *"runs in background without blocking"* and is a guard that has stopped guarding (V7b, finding
 /// F6); here it would be a run that fails on its own configuration. Either way the assertion is
 /// the same and it is a value a test reads (§ 8.4 O7).
-fn build_hook(hook_path: &Path) -> Value {
+///
+/// The `command` is the program's path as one single-quoted shell word (amendment a37): the
+/// pinned binary hands the string to a shell, so an unquoted root with a space in it would run
+/// the wrong program.
+fn build_hook(hook_path: &Path) -> Result<Value, LaunchRefusal> {
+    let command = crate::shell_quote_path(hook_path)
+        .map_err(|refusal| LaunchRefusal::PathNotUtf8 { path: refusal.path })?;
     let mut group = serde_json::Map::new();
     if let Some(matcher) = MATCHER {
         group.insert("matcher".to_string(), json!(matcher));
@@ -1145,11 +1182,11 @@ fn build_hook(hook_path: &Path) -> Value {
         "hooks".to_string(),
         json!([{
             "type": "command",
-            "command": hook_path.display().to_string(),
+            "command": command,
             "timeout": HOOK_TIMEOUT_SECONDS,
         }]),
     );
-    Value::Object(group)
+    Ok(Value::Object(group))
 }
 
 /// The `config.toml` the scratch home carries, seam and all.
@@ -1332,9 +1369,30 @@ fn sandbox_reason(spec: &RunSpec) -> &'static str {
 /// The values here are paths and words metaharness chose, and escaping them is still not optional:
 /// a scratch root with a quote or a backslash in it would otherwise produce a config file that
 /// parses as something else — or does not parse, which on this vendor is a run with no seam.
+///
+/// Every control character is escaped by the basic-string rules (amendment a37): the five short
+/// forms `\b \t \n \f \r`, and `\uXXXX` for the rest of U+0000–U+001F and for U+007F. TOML admits
+/// none of them raw in a basic string, so a newline in a scratch root used to end the line.
 fn quote(value: &str) -> String {
-    let escaped = value.replace('\\', "\\\\").replace('"', "\\\"");
-    format!("\"{escaped}\"")
+    let mut quoted = String::with_capacity(value.len() + 2);
+    quoted.push('"');
+    for character in value.chars() {
+        match character {
+            '"' => quoted.push_str("\\\""),
+            '\\' => quoted.push_str("\\\\"),
+            '\u{8}' => quoted.push_str("\\b"),
+            '\t' => quoted.push_str("\\t"),
+            '\n' => quoted.push_str("\\n"),
+            '\u{c}' => quoted.push_str("\\f"),
+            '\r' => quoted.push_str("\\r"),
+            control if control.is_control() && u32::from(control) <= 0x7f => {
+                let _ = write!(quoted, "\\u{:04X}", u32::from(control));
+            }
+            other => quoted.push(other),
+        }
+    }
+    quoted.push('"');
+    quoted
 }
 
 /// What metaharness claims it imposed, and what it says it could not.
@@ -2013,8 +2071,102 @@ mod tests {
         assert!(entry.get("async").is_none());
         assert_eq!(
             entry["command"],
-            json!("/scratch/run-1/hooks/pretooluse".to_string())
+            json!("'/scratch/run-1/hooks/pretooluse'".to_string())
         );
+    }
+
+    /// The words `/bin/sh -c` splits a command string into, NUL-separated so a newline survives.
+    fn shell_words(command: &str) -> Vec<String> {
+        let output = std::process::Command::new("/bin/sh")
+            .arg("-c")
+            .arg(format!("printf '%s\\0' {command}"))
+            .env_clear()
+            .env("PATH", "/usr/bin:/bin")
+            .output()
+            .expect("sh runs");
+        assert!(
+            output.status.success(),
+            "sh -c failed on {command:?}: {}",
+            String::from_utf8_lossy(&output.stderr)
+        );
+        String::from_utf8(output.stdout)
+            .expect("UTF-8 words")
+            .split_terminator('\0')
+            .map(str::to_owned)
+            .collect()
+    }
+
+    /// A scratch root carrying a quote, a parameter, a backtick, a space and a newline.
+    fn awkward_world() -> (PathBuf, LaunchContext) {
+        let root = PathBuf::from("/scratch/it's \"q\" $HOME `true` a b\nc");
+        let mut world = context();
+        world.scratch_root.clone_from(&root);
+        world.cwd = root.join("work");
+        (root, world)
+    }
+
+    /// Amendment a37: the vendor runs the hook `command` through a shell, so an awkward scratch
+    /// root must still name exactly one word, and that word is the program the launch installs.
+    #[test]
+    fn the_vendor_hook_command_is_one_shell_word_naming_the_program() {
+        let (root, world) = awkward_world();
+        let plan = plan_launch(&spec(), &world).expect("the run plans");
+        let command = plan.hook["hooks"][0]["command"]
+            .as_str()
+            .expect("a command string");
+        assert_eq!(
+            shell_words(command),
+            vec![
+                hook_program_path(&root)
+                    .to_str()
+                    .expect("a UTF-8 path")
+                    .to_owned()
+            ]
+        );
+    }
+
+    /// Amendment a37: the config for an awkward root parses as TOML, and the `command` it parses
+    /// back to is the plan's own, byte for byte, newline included.
+    #[test]
+    fn the_config_for_an_awkward_root_parses_and_round_trips_the_command() {
+        let (_, world) = awkward_world();
+        let plan = plan_launch(&spec(), &world).expect("the run plans");
+        let table: toml::Table = plan
+            .config
+            .parse()
+            .unwrap_or_else(|error| panic!("{error}\n{}", plan.config));
+        let parsed = table["hooks"]["PreToolUse"][0]["hooks"][0]["command"]
+            .as_str()
+            .expect("a command string");
+        assert_eq!(Some(parsed), plan.hook["hooks"][0]["command"].as_str());
+    }
+
+    /// TOML basic strings: every control character is escaped, so none reaches the document raw.
+    #[test]
+    fn a_toml_string_escapes_every_control_character() {
+        for code in (0u32..0x20).chain([0x7f]) {
+            let value = format!("a{}b", char::from_u32(code).expect("a char"));
+            let quoted = quote(&value);
+            assert!(
+                !quoted.chars().any(char::is_control),
+                "{code:#x}: {quoted:?}"
+            );
+            let parsed: toml::Table = format!("k = {quoted}").parse().expect("parses");
+            assert_eq!(parsed["k"].as_str(), Some(value.as_str()), "{code:#x}");
+        }
+    }
+
+    /// Amendment a37: a scratch root that is not UTF-8 has no faithful rendering in `config.toml`,
+    /// so the plan refuses it by name rather than writing a lossy path.
+    #[test]
+    fn a_scratch_root_that_is_not_utf8_is_refused_by_name() {
+        use std::os::unix::ffi::OsStrExt as _;
+        let root = PathBuf::from(std::ffi::OsStr::from_bytes(b"/scratch/run-\xff"));
+        let mut world = context();
+        world.scratch_root.clone_from(&root);
+        world.cwd = root.join("work");
+        let refusal = plan_launch(&spec(), &world).expect_err("a non-UTF-8 root is refused");
+        assert!(refusal.to_string().contains("not UTF-8"), "{refusal}");
     }
 
     /// The seam is declared in `config.toml`, in the table 0.145.0 actually reads, spelled the way
@@ -2028,7 +2180,7 @@ mod tests {
         assert!(config.contains("[[hooks.PreToolUse.hooks]]"), "{config}");
         assert!(config.contains(r#"type = "command""#), "{config}");
         assert!(
-            config.contains(r#"command = "/scratch/run-1/hooks/pretooluse""#),
+            config.contains(r#"command = "'/scratch/run-1/hooks/pretooluse'""#),
             "{config}"
         );
         assert!(config.contains("timeout = 60"), "{config}");
