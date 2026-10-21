@@ -743,6 +743,7 @@ fn start_b10x(
         planned_mcp_servers: Vec::new(),
         planned_output_style: None,
         record_silences: &[],
+        memory_canaries: None,
         pinned_versions: metaharness_b10x::PINNED_VERSIONS
             .iter()
             .map(ToString::to_string)
@@ -867,7 +868,7 @@ fn start_claude(
             cwd: cwd.clone(),
             credentials_file: credentials,
             inherited_env: std::env::vars().collect::<BTreeMap<String, String>>(),
-            memory_ancestors: memory_ancestors(&cwd),
+            memory_ancestors: claude_memory_ancestors(&cwd),
             inputs_digest: None,
             plugins: plugin_trees(&spec),
             marketplace_plugins: marketplace_plugins(&spec)?,
@@ -949,6 +950,7 @@ fn start_claude(
             // and the record must name it.
             planned_output_style: None,
             record_silences: &[],
+            memory_canaries: Some(crate::vectors::memory_canaries(Kind::Claude)),
             pinned_versions: metaharness_claude::PINNED_VERSIONS
                 .iter()
                 .map(ToString::to_string)
@@ -1226,6 +1228,7 @@ fn start_codex(
         planned_output_style: Some(metaharness_codex::PERSONALITY),
         // Why the pinned rollout leaves H1a, H4 and H5 `unk`, printed in those rows (a34).
         record_silences: &metaharness_codex::RECORD_SILENCES,
+        memory_canaries: None,
         pinned_versions: metaharness_codex::PINNED_VERSIONS
             .iter()
             .map(ToString::to_string)
@@ -2016,43 +2019,96 @@ fn credentials_file(spec: &RunSpec) -> Option<PathBuf> {
     }
 }
 
-/// Every memory file discoverable above the scratch working directory (design § 8.1 H11).
+/// Every `CLAUDE.md` and `AGENTS.md` above the scratch working directory (design § 8.1 H11), the
+/// walk of the Codex and b10x launches.
 ///
 /// Walked and handed to the adapter rather than checked here, because H11's verdict is the
 /// adapter's launch assertion. On codex the root-to-cwd `AGENTS.md` walk is native and has no
-/// switch at all. On Claude Code 2.1.304 and 2.1.305 discovery is gated on the project and local
-/// setting sources, which the launch's `--setting-sources ""` switches off — observed in the
-/// native fixture, and the pinned binary's behaviour rather than a control metaharness holds
-/// (design amendment a33) — so the walk still decides the row on both vendors.
-///
-/// The walk looks for `CLAUDE.md` and `AGENTS.md` and nothing else. Those two pinned binaries
-/// also read `.claude/CLAUDE.md`, `CLAUDE.local.md`, `.claude/AGENTS.md` and
-/// `.claude/rules/**/*.md` from a directory above the cwd once a source is on (a33); this walk does
-/// not look for those shapes, and `story:claude-h11-memory-walk-shapes` (decided: option C) covers
-/// them.
+/// switch at all, so a file it finds decides the row. Claude Code walks with
+/// [`claude_memory_ancestors`].
 fn memory_ancestors(cwd: &std::path::Path) -> Vec<PathBuf> {
     let mut found = Vec::new();
     for ancestor in cwd.ancestors().skip(1) {
-        for name in ["CLAUDE.md", "AGENTS.md"] {
-            let candidate = ancestor.join(name);
-            if candidate.is_file() {
-                found.push(candidate);
-            }
+        found.extend(memory_files_in(ancestor, &["CLAUDE.md", "AGENTS.md"], None));
+    }
+    found
+}
+
+/// Every memory file of a shape the pinned Claude Code loader reads, in each directory above the
+/// scratch working directory (design amendment a36): each of
+/// [`metaharness_claude::MEMORY_SHAPES`] that is a file, and every `.md` file under
+/// [`metaharness_claude::MEMORY_RULES_DIRECTORY`] at any depth.
+///
+/// **Information, never the verdict.** H11 on Claude rests on `--setting-sources ""` and the fresh
+/// scratch config home, held by the floor to the memory canary of the version the record reports;
+/// the adapter names what this walk found in the H11 row and refuses nothing for it.
+fn claude_memory_ancestors(cwd: &std::path::Path) -> Vec<PathBuf> {
+    let mut found = Vec::new();
+    for ancestor in cwd.ancestors().skip(1) {
+        found.extend(claude_memory_files_in(ancestor));
+    }
+    found
+}
+
+/// The Claude Code memory files in one directory (amendment a36), in a stable order.
+fn claude_memory_files_in(directory: &std::path::Path) -> Vec<PathBuf> {
+    memory_files_in(
+        directory,
+        &metaharness_claude::MEMORY_SHAPES,
+        Some(metaharness_claude::MEMORY_RULES_DIRECTORY),
+    )
+}
+
+/// Each of `shapes` that is a file under `directory`; a shape equal to `rules` names a directory
+/// whose `.md` files are collected at every depth instead. A symlinked directory under the rules
+/// directory is not followed, so a link cannot make the walk circle or leave the tree.
+fn memory_files_in(
+    directory: &std::path::Path,
+    shapes: &[&str],
+    rules: Option<&str>,
+) -> Vec<PathBuf> {
+    let mut found = Vec::new();
+    for shape in shapes {
+        let candidate = directory.join(shape);
+        if Some(*shape) == rules {
+            let mut markdown = Vec::new();
+            collect_markdown(&candidate, &mut markdown);
+            markdown.sort();
+            found.extend(markdown);
+        } else if candidate.is_file() {
+            found.push(candidate);
         }
     }
     found
 }
 
+fn collect_markdown(directory: &std::path::Path, into: &mut Vec<PathBuf>) {
+    let Ok(entries) = std::fs::read_dir(directory) else {
+        return;
+    };
+    for entry in entries.flatten() {
+        let path = entry.path();
+        let Ok(kind) = entry.file_type() else {
+            continue;
+        };
+        if kind.is_dir() {
+            collect_markdown(&path, into);
+        } else if path.extension().is_some_and(|ext| ext == "md") && path.is_file() {
+            into.push(path);
+        }
+    }
+}
+
 /// Memory files at the root of an embedder's declared scratch copy, listed as the copy's own
 /// (design amendment a27).
 ///
-/// The ancestor walk starts **above** the working directory, so a `CLAUDE.md` or `AGENTS.md` at
-/// the copy's root never enters H11's verdict: the copy is the embedder's, and what it put there is
-/// in context by its own declaration. The record still has to name it — an input the run had and
-/// nobody listed is the reading § 8.1 refuses — so it goes into `ambient_inputs`, the list of
-/// inputs metaharness reports and does not claim to have removed. Nothing is listed when nothing
-/// was declared: under a6 the operator's tree is theirs, and metaharness claims nothing about what
-/// is in it.
+/// The ancestor walk starts **above** the working directory, so a memory file at the copy's root
+/// never enters H11: the copy is the embedder's, and what it put there is in context by its own
+/// declaration. The record still has to name it — an input the run had and nobody listed is the
+/// reading § 8.1 refuses — so it goes into `ambient_inputs`, the list of inputs metaharness reports
+/// and does not claim to have removed. Claude Code lists every shape its walk looks for (a36);
+/// the other kinds list `CLAUDE.md` and `AGENTS.md`. Nothing is listed when nothing was declared:
+/// under a6 the operator's tree is theirs, and metaharness claims nothing about what is in it.
 fn list_declared_copy_memory_files(
     spec: &RunSpec,
     cwd: &std::path::Path,
@@ -2061,14 +2117,15 @@ fn list_declared_copy_memory_files(
     if !spec.scratch_cwd {
         return;
     }
-    for name in ["CLAUDE.md", "AGENTS.md"] {
-        let candidate = cwd.join(name);
-        if candidate.is_file() {
-            attestation.ambient_inputs.push(format!(
-                "memory file inside the declared scratch copy, the copy's own: {}",
-                candidate.display()
-            ));
-        }
+    let found = match spec.kind {
+        Kind::Claude => claude_memory_files_in(cwd),
+        Kind::Codex | Kind::B10x => memory_files_in(cwd, &["CLAUDE.md", "AGENTS.md"], None),
+    };
+    for candidate in found {
+        attestation.ambient_inputs.push(format!(
+            "memory file inside the declared scratch copy, the copy's own: {}",
+            candidate.display()
+        ));
     }
 }
 
@@ -3880,22 +3937,81 @@ mod scratch_cwd_tests {
         assert_eq!(exit(&run), RunExit::Ok);
     }
 
-    /// The declaration does not stand in for the measurement: a memory file above the copy is a
-    /// gap on H11 and strict still exits 1.
+    /// A memory file above the copy is information, not a gap (design amendment a36): H11 rests on
+    /// the launch's control and the pinned version's memory canary, names the file, and strict
+    /// exits 0.
     #[test]
-    fn a_memory_file_above_the_declared_copy_still_fails_strict() {
+    fn a_memory_file_above_the_declared_copy_is_named_and_strict_passes() {
         let (root, copy) = embedder_copy();
         std::fs::write(root.path().join("AGENTS.md"), "above the copy").unwrap();
+        let planted = std::fs::canonicalize(root.path())
+            .unwrap()
+            .join("AGENTS.md");
         let (run, _log) = strict_run(&copy, true);
 
         let attested = attestation(&run);
         assert!(attested.declares(HermeticRow::H7));
-        assert!(!attested.claims(HermeticRow::H11));
+        assert!(attested.claims(HermeticRow::H11), "{attested:?}");
         let (h11_verdict, h11_detail) = verdict(&run, HermeticRow::H11);
-        assert_eq!(h11_verdict, Verdict::Gap, "{h11_detail}");
-        assert!(h11_detail.contains("1 memory file"), "{h11_detail}");
+        assert_eq!(h11_verdict, Verdict::Ok, "{h11_detail}");
+        assert!(
+            h11_detail.contains(&planted.display().to_string()),
+            "{h11_detail}"
+        );
+        assert!(
+            h11_detail.contains(&format!(
+                "memory canary recorded for {}",
+                metaharness_claude::PINNED_VERSIONS[0]
+            )),
+            "{h11_detail}"
+        );
+        // a36 § 6: an `ok` H11 says nothing about managed memory, and says so.
+        assert!(
+            h11_detail.ends_with(
+                "managed memory (/etc/claude-code/CLAUDE.md) is neither walked nor probed, so \
+                 this row says nothing about it"
+            ),
+            "{h11_detail}"
+        );
         assert_eq!(verdict(&run, HermeticRow::H7).0, Verdict::Ok);
-        assert_eq!(exit(&run), RunExit::Gap);
+        assert_eq!(exit(&run), RunExit::Ok);
+    }
+
+    /// The Claude walk looks for every shape the pinned loader reads above the cwd (a33's list,
+    /// a36), and names each in H11 without refusing or failing the run.
+    #[test]
+    fn every_memory_shape_above_the_declared_copy_is_named_in_h11() {
+        let (root, copy) = embedder_copy();
+        let shapes = [
+            "CLAUDE.md",
+            "CLAUDE.local.md",
+            "AGENTS.md",
+            ".claude/CLAUDE.md",
+            ".claude/AGENTS.md",
+            ".claude/rules/style.md",
+            ".claude/rules/nested/deeper.md",
+        ];
+        for shape in shapes {
+            let path = root.path().join(shape);
+            std::fs::create_dir_all(path.parent().unwrap()).unwrap();
+            std::fs::write(&path, "above the copy").unwrap();
+        }
+        // Not a memory file: the loader reads `.md` files under `.claude/rules` only.
+        std::fs::write(root.path().join(".claude/rules/notes.txt"), "not markdown").unwrap();
+        let canonical_root = std::fs::canonicalize(root.path()).unwrap();
+        let (run, _log) = strict_run(&copy, true);
+
+        let (h11_verdict, h11_detail) = verdict(&run, HermeticRow::H11);
+        assert_eq!(h11_verdict, Verdict::Ok, "{h11_detail}");
+        for shape in shapes {
+            let named = canonical_root.join(shape).display().to_string();
+            assert!(
+                h11_detail.contains(&named),
+                "{shape} not named: {h11_detail}"
+            );
+        }
+        assert!(!h11_detail.contains("notes.txt"), "{h11_detail}");
+        assert_eq!(exit(&run), RunExit::Ok);
     }
 
     /// A memory file at the copy's root is the copy's own: in context by the declaration, named in

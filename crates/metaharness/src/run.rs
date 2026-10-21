@@ -224,6 +224,9 @@ pub(crate) struct LaunchFacts {
     pub(crate) planned_output_style: Option<&'static str>,
     /// Why this kind's opening record is silent on a record-asserted row (amendment a34).
     pub(crate) record_silences: &'static [(metaharness_protocol::HermeticRow, &'static str)],
+    /// The memory canary recorded per pinned version, for H11 (amendment a36). `None` for a kind
+    /// whose H11 the floor does not hold to a canary.
+    pub(crate) memory_canaries: Option<Vec<crate::audit::MemoryCanary>>,
     pub(crate) pinned_versions: Vec<String>,
     pub(crate) transcript: TranscriptRef,
     /// What the launch handed the child with `--context`, for the opening record (amendment a35).

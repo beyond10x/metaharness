@@ -617,6 +617,36 @@ pub fn builtin_plugins(kind: Kind) -> Vec<crate::audit::BuiltinPlugin> {
     }
 }
 
+/// The memory canary of each pinned binary of this kind, as the floor's H11 reads them
+/// (amendment a36).
+///
+/// The measurements are the adapter's (invariant 2); this only folds the two credential modes
+/// into one count of canaries that reached a request through the launch. Empty for a kind whose
+/// adapter records none; the builder hands the floor this list only for a kind whose H11 rests on
+/// a launch control the binary has to honour.
+#[must_use]
+pub fn memory_canaries(kind: Kind) -> Vec<crate::audit::MemoryCanary> {
+    match kind {
+        Kind::Claude => metaharness_claude::MEMORY_CANARIES
+            .iter()
+            .map(claude_memory_canary)
+            .collect(),
+        Kind::Codex | Kind::B10x => Vec::new(),
+    }
+}
+
+/// One Claude canary row in the floor's shape: a canary that reached a request under either
+/// credential mode counts, so the two are summed.
+fn claude_memory_canary(canary: &metaharness_claude::MemoryCanary) -> crate::audit::MemoryCanary {
+    crate::audit::MemoryCanary {
+        version: canary.version.to_string(),
+        planted: canary.planted,
+        control_sent: canary.control_sent,
+        reached_through_launch: canary.launch_none + canary.launch_loopback,
+        not_covered: metaharness_claude::MEMORY_NOT_PROBED.to_owned(),
+    }
+}
+
 /// What the adapter for this kind declares its contract owes (CT-4).
 ///
 /// The dispatch is the enforcement: a new [`Kind`] does not compile until it names a declaration,
@@ -686,6 +716,38 @@ pub fn contract_result(
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    /// A canary that reached a request under `loopback` alone, or under `none` alone, reaches the
+    /// floor as reached (a36): the fold sums both modes, and the floor then reads H11 `gap`.
+    #[test]
+    fn a_claude_canary_counts_a_leak_under_either_credential_mode() {
+        let recorded = metaharness_claude::MEMORY_CANARIES[0];
+        for (launch_none, launch_loopback, reached) in [(0, 2, 2), (3, 0, 3), (1, 2, 3), (0, 0, 0)]
+        {
+            let folded = claude_memory_canary(&metaharness_claude::MemoryCanary {
+                launch_none,
+                launch_loopback,
+                ..recorded
+            });
+            assert_eq!(
+                folded.reached_through_launch, reached,
+                "none {launch_none}, loopback {launch_loopback}"
+            );
+            assert_eq!(folded.version, recorded.version);
+            assert_eq!(folded.planted, recorded.planted);
+            assert_eq!(folded.control_sent, recorded.control_sent);
+            assert_eq!(folded.not_covered, metaharness_claude::MEMORY_NOT_PROBED);
+        }
+        assert_eq!(
+            memory_canaries(Kind::Claude),
+            metaharness_claude::MEMORY_CANARIES
+                .iter()
+                .map(claude_memory_canary)
+                .collect::<Vec<_>>()
+        );
+        assert_eq!(memory_canaries(Kind::Codex), Vec::new());
+        assert_eq!(memory_canaries(Kind::B10x), Vec::new());
+    }
 
     /// CT-1: an adapter's conformance run is a `contract_result` — the shape a consumer reads,
     /// with the pin in the provider and the vendor-tier failures called out as breaking.

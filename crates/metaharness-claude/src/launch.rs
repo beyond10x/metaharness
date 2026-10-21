@@ -188,14 +188,13 @@ pub struct LaunchContext {
     /// constructed from [`INHERITED_KEYS`], so a variable absent from that list cannot reach the
     /// child however it got into this map (design § 8.1 H3).
     pub inherited_env: BTreeMap<String, String>,
-    /// What an ancestor walk from [`LaunchContext::cwd`] found. A non-empty walk is a **refusal
-    /// before the run** and not a warning (design § 8.1 H11, finding F14).
-    ///
-    /// **The walk looks for `CLAUDE.md` and `AGENTS.md` in each directory above the cwd, and for
-    /// nothing else.** The 2.1.304 and 2.1.305 loader also reads `.claude/CLAUDE.md`,
-    /// `CLAUDE.local.md`, `.claude/AGENTS.md` and every `.md` file under `.claude/rules` from those
-    /// directories once a source is on (design amendment a33); the walk does not look for those
-    /// shapes, and `story:claude-h11-memory-walk-shapes` (decided: option C) covers them.
+    /// What an ancestor walk from [`LaunchContext::cwd`] found: every file of
+    /// [`crate::MEMORY_SHAPES`] in each directory above the cwd, and every `.md` file under each
+    /// such directory's [`crate::MEMORY_RULES_DIRECTORY`]. The walk is **information**, named in
+    /// the H11 row, and never a refusal (design amendment a36): H11 rests on
+    /// `--setting-sources ""` and the fresh config home, held by the floor to the memory canary
+    /// recorded for the record's version ([`crate::MEMORY_CANARIES`]). Before a36 a non-empty
+    /// walk refused the launch and looked for `CLAUDE.md` and `AGENTS.md` only.
     ///
     /// What a memory file does is observed per pin, not assumed. At 2.1.304 and 2.1.305
     /// project-memory discovery is gated on the `projectSettings` source (`CLAUDE.local.md` on
@@ -204,10 +203,9 @@ pub struct LaunchContext {
     /// under `credentials: none` and `loopback`, while the same binary sent every one with the
     /// project and local sources on (the `AGENTS.md` shapes where no `CLAUDE.md`-family file sat in
     /// or above the cwd, the only case their built-in loads them). The older reading here —
-    /// *auto-discovery is on in every run that is not `--bare`* — is superseded for those pins. The
-    /// walk still refuses: the observation is the binary's behaviour, and a binary that loaded
-    /// memory regardless of the source would put the file in context with nothing in the record to
-    /// say so.
+    /// *auto-discovery is on in every run that is not `--bare`* — is superseded for those pins.
+    /// That observation is the binary's behaviour, which is why the floor reads H11 `gap` on a
+    /// record version with no canary, or whose canary reached a request (a36).
     pub memory_ancestors: Vec<PathBuf>,
     /// The digest of the copied input tree, carried into `session.started.inputs_digest` — the
     /// evidence for H10. `None` means the caller pinned nothing, and the attestation says so
@@ -421,13 +419,6 @@ pub enum LaunchRefusal {
         /// The root it must be under.
         scratch_root: PathBuf,
     },
-    /// The ancestor walk found memory files above the scratch working directory (H11). A
-    /// refusal and not a warning, because whether those files enter the context is the pinned
-    /// binary's behaviour rather than a control metaharness holds (design amendment a33).
-    MemoryAncestorsFound {
-        /// What the walk found, in the order it found them.
-        found: Vec<PathBuf>,
-    },
     /// The run declared an operator login and named no credential file to copy.
     CredentialFileMissing,
     /// The run declared `credentials: api-key` and no `ANTHROPIC_API_KEY` was in the caller's
@@ -551,19 +542,6 @@ impl LaunchRefusal {
     }
 }
 
-/// [`LaunchRefusal::MemoryAncestorsFound`] in words: what the walk found, and why a memory file
-/// above the scratch cwd is refused whatever the pinned binary does with it (design amendment a33).
-fn memory_refusal(f: &mut fmt::Formatter<'_>, found: &[PathBuf]) -> fmt::Result {
-    write!(
-        f,
-        "H11: the ancestor walk found {}; a memory file above the scratch cwd is refused whatever \
-         the pinned binary loads, because what --setting-sources \"\" keeps out (the CLAUDE.md \
-         shapes, observed at 2.1.304 and 2.1.305) is the pinned binary's behaviour and not a \
-         control metaharness holds",
-        join_paths(found)
-    )
-}
-
 /// The two `--context` refusals in words (design amendment a35).
 fn context_words(refusal: &LaunchRefusal, f: &mut fmt::Formatter<'_>) -> fmt::Result {
     match refusal {
@@ -606,7 +584,6 @@ impl fmt::Display for LaunchRefusal {
                 cwd.display(),
                 scratch_root.display()
             ),
-            LaunchRefusal::MemoryAncestorsFound { found } => memory_refusal(f, found),
             LaunchRefusal::CredentialFileMissing => f.write_str(
                 "the run's credential source needs the operator's credential file and none was \
                  named: an operator login has nothing to copy into the scratch home, and a \
@@ -722,21 +699,15 @@ pub fn plan_launch(spec: &RunSpec, context: &LaunchContext) -> Result<LaunchPlan
         return Err(LaunchRefusal::NoPrompt);
     };
     guard_decision_mode(spec)?;
-    // An operator-named cwd (amendment a6) is a declaration, not a defect: the two refusals
-    // below exist to keep a *scratch* cwd honest, and a run the operator pointed at a real tree
-    // instead loses rows H7 and H11 in the attestation rather than being refused here.
-    if spec.cwd.is_none() {
-        if !context.cwd.starts_with(&context.scratch_root) {
-            return Err(LaunchRefusal::CwdOutsideScratch {
-                cwd: context.cwd.clone(),
-                scratch_root: context.scratch_root.clone(),
-            });
-        }
-        if !context.memory_ancestors.is_empty() {
-            return Err(LaunchRefusal::MemoryAncestorsFound {
-                found: context.memory_ancestors.clone(),
-            });
-        }
+    // An operator-named cwd (amendment a6) is a declaration, not a defect: the refusal below
+    // exists to keep a *scratch* cwd honest, and a run the operator pointed at a real tree
+    // instead loses rows H7 and H11 in the attestation rather than being refused here. A memory
+    // file above the cwd refuses nothing on either (amendment a36): the walk reports it in H11.
+    if spec.cwd.is_none() && !context.cwd.starts_with(&context.scratch_root) {
+        return Err(LaunchRefusal::CwdOutsideScratch {
+            cwd: context.cwd.clone(),
+            scratch_root: context.scratch_root.clone(),
+        });
     }
 
     // `loopback` is exempt: under it the declared endpoint is not the child's base URL at all —
@@ -1672,8 +1643,10 @@ fn attest(
     // declaration named, which is what makes `--hermetic strict` refuse such a run instead of
     // this attestation quietly claiming a directory it never made. An embedder's **declared
     // scratch copy** (amendment a27) is neither: H7 is `declared` — stated by the party that made
-    // the directory, never claimed by this attestation — and H11 is measured by the same walk a
-    // scratch cwd gets, because a declaration covers the copy and nothing above it.
+    // the directory, never claimed by this attestation — and H11 is imposed exactly as over a
+    // scratch cwd. H11 rests on the launch's own control on both, never on the walk (amendment
+    // a36): the walk's findings are named in the row, and the floor holds the control to the
+    // memory canary of the version the record reports.
     let mut declared = Vec::new();
     if spec.scratch_cwd && spec.cwd.is_some() {
         declared.push(metaharness_protocol::DeclaredControl {
@@ -1685,26 +1658,16 @@ fn attest(
                 context.cwd.display()
             ),
         });
-        if context.memory_ancestors.is_empty() {
-            imposed.push(control_imposed(
-                HermeticRow::H11,
-                format!(
-                    "the ancestor walk from the declared scratch copy {} found no CLAUDE.md and no \
-                     AGENTS.md above it; a memory file at the copy's root is the copy's own",
-                    context.cwd.display()
-                ),
-            ));
-        } else {
-            unavailable.push(control_unavailable(
-                HermeticRow::H11,
-                format!(
-                    "the ancestor walk from the declared scratch copy found {} memory file(s) \
-                     above it, which the declaration does not cover: the copy is the embedder's, \
-                     the directories above it are not",
-                    context.memory_ancestors.len()
-                ),
-            ));
-        }
+        imposed.push(control_imposed(
+            HermeticRow::H11,
+            format!(
+                "{}; the ancestor walk from the declared scratch copy {} found {}; a memory file \
+                 at the copy's root is the copy's own",
+                memory_control(config_home),
+                context.cwd.display(),
+                walk_findings(&context.memory_ancestors)
+            ),
+        ));
     } else if spec.cwd.is_some() {
         unavailable.push(control_unavailable(
             HermeticRow::H7,
@@ -1719,9 +1682,8 @@ fn attest(
             format!(
                 "the ancestor walk from the operator's directory found {} memory file(s) above \
                  it, and the tree is the operator's, so metaharness claims nothing about it; \
-                 --setting-sources \"\" kept memory files in and above the cwd out of every \
-                 request at 2.1.304 and 2.1.305 (a33), which is the pinned binary's behaviour \
-                 and not a control metaharness holds",
+                 the launch still passes --setting-sources \"\", which kept memory files in and \
+                 above the cwd out of every request at 2.1.304 and 2.1.305 (a33, a36)",
                 context.memory_ancestors.len()
             ),
         ));
@@ -1735,7 +1697,12 @@ fn attest(
         ));
         imposed.push(control_imposed(
             HermeticRow::H11,
-            "the ancestor walk from the scratch cwd found no CLAUDE.md and no AGENTS.md",
+            format!(
+                "{}; the ancestor walk from the scratch cwd {} found {}",
+                memory_control(config_home),
+                context.cwd.display(),
+                walk_findings(&context.memory_ancestors)
+            ),
         ));
     }
 
@@ -1942,6 +1909,31 @@ fn control_unavailable(row: HermeticRow, why: impl Into<String>) -> UnavailableC
         row,
         why: why.into(),
     }
+}
+
+/// The control H11 rests on (amendment a36): the two launch facts that keep memory discovery
+/// off, and the canary the floor holds them to.
+fn memory_control(config_home: &Path) -> String {
+    format!(
+        "--setting-sources \"\" switches off the project and local sources the pinned binary's \
+         memory discovery is gated on, and CLAUDE_CONFIG_DIR={} is a fresh scratch config home \
+         the launch writes no memory file into; the floor holds this to the memory canary \
+         recorded for the record's version (a36)",
+        config_home.display()
+    )
+}
+
+/// What the ancestor walk found, said as information and never as a refusal (amendment a36).
+fn walk_findings(found: &[PathBuf]) -> String {
+    if found.is_empty() {
+        return "no memory file above it".to_owned();
+    }
+    let paths: Vec<String> = found.iter().map(|p| p.display().to_string()).collect();
+    format!(
+        "{} memory file(s) above it, reported and not refused: {}",
+        found.len(),
+        paths.join(", ")
+    )
 }
 
 #[cfg(test)]
@@ -2777,21 +2769,53 @@ mod tests {
         );
     }
 
-    /// A memory file above the scratch cwd is refused before the run and never warned about (H11,
-    /// finding F14): whether it would enter the context is the pinned binary's behaviour, not a
-    /// control metaharness holds (design amendment a33).
+    /// A memory file above the scratch cwd is reported, never refused (design amendment a36): H11
+    /// rests on the launch's own control — `--setting-sources ""` and the fresh scratch config
+    /// home — and the walk's findings are information in that row, every path named.
     #[test]
-    fn a_non_empty_ancestor_walk_is_a_refusal_before_the_run() {
+    fn a_memory_file_above_the_scratch_cwd_is_reported_and_not_refused() {
         let mut context = context();
-        context.memory_ancestors = vec![PathBuf::from("/scratch/CLAUDE.md")];
-        let refusal = plan_launch(&spec(), &context).expect_err("H11 refuses");
-        assert_eq!(
-            refusal,
-            LaunchRefusal::MemoryAncestorsFound {
-                found: vec![PathBuf::from("/scratch/CLAUDE.md")]
-            }
-        );
-        assert_eq!(refusal.code(), None);
+        context.memory_ancestors = vec![
+            PathBuf::from("/scratch/CLAUDE.md"),
+            PathBuf::from("/scratch/.claude/rules/style.md"),
+        ];
+        let plan = plan_launch(&spec(), &context).expect("a memory file above is not a refusal");
+        assert!(plan.attestation.claims(HermeticRow::H11));
+        let h11 = plan
+            .attestation
+            .imposed
+            .iter()
+            .find(|control| control.row == HermeticRow::H11)
+            .expect("H11 imposed");
+        for needle in [
+            "--setting-sources \"\"",
+            "CLAUDE_CONFIG_DIR=/scratch/run-1/claude-home",
+            "2 memory file(s)",
+            "/scratch/CLAUDE.md",
+            "/scratch/.claude/rules/style.md",
+            "not refused",
+        ] {
+            assert!(h11.how.contains(needle), "{needle:?} missing: {}", h11.how);
+        }
+    }
+
+    /// An empty walk changes what the row says, not what it rests on: the control is the same.
+    #[test]
+    fn an_empty_walk_rests_h11_on_the_same_launch_control() {
+        let plan = plan();
+        let h11 = plan
+            .attestation
+            .imposed
+            .iter()
+            .find(|control| control.row == HermeticRow::H11)
+            .expect("H11 imposed");
+        for needle in [
+            "--setting-sources \"\"",
+            "CLAUDE_CONFIG_DIR=/scratch/run-1/claude-home",
+            "found no memory file",
+        ] {
+            assert!(h11.how.contains(needle), "{needle:?} missing: {}", h11.how);
+        }
     }
 
     /// A control that appears to work and does not is worse than one that is absent, so the run
@@ -3101,11 +3125,11 @@ mod tests {
         assert_eq!(plan.cwd, PathBuf::from("/embedder/copy"));
     }
 
-    /// A memory file above the declared copy is measured, not declared away: H11 goes unavailable
-    /// with the count named, H7 stays declared, and the launch is not refused — the ancestors are
-    /// the embedder's placement, and the floor exits 1 after the run.
+    /// A memory file above the declared copy is reported, not declared away and not a gap (design
+    /// amendment a36): H11 stays imposed on the launch's control and names the file, H7 stays
+    /// declared, and the launch is not refused.
     #[test]
-    fn a_memory_file_above_the_declared_copy_is_attested_unavailable_not_refused() {
+    fn a_memory_file_above_the_declared_copy_is_named_in_an_imposed_h11() {
         let mut spec = spec();
         spec.cwd = Some(PathBuf::from("/embedder/copy"));
         spec.scratch_cwd = true;
@@ -3114,14 +3138,28 @@ mod tests {
         context.memory_ancestors = vec![PathBuf::from("/embedder/AGENTS.md")];
         let plan = plan_launch(&spec, &context).expect("the declared copy plans");
         assert!(plan.attestation.declares(HermeticRow::H7));
-        assert!(!plan.attestation.claims(HermeticRow::H11));
+        assert!(
+            plan.attestation
+                .unavailable
+                .iter()
+                .all(|control| control.row != HermeticRow::H11),
+            "{:?}",
+            plan.attestation.unavailable
+        );
         let h11 = plan
             .attestation
-            .unavailable
+            .imposed
             .iter()
             .find(|control| control.row == HermeticRow::H11)
-            .expect("H11 unavailable");
-        assert!(h11.why.contains("1 memory file"), "{}", h11.why);
+            .expect("H11 imposed");
+        for needle in [
+            "--setting-sources \"\"",
+            "1 memory file(s)",
+            "/embedder/AGENTS.md",
+            "/embedder/copy",
+        ] {
+            assert!(h11.how.contains(needle), "{needle:?} missing: {}", h11.how);
+        }
     }
 
     /// The declaration without `--cwd` is the library's refusal (`check_spec`), not this plan's:
@@ -3161,9 +3199,6 @@ mod tests {
             LaunchRefusal::CwdOutsideScratch {
                 cwd: PathBuf::from("/a"),
                 scratch_root: PathBuf::from("/b"),
-            },
-            LaunchRefusal::MemoryAncestorsFound {
-                found: vec![PathBuf::from("/a/CLAUDE.md")],
             },
             LaunchRefusal::CredentialFileMissing,
             LaunchRefusal::ApiKeyMissing,

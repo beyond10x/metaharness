@@ -60,6 +60,7 @@ fn h7(observed: &str, planned: &str) -> (Verdict, String) {
             planned_mcp_servers: &[],
             planned_output_style: None,
             record_silences: &[],
+            memory_canaries: None,
         },
     );
     let row = rows

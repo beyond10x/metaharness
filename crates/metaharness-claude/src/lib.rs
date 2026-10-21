@@ -300,6 +300,99 @@ pub fn mention_canary(version: &str) -> Option<MentionCanary> {
         .copied()
 }
 
+/// The memory files the pinned binaries read from the cwd and every directory above it once the
+/// project or local source is on, in the binary's own order (design amendments a33, a36).
+///
+/// Read from both binaries: `[["CLAUDE.md"],["CLAUDE.local.md"],["AGENTS.md"],[".claude",
+/// "CLAUDE.md"],[".claude","AGENTS.md"],[".claude","rules"]]`, the same string in each. The last
+/// entry is a directory: every `.md` file under it, at any depth. The ancestor walk looks for
+/// exactly these, and what it finds is information in H11, never a refusal.
+pub const MEMORY_SHAPES: [&str; 6] = [
+    "CLAUDE.md",
+    "CLAUDE.local.md",
+    "AGENTS.md",
+    ".claude/CLAUDE.md",
+    ".claude/AGENTS.md",
+    MEMORY_RULES_DIRECTORY,
+];
+
+/// The entry of [`MEMORY_SHAPES`] that names a directory rather than a file: the binary reads
+/// every `.md` file under it, recursively.
+pub const MEMORY_RULES_DIRECTORY: &str = ".claude/rules";
+
+/// What one pinned binary did with a canary of every memory shape, planted in the cwd and in its
+/// parent (design amendment a36). H11 rests on this row.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct MemoryCanary {
+    /// The binary measured.
+    pub version: &'static str,
+    /// Canaries planted: each of [`MEMORY_SHAPES`] in the cwd and in its parent.
+    pub planted: usize,
+    /// How many the positive control sent, the vendor run directly with
+    /// `--setting-sources project,local`. Fewer than planted means the probe could not see a
+    /// shape, and the zero below says nothing about it.
+    pub control_sent: usize,
+    /// How many reached a request through the launch under `credentials: none`.
+    pub launch_none: usize,
+    /// How many reached a request through the launch under `credentials: loopback`.
+    pub launch_loopback: usize,
+}
+
+impl MemoryCanary {
+    /// Whether this row supports H11: the control saw every canary, and none got through the
+    /// launch under either credential mode.
+    #[must_use]
+    pub fn kept_out(&self) -> bool {
+        self.control_sent == self.planted && self.launch_none == 0 && self.launch_loopback == 0
+    }
+}
+
+/// What no memory canary row covers, in the words an `ok` H11 ends with (design amendment a36 § 6).
+/// The walk looks only above the cwd and the probe planted only there, so the policy directory's
+/// memory file is outside both.
+pub const MEMORY_NOT_PROBED: &str = "managed memory (/etc/claude-code/CLAUDE.md) is neither walked \
+                                     nor probed, so this row says nothing about it";
+
+/// The memory canary of every pinned binary, one row per entry of [`PINNED_VERSIONS`] in the same
+/// order (design amendment a36).
+///
+/// Measured on 2026-10-21 by the native fixture against its stub endpoint in a loopback-only
+/// namespace, no model reached (`docs/research/2026-10-21-claude-code-2.1.304-adapter-surface.md`,
+/// § *H11: memory files*): on 2.1.304 and on 2.1.305 the positive control sent all twelve — the
+/// eight `CLAUDE.md`-family canaries, and the four `AGENTS.md` ones where no `CLAUDE.md`-family
+/// file sat in or above the cwd — and the production launch sent none under `none` or `loopback`.
+/// User memory (a `CLAUDE.md` in the config home) and managed memory were not probed. A test holds
+/// the rows to the pin, so a pin without a row fails, the coupling [`MENTION_CANARIES`] has; it
+/// cannot tell a measured row from a copied one. The native fixture's canary case compares its
+/// measurement with the row of the binary under test; it is ignored in `task check`, so re-running
+/// it is a step of every pin move.
+pub const MEMORY_CANARIES: [MemoryCanary; 2] = [
+    MemoryCanary {
+        version: "2.1.304",
+        planted: 12,
+        control_sent: 12,
+        launch_none: 0,
+        launch_loopback: 0,
+    },
+    MemoryCanary {
+        version: "2.1.305",
+        planted: 12,
+        control_sent: 12,
+        launch_none: 0,
+        launch_loopback: 0,
+    },
+];
+
+/// The memory canary of the pinned binary of `version`, or `None` for a version this adapter does
+/// not pin.
+#[must_use]
+pub fn memory_canary(version: &str) -> Option<MemoryCanary> {
+    MEMORY_CANARIES
+        .iter()
+        .find(|row| row.version == version)
+        .copied()
+}
+
 /// The plugins the pinned binary of `version` compiles in, or `None` for a version this adapter
 /// does not pin.
 #[must_use]

@@ -70,8 +70,8 @@ mod viewer;
 pub use metaharness_protocol as protocol;
 
 pub use audit::{
-    AuditReport, BuiltinPlugin, FloorInputs, RunExit, anything_was_adjudicated, decision_census,
-    exit_without_audit, hermetic_floor, withheld_tools,
+    AuditReport, BuiltinPlugin, FloorInputs, MemoryCanary, RunExit, anything_was_adjudicated,
+    decision_census, exit_without_audit, hermetic_floor, withheld_tools,
 };
 pub use auditor::{
     AuditorInvoker, AuditorRun, AuditorVerdict, FakeAuditor, ProcessAuditor, auditor_argv,

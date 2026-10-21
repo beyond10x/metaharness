@@ -1053,8 +1053,9 @@ becomes an `allow`.
 | `SHADOWED` | the command would be accepted by the vendor and silently overridden by another layer (§ 7.3 row `can_use_tool`). Refused rather than delivered, because a control that appears to work and does not is worse than one that is absent |
 
 **These five are *command* refusal codes, and a launch refusal is not one of them** (amendment a2).
-H11's ancestor walk finding a `CLAUDE.md` above the scratch root, and H8's denylist finding
-`--safe-mode`, both refuse the run before it starts and neither is a command. They carry their own
+H11's ancestor walk finding a `CLAUDE.md` above the scratch root (Codex; on Claude it reports and
+refuses nothing since a36), and H8's denylist finding `--safe-mode`, both refuse the run before it
+starts and neither is a command. They carry their own
 name and no code, because inventing one would put a wrong word on a right refusal. `SHADOWED` is
 the one code that is also reachable at launch, and on the v0.1 `RunSpec` surface it is reachable
 **only** under `--tool-surface owned` — no other field can put a bare `--allowedTools` entry in the
@@ -1244,7 +1245,7 @@ when its unobservability is a property of the mechanism rather than of the run.
 | H8 | hooks and customizations are not skipped | an argv **denylist**: neither `--bare` nor **`--safe-mode`**, and neither `CLAUDE_CODE_SAFE_MODE` nor `CLAUDE_CODE_SIMPLE` in the child environment | launch: the argv and environment as values | n/a — launch assertion | **gating** |
 | H9 | the vendor version is the pinned one | `doctor` before the run | record: the harness version in the opening record | absent ⇒ `unk` | **gating** |
 | H10 | governing documents cannot move under the run | inputs are copied into the run directory, not referenced | record: the digest of the copied tree, in `session.started` | n/a | **gating** |
-| H11 | **no memory file outside the copied tree is discoverable** | the scratch root has no `CLAUDE.md` / `AGENTS.md` ancestor above it, or an explicit `--system-prompt` replaces discovery. **a33: the 2.1.304 and 2.1.305 loader also reads `.claude/CLAUDE.md`, `CLAUDE.local.md`, `.claude/AGENTS.md` and `.claude/rules/**/*.md` from an ancestor; the walk does not look for them, and `story:claude-h11-memory-walk-shapes` (decided: option C) covers them.** **a6: under an operator-named `--cwd` the walk's findings go into the attested-unavailable reason instead of refusing — the operator declared the tree, memory files and all.** **a27: under `--cwd <dir> --scratch-cwd` this row is never declared: the same walk runs from `<dir>`, nothing above it is `imposed`, a memory file above it is `unavailable` (so strict exits 1 after the run), and a `CLAUDE.md`/`AGENTS.md` at the copy's root is the copy's own, listed in `ambient_inputs`** | launch: the ancestor walk from the scratch cwd — or from the declared copy (a27) — as a value | n/a — launch assertion | **gating** |
+| H11 | **no memory file outside the copied tree is discoverable** | the scratch root has no `CLAUDE.md` / `AGENTS.md` ancestor above it, or an explicit `--system-prompt` replaces discovery. **a33: the 2.1.304 and 2.1.305 loader also reads `.claude/CLAUDE.md`, `CLAUDE.local.md`, `.claude/AGENTS.md` and `.claude/rules/**/*.md` from an ancestor; the walk does not look for them, and `story:claude-h11-memory-walk-shapes` (decided: option C) covers them.** *(Superseded by a36 for Claude: the walk looks for all six shapes.)* **a36 (Claude only): the row rests on the launch's own control — `--setting-sources ""` and a fresh scratch `CLAUDE_CONFIG_DIR` with no memory file in it — and the floor reads it `ok` only where `MEMORY_CANARIES` records, for the opening record's version, that no planted canary of the six shapes reached the model; a version with no row, or a canary that reached it, is `gap`. The walk looks for all six shapes and its findings are information in the row, never a refusal; under a27 a memory file above the copy is named and the row stays `imposed`. Codex and b10x keep the walk as the control.** **a6: under an operator-named `--cwd` the walk's findings go into the attested-unavailable reason instead of refusing — the operator declared the tree, memory files and all.** **a27: under `--cwd <dir> --scratch-cwd` this row is never declared: the same walk runs from `<dir>`, nothing above it is `imposed`, a memory file above it is `unavailable` (so strict exits 1 after the run) *(superseded by a36 for Claude, where it is named in an `imposed` row; Codex and b10x keep this)*, and a `CLAUDE.md`/`AGENTS.md` at the copy's root is the copy's own, listed in `ambient_inputs`** | launch: the ancestor walk from the scratch cwd — or from the declared copy (a27) — as a value | n/a — launch assertion | **gating** |
 
 Three rows deserve their reasons in full.
 
@@ -1259,7 +1260,8 @@ every run that is not `--bare`, and H8 forbids `--bare` — so a `CLAUDE.md` in 
 scratch working directory enters the context of a run this design calls hermetic. (**a33:** not at
 2.1.304 or 2.1.305, where `--setting-sources ""` kept a canary of every memory shape in the cwd and in an
 ancestor out of every request; the walk and its refusal stay, because that is the binary's
-behaviour.) H10 pins the
+behaviour. **a36:** on Claude the row now rests on that launch control, held per pinned version to
+its memory canary, and the walk reports instead of refusing.) H10 pins the
 *copied* documents and was silent about the uncopied ones. A second ambient input is named by the
 same source and is **not** closed here: `--exclude-dynamic-system-prompt-sections` describes moving
 *"cwd, env info, memory paths, **git status**"* out of the system prompt, which means git status is
@@ -2778,13 +2780,16 @@ within this amendment: the operator's own `~/.claude/CLAUDE.md` is a `.claude/CL
 scratch root under `HOME`, so on a machine whose `TMPDIR` sits there every scratch Claude run was
 refused and every `--cwd --scratch-cwd` run read H11 unavailable — including an embedder's copies —
 while the canaries showed none of those files reaching the model through the launch.
-`story:claude-h11-memory-walk-shapes` (decided: option C) covers them.
+`story:claude-h11-memory-walk-shapes` (decided: option C) covers them. **Superseded by a36:** the
+walk looks for all six shapes and reports what it finds, the refusal is gone, and H11 rests on
+`--setting-sources ""` and the fresh scratch config home, held to `MEMORY_CANARIES` per version.
 
 **7. The `--cwd` H11 row says what was observed.** Under an operator-named cwd the row was attested
 unavailable with *"the operator declared the tree as the run's context by naming it"*, which reads
 as though the tree's memory files were in context. It now says the tree is the operator's, so
 metaharness claims nothing about it, and that `--setting-sources ""` kept memory files in and above
-the cwd out of every request at both pins — the binary's behaviour, not a control.
+the cwd out of every request at both pins — the binary's behaviour, not a control. (a36: the H11 row of the a6 case is
+unchanged; the count in its `why` covers the six shapes.)
 
 No event or frame wire change. `FloorInputs` gains `builtin_plugins` and `endpoint_key_posture`;
 `contract_result`'s provider reads `claude 2.1.304, 2.1.305`; the c1 refusal fixture for a memory
@@ -3101,3 +3106,78 @@ target maps the refusal type without a wildcard, so a thirteenth refusal fails t
 suite moves from 90 to 103 scenarios. The native fixture gains two cases (the canary and the
 production case), 7 → 9 on each pinned binary. What a model does with the files is not measured
 here, and no paid run was made.
+
+### Amendment a36 — Claude H11 rests on the launch's own control, and the ancestor walk reports (2026-10-21)
+
+`story:claude-h11-memory-walk-shapes` (Atlas ADR 0096). **Decision C** (the story's wave,
+2026-10-21): *"H11 then rests on the imposed control: `--setting-sources ""` with a fresh
+CLAUDE_CONFIG_DIR, citing the canary evidence per pinned version. The ancestor walk reports what it
+finds as information, not a refusal. Guard: every change to PINNED_VERSIONS re-runs the canary
+probe, and a canary that reaches the model turns H11 to `gap`."* This supersedes, **for the Claude
+kind only**, a33 § 6's *"the ancestor walk and its refusal stay"* and § 8.1's H11 control (*"the
+scratch root has no `CLAUDE.md` / `AGENTS.md` ancestor above it"*). Codex and b10x keep their walk,
+their refusal-free a6 reading and their verdicts unchanged. Seven decisions; the evidence is
+`docs/research/2026-10-21-claude-code-2.1.304-adapter-surface.md` § *H11: memory files*.
+
+**1. What the row claims on Claude.** Over a scratch cwd and over a declared scratch copy (a27), H11
+is `imposed`, and the `how` names the two things the launch does: it passes `--setting-sources ""`,
+which switches off the `projectSettings` and `localSettings` sources that project-memory discovery
+is gated on at both pins, and it hands the child a fresh scratch `CLAUDE_CONFIG_DIR` into which it
+writes no memory file. Both are values metaharness builds — the argv and the config home — so this is
+a control it holds. The walk the row rested on before is a fact about directories metaharness does
+not own, and it cannot make a run hermetic; it can only make one refused. Whether the control works
+is the pinned binary's behaviour, so the claim is held to a measurement per version (2, 3).
+
+**2. A memory canary per pinned version.** `metaharness_claude::MEMORY_CANARIES` has one row per
+entry of `PINNED_VERSIONS`, in the same order, beside `MENTION_CANARIES`: the canaries planted
+(twelve — the binary's six shapes, in the cwd and in its parent), how many the positive control
+sent (`--setting-sources project,local`, run directly: twelve), and how many reached a request
+through the launch under `credentials: none` and under `loopback` (zero and zero). The rows for
+2.1.304 and 2.1.305 are the research page's table. A test holds the rows to the pin, as it holds
+`BUILTIN_PLUGINS` and `MENTION_CANARIES`, so a pin move without a row fails before it lands; like
+those, it cannot tell a measured row from a copied one. The native fixture's canary case compares
+what it measured against the row of the binary under test, so re-running it on the new binary is a
+step of every pin move — the guard the decision names. A row in which a canary reached a request is recordable (coordinator decision D3): the pin test asks for a row per pinned version and a control that saw every shape, never for zero leaks, and the native case requires its measurement to equal the row, so a binary that leaks is pinned with a row the floor reads as `gap` (3). It is ignored in `task check`, which does not
+run it.
+
+**3. The floor reads the canary of the record's version.** `FloorInputs` gains `memory_canaries`:
+the adapter's rows on Claude, `None` on every other kind. Where it is `Some` and the attestation
+reads H11 `ok`, the floor looks up the opening record's harness version: no version → `unk`
+(nothing names the binary the claim is about); a version with no row → `gap`; a row in which any
+canary reached a request through the launch, or in which the control sent fewer than were planted
+(a probe that could not see the shape shows nothing about it) → `gap`; otherwise `ok`, the detail
+naming the attestation and the canary. An `unavailable` H11 (a6) and a declared one are read as
+before, before the canary is looked at.
+
+**4. The walk looks for the binary's six shapes and refuses nothing.** On Claude the walk looks in
+every directory above the cwd for `CLAUDE.md`, `CLAUDE.local.md`, `AGENTS.md`, `.claude/CLAUDE.md`,
+`.claude/AGENTS.md` and every `.md` file under `.claude/rules` (recursively, without following a
+linked directory) — the binary's own list — and its findings go into H11 as information: the count
+and every path in the `imposed` `how`, the count in the a6 `unavailable` `why`.
+`LaunchRefusal::MemoryAncestorsFound` is removed; a scratch Claude run with memory files above it
+starts. This is what a33 § 6 built and reverted: on a machine whose `TMPDIR` sits under `HOME`, the
+operator's own `~/.claude/CLAUDE.md` is a `.claude/CLAUDE.md` above every scratch root, and under the
+refusal every scratch Claude run was refused. Under this amendment the file is named in the row and
+the run proceeds, which is what the canaries say the launch does with it. The declared copy's root
+listing (a27, `ambient_inputs`) looks for the same six shapes on Claude; b10x keeps `CLAUDE.md` and
+`AGENTS.md`.
+
+**5. a6 is unchanged.** Under an operator-named `--cwd` without the declaration H11 stays
+`unavailable`: the tree is the operator's and metaharness claims nothing about it. The `why` counts
+with the six shapes now.
+
+**6. What the claim does not cover.** User memory is the config home's `CLAUDE.md`; the launch
+writes none there, which is the claim, and the canaries did not probe one. Managed memory (the
+policy directory's `CLAUDE.md`) was not probed on either binary, and an `ok` H11 says nothing about
+it. Whether either is loaded under `--setting-sources ""` is not known here. The `ok` detail says so in words: it ends by naming managed memory (`/etc/claude-code/CLAUDE.md`) as neither walked nor probed.
+
+**7. Conformance.** The C1 vector `c1-memory-ancestor-refusal` becomes `c1-memory-ancestor-reported`:
+a scratch cwd with a `CLAUDE.md` above it plans a launch, and its fixture records the H11
+attestation naming the file. The scratch-copy vector's polluted case reads H11 `imposed`. The ESS
+outcome `DeclareScratchWorkingDirectory/outcome/memory-above-the-copy-fails-strict` becomes
+`memory-above-the-copy-is-reported` (H7 `declared`, H11 imposed, exit 0), and
+`ScratchCwdAttested` gains `memory_above_reported`, true when the H11 `how` names the `AGENTS.md`
+planted above the copy, so the outcome is told apart from `strict-admits-the-declared-copy` by an
+observation and not by the probe. The scenario is Claude-only, as before (the target runs
+`Kind::Claude`), and the suite keeps 103 scenarios. No event or frame wire change.
+`FloorInputs` gains `memory_canaries`; `LaunchRefusal` loses a variant.

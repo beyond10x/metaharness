@@ -47,7 +47,7 @@ pub const CONTRACT_OBLIGATIONS: ContractObligations = ContractObligations {
         "c1-strict-hermetic",
         "c1-api-key",
         "c1-shadow-refusal",
-        "c1-memory-ancestor-refusal",
+        "c1-memory-ancestor-reported",
         "c1-plugin-empty-refusal",
         "c1-observe-mode",
         "c1-plugin-injection",
@@ -194,28 +194,38 @@ fn scratch_cwd_vector() -> VectorOutcome {
         }
     }
 
-    // A memory file above the copy is measured, not declared away.
+    // A memory file above the copy is reported, not declared away and not a gap (a36): H11 rests
+    // on the launch's control and names the file.
     let mut polluted = base_context();
     polluted.cwd.clone_from(&copy);
     polluted.memory_ancestors = vec![PathBuf::from("/embedder/AGENTS.md")];
     match plan_launch(&spec, &polluted) {
         Err(refusal) => differences.push(format!(
             "a memory file above the declared copy refused the launch instead of being \
-             attested: {refusal}"
+             reported: {refusal}"
         )),
         Ok(plan) => {
             if !plan.attestation.declares(HermeticRow::H7) {
                 differences.push("H7 is not declared when a memory file is above".to_string());
             }
-            if plan.attestation.claims(HermeticRow::H11) {
-                differences.push("H11 is imposed over a memory file above the copy".to_string());
-            }
-            let measured = plan.attestation.unavailable.iter().any(|control| {
-                control.row == HermeticRow::H11 && control.why.contains("1 memory file")
+            let reported = plan.attestation.imposed.iter().any(|control| {
+                control.row == HermeticRow::H11
+                    && control.how.contains("1 memory file(s)")
+                    && control.how.contains("/embedder/AGENTS.md")
             });
-            if !measured {
+            if !reported {
+                differences.push(
+                    "H11 is not imposed with the memory file above the copy named".to_string(),
+                );
+            }
+            if plan
+                .attestation
+                .unavailable
+                .iter()
+                .any(|control| control.row == HermeticRow::H11)
+            {
                 differences
-                    .push("H11 is not attested unavailable with the count named".to_string());
+                    .push("H11 is attested unavailable over a memory file above".to_string());
             }
         }
     }
@@ -492,8 +502,8 @@ const LAUNCH_FIXTURES: [(&str, &str); 6] = [
         include_str!("../fixtures/c1/shadow-refusal.json"),
     ),
     (
-        "c1-memory-ancestor-refusal",
-        include_str!("../fixtures/c1/memory-ancestor-refusal.json"),
+        "c1-memory-ancestor-reported",
+        include_str!("../fixtures/c1/memory-ancestor-reported.json"),
     ),
     (
         "c1-plugin-empty-refusal",
@@ -538,10 +548,36 @@ fn launch_vector(id: &str, expectation: &str) -> VectorOutcome {
         return VectorOutcome::failed(id, ConformanceTier::C1, "no case is registered for this id");
     };
     let observed = match plan_launch(&spec, &context) {
+        // A memory file above the cwd changes no argv and no environment; what it changes is the
+        // H11 row, which is what this vector records (design amendment a36).
+        Ok(plan) if id == "c1-memory-ancestor-reported" => observed_h11(&plan),
         Ok(plan) => observed_plan(&plan),
         Err(refusal) => observed_refusal(&refusal),
     };
     compare(id, ConformanceTier::C1, expectation, &observed)
+}
+
+/// What the memory-ancestor vector records: H11 as the plan attests it, imposed or not.
+fn observed_h11(plan: &LaunchPlan) -> Value {
+    let imposed = plan
+        .attestation
+        .imposed
+        .iter()
+        .find(|control| control.row == HermeticRow::H11)
+        .map(|control| control.how.clone());
+    let unavailable = plan
+        .attestation
+        .unavailable
+        .iter()
+        .find(|control| control.row == HermeticRow::H11)
+        .map(|control| control.why.clone());
+    match (imposed, unavailable) {
+        (Some(how), None) => json!({ "h11_imposed": how }),
+        (imposed, unavailable) => json!({
+            "h11_imposed": imposed,
+            "h11_unavailable": unavailable,
+        }),
+    }
 }
 
 /// What a launch vector records: the command line and the whole child environment, or the
@@ -580,7 +616,7 @@ fn launch_case(id: &str) -> Option<(RunSpec, LaunchContext)> {
             spec.decisions = DecisionMode::Ask;
             spec.tool_surface = ToolSurface::Owned;
         }
-        "c1-memory-ancestor-refusal" => {
+        "c1-memory-ancestor-reported" => {
             context.memory_ancestors = vec![PathBuf::from("/scratch/CLAUDE.md")];
         }
         // A directory that exists and holds nothing: what a mistyped `--plugin-dir` looks like
@@ -978,7 +1014,7 @@ mod tests {
             "c1-strict-hermetic",
             "c1-api-key",
             "c1-shadow-refusal",
-            "c1-memory-ancestor-refusal",
+            "c1-memory-ancestor-reported",
             "c2-session",
             "c2-unknown-records",
             "c2-auth-expired",

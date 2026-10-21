@@ -227,7 +227,8 @@ declared scratch copy (`--cwd <dir> --scratch-cwd`). The domain
 generated scenarios: the declaration without a directory is refused
 (`check_spec`, every kind); a declared copy under strict is admitted (H7
 `declared`, H11 imposed, exit 0); a declared copy with an `AGENTS.md` one level
-above it reports H7 `declared`, H11 unavailable and exit 1; a named directory
+above it reported H7 `declared`, H11 unavailable and exit 1 until amendment a36,
+which renamed it (see below); a named directory
 without the declaration keeps a6 (H7 unavailable, exit 1). Each scenario is a real
 strict Claude run over `ScriptedRunner` in a directory the target made, drained to
 its end; the H7 state and H11 verdict are read off `session.started`'s attestation,
@@ -248,7 +249,8 @@ Hardening evidence, 2026-10-20, each defect restored and rerun green:
   measured walk ignored under the declaration — failed
   DeclareScratchWorkingDirectory/outcome/memory-above-the-copy-fails-strict
   (82 passed, one failed), reported as the undeclared shape
-  `("declared", false, 0)` rather than aborting the run.
+  `("declared", false, 0)` rather than aborting the run. That scenario is now
+  `memory-above-the-copy-is-reported` (a36), and this defect is no longer one.
 - `ess verify conform mutate --class guard-negate --emit`, execution of every
   emitted suite against production, and `--collect` killed **55 of 55 mutants**:
   no survivors, inconclusive, stillborn, unwitnessed or equivalent results.
@@ -386,3 +388,24 @@ not kill it, and that story must revisit the clause. Dropping the clause would r
 89 mutants, 88 killed, none survived. The inconclusive mutant negates
 `ProjectRecordedRun/decomposer-clean-recorded`, whose scenarios the reference
 model cannot run.
+
+## Amendment a36 change — a memory file above the copy is reported
+
+Protocol amendment a36 (2026-10-21) rests Claude Code's H11 on the launch's own
+control (`--setting-sources ""` and a fresh scratch config home), held by the floor
+to the memory canary recorded for the record's version, and makes the ancestor walk
+report what it finds. `DeclareScratchWorkingDirectory/outcome/memory-above-the-copy-fails-strict`
+becomes `memory-above-the-copy-is-reported`: an `AGENTS.md` one level above the
+declared copy now reads H7 `declared`, H11 imposed and exit 0, and the event carries
+`memory_above_reported: true`, read off whether the imposed H11 row names the planted
+file by its resolved path. The other three scenarios carry `memory_above_reported:
+false`. The scenario is Claude-specific: the target drives a Claude run, and the
+Codex and b10x walks are unchanged. The count stays at 103 (100 generated, 3
+authored), zero refused, regenerated with ESS 0.67.0.
+
+Hardening evidence, 2026-10-21, restored and rerun green: making the Claude walk
+return nothing failed `memory-above-the-copy-is-reported` alone (102 passed, one
+failed), observed as `strict-admits-the-declared-copy` with
+`memory_above_reported: false`. The canary guard itself (a version with no canary,
+or a canary that reached a request, reads H11 `gap`) is pinned by
+`crates/metaharness/tests/audit.rs`, not by this suite.

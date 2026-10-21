@@ -11,9 +11,9 @@ use metaharness::protocol::{
 };
 use metaharness::{
     AuditReport, AuditorRun, BuiltinPlugin, ClaudeSeams, FakeAuditor, FloorInputs, Input,
-    ManualClock, Metaharness, Refusal, RunExit, ScriptStep, ScriptedLog, ScriptedRunner,
-    ScriptedSeams, auditor_argv, builtin_plugins, count_verdict_rows, decision_census,
-    exit_without_audit, hermetic_floor, run_auditor, withheld_tools,
+    ManualClock, MemoryCanary, Metaharness, Refusal, RunExit, ScriptStep, ScriptedLog,
+    ScriptedRunner, ScriptedSeams, auditor_argv, builtin_plugins, count_verdict_rows,
+    decision_census, exit_without_audit, hermetic_floor, run_auditor, withheld_tools,
 };
 
 /// An opening record whose every observable field is present and correct.
@@ -84,6 +84,7 @@ fn inputs<'a>(spec: &'a RunSpec, pins: &'a [String], plugins: &'a [String]) -> F
         planned_mcp_servers: &[],
         planned_output_style: None,
         record_silences: &[],
+        memory_canaries: None,
     }
 }
 
@@ -136,6 +137,153 @@ fn a_clean_opening_record_makes_every_row_ok() {
         .map(|row| row.row.id())
         .collect();
     assert!(not_ok.is_empty(), "{not_ok:?}");
+}
+
+// ------------------------------------------- H11 held to the memory canary (amendment a36)
+
+/// A canary row for `version`: `planted` canaries, the control saw `control_sent`, and
+/// `reached` got through the launch.
+fn canary(version: &str, control_sent: usize, reached: usize) -> MemoryCanary {
+    MemoryCanary {
+        version: version.to_string(),
+        planted: 12,
+        control_sent,
+        reached_through_launch: reached,
+        not_covered: NOT_COVERED.to_string(),
+    }
+}
+
+/// What the fixture canary says it does not cover.
+const NOT_COVERED: &str = "managed memory is neither walked nor probed";
+
+/// H11 under a kind whose launch control is held to a memory canary, over `good_record()`
+/// (harness version 2.1.239, H11 imposed), with the version the record names replaced.
+fn h11_with_canaries(
+    version: Option<&str>,
+    canaries: &[MemoryCanary],
+) -> metaharness::protocol::RowVerdict {
+    let spec = RunSpec::new(Kind::Claude);
+    let pins = pins();
+    let record = with_record(good_record(), |record| {
+        if let Event::SessionStarted {
+            harness_version, ..
+        } = record
+        {
+            *harness_version = version.map(ToString::to_string);
+        }
+    });
+    let rows = hermetic_floor(
+        &[record],
+        &FloorInputs {
+            memory_canaries: Some(canaries),
+            ..inputs(&spec, &pins, &[])
+        },
+    );
+    rows.into_iter()
+        .find(|row| row.row == HermeticRow::H11)
+        .expect("every row is evaluated")
+}
+
+/// The claim holds only where the binary that ran has a canary that kept every shape out, and
+/// the row says which canary it rests on.
+#[test]
+fn h11_is_ok_on_an_imposed_control_whose_version_kept_every_canary_out() {
+    let row = h11_with_canaries(Some("2.1.239"), &[canary("2.1.239", 12, 0)]);
+    assert_eq!(row.verdict, Verdict::Ok, "{}", row.detail);
+    assert!(row.detail.contains("imposed H11"), "{}", row.detail);
+    assert!(
+        row.detail.contains(
+            "memory canary recorded for 2.1.239: 12 planted, the control sent 12, 0 reached"
+        ),
+        "{}",
+        row.detail
+    );
+    // a36 § 6: the row never reads wider than the measurement.
+    assert!(
+        row.detail.ends_with(&format!(
+            "0 reached a request through the launch; {NOT_COVERED}"
+        )),
+        "{}",
+        row.detail
+    );
+}
+
+/// A canary that states nothing it leaves out adds nothing to the detail.
+#[test]
+fn h11_ok_adds_no_caveat_for_a_canary_that_states_none() {
+    let silent = MemoryCanary {
+        not_covered: String::new(),
+        ..canary("2.1.239", 12, 0)
+    };
+    let row = h11_with_canaries(Some("2.1.239"), &[silent]);
+    assert_eq!(row.verdict, Verdict::Ok, "{}", row.detail);
+    assert!(
+        row.detail
+            .ends_with("0 reached a request through the launch"),
+        "{}",
+        row.detail
+    );
+}
+
+/// A version with no recorded canary is a `gap`: nobody measured whether this binary honours
+/// the control.
+#[test]
+fn h11_is_gap_on_a_version_without_a_memory_canary() {
+    let row = h11_with_canaries(Some("2.1.240"), &[canary("2.1.239", 12, 0)]);
+    assert_eq!(row.verdict, Verdict::Gap, "{}", row.detail);
+    assert!(row.detail.contains("no memory canary"), "{}", row.detail);
+    assert!(row.detail.contains("2.1.240"), "{}", row.detail);
+}
+
+/// A canary that reached a request through the launch turns H11 to `gap` (decision C's guard).
+#[test]
+fn h11_is_gap_when_the_recorded_canary_reached_the_model() {
+    let row = h11_with_canaries(Some("2.1.239"), &[canary("2.1.239", 12, 1)]);
+    assert_eq!(row.verdict, Verdict::Gap, "{}", row.detail);
+    assert!(row.detail.contains("1 reached"), "{}", row.detail);
+}
+
+/// A control that did not see every canary shows nothing about the shapes it missed.
+#[test]
+fn h11_is_gap_when_the_canarys_control_missed_a_shape() {
+    let row = h11_with_canaries(Some("2.1.239"), &[canary("2.1.239", 11, 0)]);
+    assert_eq!(row.verdict, Verdict::Gap, "{}", row.detail);
+    assert!(row.detail.contains("the control sent 11"), "{}", row.detail);
+}
+
+/// A record that names no version names no binary to look a canary up for.
+#[test]
+fn h11_is_unk_when_the_record_names_no_version_to_read_a_canary_for() {
+    let row = h11_with_canaries(None, &[canary("2.1.239", 12, 0)]);
+    assert_eq!(row.verdict, Verdict::Unk, "{}", row.detail);
+}
+
+/// The canary never upgrades a row the attestation did not claim: an unavailable H11 (a6) stays
+/// a `gap`.
+#[test]
+fn a_memory_canary_never_turns_an_unavailable_h11_ok() {
+    let spec = RunSpec::new(Kind::Claude);
+    let pins = pins();
+    let record = with_record(good_record(), |record| {
+        if let Event::SessionStarted { hermetic, .. } = record {
+            hermetic
+                .imposed
+                .retain(|control| control.row != HermeticRow::H11);
+            hermetic.unavailable.push(UnavailableControl {
+                row: HermeticRow::H11,
+                why: "the operator's tree".to_string(),
+            });
+        }
+    });
+    let canaries = [canary("2.1.239", 12, 0)];
+    let rows = hermetic_floor(
+        &[record],
+        &FloorInputs {
+            memory_canaries: Some(&canaries),
+            ..inputs(&spec, &pins, &[])
+        },
+    );
+    assert_eq!(verdict_of(&rows, HermeticRow::H11), Verdict::Gap);
 }
 
 #[test]
