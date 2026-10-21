@@ -210,6 +210,7 @@ impl TranscriptReader {
             // has and never a tool it wanted and could not have. `None` is *it did not say*, and
             // an empty list here would be this adapter asserting the machine admitted everything.
             withheld: None,
+            context_files: Vec::new(),
             adapter: ADAPTER_ID.to_string(),
             adapter_class: "harness".to_string(),
             harness_version: str_field(record, "claude_code_version"),

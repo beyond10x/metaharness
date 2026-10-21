@@ -91,14 +91,25 @@ pub enum Refusal {
         /// The kind that brings its own tools.
         kind: Kind,
     },
-    /// `--write-scope` or `--context` was given for a kind that carries them another way.
+    /// `--write-scope` was given for a kind that carries it another way.
     ///
     /// Not because a vendor arm should be unbounded. A scope reaches it as `Frame.subjects`, sealed
     /// into the frame's digest and adjudicated at its hook seam; a flag here would be a second,
     /// unsealed copy of the same rule, and the two would disagree the first time one moved.
+    /// `--context` was refused here too until design amendment a35, which gave it every kind.
     ScopeUnsupported {
         /// The kind whose scope travels in the frame.
         kind: Kind,
+    },
+    /// A `--context` file this run cannot be handed (design amendment a35).
+    ///
+    /// Raised before anything is spawned, and naming the file: a run handed a smaller context
+    /// than it declared is one nobody can reproduce from the declaration.
+    ContextFile {
+        /// The path as declared.
+        path: PathBuf,
+        /// Why it cannot be handed over.
+        why: ContextRefusal,
     },
     /// The adapter refused to plan the launch.
     Launch {
@@ -212,6 +223,110 @@ pub enum Refusal {
     },
 }
 
+/// Why a `--context` file is refused (design amendment a35), one variant per refusal the story's
+/// acceptance names, plus the two a file's bytes can raise.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum ContextRefusal {
+    /// The run names no `--cwd`, so there is no tree to read the file from.
+    WithoutCwd,
+    /// The path names no file: empty, or only `.` components.
+    Empty,
+    /// The path is absolute.
+    Absolute,
+    /// The path has a `..` component.
+    Escapes,
+    /// The path is not UTF-8.
+    PathNotUtf8,
+    /// The path is, or passes through, a symbolic link.
+    Symlink,
+    /// The path names something other than a regular file.
+    NotRegularFile,
+    /// The file could not be opened or read: absent, or the platform said no.
+    Unreadable {
+        /// What the platform said.
+        detail: String,
+    },
+    /// The content is not UTF-8 text without NUL bytes.
+    NotText {
+        /// Where the content stopped being text.
+        detail: String,
+    },
+    /// The file is not tracked by git in the `--cwd` tree.
+    Untracked {
+        /// What git said, or why it could not say.
+        detail: String,
+    },
+    /// The list declares more files than [`metaharness_protocol::CONTEXT_FILES_MAX`]; this path
+    /// is the first one past the cap.
+    CountCap {
+        /// How many the run declared.
+        declared: usize,
+    },
+    /// With this file the list passes [`metaharness_protocol::CONTEXT_BYTES_MAX`].
+    ByteCap {
+        /// The running total, this file included.
+        bytes: usize,
+    },
+}
+
+impl fmt::Display for ContextRefusal {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            ContextRefusal::WithoutCwd => f.write_str(
+                "a context file is read from the --cwd tree and this run names none; without \
+                 --cwd the child starts in an empty scratch directory where no tracked file can \
+                 exist. Name the tree with --cwd",
+            ),
+            ContextRefusal::Empty => f.write_str("the path names no file"),
+            ContextRefusal::Absolute => f.write_str(
+                "the path is absolute; a context file is named relative to the --cwd tree, so the \
+                 declaration cannot reach outside it",
+            ),
+            ContextRefusal::Escapes => f.write_str(
+                "the path has a `..` component; a context file is named beneath the --cwd tree and \
+                 never climbs out of it",
+            ),
+            ContextRefusal::PathNotUtf8 => f.write_str(
+                "the path is not UTF-8, and the record and the prompt carry it as text",
+            ),
+            ContextRefusal::Symlink => f.write_str(
+                "the path is or passes through a symbolic link; the file is opened beneath the \
+                 --cwd tree without following one (openat2, RESOLVE_BENEATH | \
+                 RESOLVE_NO_SYMLINKS), so the file the declaration names is the file that is read",
+            ),
+            ContextRefusal::NotRegularFile => f.write_str(
+                "it is not a regular file; a context file is a file's bytes, and a directory, FIFO, \
+                 socket or device either has none or blocks",
+            ),
+            ContextRefusal::Unreadable { detail } => write!(f, "it could not be read: {detail}"),
+            ContextRefusal::NotText { detail } => write!(
+                f,
+                "its content is not UTF-8 text without NUL bytes ({detail}); it travels in the \
+                 prompt, one argv string, and a lossy conversion would render bytes other than the \
+                 ones digested"
+            ),
+            ContextRefusal::Untracked { detail } => write!(
+                f,
+                "it is not tracked by git in the --cwd tree ({detail}); a context file is one the \
+                 tree's own index names"
+            ),
+            ContextRefusal::CountCap { declared } => write!(
+                f,
+                "the run declares {declared} context files and the count cap is {} (design \
+                 amendment a35)",
+                metaharness_protocol::CONTEXT_FILES_MAX
+            ),
+            ContextRefusal::ByteCap { bytes } => write!(
+                f,
+                "with it the context files reach {bytes} bytes, past the byte cap of {} counted \
+                 over each file's content and rendered path; the cap keeps the prompt under \
+                 Linux's 128 KiB single-argument limit (design amendment a35)",
+                metaharness_protocol::CONTEXT_BYTES_MAX
+            ),
+        }
+    }
+}
+
 impl Refusal {
     /// The `command.result` events a run-start control refusal owes.
     ///
@@ -321,13 +436,16 @@ impl fmt::Display for Refusal {
             ),
             Refusal::ScopeUnsupported { kind } => write!(
                 f,
-                "--write-scope and --context are refused for {}: a scope reaches it as \
-                 Frame.subjects, sealed into the frame's digest and adjudicated at its hook seam. A \
-                 flag here would be a second copy of the same rule that nothing seals, and the two \
-                 would disagree the first time one moved. The b10x loop takes them because it has \
-                 no seam: its published toolset is its policy, so the scope travels to the tools",
+                "--write-scope is refused for {}: a scope reaches it as Frame.subjects, sealed \
+                 into the frame's digest and adjudicated at its hook seam. A flag here would be a \
+                 second copy of the same rule that nothing seals, and the two would disagree the \
+                 first time one moved. The b10x loop takes one because it has no seam: its \
+                 published toolset is its policy, so the scope travels to the tools",
                 kind.as_str(),
             ),
+            Refusal::ContextFile { path, why } => {
+                write!(f, "--context {} is refused: {why}", path.display())
+            }
             Refusal::Launch { detail } => {
                 write!(f, "the adapter refused to plan the launch: {detail}")
             }

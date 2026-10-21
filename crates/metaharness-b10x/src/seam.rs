@@ -288,6 +288,7 @@ impl HarnessSeam for B10xSeam {
                     inputs_digest: None,
                     transcript: self.transcript.clone(),
                     hermetic: self.attestation.clone(),
+                    context_files: Vec::new(),
                 })]
             }
             "text-delta" => vec![Emission::untimed(Event::Text {

@@ -1097,3 +1097,239 @@ fn native_memory_canaries_in_the_cwd_and_an_ancestor_never_reach_the_model() {
         }
     }
 }
+
+/// Every request body's `system` blocks, as text.
+fn system_texts(root: &Path) -> Vec<String> {
+    let requests: Vec<Value> =
+        serde_json::from_str(&fs::read_to_string(root.join("requests.json")).unwrap()).unwrap();
+    requests
+        .iter()
+        .filter_map(|request| request["body"]["system"].as_array())
+        .flatten()
+        .filter_map(|block| block["text"].as_str().map(ToOwned::to_owned))
+        .collect()
+}
+
+/// The text every mention route carries: a line that is nothing but a mention.
+const MENTION_TEXT: &str = "Quote the marker.\n@marker.txt";
+
+/// One direct run of the binary under test with [`MENTION_TEXT`] routed as `route`, against the
+/// stub, in a fresh root whose `work/marker.txt` holds a marker unique to the route. Returns
+/// whether that marker reached any request body (the mention expanded) and whether the text
+/// arrived byte-exact in a `system` block.
+fn mention_route(route: &str) -> (bool, bool) {
+    let (vendor, evidence) = vendor_and_evidence();
+    let root = fresh_root(&vendor, &evidence, Credentials::None);
+    let marker = format!("native-mention-{route}-5c2e9b");
+    fs::write(root.join("work/marker.txt"), &marker).unwrap();
+    let provider = Provider::start(Mode::Text, Credentials::None);
+    let config = root.join("home/.claude-config");
+    fs::create_dir_all(&config).unwrap();
+    let answer = "Return the fixture answer.";
+    let (args, input): (Vec<&str>, String) = match route {
+        "prompt-argument" => (vec!["-p", MENTION_TEXT], String::new()),
+        "stdin-text" => (vec!["-p"], MENTION_TEXT.to_owned()),
+        "stdin-stream-json" => (
+            vec!["-p", "--input-format", "stream-json"],
+            format!(
+                "{}\n",
+                json!({"type":"user","message":{"role":"user","content":[{"type":"text","text":MENTION_TEXT}]}})
+            ),
+        ),
+        "append-system-prompt" => (
+            vec!["-p", answer, "--append-system-prompt", MENTION_TEXT],
+            String::new(),
+        ),
+        "system-prompt" => (
+            vec!["-p", answer, "--system-prompt", MENTION_TEXT],
+            String::new(),
+        ),
+        other => panic!("no route {other}"),
+    };
+    let mut command = Command::new(&vendor);
+    command
+        .args(args)
+        .args([
+            "--output-format",
+            "stream-json",
+            "--verbose",
+            "--model",
+            MODEL,
+            "--max-turns",
+            "1",
+            "--strict-mcp-config",
+            "--setting-sources",
+            "",
+        ])
+        .env_clear()
+        .env("HOME", root.join("home"))
+        .env("CLAUDE_CONFIG_DIR", &config)
+        .env("PATH", "/usr/local/bin:/usr/bin:/bin")
+        .env("LANG", "C.UTF-8")
+        .env("TMPDIR", root.join("tmp"))
+        .env("ANTHROPIC_BASE_URL", &provider.endpoint)
+        .env("ANTHROPIC_API_KEY", ENDPOINT_PLACEHOLDER)
+        .env("CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC", "1")
+        .current_dir(root.join("work"))
+        .stdin(Stdio::piped())
+        .stdout(fs::File::create(root.join("vendor-stdout.jsonl")).unwrap())
+        .stderr(fs::File::create(root.join("stderr.log")).unwrap())
+        .process_group(0);
+    let mut child = NativeChild {
+        child: command.spawn().unwrap(),
+        reaped: false,
+    };
+    {
+        let mut stdin = child.child.stdin.take().unwrap();
+        stdin.write_all(input.as_bytes()).unwrap();
+    }
+    let deadline = Instant::now() + Duration::from_secs(45);
+    while child.child.try_wait().unwrap().is_none() {
+        assert!(
+            Instant::now() < deadline,
+            "the {route} route exceeded 45 seconds: {}",
+            root.display()
+        );
+        thread::sleep(Duration::from_millis(20));
+    }
+    child.reaped = true;
+    retain_provider(&root, &provider);
+    let requests = fs::read_to_string(root.join("requests.json")).unwrap();
+    assert!(
+        requests.contains("/v1/messages"),
+        "the {route} route reached the stub: {}",
+        root.display()
+    );
+    let in_system = system_texts(&root)
+        .iter()
+        .any(|text| text.contains(MENTION_TEXT));
+    (requests.contains(&marker), in_system)
+}
+
+/// Correction round 1, condition 3: the `@`-mention canary of the binary under test, measured and
+/// held against its row in [`metaharness_claude::MENTION_CANARIES`]. The lane runs once per pinned
+/// binary, beside the H11 canary, as a step of every pin move: it is ignored in `task check`, and
+/// the unit test in `tests/adapter.rs` refuses a pin without a row but cannot tell a copied row
+/// from a measured one.
+///
+/// Every route runs the binary directly against the stub with a line that is nothing but
+/// `@marker.txt`; the route expanded when the file's marker reached a request body. The two system
+/// prompt routes also have to carry the text byte-exact, or not expanding would mean nothing.
+#[test]
+#[ignore = "actual Claude and production driver; explicit binaries/evidence and isolated loopback network namespace required"]
+fn native_at_mentions_expand_in_the_user_turn_and_not_in_the_system_prompt() {
+    let _lease = NATIVE_RUN
+        .lock()
+        .unwrap_or_else(std::sync::PoisonError::into_inner);
+    require_isolation();
+    let version = vendor_version();
+    let row = metaharness_claude::mention_canary(version).expect("a pinned version has a row");
+    let (prompt_argument, _) = mention_route("prompt-argument");
+    let (stdin_text, _) = mention_route("stdin-text");
+    let (stdin_stream_json, _) = mention_route("stdin-stream-json");
+    let (append_system_prompt, appended_exact) = mention_route("append-system-prompt");
+    let (system_prompt, system_exact) = mention_route("system-prompt");
+    let mention = |expanded: bool| {
+        if expanded {
+            metaharness_claude::Mention::Expanded
+        } else {
+            metaharness_claude::Mention::Text
+        }
+    };
+    assert_eq!(
+        metaharness_claude::MentionCanary {
+            version: row.version,
+            prompt_argument: mention(prompt_argument),
+            stdin_text: mention(stdin_text),
+            stdin_stream_json: mention(stdin_stream_json),
+            append_system_prompt: mention(append_system_prompt),
+            system_prompt: mention(system_prompt),
+        },
+        row,
+        "{version}: the measured canary is not the recorded row"
+    );
+    assert!(
+        appended_exact && system_exact,
+        "{version}: a system prompt route did not carry the text byte-exact"
+    );
+}
+
+/// Correction round 1, decision 1, through the production driver: a `--context` file whose text
+/// holds `@marker.txt` at the start of a line and `@../outside` reaches the model as text in the
+/// appended system prompt, byte-exact, and neither the file in the tree nor the one beside it is
+/// read into any request. The opening record names the file with the `system-prompt` channel.
+#[test]
+#[ignore = "actual Claude and production driver; explicit binaries/evidence and isolated loopback network namespace required"]
+fn native_context_files_reach_the_system_prompt_byte_exact_and_their_mentions_stay_text() {
+    let _lease = NATIVE_RUN
+        .lock()
+        .unwrap_or_else(std::sync::PoisonError::into_inner);
+    let in_tree = "native-context-marker-in-tree-3f9a";
+    let beside = "native-context-marker-beside-3f9a";
+    let notes = "@marker.txt\nand the parent's: @../outside\n";
+    let (root, events, _) = run_in(
+        Mode::Text,
+        Credentials::None,
+        &["--context", "notes.md"],
+        |root| {
+            let work = root.join("work");
+            fs::write(work.join("notes.md"), notes).unwrap();
+            fs::write(work.join("marker.txt"), in_tree).unwrap();
+            fs::write(root.join("outside"), beside).unwrap();
+            for args in [
+                &["init", "--quiet"][..],
+                &["add", "notes.md", "marker.txt"][..],
+            ] {
+                let status = Command::new("/usr/bin/git")
+                    .current_dir(&work)
+                    .env_clear()
+                    .env("PATH", "/usr/bin:/bin")
+                    .env("GIT_CONFIG_NOSYSTEM", "1")
+                    .env("GIT_CONFIG_GLOBAL", "/dev/null")
+                    .args(args)
+                    .status()
+                    .unwrap();
+                assert!(status.success(), "git {args:?}");
+            }
+        },
+    );
+    assert!(
+        events
+            .iter()
+            .any(|e| e["event"] == "text" && e["text"] == ANSWER),
+        "the run reached the model: {}",
+        root.display()
+    );
+    let requests = fs::read_to_string(root.join("requests.json")).unwrap();
+    assert!(
+        !requests.contains(in_tree) && !requests.contains(beside),
+        "a mention inside the context file was expanded: {}",
+        root.display()
+    );
+    let file = metaharness_protocol::DeclaredContextFile::new(
+        "notes.md".to_owned(),
+        notes.as_bytes().to_vec(),
+    )
+    .unwrap();
+    let block = metaharness_protocol::render_context_files(std::slice::from_ref(&file)).unwrap();
+    assert!(
+        system_texts(&root).iter().any(|text| text.contains(&block)),
+        "the block is not byte-exact in the system prompt: {}",
+        root.display()
+    );
+    let opening = events
+        .iter()
+        .find(|e| e["event"] == "session.started")
+        .expect("the run opened");
+    assert_eq!(
+        opening["context_files"],
+        json!([{
+            "path": "notes.md",
+            "sha256": metaharness_protocol::Digest::of(notes.as_bytes()).as_str(),
+            "bytes": notes.len(),
+            "channel": "system-prompt",
+        }]),
+        "{}",
+        root.display()
+    );
+}

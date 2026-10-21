@@ -21,9 +21,9 @@ use std::collections::BTreeSet;
 use std::path::PathBuf;
 
 use metaharness_protocol::{
-    ConformanceTier, ContractObligations, CredentialSource, Digest, Emission, Event, EventStream,
-    HermeticAttestation, HermeticMode, HermeticRow, Kind, Obligation, RunId, RunSpec,
-    TranscriptRef, VectorOutcome,
+    ConformanceTier, ContractObligations, CredentialSource, DeclaredContextFile, Digest, Emission,
+    Event, EventStream, HermeticAttestation, HermeticMode, HermeticRow, Kind, Obligation, RunId,
+    RunSpec, TranscriptRef, VectorOutcome,
 };
 use serde_json::{Value, json};
 
@@ -48,6 +48,7 @@ pub const CONTRACT_OBLIGATIONS: ContractObligations = ContractObligations {
         "c1-unsupported-option-refusal",
         "c1-memory-ancestor-refusal",
         "c1-scratch-cwd-declaration",
+        "c1-context-files",
     ]),
     recorded_wire: Obligation::Filled(&["golden-rollout"]),
     recorded_hook_input: Obligation::Filled(&["golden-hook-input"]),
@@ -91,7 +92,7 @@ pub fn conformance_vectors() -> Vec<VectorOutcome> {
 }
 
 /// The recorded expectations, paired with the case that produces them.
-const LAUNCH_FIXTURES: [(&str, &str); 6] = [
+const LAUNCH_FIXTURES: [(&str, &str); 7] = [
     (
         "c1-strict-hermetic",
         include_str!("../fixtures/c1/strict-hermetic.json"),
@@ -109,6 +110,10 @@ const LAUNCH_FIXTURES: [(&str, &str); 6] = [
     (
         "c1-memory-ancestor-refusal",
         include_str!("../fixtures/c1/memory-ancestor-refusal.json"),
+    ),
+    (
+        "c1-context-files",
+        include_str!("../fixtures/c1/context-files.json"),
     ),
 ];
 
@@ -192,9 +197,34 @@ fn launch_case(id: &str) -> Option<(RunSpec, LaunchContext)> {
         "c1-memory-ancestor-refusal" => {
             context.memory_ancestors = vec![PathBuf::from("/scratch/AGENTS.md")];
         }
+        // Two `--context` files in a named tree (amendment a35), inline because 0.153.4 does not
+        // expand `@path`; the second carries the first tag's closing line, so the tag moves.
+        "c1-context-files" => {
+            spec.cwd = Some(PathBuf::from("/operator/repo"));
+            spec.context = vec!["todo.py".into(), "notes/closing.md".into()];
+            context.cwd = PathBuf::from("/operator/repo");
+            context.context_files = synthetic_context_files();
+        }
         _ => return None,
     }
     Some((spec, context))
+}
+
+/// The two synthesised files the context vector renders: invented names, invented bytes.
+fn synthetic_context_files() -> Vec<DeclaredContextFile> {
+    [
+        ("todo.py", "def add(items, item):\n    items.append(item)\n"),
+        (
+            "notes/closing.md",
+            "a file may say </context-file-0> and stay inside\n",
+        ),
+    ]
+    .into_iter()
+    .map(|(path, text)| {
+        DeclaredContextFile::new(path.to_owned(), text.as_bytes().to_vec())
+            .expect("synthesised text")
+    })
+    .collect()
 }
 
 /// C1 — **the declared scratch copy** (amendment a27), read off the plan rather than off a
@@ -340,6 +370,7 @@ fn base_spec() -> RunSpec {
 /// A synthetic world: no path, name or value here comes from a real machine.
 fn base_context() -> LaunchContext {
     LaunchContext {
+        context_files: Vec::new(),
         scratch_root: PathBuf::from("/scratch/run-1"),
         cwd: PathBuf::from("/scratch/run-1/work"),
         credentials_file: Some(PathBuf::from("/operator/.codex/auth.json")),
@@ -957,7 +988,7 @@ mod tests {
             assert_eq!(outcome.tier, ConformanceTier::C1, "{id}");
             assert!(outcome.passed, "{id}: {}", outcome.detail);
         }
-        // The six recorded expectations, and the one computed vector (a27's declared scratch
+        // The seven recorded expectations, and the one computed vector (a27's declared scratch
         // copy) that reads the plan's attestation instead of comparing against a fixture.
         assert_eq!(ids.len(), LAUNCH_FIXTURES.len() + 1);
     }

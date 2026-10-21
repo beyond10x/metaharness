@@ -24,10 +24,11 @@ use std::fmt::Write as _;
 use std::path::{Path, PathBuf};
 
 use metaharness_protocol::{
-    CredentialSource, DecisionMode, Digest, HermeticAttestation, HermeticRow, ImposedControl,
-    InstalledPlugin, Kind, MarketplacePlugin, PluginContent, PluginInstall, PluginTree,
-    RefusalCode, ResolvedMarketplacePlugin, RunSpec, TierStatus, ToolSurface, UnavailableControl,
-    required_commands,
+    CredentialSource, DecisionMode, DeclaredContextFile, Digest, HermeticAttestation, HermeticRow,
+    ImposedControl, InstalledPlugin, Kind, MarketplacePlugin, PluginContent, PluginInstall,
+    PluginTree, RefusalCode, ResolvedMarketplacePlugin, RunSpec, TierStatus, ToolSurface,
+    UnavailableControl, argument_too_long, context_matches_declaration, oversized_argument,
+    render_context_files, required_commands,
 };
 use serde_json::{Value, json};
 
@@ -245,6 +246,17 @@ pub struct LaunchContext {
     /// sees will say. A declared plugin with no resolution here is a caller that forgot to look,
     /// and it is refused rather than silently planned without.
     pub marketplace_plugins: Vec<ResolvedMarketplacePlugin>,
+    /// Every `--context` file, **as the caller read it** beneath the `--cwd` tree (design
+    /// amendment a35).
+    ///
+    /// The same division again: the caller opens and reads the files, this function renders them
+    /// into the value of `--append-system-prompt`, verbatim inside a delimiter each file does not
+    /// contain ([`metaharness_protocol::render_context_files`]). Never into the user turn: the
+    /// pinned binaries expand an `@path` there into a file read that passes no `PreToolUse` seam
+    /// and leaves no record ([`crate::MENTION_CANARIES`]). A list that is not exactly the
+    /// declared one is [`LaunchRefusal::ContextFilesUnread`], never a smaller context than the run
+    /// declared.
+    pub context_files: Vec<DeclaredContextFile>,
 }
 
 /// One document the caller writes into the scratch tree before the child starts.
@@ -503,6 +515,24 @@ pub enum LaunchRefusal {
         /// What the adapter declares about it.
         status: TierStatus,
     },
+    /// The run declared `--context` files and the caller handed this plan another list (design
+    /// amendment a35): a caller that planned without reading them, or read other files.
+    ContextFilesUnread {
+        /// How many the run declared.
+        declared: usize,
+        /// How many the caller read.
+        read: usize,
+    },
+    /// An argument the launch built does not fit one argv string (`MAX_ARG_STRLEN`, design
+    /// amendment a35): refused here rather than failing at `execve` with `E2BIG`.
+    ArgumentTooLong {
+        /// The flag the argument follows.
+        argument: String,
+        /// Its size in bytes.
+        bytes: usize,
+        /// Every context file the run declared, with its size in bytes.
+        files: Vec<(String, usize)>,
+    },
 }
 
 impl LaunchRefusal {
@@ -532,6 +562,24 @@ fn memory_refusal(f: &mut fmt::Formatter<'_>, found: &[PathBuf]) -> fmt::Result 
          control metaharness holds",
         join_paths(found)
     )
+}
+
+/// The two `--context` refusals in words (design amendment a35).
+fn context_words(refusal: &LaunchRefusal, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+    match refusal {
+        LaunchRefusal::ContextFilesUnread { declared, read } => write!(
+            f,
+            "the run declared {declared} --context file(s) and the caller handed this plan {read} \
+             read ones that are not that list; a run handed a smaller context than it declared is \
+             one nobody can reproduce from the declaration (design amendment a35)"
+        ),
+        LaunchRefusal::ArgumentTooLong {
+            argument,
+            bytes,
+            files,
+        } => f.write_str(&argument_too_long(argument, *bytes, files)),
+        _ => unreachable!("only the context refusals are worded here"),
+    }
 }
 
 impl fmt::Display for LaunchRefusal {
@@ -630,6 +678,9 @@ impl fmt::Display for LaunchRefusal {
                         "delivered, which is not a refusal and is a defect here",
                 }
             ),
+            LaunchRefusal::ContextFilesUnread { .. } | LaunchRefusal::ArgumentTooLong { .. } => {
+                context_words(self, f)
+            }
         }
     }
 }
@@ -710,10 +761,21 @@ pub fn plan_launch(spec: &RunSpec, context: &LaunchContext) -> Result<LaunchPlan
     let marketplace_installs = marketplace_installs(spec, context, &config_home)?;
     let scratch_files = scratch_registry_files(spec, context, &config_home)?;
     let mcp_config = build_mcp_config(spec, context)?;
+    if !context_matches_declaration(&spec.context, &context.context_files) {
+        return Err(LaunchRefusal::ContextFilesUnread {
+            declared: spec.context.len(),
+            read: context.context_files.len(),
+        });
+    }
+    // The context block goes to the appended system prompt, never the user turn: the pinned
+    // binaries expand an `@path` anywhere in the user turn into a file read no seam sees
+    // (`MENTION_CANARIES`, amendment a35). Nothing is appended when no file was declared.
     let prompt = spec.with_agent_execution_context(prompt);
+    let appended = render_context_files(&context.context_files);
     let args = build_args(
         spec,
         &prompt,
+        appended.as_deref(),
         &context.scratch_root.join(SETTINGS_FILE),
         &plugin_installs,
         &marketplace_installs,
@@ -722,6 +784,7 @@ pub fn plan_launch(spec: &RunSpec, context: &LaunchContext) -> Result<LaunchPlan
             .then(|| mcp_config_path(&context.scratch_root)),
     );
     guard_arguments(&args)?;
+    guard_argument_lengths(&args, &context.context_files)?;
     guard_shadowing(spec, &args)?;
     let env = build_env(spec, context, &config_home)?;
     let hook = build_hook(&context.scratch_root.join(HOOK_FILE));
@@ -1076,14 +1139,20 @@ fn credential_copies(
 fn build_args(
     spec: &RunSpec,
     prompt: &str,
+    appended_system_prompt: Option<&str>,
     settings_path: &Path,
     plugin_installs: &[PluginInstall],
     marketplace_installs: &[PluginInstall],
     mcp_config_path: Option<PathBuf>,
 ) -> Vec<String> {
-    let mut args = vec![
-        "-p".to_string(),
-        prompt.to_string(),
+    let mut args = vec!["-p".to_string(), prompt.to_string()];
+    // The `--context` block (amendment a35): appended to the system prompt, which the pinned
+    // binaries pass through byte-exact and do not scan for `@path` mentions.
+    if let Some(block) = appended_system_prompt {
+        args.push("--append-system-prompt".to_string());
+        args.push(block.to_string());
+    }
+    args.extend([
         "--output-format".to_string(),
         "stream-json".to_string(),
         "--verbose".to_string(),
@@ -1096,7 +1165,7 @@ fn build_args(
         String::new(),
         "--settings".to_string(),
         settings_path.display().to_string(),
-    ];
+    ]);
     if let Some(model) = &spec.model {
         args.push("--model".to_string());
         args.push(model.clone());
@@ -1328,6 +1397,29 @@ pub fn child_path(home: Option<&str>) -> String {
 }
 
 /// H8 over the argv, as a guard rather than as a spelling check.
+/// N1 (amendment a35, correction round 1): every argument fits one argv string, or the launch is
+/// refused by name — the flag it follows, its size and every context file with its size — rather
+/// than failing at `execve` with `E2BIG`. `-p` carries the task and `--append-system-prompt` the
+/// context block, so each is measured on its own.
+fn guard_argument_lengths(
+    args: &[String],
+    files: &[DeclaredContextFile],
+) -> Result<(), LaunchRefusal> {
+    let Some((index, bytes)) = oversized_argument(args) else {
+        return Ok(());
+    };
+    Err(LaunchRefusal::ArgumentTooLong {
+        argument: index
+            .checked_sub(1)
+            .map_or_else(|| "an argument".to_owned(), |flag| args[flag].clone()),
+        bytes,
+        files: files
+            .iter()
+            .map(|file| (file.path().to_owned(), file.text().len()))
+            .collect(),
+    })
+}
+
 fn guard_arguments(args: &[String]) -> Result<(), LaunchRefusal> {
     for argument in args {
         let head = argument.split('=').next().unwrap_or(argument);
@@ -1859,6 +1951,7 @@ mod tests {
 
     fn context() -> LaunchContext {
         LaunchContext {
+            context_files: Vec::new(),
             scratch_root: PathBuf::from("/scratch/run-1"),
             cwd: PathBuf::from("/scratch/run-1/work"),
             credentials_file: Some(PathBuf::from("/operator/.claude/.credentials.json")),
@@ -1973,6 +2066,31 @@ mod tests {
 
     fn plan() -> LaunchPlan {
         plan_launch(&spec(), &context()).expect("the strict run plans")
+    }
+
+    /// Amendment a35: a plan handed a read list that is not the declared one refuses, whichever
+    /// way it differs — missing, extra or another file — rather than rendering a smaller context.
+    #[test]
+    fn a_context_list_that_is_not_the_declared_one_is_refused() {
+        let read =
+            |path: &str| DeclaredContextFile::new(path.to_owned(), b"x\n".to_vec()).expect("text");
+        for (declared, handed) in [
+            (vec!["a.py"], vec![]),
+            (vec![], vec![read("a.py")]),
+            (vec!["a.py"], vec![read("b.py")]),
+        ] {
+            let mut spec = spec();
+            spec.context = declared.iter().map(PathBuf::from).collect();
+            let mut world = context();
+            world.context_files = handed;
+            assert!(
+                matches!(
+                    plan_launch(&spec, &world),
+                    Err(LaunchRefusal::ContextFilesUnread { .. })
+                ),
+                "{declared:?}"
+            );
+        }
     }
 
     #[test]

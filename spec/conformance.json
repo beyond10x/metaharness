@@ -24,7 +24,7 @@
     },
     "counts": {
       "authored": 3,
-      "generated": 87,
+      "generated": 100,
       "outside": 0,
       "refused": 0
     },
@@ -108,6 +108,19 @@
       "metaharness.trace.VerifyStreamCompleteness/outcome/truncated",
       "metaharness.workspace.CheckSelectedName/outcome/eligible-component",
       "metaharness.workspace.CheckSelectedName/outcome/invalid-name-refused",
+      "metaharness.workspace.DeclareContextFiles/outcome/absolute-path-refused",
+      "metaharness.workspace.DeclareContextFiles/outcome/byte-cap-refused",
+      "metaharness.workspace.DeclareContextFiles/outcome/climbing-path-refused",
+      "metaharness.workspace.DeclareContextFiles/outcome/context-without-cwd",
+      "metaharness.workspace.DeclareContextFiles/outcome/count-cap-refused",
+      "metaharness.workspace.DeclareContextFiles/outcome/empty-path-refused",
+      "metaharness.workspace.DeclareContextFiles/outcome/irregular-file-refused",
+      "metaharness.workspace.DeclareContextFiles/outcome/non-utf8-path-refused",
+      "metaharness.workspace.DeclareContextFiles/outcome/not-text-refused",
+      "metaharness.workspace.DeclareContextFiles/outcome/symlink-refused",
+      "metaharness.workspace.DeclareContextFiles/outcome/tracked-files-recorded",
+      "metaharness.workspace.DeclareContextFiles/outcome/unreadable-file-refused",
+      "metaharness.workspace.DeclareContextFiles/outcome/untracked-file-refused",
       "metaharness.workspace.DeclareProcessWrites/outcome/file-scope-is-not-process-scope",
       "metaharness.workspace.DeclareProcessWrites/outcome/process-explicit-subtrees",
       "metaharness.workspace.DeclareProcessWrites/outcome/process-invalid-directory",
@@ -131,9 +144,9 @@
     }
   },
   "provenance": {
-    "contract_digest": "cbef7df09ddba922a2e4267186a6e6ce255ce6ae6e15113d8d3d2f0ea356f680",
+    "contract_digest": "da67657c040e62d85851f163c6dfee92c82cc6885a56bea031f8dd298e3f07ee",
     "scenario_initial_state": "empty",
-    "spec_digest": "f2a307eec9ba70327a06ff28c6efaa5dca75241755a1e2d2463771a92e49fdf8",
+    "spec_digest": "edbdd759da7f75edce66ffe2ea26573831f93178db78804856e91c7853d14b7f",
     "specification_version": "v1",
     "suite_version": "ess-conformance/35",
     "system": "metaharness"
@@ -236,6 +249,10 @@
         {
           "kind": "event",
           "name": "metaharness.trace.VendorSourceRefused"
+        },
+        {
+          "kind": "event",
+          "name": "metaharness.workspace.ContextFilesRecorded"
         },
         {
           "kind": "event",
@@ -358,6 +375,10 @@
           "step": "expect_no_event"
         },
         {
+          "event": "metaharness.workspace.ContextFilesRecorded",
+          "step": "expect_no_event"
+        },
+        {
           "event": "metaharness.workspace.ProcessWritePlanned",
           "step": "expect_no_event"
         },
@@ -464,6 +485,10 @@
         {
           "kind": "event",
           "name": "metaharness.trace.VendorSourceRefused"
+        },
+        {
+          "kind": "event",
+          "name": "metaharness.workspace.ContextFilesRecorded"
         },
         {
           "kind": "event",
@@ -583,6 +608,10 @@
         },
         {
           "event": "metaharness.trace.VendorSourceRefused",
+          "step": "expect_no_event"
+        },
+        {
+          "event": "metaharness.workspace.ContextFilesRecorded",
           "step": "expect_no_event"
         },
         {
@@ -716,6 +745,10 @@
         },
         {
           "kind": "event",
+          "name": "metaharness.workspace.ContextFilesRecorded"
+        },
+        {
+          "kind": "event",
           "name": "metaharness.workspace.ProcessWritePlanned"
         },
         {
@@ -831,6 +864,10 @@
           "step": "expect_no_event"
         },
         {
+          "event": "metaharness.workspace.ContextFilesRecorded",
+          "step": "expect_no_event"
+        },
+        {
           "event": "metaharness.workspace.ProcessWritePlanned",
           "step": "expect_no_event"
         },
@@ -937,6 +974,10 @@
         {
           "kind": "event",
           "name": "metaharness.trace.VendorSourceRefused"
+        },
+        {
+          "kind": "event",
+          "name": "metaharness.workspace.ContextFilesRecorded"
         },
         {
           "kind": "event",
@@ -1055,6 +1096,10 @@
           "step": "expect_no_event"
         },
         {
+          "event": "metaharness.workspace.ContextFilesRecorded",
+          "step": "expect_no_event"
+        },
+        {
           "event": "metaharness.workspace.ProcessWritePlanned",
           "step": "expect_no_event"
         },
@@ -1161,6 +1206,10 @@
         {
           "kind": "event",
           "name": "metaharness.trace.VendorSourceRefused"
+        },
+        {
+          "kind": "event",
+          "name": "metaharness.workspace.ContextFilesRecorded"
         },
         {
           "kind": "event",
@@ -1279,6 +1328,10 @@
           "step": "expect_no_event"
         },
         {
+          "event": "metaharness.workspace.ContextFilesRecorded",
+          "step": "expect_no_event"
+        },
+        {
           "event": "metaharness.workspace.ProcessWritePlanned",
           "step": "expect_no_event"
         },
@@ -1385,6 +1438,10 @@
         {
           "kind": "event",
           "name": "metaharness.trace.VendorSourceRefused"
+        },
+        {
+          "kind": "event",
+          "name": "metaharness.workspace.ContextFilesRecorded"
         },
         {
           "kind": "event",
@@ -1503,6 +1560,10 @@
           "step": "expect_no_event"
         },
         {
+          "event": "metaharness.workspace.ContextFilesRecorded",
+          "step": "expect_no_event"
+        },
+        {
           "event": "metaharness.workspace.ProcessWritePlanned",
           "step": "expect_no_event"
         },
@@ -1609,6 +1670,10 @@
         {
           "kind": "event",
           "name": "metaharness.trace.VendorSourceRefused"
+        },
+        {
+          "kind": "event",
+          "name": "metaharness.workspace.ContextFilesRecorded"
         },
         {
           "kind": "event",
@@ -1727,6 +1792,10 @@
           "step": "expect_no_event"
         },
         {
+          "event": "metaharness.workspace.ContextFilesRecorded",
+          "step": "expect_no_event"
+        },
+        {
           "event": "metaharness.workspace.ProcessWritePlanned",
           "step": "expect_no_event"
         },
@@ -1833,6 +1902,10 @@
         {
           "kind": "event",
           "name": "metaharness.trace.VendorSourceRefused"
+        },
+        {
+          "kind": "event",
+          "name": "metaharness.workspace.ContextFilesRecorded"
         },
         {
           "kind": "event",
@@ -1951,6 +2024,10 @@
           "step": "expect_no_event"
         },
         {
+          "event": "metaharness.workspace.ContextFilesRecorded",
+          "step": "expect_no_event"
+        },
+        {
           "event": "metaharness.workspace.ProcessWritePlanned",
           "step": "expect_no_event"
         },
@@ -2057,6 +2134,10 @@
         {
           "kind": "event",
           "name": "metaharness.trace.VendorSourceRefused"
+        },
+        {
+          "kind": "event",
+          "name": "metaharness.workspace.ContextFilesRecorded"
         },
         {
           "kind": "event",
@@ -2177,6 +2258,10 @@
         },
         {
           "event": "metaharness.trace.VendorSourceRefused",
+          "step": "expect_no_event"
+        },
+        {
+          "event": "metaharness.workspace.ContextFilesRecorded",
           "step": "expect_no_event"
         },
         {
@@ -2306,6 +2391,10 @@
         },
         {
           "kind": "event",
+          "name": "metaharness.workspace.ContextFilesRecorded"
+        },
+        {
+          "kind": "event",
           "name": "metaharness.workspace.ProcessWritePlanned"
         },
         {
@@ -2426,6 +2515,10 @@
           "step": "expect_no_event"
         },
         {
+          "event": "metaharness.workspace.ContextFilesRecorded",
+          "step": "expect_no_event"
+        },
+        {
           "event": "metaharness.workspace.ProcessWritePlanned",
           "step": "expect_no_event"
         },
@@ -2532,6 +2625,10 @@
         {
           "kind": "event",
           "name": "metaharness.trace.VendorSourceRefused"
+        },
+        {
+          "kind": "event",
+          "name": "metaharness.workspace.ContextFilesRecorded"
         },
         {
           "kind": "event",
@@ -2655,6 +2752,10 @@
           "step": "expect_no_event"
         },
         {
+          "event": "metaharness.workspace.ContextFilesRecorded",
+          "step": "expect_no_event"
+        },
+        {
           "event": "metaharness.workspace.ProcessWritePlanned",
           "step": "expect_no_event"
         },
@@ -2761,6 +2862,10 @@
         {
           "kind": "event",
           "name": "metaharness.trace.VendorSourceRefused"
+        },
+        {
+          "kind": "event",
+          "name": "metaharness.workspace.ContextFilesRecorded"
         },
         {
           "kind": "event",
@@ -2879,6 +2984,10 @@
           "step": "expect_no_event"
         },
         {
+          "event": "metaharness.workspace.ContextFilesRecorded",
+          "step": "expect_no_event"
+        },
+        {
           "event": "metaharness.workspace.ProcessWritePlanned",
           "step": "expect_no_event"
         },
@@ -2985,6 +3094,10 @@
         {
           "kind": "event",
           "name": "metaharness.trace.VendorSourceRefused"
+        },
+        {
+          "kind": "event",
+          "name": "metaharness.workspace.ContextFilesRecorded"
         },
         {
           "kind": "event",
@@ -3103,6 +3216,10 @@
           "step": "expect_no_event"
         },
         {
+          "event": "metaharness.workspace.ContextFilesRecorded",
+          "step": "expect_no_event"
+        },
+        {
           "event": "metaharness.workspace.ProcessWritePlanned",
           "step": "expect_no_event"
         },
@@ -3209,6 +3326,10 @@
         {
           "kind": "event",
           "name": "metaharness.trace.VendorSourceRefused"
+        },
+        {
+          "kind": "event",
+          "name": "metaharness.workspace.ContextFilesRecorded"
         },
         {
           "kind": "event",
@@ -3337,6 +3458,10 @@
           "step": "expect_no_event"
         },
         {
+          "event": "metaharness.workspace.ContextFilesRecorded",
+          "step": "expect_no_event"
+        },
+        {
           "event": "metaharness.workspace.ProcessWritePlanned",
           "step": "expect_no_event"
         },
@@ -3443,6 +3568,10 @@
         {
           "kind": "event",
           "name": "metaharness.trace.VendorSourceRefused"
+        },
+        {
+          "kind": "event",
+          "name": "metaharness.workspace.ContextFilesRecorded"
         },
         {
           "kind": "event",
@@ -3571,6 +3700,10 @@
           "step": "expect_no_event"
         },
         {
+          "event": "metaharness.workspace.ContextFilesRecorded",
+          "step": "expect_no_event"
+        },
+        {
           "event": "metaharness.workspace.ProcessWritePlanned",
           "step": "expect_no_event"
         },
@@ -3677,6 +3810,10 @@
         {
           "kind": "event",
           "name": "metaharness.trace.VendorSourceRefused"
+        },
+        {
+          "kind": "event",
+          "name": "metaharness.workspace.ContextFilesRecorded"
         },
         {
           "kind": "event",
@@ -3805,6 +3942,10 @@
           "step": "expect_no_event"
         },
         {
+          "event": "metaharness.workspace.ContextFilesRecorded",
+          "step": "expect_no_event"
+        },
+        {
           "event": "metaharness.workspace.ProcessWritePlanned",
           "step": "expect_no_event"
         },
@@ -3911,6 +4052,10 @@
         {
           "kind": "event",
           "name": "metaharness.trace.VendorSourceRefused"
+        },
+        {
+          "kind": "event",
+          "name": "metaharness.workspace.ContextFilesRecorded"
         },
         {
           "kind": "event",
@@ -4039,6 +4184,10 @@
           "step": "expect_no_event"
         },
         {
+          "event": "metaharness.workspace.ContextFilesRecorded",
+          "step": "expect_no_event"
+        },
+        {
           "event": "metaharness.workspace.ProcessWritePlanned",
           "step": "expect_no_event"
         },
@@ -4145,6 +4294,10 @@
         {
           "kind": "event",
           "name": "metaharness.trace.VendorSourceRefused"
+        },
+        {
+          "kind": "event",
+          "name": "metaharness.workspace.ContextFilesRecorded"
         },
         {
           "kind": "event",
@@ -4273,6 +4426,10 @@
           "step": "expect_no_event"
         },
         {
+          "event": "metaharness.workspace.ContextFilesRecorded",
+          "step": "expect_no_event"
+        },
+        {
           "event": "metaharness.workspace.ProcessWritePlanned",
           "step": "expect_no_event"
         },
@@ -4379,6 +4536,10 @@
         {
           "kind": "event",
           "name": "metaharness.trace.VendorSourceRefused"
+        },
+        {
+          "kind": "event",
+          "name": "metaharness.workspace.ContextFilesRecorded"
         },
         {
           "kind": "event",
@@ -4516,6 +4677,10 @@
         },
         {
           "event": "metaharness.trace.VendorSourceRefused",
+          "step": "expect_no_event"
+        },
+        {
+          "event": "metaharness.workspace.ContextFilesRecorded",
           "step": "expect_no_event"
         },
         {
@@ -4694,6 +4859,10 @@
         },
         {
           "kind": "event",
+          "name": "metaharness.workspace.ContextFilesRecorded"
+        },
+        {
+          "kind": "event",
           "name": "metaharness.workspace.ProcessWritePlanned"
         },
         {
@@ -4828,6 +4997,10 @@
         },
         {
           "event": "metaharness.trace.VendorSourceRefused",
+          "step": "expect_no_event"
+        },
+        {
+          "event": "metaharness.workspace.ContextFilesRecorded",
           "step": "expect_no_event"
         },
         {
@@ -5006,6 +5179,10 @@
         },
         {
           "kind": "event",
+          "name": "metaharness.workspace.ContextFilesRecorded"
+        },
+        {
+          "kind": "event",
           "name": "metaharness.workspace.ProcessWritePlanned"
         },
         {
@@ -5143,6 +5320,10 @@
           "step": "expect_no_event"
         },
         {
+          "event": "metaharness.workspace.ContextFilesRecorded",
+          "step": "expect_no_event"
+        },
+        {
           "event": "metaharness.workspace.ProcessWritePlanned",
           "step": "expect_no_event"
         },
@@ -5257,6 +5438,10 @@
         {
           "kind": "event",
           "name": "metaharness.trace.VendorSourceRefused"
+        },
+        {
+          "kind": "event",
+          "name": "metaharness.workspace.ContextFilesRecorded"
         },
         {
           "kind": "event",
@@ -5383,6 +5568,10 @@
           "step": "expect_no_event"
         },
         {
+          "event": "metaharness.workspace.ContextFilesRecorded",
+          "step": "expect_no_event"
+        },
+        {
           "event": "metaharness.workspace.ProcessWritePlanned",
           "step": "expect_no_event"
         },
@@ -5497,6 +5686,10 @@
         {
           "kind": "event",
           "name": "metaharness.trace.VendorSourceRefused"
+        },
+        {
+          "kind": "event",
+          "name": "metaharness.workspace.ContextFilesRecorded"
         },
         {
           "kind": "event",
@@ -5623,6 +5816,10 @@
           "step": "expect_no_event"
         },
         {
+          "event": "metaharness.workspace.ContextFilesRecorded",
+          "step": "expect_no_event"
+        },
+        {
           "event": "metaharness.workspace.ProcessWritePlanned",
           "step": "expect_no_event"
         },
@@ -5737,6 +5934,10 @@
         {
           "kind": "event",
           "name": "metaharness.trace.VendorSourceRefused"
+        },
+        {
+          "kind": "event",
+          "name": "metaharness.workspace.ContextFilesRecorded"
         },
         {
           "kind": "event",
@@ -5860,6 +6061,10 @@
         },
         {
           "event": "metaharness.trace.VendorSourceRefused",
+          "step": "expect_no_event"
+        },
+        {
+          "event": "metaharness.workspace.ContextFilesRecorded",
           "step": "expect_no_event"
         },
         {
@@ -5990,6 +6195,10 @@
         {
           "kind": "event",
           "name": "metaharness.trace.VendorSourceRefused"
+        },
+        {
+          "kind": "event",
+          "name": "metaharness.workspace.ContextFilesRecorded"
         },
         {
           "kind": "event",
@@ -6128,6 +6337,10 @@
           "step": "expect_no_event"
         },
         {
+          "event": "metaharness.workspace.ContextFilesRecorded",
+          "step": "expect_no_event"
+        },
+        {
           "event": "metaharness.workspace.ProcessWritePlanned",
           "step": "expect_no_event"
         },
@@ -6234,6 +6447,10 @@
         {
           "kind": "event",
           "name": "metaharness.trace.VendorSourceRefused"
+        },
+        {
+          "kind": "event",
+          "name": "metaharness.workspace.ContextFilesRecorded"
         },
         {
           "kind": "event",
@@ -6372,6 +6589,10 @@
           "step": "expect_no_event"
         },
         {
+          "event": "metaharness.workspace.ContextFilesRecorded",
+          "step": "expect_no_event"
+        },
+        {
           "event": "metaharness.workspace.ProcessWritePlanned",
           "step": "expect_no_event"
         },
@@ -6478,6 +6699,10 @@
         {
           "kind": "event",
           "name": "metaharness.trace.VendorSourceRefused"
+        },
+        {
+          "kind": "event",
+          "name": "metaharness.workspace.ContextFilesRecorded"
         },
         {
           "kind": "event",
@@ -6616,6 +6841,10 @@
           "step": "expect_no_event"
         },
         {
+          "event": "metaharness.workspace.ContextFilesRecorded",
+          "step": "expect_no_event"
+        },
+        {
           "event": "metaharness.workspace.ProcessWritePlanned",
           "step": "expect_no_event"
         },
@@ -6722,6 +6951,10 @@
         {
           "kind": "event",
           "name": "metaharness.trace.VendorSourceRefused"
+        },
+        {
+          "kind": "event",
+          "name": "metaharness.workspace.ContextFilesRecorded"
         },
         {
           "kind": "event",
@@ -6860,6 +7093,10 @@
           "step": "expect_no_event"
         },
         {
+          "event": "metaharness.workspace.ContextFilesRecorded",
+          "step": "expect_no_event"
+        },
+        {
           "event": "metaharness.workspace.ProcessWritePlanned",
           "step": "expect_no_event"
         },
@@ -6966,6 +7203,10 @@
         {
           "kind": "event",
           "name": "metaharness.trace.VendorSourceRefused"
+        },
+        {
+          "kind": "event",
+          "name": "metaharness.workspace.ContextFilesRecorded"
         },
         {
           "kind": "event",
@@ -7104,6 +7345,10 @@
           "step": "expect_no_event"
         },
         {
+          "event": "metaharness.workspace.ContextFilesRecorded",
+          "step": "expect_no_event"
+        },
+        {
           "event": "metaharness.workspace.ProcessWritePlanned",
           "step": "expect_no_event"
         },
@@ -7210,6 +7455,10 @@
         {
           "kind": "event",
           "name": "metaharness.trace.VendorSourceRefused"
+        },
+        {
+          "kind": "event",
+          "name": "metaharness.workspace.ContextFilesRecorded"
         },
         {
           "kind": "event",
@@ -7320,6 +7569,10 @@
         },
         {
           "event": "metaharness.trace.VendorSourceRefused",
+          "step": "expect_no_event"
+        },
+        {
+          "event": "metaharness.workspace.ContextFilesRecorded",
           "step": "expect_no_event"
         },
         {
@@ -7665,6 +7918,10 @@
         },
         {
           "kind": "event",
+          "name": "metaharness.workspace.ContextFilesRecorded"
+        },
+        {
+          "kind": "event",
           "name": "metaharness.workspace.ProcessWritePlanned"
         },
         {
@@ -7779,6 +8036,10 @@
         },
         {
           "event": "metaharness.trace.VendorSourceRefused",
+          "step": "expect_no_event"
+        },
+        {
+          "event": "metaharness.workspace.ContextFilesRecorded",
           "step": "expect_no_event"
         },
         {
@@ -7912,6 +8173,10 @@
         {
           "kind": "event",
           "name": "metaharness.trace.VendorSourceRefused"
+        },
+        {
+          "kind": "event",
+          "name": "metaharness.workspace.ContextFilesRecorded"
         },
         {
           "kind": "event",
@@ -8078,6 +8343,10 @@
           "step": "expect_no_event"
         },
         {
+          "event": "metaharness.workspace.ContextFilesRecorded",
+          "step": "expect_no_event"
+        },
+        {
           "event": "metaharness.workspace.ProcessWritePlanned",
           "step": "expect_no_event"
         },
@@ -8216,6 +8485,10 @@
         {
           "kind": "event",
           "name": "metaharness.trace.VendorSourceRefused"
+        },
+        {
+          "kind": "event",
+          "name": "metaharness.workspace.ContextFilesRecorded"
         },
         {
           "kind": "event",
@@ -8383,6 +8656,10 @@
           "step": "expect_no_event"
         },
         {
+          "event": "metaharness.workspace.ContextFilesRecorded",
+          "step": "expect_no_event"
+        },
+        {
           "event": "metaharness.workspace.ProcessWritePlanned",
           "step": "expect_no_event"
         },
@@ -8524,6 +8801,10 @@
         },
         {
           "kind": "event",
+          "name": "metaharness.workspace.ContextFilesRecorded"
+        },
+        {
+          "kind": "event",
           "name": "metaharness.workspace.ProcessWritePlanned"
         },
         {
@@ -8639,6 +8920,10 @@
         },
         {
           "event": "metaharness.trace.VendorSourceRefused",
+          "step": "expect_no_event"
+        },
+        {
+          "event": "metaharness.workspace.ContextFilesRecorded",
           "step": "expect_no_event"
         },
         {
@@ -8829,6 +9114,10 @@
         },
         {
           "kind": "event",
+          "name": "metaharness.workspace.ContextFilesRecorded"
+        },
+        {
+          "kind": "event",
           "name": "metaharness.workspace.ProcessWritePlanned"
         },
         {
@@ -8936,6 +9225,10 @@
         },
         {
           "event": "metaharness.trace.VendorSourceRefused",
+          "step": "expect_no_event"
+        },
+        {
+          "event": "metaharness.workspace.ContextFilesRecorded",
           "step": "expect_no_event"
         },
         {
@@ -9060,6 +9353,10 @@
         },
         {
           "kind": "event",
+          "name": "metaharness.workspace.ContextFilesRecorded"
+        },
+        {
+          "kind": "event",
           "name": "metaharness.workspace.ProcessWritePlanned"
         },
         {
@@ -9167,6 +9464,10 @@
         },
         {
           "event": "metaharness.trace.VendorSourceRefused",
+          "step": "expect_no_event"
+        },
+        {
+          "event": "metaharness.workspace.ContextFilesRecorded",
           "step": "expect_no_event"
         },
         {
@@ -9414,6 +9715,10 @@
         },
         {
           "kind": "event",
+          "name": "metaharness.workspace.ContextFilesRecorded"
+        },
+        {
+          "kind": "event",
           "name": "metaharness.workspace.ProcessWritePlanned"
         },
         {
@@ -9542,6 +9847,10 @@
           "step": "expect_no_event"
         },
         {
+          "event": "metaharness.workspace.ContextFilesRecorded",
+          "step": "expect_no_event"
+        },
+        {
           "event": "metaharness.workspace.ProcessWritePlanned",
           "step": "expect_no_event"
         },
@@ -9652,6 +9961,10 @@
         {
           "kind": "event",
           "name": "metaharness.trace.VendorSourceRefused"
+        },
+        {
+          "kind": "event",
+          "name": "metaharness.workspace.ContextFilesRecorded"
         },
         {
           "kind": "event",
@@ -9783,6 +10096,10 @@
           "step": "expect_no_event"
         },
         {
+          "event": "metaharness.workspace.ContextFilesRecorded",
+          "step": "expect_no_event"
+        },
+        {
           "event": "metaharness.workspace.ProcessWritePlanned",
           "step": "expect_no_event"
         },
@@ -9893,6 +10210,10 @@
         {
           "kind": "event",
           "name": "metaharness.trace.VendorSourceRefused"
+        },
+        {
+          "kind": "event",
+          "name": "metaharness.workspace.ContextFilesRecorded"
         },
         {
           "kind": "event",
@@ -10024,6 +10345,10 @@
           "step": "expect_no_event"
         },
         {
+          "event": "metaharness.workspace.ContextFilesRecorded",
+          "step": "expect_no_event"
+        },
+        {
           "event": "metaharness.workspace.ProcessWritePlanned",
           "step": "expect_no_event"
         },
@@ -10134,6 +10459,10 @@
         {
           "kind": "event",
           "name": "metaharness.trace.VendorSourceRefused"
+        },
+        {
+          "kind": "event",
+          "name": "metaharness.workspace.ContextFilesRecorded"
         },
         {
           "kind": "event",
@@ -10265,6 +10594,10 @@
           "step": "expect_no_event"
         },
         {
+          "event": "metaharness.workspace.ContextFilesRecorded",
+          "step": "expect_no_event"
+        },
+        {
           "event": "metaharness.workspace.ProcessWritePlanned",
           "step": "expect_no_event"
         },
@@ -10375,6 +10708,10 @@
         {
           "kind": "event",
           "name": "metaharness.trace.VendorSourceRefused"
+        },
+        {
+          "kind": "event",
+          "name": "metaharness.workspace.ContextFilesRecorded"
         },
         {
           "kind": "event",
@@ -10503,6 +10840,10 @@
         },
         {
           "event": "metaharness.trace.VendorSourceRefused",
+          "step": "expect_no_event"
+        },
+        {
+          "event": "metaharness.workspace.ContextFilesRecorded",
           "step": "expect_no_event"
         },
         {
@@ -10636,6 +10977,10 @@
         },
         {
           "kind": "event",
+          "name": "metaharness.workspace.ContextFilesRecorded"
+        },
+        {
+          "kind": "event",
           "name": "metaharness.workspace.ProcessWritePlanned"
         },
         {
@@ -10764,6 +11109,10 @@
           "step": "expect_no_event"
         },
         {
+          "event": "metaharness.workspace.ContextFilesRecorded",
+          "step": "expect_no_event"
+        },
+        {
           "event": "metaharness.workspace.ProcessWritePlanned",
           "step": "expect_no_event"
         },
@@ -10874,6 +11223,10 @@
         {
           "kind": "event",
           "name": "metaharness.trace.VendorSourceRefused"
+        },
+        {
+          "kind": "event",
+          "name": "metaharness.workspace.ContextFilesRecorded"
         },
         {
           "kind": "event",
@@ -11005,6 +11358,10 @@
           "step": "expect_no_event"
         },
         {
+          "event": "metaharness.workspace.ContextFilesRecorded",
+          "step": "expect_no_event"
+        },
+        {
           "event": "metaharness.workspace.ProcessWritePlanned",
           "step": "expect_no_event"
         },
@@ -11115,6 +11472,10 @@
         {
           "kind": "event",
           "name": "metaharness.trace.VendorSourceRefused"
+        },
+        {
+          "kind": "event",
+          "name": "metaharness.workspace.ContextFilesRecorded"
         },
         {
           "kind": "event",
@@ -11246,6 +11607,10 @@
           "step": "expect_no_event"
         },
         {
+          "event": "metaharness.workspace.ContextFilesRecorded",
+          "step": "expect_no_event"
+        },
+        {
           "event": "metaharness.workspace.ProcessWritePlanned",
           "step": "expect_no_event"
         },
@@ -11356,6 +11721,10 @@
         {
           "kind": "event",
           "name": "metaharness.trace.VendorSourceRefused"
+        },
+        {
+          "kind": "event",
+          "name": "metaharness.workspace.ContextFilesRecorded"
         },
         {
           "kind": "event",
@@ -11487,6 +11856,10 @@
           "step": "expect_no_event"
         },
         {
+          "event": "metaharness.workspace.ContextFilesRecorded",
+          "step": "expect_no_event"
+        },
+        {
           "event": "metaharness.workspace.ProcessWritePlanned",
           "step": "expect_no_event"
         },
@@ -11597,6 +11970,10 @@
         {
           "kind": "event",
           "name": "metaharness.trace.VendorSourceRefused"
+        },
+        {
+          "kind": "event",
+          "name": "metaharness.workspace.ContextFilesRecorded"
         },
         {
           "kind": "event",
@@ -11728,6 +12105,10 @@
           "step": "expect_no_event"
         },
         {
+          "event": "metaharness.workspace.ContextFilesRecorded",
+          "step": "expect_no_event"
+        },
+        {
           "event": "metaharness.workspace.ProcessWritePlanned",
           "step": "expect_no_event"
         },
@@ -11838,6 +12219,10 @@
         {
           "kind": "event",
           "name": "metaharness.trace.VendorSourceRefused"
+        },
+        {
+          "kind": "event",
+          "name": "metaharness.workspace.ContextFilesRecorded"
         },
         {
           "kind": "event",
@@ -11969,6 +12354,10 @@
           "step": "expect_no_event"
         },
         {
+          "event": "metaharness.workspace.ContextFilesRecorded",
+          "step": "expect_no_event"
+        },
+        {
           "event": "metaharness.workspace.ProcessWritePlanned",
           "step": "expect_no_event"
         },
@@ -12079,6 +12468,10 @@
         {
           "kind": "event",
           "name": "metaharness.trace.VendorSourceRefused"
+        },
+        {
+          "kind": "event",
+          "name": "metaharness.workspace.ContextFilesRecorded"
         },
         {
           "kind": "event",
@@ -12215,6 +12608,10 @@
           "step": "expect_no_event"
         },
         {
+          "event": "metaharness.workspace.ContextFilesRecorded",
+          "step": "expect_no_event"
+        },
+        {
           "event": "metaharness.workspace.ProcessWritePlanned",
           "step": "expect_no_event"
         },
@@ -12325,6 +12722,10 @@
         {
           "kind": "event",
           "name": "metaharness.trace.VendorSourceRefused"
+        },
+        {
+          "kind": "event",
+          "name": "metaharness.workspace.ContextFilesRecorded"
         },
         {
           "kind": "event",
@@ -12461,6 +12862,10 @@
           "step": "expect_no_event"
         },
         {
+          "event": "metaharness.workspace.ContextFilesRecorded",
+          "step": "expect_no_event"
+        },
+        {
           "event": "metaharness.workspace.ProcessWritePlanned",
           "step": "expect_no_event"
         },
@@ -12571,6 +12976,10 @@
         {
           "kind": "event",
           "name": "metaharness.trace.VendorSourceRefused"
+        },
+        {
+          "kind": "event",
+          "name": "metaharness.workspace.ContextFilesRecorded"
         },
         {
           "kind": "event",
@@ -12707,6 +13116,10 @@
           "step": "expect_no_event"
         },
         {
+          "event": "metaharness.workspace.ContextFilesRecorded",
+          "step": "expect_no_event"
+        },
+        {
           "event": "metaharness.workspace.ProcessWritePlanned",
           "step": "expect_no_event"
         },
@@ -12817,6 +13230,10 @@
         {
           "kind": "event",
           "name": "metaharness.trace.VendorSourceRefused"
+        },
+        {
+          "kind": "event",
+          "name": "metaharness.workspace.ContextFilesRecorded"
         },
         {
           "kind": "event",
@@ -12953,6 +13370,10 @@
           "step": "expect_no_event"
         },
         {
+          "event": "metaharness.workspace.ContextFilesRecorded",
+          "step": "expect_no_event"
+        },
+        {
           "event": "metaharness.workspace.ProcessWritePlanned",
           "step": "expect_no_event"
         },
@@ -13063,6 +13484,10 @@
         {
           "kind": "event",
           "name": "metaharness.trace.VendorSourceRefused"
+        },
+        {
+          "kind": "event",
+          "name": "metaharness.workspace.ContextFilesRecorded"
         },
         {
           "kind": "event",
@@ -13199,6 +13624,10 @@
           "step": "expect_no_event"
         },
         {
+          "event": "metaharness.workspace.ContextFilesRecorded",
+          "step": "expect_no_event"
+        },
+        {
           "event": "metaharness.workspace.ProcessWritePlanned",
           "step": "expect_no_event"
         },
@@ -13309,6 +13738,10 @@
         {
           "kind": "event",
           "name": "metaharness.trace.VendorSourceRefused"
+        },
+        {
+          "kind": "event",
+          "name": "metaharness.workspace.ContextFilesRecorded"
         },
         {
           "kind": "event",
@@ -13445,6 +13878,10 @@
           "step": "expect_no_event"
         },
         {
+          "event": "metaharness.workspace.ContextFilesRecorded",
+          "step": "expect_no_event"
+        },
+        {
           "event": "metaharness.workspace.ProcessWritePlanned",
           "step": "expect_no_event"
         },
@@ -13555,6 +13992,10 @@
         {
           "kind": "event",
           "name": "metaharness.trace.VendorSourceRefused"
+        },
+        {
+          "kind": "event",
+          "name": "metaharness.workspace.ContextFilesRecorded"
         },
         {
           "kind": "event",
@@ -13691,6 +14132,10 @@
           "step": "expect_no_event"
         },
         {
+          "event": "metaharness.workspace.ContextFilesRecorded",
+          "step": "expect_no_event"
+        },
+        {
           "event": "metaharness.workspace.ProcessWritePlanned",
           "step": "expect_no_event"
         },
@@ -13801,6 +14246,10 @@
         {
           "kind": "event",
           "name": "metaharness.trace.VendorSourceRefused"
+        },
+        {
+          "kind": "event",
+          "name": "metaharness.workspace.ContextFilesRecorded"
         },
         {
           "kind": "event",
@@ -13937,6 +14386,10 @@
           "step": "expect_no_event"
         },
         {
+          "event": "metaharness.workspace.ContextFilesRecorded",
+          "step": "expect_no_event"
+        },
+        {
           "event": "metaharness.workspace.ProcessWritePlanned",
           "step": "expect_no_event"
         },
@@ -14043,6 +14496,10 @@
         {
           "kind": "event",
           "name": "metaharness.trace.VendorSourceRefused"
+        },
+        {
+          "kind": "event",
+          "name": "metaharness.workspace.ContextFilesRecorded"
         },
         {
           "kind": "event",
@@ -14171,6 +14628,10 @@
           "step": "expect_no_event"
         },
         {
+          "event": "metaharness.workspace.ContextFilesRecorded",
+          "step": "expect_no_event"
+        },
+        {
           "event": "metaharness.workspace.ProcessWritePlanned",
           "step": "expect_no_event"
         },
@@ -14277,6 +14738,10 @@
         {
           "kind": "event",
           "name": "metaharness.trace.VendorSourceRefused"
+        },
+        {
+          "kind": "event",
+          "name": "metaharness.workspace.ContextFilesRecorded"
         },
         {
           "kind": "event",
@@ -14402,6 +14867,10 @@
         },
         {
           "event": "metaharness.trace.VendorSourceRefused",
+          "step": "expect_no_event"
+        },
+        {
+          "event": "metaharness.workspace.ContextFilesRecorded",
           "step": "expect_no_event"
         },
         {
@@ -14597,6 +15066,10 @@
         },
         {
           "kind": "event",
+          "name": "metaharness.workspace.ContextFilesRecorded"
+        },
+        {
+          "kind": "event",
           "name": "metaharness.workspace.ProcessWritePlanned"
         },
         {
@@ -14739,6 +15212,10 @@
           "step": "expect_no_event"
         },
         {
+          "event": "metaharness.workspace.ContextFilesRecorded",
+          "step": "expect_no_event"
+        },
+        {
           "event": "metaharness.workspace.ProcessWritePlanned",
           "step": "expect_no_event"
         },
@@ -14853,6 +15330,10 @@
         {
           "kind": "event",
           "name": "metaharness.trace.VendorSourceRefused"
+        },
+        {
+          "kind": "event",
+          "name": "metaharness.workspace.ContextFilesRecorded"
         },
         {
           "kind": "event",
@@ -14998,6 +15479,10 @@
           "step": "expect_no_event"
         },
         {
+          "event": "metaharness.workspace.ContextFilesRecorded",
+          "step": "expect_no_event"
+        },
+        {
           "event": "metaharness.workspace.ProcessWritePlanned",
           "step": "expect_no_event"
         },
@@ -15112,6 +15597,10 @@
         {
           "kind": "event",
           "name": "metaharness.trace.VendorSourceRefused"
+        },
+        {
+          "kind": "event",
+          "name": "metaharness.workspace.ContextFilesRecorded"
         },
         {
           "kind": "event",
@@ -15257,6 +15746,10 @@
           "step": "expect_no_event"
         },
         {
+          "event": "metaharness.workspace.ContextFilesRecorded",
+          "step": "expect_no_event"
+        },
+        {
           "event": "metaharness.workspace.ProcessWritePlanned",
           "step": "expect_no_event"
         },
@@ -15371,6 +15864,10 @@
         {
           "kind": "event",
           "name": "metaharness.trace.VendorSourceRefused"
+        },
+        {
+          "kind": "event",
+          "name": "metaharness.workspace.ContextFilesRecorded"
         },
         {
           "kind": "event",
@@ -15516,6 +16013,10 @@
           "step": "expect_no_event"
         },
         {
+          "event": "metaharness.workspace.ContextFilesRecorded",
+          "step": "expect_no_event"
+        },
+        {
           "event": "metaharness.workspace.ProcessWritePlanned",
           "step": "expect_no_event"
         },
@@ -15626,6 +16127,10 @@
         {
           "kind": "event",
           "name": "metaharness.trace.VendorSourceRefused"
+        },
+        {
+          "kind": "event",
+          "name": "metaharness.workspace.ContextFilesRecorded"
         },
         {
           "kind": "event",
@@ -15772,6 +16277,10 @@
           "step": "expect_no_event"
         },
         {
+          "event": "metaharness.workspace.ContextFilesRecorded",
+          "step": "expect_no_event"
+        },
+        {
           "event": "metaharness.workspace.ProcessWritePlanned",
           "step": "expect_no_event"
         },
@@ -15894,6 +16403,10 @@
         {
           "kind": "event",
           "name": "metaharness.trace.VendorSourceRefused"
+        },
+        {
+          "kind": "event",
+          "name": "metaharness.workspace.ContextFilesRecorded"
         },
         {
           "kind": "event",
@@ -16040,6 +16553,10 @@
           "step": "expect_no_event"
         },
         {
+          "event": "metaharness.workspace.ContextFilesRecorded",
+          "step": "expect_no_event"
+        },
+        {
           "event": "metaharness.workspace.ProcessWritePlanned",
           "step": "expect_no_event"
         },
@@ -16166,6 +16683,10 @@
         {
           "kind": "event",
           "name": "metaharness.trace.VendorSourceRefused"
+        },
+        {
+          "kind": "event",
+          "name": "metaharness.workspace.ContextFilesRecorded"
         },
         {
           "kind": "event",
@@ -16341,6 +16862,10 @@
           "step": "expect_no_event"
         },
         {
+          "event": "metaharness.workspace.ContextFilesRecorded",
+          "step": "expect_no_event"
+        },
+        {
           "event": "metaharness.workspace.ProcessWritePlanned",
           "step": "expect_no_event"
         },
@@ -16455,6 +16980,10 @@
         {
           "kind": "event",
           "name": "metaharness.trace.VendorSourceRefused"
+        },
+        {
+          "kind": "event",
+          "name": "metaharness.workspace.ContextFilesRecorded"
         },
         {
           "kind": "event",
@@ -16630,6 +17159,10 @@
           "step": "expect_no_event"
         },
         {
+          "event": "metaharness.workspace.ContextFilesRecorded",
+          "step": "expect_no_event"
+        },
+        {
           "event": "metaharness.workspace.ProcessWritePlanned",
           "step": "expect_no_event"
         },
@@ -16736,6 +17269,10 @@
         {
           "kind": "event",
           "name": "metaharness.trace.VendorSourceRefused"
+        },
+        {
+          "kind": "event",
+          "name": "metaharness.workspace.ContextFilesRecorded"
         },
         {
           "kind": "event",
@@ -16859,6 +17396,10 @@
           "step": "expect_no_event"
         },
         {
+          "event": "metaharness.workspace.ContextFilesRecorded",
+          "step": "expect_no_event"
+        },
+        {
           "event": "metaharness.workspace.ProcessWritePlanned",
           "step": "expect_no_event"
         },
@@ -16973,6 +17514,10 @@
         {
           "kind": "event",
           "name": "metaharness.trace.VendorSourceRefused"
+        },
+        {
+          "kind": "event",
+          "name": "metaharness.workspace.ContextFilesRecorded"
         },
         {
           "kind": "event",
@@ -17145,6 +17690,10 @@
         },
         {
           "event": "metaharness.trace.VendorSourceRefused",
+          "step": "expect_no_event"
+        },
+        {
+          "event": "metaharness.workspace.ContextFilesRecorded",
           "step": "expect_no_event"
         },
         {
@@ -17452,6 +18001,10 @@
         },
         {
           "kind": "event",
+          "name": "metaharness.workspace.ContextFilesRecorded"
+        },
+        {
+          "kind": "event",
           "name": "metaharness.workspace.ProcessWritePlanned"
         },
         {
@@ -17577,6 +18130,10 @@
           "step": "expect_no_event"
         },
         {
+          "event": "metaharness.workspace.ContextFilesRecorded",
+          "step": "expect_no_event"
+        },
+        {
           "event": "metaharness.workspace.ProcessWritePlanned",
           "step": "expect_no_event"
         },
@@ -17683,6 +18240,10 @@
         {
           "kind": "event",
           "name": "metaharness.trace.VendorSourceRefused"
+        },
+        {
+          "kind": "event",
+          "name": "metaharness.workspace.ContextFilesRecorded"
         },
         {
           "kind": "event",
@@ -17811,6 +18372,10 @@
           "step": "expect_no_event"
         },
         {
+          "event": "metaharness.workspace.ContextFilesRecorded",
+          "step": "expect_no_event"
+        },
+        {
           "event": "metaharness.workspace.ProcessWritePlanned",
           "step": "expect_no_event"
         },
@@ -17917,6 +18482,10 @@
         {
           "kind": "event",
           "name": "metaharness.trace.VendorSourceRefused"
+        },
+        {
+          "kind": "event",
+          "name": "metaharness.workspace.ContextFilesRecorded"
         },
         {
           "kind": "event",
@@ -18045,6 +18614,10 @@
           "step": "expect_no_event"
         },
         {
+          "event": "metaharness.workspace.ContextFilesRecorded",
+          "step": "expect_no_event"
+        },
+        {
           "event": "metaharness.workspace.ProcessWritePlanned",
           "step": "expect_no_event"
         },
@@ -18151,6 +18724,10 @@
         {
           "kind": "event",
           "name": "metaharness.trace.VendorSourceRefused"
+        },
+        {
+          "kind": "event",
+          "name": "metaharness.workspace.ContextFilesRecorded"
         },
         {
           "kind": "event",
@@ -18279,6 +18856,10 @@
           "step": "expect_no_event"
         },
         {
+          "event": "metaharness.workspace.ContextFilesRecorded",
+          "step": "expect_no_event"
+        },
+        {
           "event": "metaharness.workspace.ProcessWritePlanned",
           "step": "expect_no_event"
         },
@@ -18385,6 +18966,10 @@
         {
           "kind": "event",
           "name": "metaharness.trace.VendorSourceRefused"
+        },
+        {
+          "kind": "event",
+          "name": "metaharness.workspace.ContextFilesRecorded"
         },
         {
           "kind": "event",
@@ -18513,6 +19098,10 @@
           "step": "expect_no_event"
         },
         {
+          "event": "metaharness.workspace.ContextFilesRecorded",
+          "step": "expect_no_event"
+        },
+        {
           "event": "metaharness.workspace.ProcessWritePlanned",
           "step": "expect_no_event"
         },
@@ -18619,6 +19208,10 @@
         {
           "kind": "event",
           "name": "metaharness.trace.VendorSourceRefused"
+        },
+        {
+          "kind": "event",
+          "name": "metaharness.workspace.ContextFilesRecorded"
         },
         {
           "kind": "event",
@@ -18782,6 +19375,10 @@
           "step": "expect_no_event"
         },
         {
+          "event": "metaharness.workspace.ContextFilesRecorded",
+          "step": "expect_no_event"
+        },
+        {
           "event": "metaharness.workspace.ProcessWritePlanned",
           "step": "expect_no_event"
         },
@@ -18923,6 +19520,10 @@
         },
         {
           "kind": "event",
+          "name": "metaharness.workspace.ContextFilesRecorded"
+        },
+        {
+          "kind": "event",
           "name": "metaharness.workspace.ProcessWritePlanned"
         },
         {
@@ -19037,6 +19638,10 @@
           "step": "expect_no_event"
         },
         {
+          "event": "metaharness.workspace.ContextFilesRecorded",
+          "step": "expect_no_event"
+        },
+        {
           "event": "metaharness.workspace.ProcessWritePlanned",
           "step": "expect_no_event"
         },
@@ -19064,6 +19669,3020 @@
         {
           "error": "metaharness.workspace.InvalidName",
           "step": "expect_error"
+        }
+      ]
+    },
+    "metaharness.workspace.DeclareContextFiles/outcome/absolute-path-refused": {
+      "purpose": "`metaharness.workspace.DeclareContextFiles` answers `absolute-path-refused` for an input that satisfies that branch's guard",
+      "source": [
+        {
+          "kind": "type",
+          "name": "metaharness.workspace.ContextFileProbe"
+        },
+        {
+          "kind": "command",
+          "name": "metaharness.workspace.DeclareContextFiles"
+        },
+        {
+          "kind": "outcome",
+          "name": {
+            "command": "metaharness.workspace.DeclareContextFiles",
+            "outcome": "absolute-path-refused"
+          }
+        },
+        {
+          "kind": "event",
+          "name": "metaharness.boundaries.CallDecided"
+        },
+        {
+          "kind": "event",
+          "name": "metaharness.boundaries.FileRead"
+        },
+        {
+          "kind": "event",
+          "name": "metaharness.boundaries.FrameRead"
+        },
+        {
+          "kind": "event",
+          "name": "metaharness.observations.NativeStatusClassified"
+        },
+        {
+          "kind": "event",
+          "name": "metaharness.observations.PresenceRead"
+        },
+        {
+          "kind": "event",
+          "name": "metaharness.observations.ToolOutcomeRead"
+        },
+        {
+          "kind": "event",
+          "name": "metaharness.session.ClosureRecorded"
+        },
+        {
+          "kind": "event",
+          "name": "metaharness.session.CompletionClassified"
+        },
+        {
+          "kind": "event",
+          "name": "metaharness.session.PollingObserved"
+        },
+        {
+          "kind": "event",
+          "name": "metaharness.session.StreamClassified"
+        },
+        {
+          "kind": "event",
+          "name": "metaharness.spending.AdmissionRecorded"
+        },
+        {
+          "kind": "event",
+          "name": "metaharness.spending.FiniteLedgerRecorded"
+        },
+        {
+          "kind": "event",
+          "name": "metaharness.trace.CompletenessVerified"
+        },
+        {
+          "kind": "event",
+          "name": "metaharness.trace.DigestNamed"
+        },
+        {
+          "kind": "event",
+          "name": "metaharness.trace.FamilyClassified"
+        },
+        {
+          "kind": "event",
+          "name": "metaharness.trace.ProjectionRecorded"
+        },
+        {
+          "kind": "event",
+          "name": "metaharness.trace.RecordNormalized"
+        },
+        {
+          "kind": "event",
+          "name": "metaharness.trace.UnkClassified"
+        },
+        {
+          "kind": "event",
+          "name": "metaharness.trace.VendorRecordProjected"
+        },
+        {
+          "kind": "event",
+          "name": "metaharness.trace.VendorSourceRefused"
+        },
+        {
+          "kind": "event",
+          "name": "metaharness.workspace.ContextFilesRecorded"
+        },
+        {
+          "kind": "event",
+          "name": "metaharness.workspace.ProcessWritePlanned"
+        },
+        {
+          "kind": "event",
+          "name": "metaharness.workspace.ScratchCwdAttested"
+        },
+        {
+          "kind": "error",
+          "name": "metaharness.workspace.ContextPathAbsolute"
+        }
+      ],
+      "steps": [
+        {
+          "command": "metaharness.workspace.DeclareContextFiles",
+          "input": {
+            "probe": {
+              "kind": "literal",
+              "value": "absolute"
+            }
+          },
+          "step": "execute_command"
+        },
+        {
+          "outcome": {
+            "command": "metaharness.workspace.DeclareContextFiles",
+            "outcome": "absolute-path-refused"
+          },
+          "step": "expect_outcome"
+        },
+        {
+          "error": "metaharness.workspace.ContextPathAbsolute",
+          "step": "expect_error"
+        },
+        {
+          "event": "metaharness.boundaries.CallDecided",
+          "step": "expect_no_event"
+        },
+        {
+          "event": "metaharness.boundaries.FileRead",
+          "step": "expect_no_event"
+        },
+        {
+          "event": "metaharness.boundaries.FrameRead",
+          "step": "expect_no_event"
+        },
+        {
+          "event": "metaharness.observations.NativeStatusClassified",
+          "step": "expect_no_event"
+        },
+        {
+          "event": "metaharness.observations.PresenceRead",
+          "step": "expect_no_event"
+        },
+        {
+          "event": "metaharness.observations.ToolOutcomeRead",
+          "step": "expect_no_event"
+        },
+        {
+          "event": "metaharness.session.ClosureRecorded",
+          "step": "expect_no_event"
+        },
+        {
+          "event": "metaharness.session.CompletionClassified",
+          "step": "expect_no_event"
+        },
+        {
+          "event": "metaharness.session.PollingObserved",
+          "step": "expect_no_event"
+        },
+        {
+          "event": "metaharness.session.StreamClassified",
+          "step": "expect_no_event"
+        },
+        {
+          "event": "metaharness.spending.AdmissionRecorded",
+          "step": "expect_no_event"
+        },
+        {
+          "event": "metaharness.spending.FiniteLedgerRecorded",
+          "step": "expect_no_event"
+        },
+        {
+          "event": "metaharness.trace.CompletenessVerified",
+          "step": "expect_no_event"
+        },
+        {
+          "event": "metaharness.trace.DigestNamed",
+          "step": "expect_no_event"
+        },
+        {
+          "event": "metaharness.trace.FamilyClassified",
+          "step": "expect_no_event"
+        },
+        {
+          "event": "metaharness.trace.ProjectionRecorded",
+          "step": "expect_no_event"
+        },
+        {
+          "event": "metaharness.trace.RecordNormalized",
+          "step": "expect_no_event"
+        },
+        {
+          "event": "metaharness.trace.UnkClassified",
+          "step": "expect_no_event"
+        },
+        {
+          "event": "metaharness.trace.VendorRecordProjected",
+          "step": "expect_no_event"
+        },
+        {
+          "event": "metaharness.trace.VendorSourceRefused",
+          "step": "expect_no_event"
+        },
+        {
+          "event": "metaharness.workspace.ContextFilesRecorded",
+          "step": "expect_no_event"
+        },
+        {
+          "event": "metaharness.workspace.ProcessWritePlanned",
+          "step": "expect_no_event"
+        },
+        {
+          "event": "metaharness.workspace.ScratchCwdAttested",
+          "step": "expect_no_event"
+        }
+      ]
+    },
+    "metaharness.workspace.DeclareContextFiles/outcome/byte-cap-refused": {
+      "purpose": "`metaharness.workspace.DeclareContextFiles` answers `byte-cap-refused` for an input that satisfies that branch's guard",
+      "source": [
+        {
+          "kind": "type",
+          "name": "metaharness.workspace.ContextFileProbe"
+        },
+        {
+          "kind": "command",
+          "name": "metaharness.workspace.DeclareContextFiles"
+        },
+        {
+          "kind": "outcome",
+          "name": {
+            "command": "metaharness.workspace.DeclareContextFiles",
+            "outcome": "byte-cap-refused"
+          }
+        },
+        {
+          "kind": "event",
+          "name": "metaharness.boundaries.CallDecided"
+        },
+        {
+          "kind": "event",
+          "name": "metaharness.boundaries.FileRead"
+        },
+        {
+          "kind": "event",
+          "name": "metaharness.boundaries.FrameRead"
+        },
+        {
+          "kind": "event",
+          "name": "metaharness.observations.NativeStatusClassified"
+        },
+        {
+          "kind": "event",
+          "name": "metaharness.observations.PresenceRead"
+        },
+        {
+          "kind": "event",
+          "name": "metaharness.observations.ToolOutcomeRead"
+        },
+        {
+          "kind": "event",
+          "name": "metaharness.session.ClosureRecorded"
+        },
+        {
+          "kind": "event",
+          "name": "metaharness.session.CompletionClassified"
+        },
+        {
+          "kind": "event",
+          "name": "metaharness.session.PollingObserved"
+        },
+        {
+          "kind": "event",
+          "name": "metaharness.session.StreamClassified"
+        },
+        {
+          "kind": "event",
+          "name": "metaharness.spending.AdmissionRecorded"
+        },
+        {
+          "kind": "event",
+          "name": "metaharness.spending.FiniteLedgerRecorded"
+        },
+        {
+          "kind": "event",
+          "name": "metaharness.trace.CompletenessVerified"
+        },
+        {
+          "kind": "event",
+          "name": "metaharness.trace.DigestNamed"
+        },
+        {
+          "kind": "event",
+          "name": "metaharness.trace.FamilyClassified"
+        },
+        {
+          "kind": "event",
+          "name": "metaharness.trace.ProjectionRecorded"
+        },
+        {
+          "kind": "event",
+          "name": "metaharness.trace.RecordNormalized"
+        },
+        {
+          "kind": "event",
+          "name": "metaharness.trace.UnkClassified"
+        },
+        {
+          "kind": "event",
+          "name": "metaharness.trace.VendorRecordProjected"
+        },
+        {
+          "kind": "event",
+          "name": "metaharness.trace.VendorSourceRefused"
+        },
+        {
+          "kind": "event",
+          "name": "metaharness.workspace.ContextFilesRecorded"
+        },
+        {
+          "kind": "event",
+          "name": "metaharness.workspace.ProcessWritePlanned"
+        },
+        {
+          "kind": "event",
+          "name": "metaharness.workspace.ScratchCwdAttested"
+        },
+        {
+          "kind": "error",
+          "name": "metaharness.workspace.ContextByteCap"
+        }
+      ],
+      "steps": [
+        {
+          "command": "metaharness.workspace.DeclareContextFiles",
+          "input": {
+            "probe": {
+              "kind": "literal",
+              "value": "over-bytes"
+            }
+          },
+          "step": "execute_command"
+        },
+        {
+          "outcome": {
+            "command": "metaharness.workspace.DeclareContextFiles",
+            "outcome": "byte-cap-refused"
+          },
+          "step": "expect_outcome"
+        },
+        {
+          "error": "metaharness.workspace.ContextByteCap",
+          "step": "expect_error"
+        },
+        {
+          "event": "metaharness.boundaries.CallDecided",
+          "step": "expect_no_event"
+        },
+        {
+          "event": "metaharness.boundaries.FileRead",
+          "step": "expect_no_event"
+        },
+        {
+          "event": "metaharness.boundaries.FrameRead",
+          "step": "expect_no_event"
+        },
+        {
+          "event": "metaharness.observations.NativeStatusClassified",
+          "step": "expect_no_event"
+        },
+        {
+          "event": "metaharness.observations.PresenceRead",
+          "step": "expect_no_event"
+        },
+        {
+          "event": "metaharness.observations.ToolOutcomeRead",
+          "step": "expect_no_event"
+        },
+        {
+          "event": "metaharness.session.ClosureRecorded",
+          "step": "expect_no_event"
+        },
+        {
+          "event": "metaharness.session.CompletionClassified",
+          "step": "expect_no_event"
+        },
+        {
+          "event": "metaharness.session.PollingObserved",
+          "step": "expect_no_event"
+        },
+        {
+          "event": "metaharness.session.StreamClassified",
+          "step": "expect_no_event"
+        },
+        {
+          "event": "metaharness.spending.AdmissionRecorded",
+          "step": "expect_no_event"
+        },
+        {
+          "event": "metaharness.spending.FiniteLedgerRecorded",
+          "step": "expect_no_event"
+        },
+        {
+          "event": "metaharness.trace.CompletenessVerified",
+          "step": "expect_no_event"
+        },
+        {
+          "event": "metaharness.trace.DigestNamed",
+          "step": "expect_no_event"
+        },
+        {
+          "event": "metaharness.trace.FamilyClassified",
+          "step": "expect_no_event"
+        },
+        {
+          "event": "metaharness.trace.ProjectionRecorded",
+          "step": "expect_no_event"
+        },
+        {
+          "event": "metaharness.trace.RecordNormalized",
+          "step": "expect_no_event"
+        },
+        {
+          "event": "metaharness.trace.UnkClassified",
+          "step": "expect_no_event"
+        },
+        {
+          "event": "metaharness.trace.VendorRecordProjected",
+          "step": "expect_no_event"
+        },
+        {
+          "event": "metaharness.trace.VendorSourceRefused",
+          "step": "expect_no_event"
+        },
+        {
+          "event": "metaharness.workspace.ContextFilesRecorded",
+          "step": "expect_no_event"
+        },
+        {
+          "event": "metaharness.workspace.ProcessWritePlanned",
+          "step": "expect_no_event"
+        },
+        {
+          "event": "metaharness.workspace.ScratchCwdAttested",
+          "step": "expect_no_event"
+        }
+      ]
+    },
+    "metaharness.workspace.DeclareContextFiles/outcome/climbing-path-refused": {
+      "purpose": "`metaharness.workspace.DeclareContextFiles` answers `climbing-path-refused` for an input that satisfies that branch's guard",
+      "source": [
+        {
+          "kind": "type",
+          "name": "metaharness.workspace.ContextFileProbe"
+        },
+        {
+          "kind": "command",
+          "name": "metaharness.workspace.DeclareContextFiles"
+        },
+        {
+          "kind": "outcome",
+          "name": {
+            "command": "metaharness.workspace.DeclareContextFiles",
+            "outcome": "climbing-path-refused"
+          }
+        },
+        {
+          "kind": "event",
+          "name": "metaharness.boundaries.CallDecided"
+        },
+        {
+          "kind": "event",
+          "name": "metaharness.boundaries.FileRead"
+        },
+        {
+          "kind": "event",
+          "name": "metaharness.boundaries.FrameRead"
+        },
+        {
+          "kind": "event",
+          "name": "metaharness.observations.NativeStatusClassified"
+        },
+        {
+          "kind": "event",
+          "name": "metaharness.observations.PresenceRead"
+        },
+        {
+          "kind": "event",
+          "name": "metaharness.observations.ToolOutcomeRead"
+        },
+        {
+          "kind": "event",
+          "name": "metaharness.session.ClosureRecorded"
+        },
+        {
+          "kind": "event",
+          "name": "metaharness.session.CompletionClassified"
+        },
+        {
+          "kind": "event",
+          "name": "metaharness.session.PollingObserved"
+        },
+        {
+          "kind": "event",
+          "name": "metaharness.session.StreamClassified"
+        },
+        {
+          "kind": "event",
+          "name": "metaharness.spending.AdmissionRecorded"
+        },
+        {
+          "kind": "event",
+          "name": "metaharness.spending.FiniteLedgerRecorded"
+        },
+        {
+          "kind": "event",
+          "name": "metaharness.trace.CompletenessVerified"
+        },
+        {
+          "kind": "event",
+          "name": "metaharness.trace.DigestNamed"
+        },
+        {
+          "kind": "event",
+          "name": "metaharness.trace.FamilyClassified"
+        },
+        {
+          "kind": "event",
+          "name": "metaharness.trace.ProjectionRecorded"
+        },
+        {
+          "kind": "event",
+          "name": "metaharness.trace.RecordNormalized"
+        },
+        {
+          "kind": "event",
+          "name": "metaharness.trace.UnkClassified"
+        },
+        {
+          "kind": "event",
+          "name": "metaharness.trace.VendorRecordProjected"
+        },
+        {
+          "kind": "event",
+          "name": "metaharness.trace.VendorSourceRefused"
+        },
+        {
+          "kind": "event",
+          "name": "metaharness.workspace.ContextFilesRecorded"
+        },
+        {
+          "kind": "event",
+          "name": "metaharness.workspace.ProcessWritePlanned"
+        },
+        {
+          "kind": "event",
+          "name": "metaharness.workspace.ScratchCwdAttested"
+        },
+        {
+          "kind": "error",
+          "name": "metaharness.workspace.ContextPathEscapes"
+        }
+      ],
+      "steps": [
+        {
+          "command": "metaharness.workspace.DeclareContextFiles",
+          "input": {
+            "probe": {
+              "kind": "literal",
+              "value": "climbing"
+            }
+          },
+          "step": "execute_command"
+        },
+        {
+          "outcome": {
+            "command": "metaharness.workspace.DeclareContextFiles",
+            "outcome": "climbing-path-refused"
+          },
+          "step": "expect_outcome"
+        },
+        {
+          "error": "metaharness.workspace.ContextPathEscapes",
+          "step": "expect_error"
+        },
+        {
+          "event": "metaharness.boundaries.CallDecided",
+          "step": "expect_no_event"
+        },
+        {
+          "event": "metaharness.boundaries.FileRead",
+          "step": "expect_no_event"
+        },
+        {
+          "event": "metaharness.boundaries.FrameRead",
+          "step": "expect_no_event"
+        },
+        {
+          "event": "metaharness.observations.NativeStatusClassified",
+          "step": "expect_no_event"
+        },
+        {
+          "event": "metaharness.observations.PresenceRead",
+          "step": "expect_no_event"
+        },
+        {
+          "event": "metaharness.observations.ToolOutcomeRead",
+          "step": "expect_no_event"
+        },
+        {
+          "event": "metaharness.session.ClosureRecorded",
+          "step": "expect_no_event"
+        },
+        {
+          "event": "metaharness.session.CompletionClassified",
+          "step": "expect_no_event"
+        },
+        {
+          "event": "metaharness.session.PollingObserved",
+          "step": "expect_no_event"
+        },
+        {
+          "event": "metaharness.session.StreamClassified",
+          "step": "expect_no_event"
+        },
+        {
+          "event": "metaharness.spending.AdmissionRecorded",
+          "step": "expect_no_event"
+        },
+        {
+          "event": "metaharness.spending.FiniteLedgerRecorded",
+          "step": "expect_no_event"
+        },
+        {
+          "event": "metaharness.trace.CompletenessVerified",
+          "step": "expect_no_event"
+        },
+        {
+          "event": "metaharness.trace.DigestNamed",
+          "step": "expect_no_event"
+        },
+        {
+          "event": "metaharness.trace.FamilyClassified",
+          "step": "expect_no_event"
+        },
+        {
+          "event": "metaharness.trace.ProjectionRecorded",
+          "step": "expect_no_event"
+        },
+        {
+          "event": "metaharness.trace.RecordNormalized",
+          "step": "expect_no_event"
+        },
+        {
+          "event": "metaharness.trace.UnkClassified",
+          "step": "expect_no_event"
+        },
+        {
+          "event": "metaharness.trace.VendorRecordProjected",
+          "step": "expect_no_event"
+        },
+        {
+          "event": "metaharness.trace.VendorSourceRefused",
+          "step": "expect_no_event"
+        },
+        {
+          "event": "metaharness.workspace.ContextFilesRecorded",
+          "step": "expect_no_event"
+        },
+        {
+          "event": "metaharness.workspace.ProcessWritePlanned",
+          "step": "expect_no_event"
+        },
+        {
+          "event": "metaharness.workspace.ScratchCwdAttested",
+          "step": "expect_no_event"
+        }
+      ]
+    },
+    "metaharness.workspace.DeclareContextFiles/outcome/context-without-cwd": {
+      "purpose": "`metaharness.workspace.DeclareContextFiles` answers `context-without-cwd` for an input that satisfies that branch's guard",
+      "source": [
+        {
+          "kind": "type",
+          "name": "metaharness.workspace.ContextFileProbe"
+        },
+        {
+          "kind": "command",
+          "name": "metaharness.workspace.DeclareContextFiles"
+        },
+        {
+          "kind": "outcome",
+          "name": {
+            "command": "metaharness.workspace.DeclareContextFiles",
+            "outcome": "context-without-cwd"
+          }
+        },
+        {
+          "kind": "event",
+          "name": "metaharness.boundaries.CallDecided"
+        },
+        {
+          "kind": "event",
+          "name": "metaharness.boundaries.FileRead"
+        },
+        {
+          "kind": "event",
+          "name": "metaharness.boundaries.FrameRead"
+        },
+        {
+          "kind": "event",
+          "name": "metaharness.observations.NativeStatusClassified"
+        },
+        {
+          "kind": "event",
+          "name": "metaharness.observations.PresenceRead"
+        },
+        {
+          "kind": "event",
+          "name": "metaharness.observations.ToolOutcomeRead"
+        },
+        {
+          "kind": "event",
+          "name": "metaharness.session.ClosureRecorded"
+        },
+        {
+          "kind": "event",
+          "name": "metaharness.session.CompletionClassified"
+        },
+        {
+          "kind": "event",
+          "name": "metaharness.session.PollingObserved"
+        },
+        {
+          "kind": "event",
+          "name": "metaharness.session.StreamClassified"
+        },
+        {
+          "kind": "event",
+          "name": "metaharness.spending.AdmissionRecorded"
+        },
+        {
+          "kind": "event",
+          "name": "metaharness.spending.FiniteLedgerRecorded"
+        },
+        {
+          "kind": "event",
+          "name": "metaharness.trace.CompletenessVerified"
+        },
+        {
+          "kind": "event",
+          "name": "metaharness.trace.DigestNamed"
+        },
+        {
+          "kind": "event",
+          "name": "metaharness.trace.FamilyClassified"
+        },
+        {
+          "kind": "event",
+          "name": "metaharness.trace.ProjectionRecorded"
+        },
+        {
+          "kind": "event",
+          "name": "metaharness.trace.RecordNormalized"
+        },
+        {
+          "kind": "event",
+          "name": "metaharness.trace.UnkClassified"
+        },
+        {
+          "kind": "event",
+          "name": "metaharness.trace.VendorRecordProjected"
+        },
+        {
+          "kind": "event",
+          "name": "metaharness.trace.VendorSourceRefused"
+        },
+        {
+          "kind": "event",
+          "name": "metaharness.workspace.ContextFilesRecorded"
+        },
+        {
+          "kind": "event",
+          "name": "metaharness.workspace.ProcessWritePlanned"
+        },
+        {
+          "kind": "event",
+          "name": "metaharness.workspace.ScratchCwdAttested"
+        },
+        {
+          "kind": "error",
+          "name": "metaharness.workspace.ContextWithoutDirectory"
+        }
+      ],
+      "steps": [
+        {
+          "command": "metaharness.workspace.DeclareContextFiles",
+          "input": {
+            "probe": {
+              "kind": "literal",
+              "value": "undirected"
+            }
+          },
+          "step": "execute_command"
+        },
+        {
+          "outcome": {
+            "command": "metaharness.workspace.DeclareContextFiles",
+            "outcome": "context-without-cwd"
+          },
+          "step": "expect_outcome"
+        },
+        {
+          "error": "metaharness.workspace.ContextWithoutDirectory",
+          "step": "expect_error"
+        },
+        {
+          "event": "metaharness.boundaries.CallDecided",
+          "step": "expect_no_event"
+        },
+        {
+          "event": "metaharness.boundaries.FileRead",
+          "step": "expect_no_event"
+        },
+        {
+          "event": "metaharness.boundaries.FrameRead",
+          "step": "expect_no_event"
+        },
+        {
+          "event": "metaharness.observations.NativeStatusClassified",
+          "step": "expect_no_event"
+        },
+        {
+          "event": "metaharness.observations.PresenceRead",
+          "step": "expect_no_event"
+        },
+        {
+          "event": "metaharness.observations.ToolOutcomeRead",
+          "step": "expect_no_event"
+        },
+        {
+          "event": "metaharness.session.ClosureRecorded",
+          "step": "expect_no_event"
+        },
+        {
+          "event": "metaharness.session.CompletionClassified",
+          "step": "expect_no_event"
+        },
+        {
+          "event": "metaharness.session.PollingObserved",
+          "step": "expect_no_event"
+        },
+        {
+          "event": "metaharness.session.StreamClassified",
+          "step": "expect_no_event"
+        },
+        {
+          "event": "metaharness.spending.AdmissionRecorded",
+          "step": "expect_no_event"
+        },
+        {
+          "event": "metaharness.spending.FiniteLedgerRecorded",
+          "step": "expect_no_event"
+        },
+        {
+          "event": "metaharness.trace.CompletenessVerified",
+          "step": "expect_no_event"
+        },
+        {
+          "event": "metaharness.trace.DigestNamed",
+          "step": "expect_no_event"
+        },
+        {
+          "event": "metaharness.trace.FamilyClassified",
+          "step": "expect_no_event"
+        },
+        {
+          "event": "metaharness.trace.ProjectionRecorded",
+          "step": "expect_no_event"
+        },
+        {
+          "event": "metaharness.trace.RecordNormalized",
+          "step": "expect_no_event"
+        },
+        {
+          "event": "metaharness.trace.UnkClassified",
+          "step": "expect_no_event"
+        },
+        {
+          "event": "metaharness.trace.VendorRecordProjected",
+          "step": "expect_no_event"
+        },
+        {
+          "event": "metaharness.trace.VendorSourceRefused",
+          "step": "expect_no_event"
+        },
+        {
+          "event": "metaharness.workspace.ContextFilesRecorded",
+          "step": "expect_no_event"
+        },
+        {
+          "event": "metaharness.workspace.ProcessWritePlanned",
+          "step": "expect_no_event"
+        },
+        {
+          "event": "metaharness.workspace.ScratchCwdAttested",
+          "step": "expect_no_event"
+        }
+      ]
+    },
+    "metaharness.workspace.DeclareContextFiles/outcome/count-cap-refused": {
+      "purpose": "`metaharness.workspace.DeclareContextFiles` answers `count-cap-refused` for an input that satisfies that branch's guard",
+      "source": [
+        {
+          "kind": "type",
+          "name": "metaharness.workspace.ContextFileProbe"
+        },
+        {
+          "kind": "command",
+          "name": "metaharness.workspace.DeclareContextFiles"
+        },
+        {
+          "kind": "outcome",
+          "name": {
+            "command": "metaharness.workspace.DeclareContextFiles",
+            "outcome": "count-cap-refused"
+          }
+        },
+        {
+          "kind": "event",
+          "name": "metaharness.boundaries.CallDecided"
+        },
+        {
+          "kind": "event",
+          "name": "metaharness.boundaries.FileRead"
+        },
+        {
+          "kind": "event",
+          "name": "metaharness.boundaries.FrameRead"
+        },
+        {
+          "kind": "event",
+          "name": "metaharness.observations.NativeStatusClassified"
+        },
+        {
+          "kind": "event",
+          "name": "metaharness.observations.PresenceRead"
+        },
+        {
+          "kind": "event",
+          "name": "metaharness.observations.ToolOutcomeRead"
+        },
+        {
+          "kind": "event",
+          "name": "metaharness.session.ClosureRecorded"
+        },
+        {
+          "kind": "event",
+          "name": "metaharness.session.CompletionClassified"
+        },
+        {
+          "kind": "event",
+          "name": "metaharness.session.PollingObserved"
+        },
+        {
+          "kind": "event",
+          "name": "metaharness.session.StreamClassified"
+        },
+        {
+          "kind": "event",
+          "name": "metaharness.spending.AdmissionRecorded"
+        },
+        {
+          "kind": "event",
+          "name": "metaharness.spending.FiniteLedgerRecorded"
+        },
+        {
+          "kind": "event",
+          "name": "metaharness.trace.CompletenessVerified"
+        },
+        {
+          "kind": "event",
+          "name": "metaharness.trace.DigestNamed"
+        },
+        {
+          "kind": "event",
+          "name": "metaharness.trace.FamilyClassified"
+        },
+        {
+          "kind": "event",
+          "name": "metaharness.trace.ProjectionRecorded"
+        },
+        {
+          "kind": "event",
+          "name": "metaharness.trace.RecordNormalized"
+        },
+        {
+          "kind": "event",
+          "name": "metaharness.trace.UnkClassified"
+        },
+        {
+          "kind": "event",
+          "name": "metaharness.trace.VendorRecordProjected"
+        },
+        {
+          "kind": "event",
+          "name": "metaharness.trace.VendorSourceRefused"
+        },
+        {
+          "kind": "event",
+          "name": "metaharness.workspace.ContextFilesRecorded"
+        },
+        {
+          "kind": "event",
+          "name": "metaharness.workspace.ProcessWritePlanned"
+        },
+        {
+          "kind": "event",
+          "name": "metaharness.workspace.ScratchCwdAttested"
+        },
+        {
+          "kind": "error",
+          "name": "metaharness.workspace.ContextCountCap"
+        }
+      ],
+      "steps": [
+        {
+          "command": "metaharness.workspace.DeclareContextFiles",
+          "input": {
+            "probe": {
+              "kind": "literal",
+              "value": "over-count"
+            }
+          },
+          "step": "execute_command"
+        },
+        {
+          "outcome": {
+            "command": "metaharness.workspace.DeclareContextFiles",
+            "outcome": "count-cap-refused"
+          },
+          "step": "expect_outcome"
+        },
+        {
+          "error": "metaharness.workspace.ContextCountCap",
+          "step": "expect_error"
+        },
+        {
+          "event": "metaharness.boundaries.CallDecided",
+          "step": "expect_no_event"
+        },
+        {
+          "event": "metaharness.boundaries.FileRead",
+          "step": "expect_no_event"
+        },
+        {
+          "event": "metaharness.boundaries.FrameRead",
+          "step": "expect_no_event"
+        },
+        {
+          "event": "metaharness.observations.NativeStatusClassified",
+          "step": "expect_no_event"
+        },
+        {
+          "event": "metaharness.observations.PresenceRead",
+          "step": "expect_no_event"
+        },
+        {
+          "event": "metaharness.observations.ToolOutcomeRead",
+          "step": "expect_no_event"
+        },
+        {
+          "event": "metaharness.session.ClosureRecorded",
+          "step": "expect_no_event"
+        },
+        {
+          "event": "metaharness.session.CompletionClassified",
+          "step": "expect_no_event"
+        },
+        {
+          "event": "metaharness.session.PollingObserved",
+          "step": "expect_no_event"
+        },
+        {
+          "event": "metaharness.session.StreamClassified",
+          "step": "expect_no_event"
+        },
+        {
+          "event": "metaharness.spending.AdmissionRecorded",
+          "step": "expect_no_event"
+        },
+        {
+          "event": "metaharness.spending.FiniteLedgerRecorded",
+          "step": "expect_no_event"
+        },
+        {
+          "event": "metaharness.trace.CompletenessVerified",
+          "step": "expect_no_event"
+        },
+        {
+          "event": "metaharness.trace.DigestNamed",
+          "step": "expect_no_event"
+        },
+        {
+          "event": "metaharness.trace.FamilyClassified",
+          "step": "expect_no_event"
+        },
+        {
+          "event": "metaharness.trace.ProjectionRecorded",
+          "step": "expect_no_event"
+        },
+        {
+          "event": "metaharness.trace.RecordNormalized",
+          "step": "expect_no_event"
+        },
+        {
+          "event": "metaharness.trace.UnkClassified",
+          "step": "expect_no_event"
+        },
+        {
+          "event": "metaharness.trace.VendorRecordProjected",
+          "step": "expect_no_event"
+        },
+        {
+          "event": "metaharness.trace.VendorSourceRefused",
+          "step": "expect_no_event"
+        },
+        {
+          "event": "metaharness.workspace.ContextFilesRecorded",
+          "step": "expect_no_event"
+        },
+        {
+          "event": "metaharness.workspace.ProcessWritePlanned",
+          "step": "expect_no_event"
+        },
+        {
+          "event": "metaharness.workspace.ScratchCwdAttested",
+          "step": "expect_no_event"
+        }
+      ]
+    },
+    "metaharness.workspace.DeclareContextFiles/outcome/empty-path-refused": {
+      "purpose": "`metaharness.workspace.DeclareContextFiles` answers `empty-path-refused` for an input that satisfies that branch's guard",
+      "source": [
+        {
+          "kind": "type",
+          "name": "metaharness.workspace.ContextFileProbe"
+        },
+        {
+          "kind": "command",
+          "name": "metaharness.workspace.DeclareContextFiles"
+        },
+        {
+          "kind": "outcome",
+          "name": {
+            "command": "metaharness.workspace.DeclareContextFiles",
+            "outcome": "empty-path-refused"
+          }
+        },
+        {
+          "kind": "event",
+          "name": "metaharness.boundaries.CallDecided"
+        },
+        {
+          "kind": "event",
+          "name": "metaharness.boundaries.FileRead"
+        },
+        {
+          "kind": "event",
+          "name": "metaharness.boundaries.FrameRead"
+        },
+        {
+          "kind": "event",
+          "name": "metaharness.observations.NativeStatusClassified"
+        },
+        {
+          "kind": "event",
+          "name": "metaharness.observations.PresenceRead"
+        },
+        {
+          "kind": "event",
+          "name": "metaharness.observations.ToolOutcomeRead"
+        },
+        {
+          "kind": "event",
+          "name": "metaharness.session.ClosureRecorded"
+        },
+        {
+          "kind": "event",
+          "name": "metaharness.session.CompletionClassified"
+        },
+        {
+          "kind": "event",
+          "name": "metaharness.session.PollingObserved"
+        },
+        {
+          "kind": "event",
+          "name": "metaharness.session.StreamClassified"
+        },
+        {
+          "kind": "event",
+          "name": "metaharness.spending.AdmissionRecorded"
+        },
+        {
+          "kind": "event",
+          "name": "metaharness.spending.FiniteLedgerRecorded"
+        },
+        {
+          "kind": "event",
+          "name": "metaharness.trace.CompletenessVerified"
+        },
+        {
+          "kind": "event",
+          "name": "metaharness.trace.DigestNamed"
+        },
+        {
+          "kind": "event",
+          "name": "metaharness.trace.FamilyClassified"
+        },
+        {
+          "kind": "event",
+          "name": "metaharness.trace.ProjectionRecorded"
+        },
+        {
+          "kind": "event",
+          "name": "metaharness.trace.RecordNormalized"
+        },
+        {
+          "kind": "event",
+          "name": "metaharness.trace.UnkClassified"
+        },
+        {
+          "kind": "event",
+          "name": "metaharness.trace.VendorRecordProjected"
+        },
+        {
+          "kind": "event",
+          "name": "metaharness.trace.VendorSourceRefused"
+        },
+        {
+          "kind": "event",
+          "name": "metaharness.workspace.ContextFilesRecorded"
+        },
+        {
+          "kind": "event",
+          "name": "metaharness.workspace.ProcessWritePlanned"
+        },
+        {
+          "kind": "event",
+          "name": "metaharness.workspace.ScratchCwdAttested"
+        },
+        {
+          "kind": "error",
+          "name": "metaharness.workspace.ContextPathEmpty"
+        }
+      ],
+      "steps": [
+        {
+          "command": "metaharness.workspace.DeclareContextFiles",
+          "input": {
+            "probe": {
+              "kind": "literal",
+              "value": "empty-path"
+            }
+          },
+          "step": "execute_command"
+        },
+        {
+          "outcome": {
+            "command": "metaharness.workspace.DeclareContextFiles",
+            "outcome": "empty-path-refused"
+          },
+          "step": "expect_outcome"
+        },
+        {
+          "error": "metaharness.workspace.ContextPathEmpty",
+          "step": "expect_error"
+        },
+        {
+          "event": "metaharness.boundaries.CallDecided",
+          "step": "expect_no_event"
+        },
+        {
+          "event": "metaharness.boundaries.FileRead",
+          "step": "expect_no_event"
+        },
+        {
+          "event": "metaharness.boundaries.FrameRead",
+          "step": "expect_no_event"
+        },
+        {
+          "event": "metaharness.observations.NativeStatusClassified",
+          "step": "expect_no_event"
+        },
+        {
+          "event": "metaharness.observations.PresenceRead",
+          "step": "expect_no_event"
+        },
+        {
+          "event": "metaharness.observations.ToolOutcomeRead",
+          "step": "expect_no_event"
+        },
+        {
+          "event": "metaharness.session.ClosureRecorded",
+          "step": "expect_no_event"
+        },
+        {
+          "event": "metaharness.session.CompletionClassified",
+          "step": "expect_no_event"
+        },
+        {
+          "event": "metaharness.session.PollingObserved",
+          "step": "expect_no_event"
+        },
+        {
+          "event": "metaharness.session.StreamClassified",
+          "step": "expect_no_event"
+        },
+        {
+          "event": "metaharness.spending.AdmissionRecorded",
+          "step": "expect_no_event"
+        },
+        {
+          "event": "metaharness.spending.FiniteLedgerRecorded",
+          "step": "expect_no_event"
+        },
+        {
+          "event": "metaharness.trace.CompletenessVerified",
+          "step": "expect_no_event"
+        },
+        {
+          "event": "metaharness.trace.DigestNamed",
+          "step": "expect_no_event"
+        },
+        {
+          "event": "metaharness.trace.FamilyClassified",
+          "step": "expect_no_event"
+        },
+        {
+          "event": "metaharness.trace.ProjectionRecorded",
+          "step": "expect_no_event"
+        },
+        {
+          "event": "metaharness.trace.RecordNormalized",
+          "step": "expect_no_event"
+        },
+        {
+          "event": "metaharness.trace.UnkClassified",
+          "step": "expect_no_event"
+        },
+        {
+          "event": "metaharness.trace.VendorRecordProjected",
+          "step": "expect_no_event"
+        },
+        {
+          "event": "metaharness.trace.VendorSourceRefused",
+          "step": "expect_no_event"
+        },
+        {
+          "event": "metaharness.workspace.ContextFilesRecorded",
+          "step": "expect_no_event"
+        },
+        {
+          "event": "metaharness.workspace.ProcessWritePlanned",
+          "step": "expect_no_event"
+        },
+        {
+          "event": "metaharness.workspace.ScratchCwdAttested",
+          "step": "expect_no_event"
+        }
+      ]
+    },
+    "metaharness.workspace.DeclareContextFiles/outcome/irregular-file-refused": {
+      "purpose": "`metaharness.workspace.DeclareContextFiles` answers `irregular-file-refused` for an input that satisfies that branch's guard",
+      "source": [
+        {
+          "kind": "type",
+          "name": "metaharness.workspace.ContextFileProbe"
+        },
+        {
+          "kind": "command",
+          "name": "metaharness.workspace.DeclareContextFiles"
+        },
+        {
+          "kind": "outcome",
+          "name": {
+            "command": "metaharness.workspace.DeclareContextFiles",
+            "outcome": "irregular-file-refused"
+          }
+        },
+        {
+          "kind": "event",
+          "name": "metaharness.boundaries.CallDecided"
+        },
+        {
+          "kind": "event",
+          "name": "metaharness.boundaries.FileRead"
+        },
+        {
+          "kind": "event",
+          "name": "metaharness.boundaries.FrameRead"
+        },
+        {
+          "kind": "event",
+          "name": "metaharness.observations.NativeStatusClassified"
+        },
+        {
+          "kind": "event",
+          "name": "metaharness.observations.PresenceRead"
+        },
+        {
+          "kind": "event",
+          "name": "metaharness.observations.ToolOutcomeRead"
+        },
+        {
+          "kind": "event",
+          "name": "metaharness.session.ClosureRecorded"
+        },
+        {
+          "kind": "event",
+          "name": "metaharness.session.CompletionClassified"
+        },
+        {
+          "kind": "event",
+          "name": "metaharness.session.PollingObserved"
+        },
+        {
+          "kind": "event",
+          "name": "metaharness.session.StreamClassified"
+        },
+        {
+          "kind": "event",
+          "name": "metaharness.spending.AdmissionRecorded"
+        },
+        {
+          "kind": "event",
+          "name": "metaharness.spending.FiniteLedgerRecorded"
+        },
+        {
+          "kind": "event",
+          "name": "metaharness.trace.CompletenessVerified"
+        },
+        {
+          "kind": "event",
+          "name": "metaharness.trace.DigestNamed"
+        },
+        {
+          "kind": "event",
+          "name": "metaharness.trace.FamilyClassified"
+        },
+        {
+          "kind": "event",
+          "name": "metaharness.trace.ProjectionRecorded"
+        },
+        {
+          "kind": "event",
+          "name": "metaharness.trace.RecordNormalized"
+        },
+        {
+          "kind": "event",
+          "name": "metaharness.trace.UnkClassified"
+        },
+        {
+          "kind": "event",
+          "name": "metaharness.trace.VendorRecordProjected"
+        },
+        {
+          "kind": "event",
+          "name": "metaharness.trace.VendorSourceRefused"
+        },
+        {
+          "kind": "event",
+          "name": "metaharness.workspace.ContextFilesRecorded"
+        },
+        {
+          "kind": "event",
+          "name": "metaharness.workspace.ProcessWritePlanned"
+        },
+        {
+          "kind": "event",
+          "name": "metaharness.workspace.ScratchCwdAttested"
+        },
+        {
+          "kind": "error",
+          "name": "metaharness.workspace.ContextNotRegularFile"
+        }
+      ],
+      "steps": [
+        {
+          "command": "metaharness.workspace.DeclareContextFiles",
+          "input": {
+            "probe": {
+              "kind": "literal",
+              "value": "irregular"
+            }
+          },
+          "step": "execute_command"
+        },
+        {
+          "outcome": {
+            "command": "metaharness.workspace.DeclareContextFiles",
+            "outcome": "irregular-file-refused"
+          },
+          "step": "expect_outcome"
+        },
+        {
+          "error": "metaharness.workspace.ContextNotRegularFile",
+          "step": "expect_error"
+        },
+        {
+          "event": "metaharness.boundaries.CallDecided",
+          "step": "expect_no_event"
+        },
+        {
+          "event": "metaharness.boundaries.FileRead",
+          "step": "expect_no_event"
+        },
+        {
+          "event": "metaharness.boundaries.FrameRead",
+          "step": "expect_no_event"
+        },
+        {
+          "event": "metaharness.observations.NativeStatusClassified",
+          "step": "expect_no_event"
+        },
+        {
+          "event": "metaharness.observations.PresenceRead",
+          "step": "expect_no_event"
+        },
+        {
+          "event": "metaharness.observations.ToolOutcomeRead",
+          "step": "expect_no_event"
+        },
+        {
+          "event": "metaharness.session.ClosureRecorded",
+          "step": "expect_no_event"
+        },
+        {
+          "event": "metaharness.session.CompletionClassified",
+          "step": "expect_no_event"
+        },
+        {
+          "event": "metaharness.session.PollingObserved",
+          "step": "expect_no_event"
+        },
+        {
+          "event": "metaharness.session.StreamClassified",
+          "step": "expect_no_event"
+        },
+        {
+          "event": "metaharness.spending.AdmissionRecorded",
+          "step": "expect_no_event"
+        },
+        {
+          "event": "metaharness.spending.FiniteLedgerRecorded",
+          "step": "expect_no_event"
+        },
+        {
+          "event": "metaharness.trace.CompletenessVerified",
+          "step": "expect_no_event"
+        },
+        {
+          "event": "metaharness.trace.DigestNamed",
+          "step": "expect_no_event"
+        },
+        {
+          "event": "metaharness.trace.FamilyClassified",
+          "step": "expect_no_event"
+        },
+        {
+          "event": "metaharness.trace.ProjectionRecorded",
+          "step": "expect_no_event"
+        },
+        {
+          "event": "metaharness.trace.RecordNormalized",
+          "step": "expect_no_event"
+        },
+        {
+          "event": "metaharness.trace.UnkClassified",
+          "step": "expect_no_event"
+        },
+        {
+          "event": "metaharness.trace.VendorRecordProjected",
+          "step": "expect_no_event"
+        },
+        {
+          "event": "metaharness.trace.VendorSourceRefused",
+          "step": "expect_no_event"
+        },
+        {
+          "event": "metaharness.workspace.ContextFilesRecorded",
+          "step": "expect_no_event"
+        },
+        {
+          "event": "metaharness.workspace.ProcessWritePlanned",
+          "step": "expect_no_event"
+        },
+        {
+          "event": "metaharness.workspace.ScratchCwdAttested",
+          "step": "expect_no_event"
+        }
+      ]
+    },
+    "metaharness.workspace.DeclareContextFiles/outcome/non-utf8-path-refused": {
+      "purpose": "`metaharness.workspace.DeclareContextFiles` answers `non-utf8-path-refused` for an input that satisfies that branch's guard",
+      "source": [
+        {
+          "kind": "type",
+          "name": "metaharness.workspace.ContextFileProbe"
+        },
+        {
+          "kind": "command",
+          "name": "metaharness.workspace.DeclareContextFiles"
+        },
+        {
+          "kind": "outcome",
+          "name": {
+            "command": "metaharness.workspace.DeclareContextFiles",
+            "outcome": "non-utf8-path-refused"
+          }
+        },
+        {
+          "kind": "event",
+          "name": "metaharness.boundaries.CallDecided"
+        },
+        {
+          "kind": "event",
+          "name": "metaharness.boundaries.FileRead"
+        },
+        {
+          "kind": "event",
+          "name": "metaharness.boundaries.FrameRead"
+        },
+        {
+          "kind": "event",
+          "name": "metaharness.observations.NativeStatusClassified"
+        },
+        {
+          "kind": "event",
+          "name": "metaharness.observations.PresenceRead"
+        },
+        {
+          "kind": "event",
+          "name": "metaharness.observations.ToolOutcomeRead"
+        },
+        {
+          "kind": "event",
+          "name": "metaharness.session.ClosureRecorded"
+        },
+        {
+          "kind": "event",
+          "name": "metaharness.session.CompletionClassified"
+        },
+        {
+          "kind": "event",
+          "name": "metaharness.session.PollingObserved"
+        },
+        {
+          "kind": "event",
+          "name": "metaharness.session.StreamClassified"
+        },
+        {
+          "kind": "event",
+          "name": "metaharness.spending.AdmissionRecorded"
+        },
+        {
+          "kind": "event",
+          "name": "metaharness.spending.FiniteLedgerRecorded"
+        },
+        {
+          "kind": "event",
+          "name": "metaharness.trace.CompletenessVerified"
+        },
+        {
+          "kind": "event",
+          "name": "metaharness.trace.DigestNamed"
+        },
+        {
+          "kind": "event",
+          "name": "metaharness.trace.FamilyClassified"
+        },
+        {
+          "kind": "event",
+          "name": "metaharness.trace.ProjectionRecorded"
+        },
+        {
+          "kind": "event",
+          "name": "metaharness.trace.RecordNormalized"
+        },
+        {
+          "kind": "event",
+          "name": "metaharness.trace.UnkClassified"
+        },
+        {
+          "kind": "event",
+          "name": "metaharness.trace.VendorRecordProjected"
+        },
+        {
+          "kind": "event",
+          "name": "metaharness.trace.VendorSourceRefused"
+        },
+        {
+          "kind": "event",
+          "name": "metaharness.workspace.ContextFilesRecorded"
+        },
+        {
+          "kind": "event",
+          "name": "metaharness.workspace.ProcessWritePlanned"
+        },
+        {
+          "kind": "event",
+          "name": "metaharness.workspace.ScratchCwdAttested"
+        },
+        {
+          "kind": "error",
+          "name": "metaharness.workspace.ContextPathNotUtf8"
+        }
+      ],
+      "steps": [
+        {
+          "command": "metaharness.workspace.DeclareContextFiles",
+          "input": {
+            "probe": {
+              "kind": "literal",
+              "value": "non-utf8-path"
+            }
+          },
+          "step": "execute_command"
+        },
+        {
+          "outcome": {
+            "command": "metaharness.workspace.DeclareContextFiles",
+            "outcome": "non-utf8-path-refused"
+          },
+          "step": "expect_outcome"
+        },
+        {
+          "error": "metaharness.workspace.ContextPathNotUtf8",
+          "step": "expect_error"
+        },
+        {
+          "event": "metaharness.boundaries.CallDecided",
+          "step": "expect_no_event"
+        },
+        {
+          "event": "metaharness.boundaries.FileRead",
+          "step": "expect_no_event"
+        },
+        {
+          "event": "metaharness.boundaries.FrameRead",
+          "step": "expect_no_event"
+        },
+        {
+          "event": "metaharness.observations.NativeStatusClassified",
+          "step": "expect_no_event"
+        },
+        {
+          "event": "metaharness.observations.PresenceRead",
+          "step": "expect_no_event"
+        },
+        {
+          "event": "metaharness.observations.ToolOutcomeRead",
+          "step": "expect_no_event"
+        },
+        {
+          "event": "metaharness.session.ClosureRecorded",
+          "step": "expect_no_event"
+        },
+        {
+          "event": "metaharness.session.CompletionClassified",
+          "step": "expect_no_event"
+        },
+        {
+          "event": "metaharness.session.PollingObserved",
+          "step": "expect_no_event"
+        },
+        {
+          "event": "metaharness.session.StreamClassified",
+          "step": "expect_no_event"
+        },
+        {
+          "event": "metaharness.spending.AdmissionRecorded",
+          "step": "expect_no_event"
+        },
+        {
+          "event": "metaharness.spending.FiniteLedgerRecorded",
+          "step": "expect_no_event"
+        },
+        {
+          "event": "metaharness.trace.CompletenessVerified",
+          "step": "expect_no_event"
+        },
+        {
+          "event": "metaharness.trace.DigestNamed",
+          "step": "expect_no_event"
+        },
+        {
+          "event": "metaharness.trace.FamilyClassified",
+          "step": "expect_no_event"
+        },
+        {
+          "event": "metaharness.trace.ProjectionRecorded",
+          "step": "expect_no_event"
+        },
+        {
+          "event": "metaharness.trace.RecordNormalized",
+          "step": "expect_no_event"
+        },
+        {
+          "event": "metaharness.trace.UnkClassified",
+          "step": "expect_no_event"
+        },
+        {
+          "event": "metaharness.trace.VendorRecordProjected",
+          "step": "expect_no_event"
+        },
+        {
+          "event": "metaharness.trace.VendorSourceRefused",
+          "step": "expect_no_event"
+        },
+        {
+          "event": "metaharness.workspace.ContextFilesRecorded",
+          "step": "expect_no_event"
+        },
+        {
+          "event": "metaharness.workspace.ProcessWritePlanned",
+          "step": "expect_no_event"
+        },
+        {
+          "event": "metaharness.workspace.ScratchCwdAttested",
+          "step": "expect_no_event"
+        }
+      ]
+    },
+    "metaharness.workspace.DeclareContextFiles/outcome/not-text-refused": {
+      "purpose": "`metaharness.workspace.DeclareContextFiles` answers `not-text-refused` for an input that satisfies that branch's guard",
+      "source": [
+        {
+          "kind": "type",
+          "name": "metaharness.workspace.ContextFileProbe"
+        },
+        {
+          "kind": "command",
+          "name": "metaharness.workspace.DeclareContextFiles"
+        },
+        {
+          "kind": "outcome",
+          "name": {
+            "command": "metaharness.workspace.DeclareContextFiles",
+            "outcome": "not-text-refused"
+          }
+        },
+        {
+          "kind": "event",
+          "name": "metaharness.boundaries.CallDecided"
+        },
+        {
+          "kind": "event",
+          "name": "metaharness.boundaries.FileRead"
+        },
+        {
+          "kind": "event",
+          "name": "metaharness.boundaries.FrameRead"
+        },
+        {
+          "kind": "event",
+          "name": "metaharness.observations.NativeStatusClassified"
+        },
+        {
+          "kind": "event",
+          "name": "metaharness.observations.PresenceRead"
+        },
+        {
+          "kind": "event",
+          "name": "metaharness.observations.ToolOutcomeRead"
+        },
+        {
+          "kind": "event",
+          "name": "metaharness.session.ClosureRecorded"
+        },
+        {
+          "kind": "event",
+          "name": "metaharness.session.CompletionClassified"
+        },
+        {
+          "kind": "event",
+          "name": "metaharness.session.PollingObserved"
+        },
+        {
+          "kind": "event",
+          "name": "metaharness.session.StreamClassified"
+        },
+        {
+          "kind": "event",
+          "name": "metaharness.spending.AdmissionRecorded"
+        },
+        {
+          "kind": "event",
+          "name": "metaharness.spending.FiniteLedgerRecorded"
+        },
+        {
+          "kind": "event",
+          "name": "metaharness.trace.CompletenessVerified"
+        },
+        {
+          "kind": "event",
+          "name": "metaharness.trace.DigestNamed"
+        },
+        {
+          "kind": "event",
+          "name": "metaharness.trace.FamilyClassified"
+        },
+        {
+          "kind": "event",
+          "name": "metaharness.trace.ProjectionRecorded"
+        },
+        {
+          "kind": "event",
+          "name": "metaharness.trace.RecordNormalized"
+        },
+        {
+          "kind": "event",
+          "name": "metaharness.trace.UnkClassified"
+        },
+        {
+          "kind": "event",
+          "name": "metaharness.trace.VendorRecordProjected"
+        },
+        {
+          "kind": "event",
+          "name": "metaharness.trace.VendorSourceRefused"
+        },
+        {
+          "kind": "event",
+          "name": "metaharness.workspace.ContextFilesRecorded"
+        },
+        {
+          "kind": "event",
+          "name": "metaharness.workspace.ProcessWritePlanned"
+        },
+        {
+          "kind": "event",
+          "name": "metaharness.workspace.ScratchCwdAttested"
+        },
+        {
+          "kind": "error",
+          "name": "metaharness.workspace.ContextNotText"
+        }
+      ],
+      "steps": [
+        {
+          "command": "metaharness.workspace.DeclareContextFiles",
+          "input": {
+            "probe": {
+              "kind": "literal",
+              "value": "not-text"
+            }
+          },
+          "step": "execute_command"
+        },
+        {
+          "outcome": {
+            "command": "metaharness.workspace.DeclareContextFiles",
+            "outcome": "not-text-refused"
+          },
+          "step": "expect_outcome"
+        },
+        {
+          "error": "metaharness.workspace.ContextNotText",
+          "step": "expect_error"
+        },
+        {
+          "event": "metaharness.boundaries.CallDecided",
+          "step": "expect_no_event"
+        },
+        {
+          "event": "metaharness.boundaries.FileRead",
+          "step": "expect_no_event"
+        },
+        {
+          "event": "metaharness.boundaries.FrameRead",
+          "step": "expect_no_event"
+        },
+        {
+          "event": "metaharness.observations.NativeStatusClassified",
+          "step": "expect_no_event"
+        },
+        {
+          "event": "metaharness.observations.PresenceRead",
+          "step": "expect_no_event"
+        },
+        {
+          "event": "metaharness.observations.ToolOutcomeRead",
+          "step": "expect_no_event"
+        },
+        {
+          "event": "metaharness.session.ClosureRecorded",
+          "step": "expect_no_event"
+        },
+        {
+          "event": "metaharness.session.CompletionClassified",
+          "step": "expect_no_event"
+        },
+        {
+          "event": "metaharness.session.PollingObserved",
+          "step": "expect_no_event"
+        },
+        {
+          "event": "metaharness.session.StreamClassified",
+          "step": "expect_no_event"
+        },
+        {
+          "event": "metaharness.spending.AdmissionRecorded",
+          "step": "expect_no_event"
+        },
+        {
+          "event": "metaharness.spending.FiniteLedgerRecorded",
+          "step": "expect_no_event"
+        },
+        {
+          "event": "metaharness.trace.CompletenessVerified",
+          "step": "expect_no_event"
+        },
+        {
+          "event": "metaharness.trace.DigestNamed",
+          "step": "expect_no_event"
+        },
+        {
+          "event": "metaharness.trace.FamilyClassified",
+          "step": "expect_no_event"
+        },
+        {
+          "event": "metaharness.trace.ProjectionRecorded",
+          "step": "expect_no_event"
+        },
+        {
+          "event": "metaharness.trace.RecordNormalized",
+          "step": "expect_no_event"
+        },
+        {
+          "event": "metaharness.trace.UnkClassified",
+          "step": "expect_no_event"
+        },
+        {
+          "event": "metaharness.trace.VendorRecordProjected",
+          "step": "expect_no_event"
+        },
+        {
+          "event": "metaharness.trace.VendorSourceRefused",
+          "step": "expect_no_event"
+        },
+        {
+          "event": "metaharness.workspace.ContextFilesRecorded",
+          "step": "expect_no_event"
+        },
+        {
+          "event": "metaharness.workspace.ProcessWritePlanned",
+          "step": "expect_no_event"
+        },
+        {
+          "event": "metaharness.workspace.ScratchCwdAttested",
+          "step": "expect_no_event"
+        }
+      ]
+    },
+    "metaharness.workspace.DeclareContextFiles/outcome/symlink-refused": {
+      "purpose": "`metaharness.workspace.DeclareContextFiles` answers `symlink-refused` for an input that satisfies that branch's guard",
+      "source": [
+        {
+          "kind": "type",
+          "name": "metaharness.workspace.ContextFileProbe"
+        },
+        {
+          "kind": "command",
+          "name": "metaharness.workspace.DeclareContextFiles"
+        },
+        {
+          "kind": "outcome",
+          "name": {
+            "command": "metaharness.workspace.DeclareContextFiles",
+            "outcome": "symlink-refused"
+          }
+        },
+        {
+          "kind": "event",
+          "name": "metaharness.boundaries.CallDecided"
+        },
+        {
+          "kind": "event",
+          "name": "metaharness.boundaries.FileRead"
+        },
+        {
+          "kind": "event",
+          "name": "metaharness.boundaries.FrameRead"
+        },
+        {
+          "kind": "event",
+          "name": "metaharness.observations.NativeStatusClassified"
+        },
+        {
+          "kind": "event",
+          "name": "metaharness.observations.PresenceRead"
+        },
+        {
+          "kind": "event",
+          "name": "metaharness.observations.ToolOutcomeRead"
+        },
+        {
+          "kind": "event",
+          "name": "metaharness.session.ClosureRecorded"
+        },
+        {
+          "kind": "event",
+          "name": "metaharness.session.CompletionClassified"
+        },
+        {
+          "kind": "event",
+          "name": "metaharness.session.PollingObserved"
+        },
+        {
+          "kind": "event",
+          "name": "metaharness.session.StreamClassified"
+        },
+        {
+          "kind": "event",
+          "name": "metaharness.spending.AdmissionRecorded"
+        },
+        {
+          "kind": "event",
+          "name": "metaharness.spending.FiniteLedgerRecorded"
+        },
+        {
+          "kind": "event",
+          "name": "metaharness.trace.CompletenessVerified"
+        },
+        {
+          "kind": "event",
+          "name": "metaharness.trace.DigestNamed"
+        },
+        {
+          "kind": "event",
+          "name": "metaharness.trace.FamilyClassified"
+        },
+        {
+          "kind": "event",
+          "name": "metaharness.trace.ProjectionRecorded"
+        },
+        {
+          "kind": "event",
+          "name": "metaharness.trace.RecordNormalized"
+        },
+        {
+          "kind": "event",
+          "name": "metaharness.trace.UnkClassified"
+        },
+        {
+          "kind": "event",
+          "name": "metaharness.trace.VendorRecordProjected"
+        },
+        {
+          "kind": "event",
+          "name": "metaharness.trace.VendorSourceRefused"
+        },
+        {
+          "kind": "event",
+          "name": "metaharness.workspace.ContextFilesRecorded"
+        },
+        {
+          "kind": "event",
+          "name": "metaharness.workspace.ProcessWritePlanned"
+        },
+        {
+          "kind": "event",
+          "name": "metaharness.workspace.ScratchCwdAttested"
+        },
+        {
+          "kind": "error",
+          "name": "metaharness.workspace.ContextSymlink"
+        }
+      ],
+      "steps": [
+        {
+          "command": "metaharness.workspace.DeclareContextFiles",
+          "input": {
+            "probe": {
+              "kind": "literal",
+              "value": "symlink"
+            }
+          },
+          "step": "execute_command"
+        },
+        {
+          "outcome": {
+            "command": "metaharness.workspace.DeclareContextFiles",
+            "outcome": "symlink-refused"
+          },
+          "step": "expect_outcome"
+        },
+        {
+          "error": "metaharness.workspace.ContextSymlink",
+          "step": "expect_error"
+        },
+        {
+          "event": "metaharness.boundaries.CallDecided",
+          "step": "expect_no_event"
+        },
+        {
+          "event": "metaharness.boundaries.FileRead",
+          "step": "expect_no_event"
+        },
+        {
+          "event": "metaharness.boundaries.FrameRead",
+          "step": "expect_no_event"
+        },
+        {
+          "event": "metaharness.observations.NativeStatusClassified",
+          "step": "expect_no_event"
+        },
+        {
+          "event": "metaharness.observations.PresenceRead",
+          "step": "expect_no_event"
+        },
+        {
+          "event": "metaharness.observations.ToolOutcomeRead",
+          "step": "expect_no_event"
+        },
+        {
+          "event": "metaharness.session.ClosureRecorded",
+          "step": "expect_no_event"
+        },
+        {
+          "event": "metaharness.session.CompletionClassified",
+          "step": "expect_no_event"
+        },
+        {
+          "event": "metaharness.session.PollingObserved",
+          "step": "expect_no_event"
+        },
+        {
+          "event": "metaharness.session.StreamClassified",
+          "step": "expect_no_event"
+        },
+        {
+          "event": "metaharness.spending.AdmissionRecorded",
+          "step": "expect_no_event"
+        },
+        {
+          "event": "metaharness.spending.FiniteLedgerRecorded",
+          "step": "expect_no_event"
+        },
+        {
+          "event": "metaharness.trace.CompletenessVerified",
+          "step": "expect_no_event"
+        },
+        {
+          "event": "metaharness.trace.DigestNamed",
+          "step": "expect_no_event"
+        },
+        {
+          "event": "metaharness.trace.FamilyClassified",
+          "step": "expect_no_event"
+        },
+        {
+          "event": "metaharness.trace.ProjectionRecorded",
+          "step": "expect_no_event"
+        },
+        {
+          "event": "metaharness.trace.RecordNormalized",
+          "step": "expect_no_event"
+        },
+        {
+          "event": "metaharness.trace.UnkClassified",
+          "step": "expect_no_event"
+        },
+        {
+          "event": "metaharness.trace.VendorRecordProjected",
+          "step": "expect_no_event"
+        },
+        {
+          "event": "metaharness.trace.VendorSourceRefused",
+          "step": "expect_no_event"
+        },
+        {
+          "event": "metaharness.workspace.ContextFilesRecorded",
+          "step": "expect_no_event"
+        },
+        {
+          "event": "metaharness.workspace.ProcessWritePlanned",
+          "step": "expect_no_event"
+        },
+        {
+          "event": "metaharness.workspace.ScratchCwdAttested",
+          "step": "expect_no_event"
+        }
+      ]
+    },
+    "metaharness.workspace.DeclareContextFiles/outcome/tracked-files-recorded": {
+      "purpose": "`metaharness.workspace.DeclareContextFiles` answers `tracked-files-recorded` for an input no other branch's guard claims",
+      "source": [
+        {
+          "kind": "type",
+          "name": "metaharness.workspace.ContextFileProbe"
+        },
+        {
+          "kind": "command",
+          "name": "metaharness.workspace.DeclareContextFiles"
+        },
+        {
+          "kind": "outcome",
+          "name": {
+            "command": "metaharness.workspace.DeclareContextFiles",
+            "outcome": "tracked-files-recorded"
+          }
+        },
+        {
+          "kind": "event",
+          "name": "metaharness.boundaries.CallDecided"
+        },
+        {
+          "kind": "event",
+          "name": "metaharness.boundaries.FileRead"
+        },
+        {
+          "kind": "event",
+          "name": "metaharness.boundaries.FrameRead"
+        },
+        {
+          "kind": "event",
+          "name": "metaharness.observations.NativeStatusClassified"
+        },
+        {
+          "kind": "event",
+          "name": "metaharness.observations.PresenceRead"
+        },
+        {
+          "kind": "event",
+          "name": "metaharness.observations.ToolOutcomeRead"
+        },
+        {
+          "kind": "event",
+          "name": "metaharness.session.ClosureRecorded"
+        },
+        {
+          "kind": "event",
+          "name": "metaharness.session.CompletionClassified"
+        },
+        {
+          "kind": "event",
+          "name": "metaharness.session.PollingObserved"
+        },
+        {
+          "kind": "event",
+          "name": "metaharness.session.StreamClassified"
+        },
+        {
+          "kind": "event",
+          "name": "metaharness.spending.AdmissionRecorded"
+        },
+        {
+          "kind": "event",
+          "name": "metaharness.spending.FiniteLedgerRecorded"
+        },
+        {
+          "kind": "event",
+          "name": "metaharness.trace.CompletenessVerified"
+        },
+        {
+          "kind": "event",
+          "name": "metaharness.trace.DigestNamed"
+        },
+        {
+          "kind": "event",
+          "name": "metaharness.trace.FamilyClassified"
+        },
+        {
+          "kind": "event",
+          "name": "metaharness.trace.ProjectionRecorded"
+        },
+        {
+          "kind": "event",
+          "name": "metaharness.trace.RecordNormalized"
+        },
+        {
+          "kind": "event",
+          "name": "metaharness.trace.UnkClassified"
+        },
+        {
+          "kind": "event",
+          "name": "metaharness.trace.VendorRecordProjected"
+        },
+        {
+          "kind": "event",
+          "name": "metaharness.trace.VendorSourceRefused"
+        },
+        {
+          "kind": "event",
+          "name": "metaharness.workspace.ContextFilesRecorded"
+        },
+        {
+          "kind": "event",
+          "name": "metaharness.workspace.ProcessWritePlanned"
+        },
+        {
+          "kind": "event",
+          "name": "metaharness.workspace.ScratchCwdAttested"
+        }
+      ],
+      "steps": [
+        {
+          "command": "metaharness.workspace.DeclareContextFiles",
+          "input": {
+            "probe": {
+              "kind": "literal",
+              "value": "tracked"
+            }
+          },
+          "step": "execute_command"
+        },
+        {
+          "outcome": {
+            "command": "metaharness.workspace.DeclareContextFiles",
+            "outcome": "tracked-files-recorded"
+          },
+          "step": "expect_outcome"
+        },
+        {
+          "event": "metaharness.workspace.ContextFilesRecorded",
+          "payload": {
+            "digests_match": true,
+            "files": 2.0,
+            "kinds": 3.0
+          },
+          "shape": {
+            "digests_match": {
+              "holds": "primitive",
+              "kind": "boolean"
+            },
+            "files": {
+              "holds": "primitive",
+              "kind": "integer"
+            },
+            "kinds": {
+              "holds": "primitive",
+              "kind": "integer"
+            }
+          },
+          "step": "expect_event"
+        },
+        {
+          "event": "metaharness.boundaries.CallDecided",
+          "step": "expect_no_event"
+        },
+        {
+          "event": "metaharness.boundaries.FileRead",
+          "step": "expect_no_event"
+        },
+        {
+          "event": "metaharness.boundaries.FrameRead",
+          "step": "expect_no_event"
+        },
+        {
+          "event": "metaharness.observations.NativeStatusClassified",
+          "step": "expect_no_event"
+        },
+        {
+          "event": "metaharness.observations.PresenceRead",
+          "step": "expect_no_event"
+        },
+        {
+          "event": "metaharness.observations.ToolOutcomeRead",
+          "step": "expect_no_event"
+        },
+        {
+          "event": "metaharness.session.ClosureRecorded",
+          "step": "expect_no_event"
+        },
+        {
+          "event": "metaharness.session.CompletionClassified",
+          "step": "expect_no_event"
+        },
+        {
+          "event": "metaharness.session.PollingObserved",
+          "step": "expect_no_event"
+        },
+        {
+          "event": "metaharness.session.StreamClassified",
+          "step": "expect_no_event"
+        },
+        {
+          "event": "metaharness.spending.AdmissionRecorded",
+          "step": "expect_no_event"
+        },
+        {
+          "event": "metaharness.spending.FiniteLedgerRecorded",
+          "step": "expect_no_event"
+        },
+        {
+          "event": "metaharness.trace.CompletenessVerified",
+          "step": "expect_no_event"
+        },
+        {
+          "event": "metaharness.trace.DigestNamed",
+          "step": "expect_no_event"
+        },
+        {
+          "event": "metaharness.trace.FamilyClassified",
+          "step": "expect_no_event"
+        },
+        {
+          "event": "metaharness.trace.ProjectionRecorded",
+          "step": "expect_no_event"
+        },
+        {
+          "event": "metaharness.trace.RecordNormalized",
+          "step": "expect_no_event"
+        },
+        {
+          "event": "metaharness.trace.UnkClassified",
+          "step": "expect_no_event"
+        },
+        {
+          "event": "metaharness.trace.VendorRecordProjected",
+          "step": "expect_no_event"
+        },
+        {
+          "event": "metaharness.trace.VendorSourceRefused",
+          "step": "expect_no_event"
+        },
+        {
+          "event": "metaharness.workspace.ProcessWritePlanned",
+          "step": "expect_no_event"
+        },
+        {
+          "event": "metaharness.workspace.ScratchCwdAttested",
+          "step": "expect_no_event"
+        }
+      ]
+    },
+    "metaharness.workspace.DeclareContextFiles/outcome/unreadable-file-refused": {
+      "purpose": "`metaharness.workspace.DeclareContextFiles` answers `unreadable-file-refused` for an input that satisfies that branch's guard",
+      "source": [
+        {
+          "kind": "type",
+          "name": "metaharness.workspace.ContextFileProbe"
+        },
+        {
+          "kind": "command",
+          "name": "metaharness.workspace.DeclareContextFiles"
+        },
+        {
+          "kind": "outcome",
+          "name": {
+            "command": "metaharness.workspace.DeclareContextFiles",
+            "outcome": "unreadable-file-refused"
+          }
+        },
+        {
+          "kind": "event",
+          "name": "metaharness.boundaries.CallDecided"
+        },
+        {
+          "kind": "event",
+          "name": "metaharness.boundaries.FileRead"
+        },
+        {
+          "kind": "event",
+          "name": "metaharness.boundaries.FrameRead"
+        },
+        {
+          "kind": "event",
+          "name": "metaharness.observations.NativeStatusClassified"
+        },
+        {
+          "kind": "event",
+          "name": "metaharness.observations.PresenceRead"
+        },
+        {
+          "kind": "event",
+          "name": "metaharness.observations.ToolOutcomeRead"
+        },
+        {
+          "kind": "event",
+          "name": "metaharness.session.ClosureRecorded"
+        },
+        {
+          "kind": "event",
+          "name": "metaharness.session.CompletionClassified"
+        },
+        {
+          "kind": "event",
+          "name": "metaharness.session.PollingObserved"
+        },
+        {
+          "kind": "event",
+          "name": "metaharness.session.StreamClassified"
+        },
+        {
+          "kind": "event",
+          "name": "metaharness.spending.AdmissionRecorded"
+        },
+        {
+          "kind": "event",
+          "name": "metaharness.spending.FiniteLedgerRecorded"
+        },
+        {
+          "kind": "event",
+          "name": "metaharness.trace.CompletenessVerified"
+        },
+        {
+          "kind": "event",
+          "name": "metaharness.trace.DigestNamed"
+        },
+        {
+          "kind": "event",
+          "name": "metaharness.trace.FamilyClassified"
+        },
+        {
+          "kind": "event",
+          "name": "metaharness.trace.ProjectionRecorded"
+        },
+        {
+          "kind": "event",
+          "name": "metaharness.trace.RecordNormalized"
+        },
+        {
+          "kind": "event",
+          "name": "metaharness.trace.UnkClassified"
+        },
+        {
+          "kind": "event",
+          "name": "metaharness.trace.VendorRecordProjected"
+        },
+        {
+          "kind": "event",
+          "name": "metaharness.trace.VendorSourceRefused"
+        },
+        {
+          "kind": "event",
+          "name": "metaharness.workspace.ContextFilesRecorded"
+        },
+        {
+          "kind": "event",
+          "name": "metaharness.workspace.ProcessWritePlanned"
+        },
+        {
+          "kind": "event",
+          "name": "metaharness.workspace.ScratchCwdAttested"
+        },
+        {
+          "kind": "error",
+          "name": "metaharness.workspace.ContextUnreadable"
+        }
+      ],
+      "steps": [
+        {
+          "command": "metaharness.workspace.DeclareContextFiles",
+          "input": {
+            "probe": {
+              "kind": "literal",
+              "value": "absent"
+            }
+          },
+          "step": "execute_command"
+        },
+        {
+          "outcome": {
+            "command": "metaharness.workspace.DeclareContextFiles",
+            "outcome": "unreadable-file-refused"
+          },
+          "step": "expect_outcome"
+        },
+        {
+          "error": "metaharness.workspace.ContextUnreadable",
+          "step": "expect_error"
+        },
+        {
+          "event": "metaharness.boundaries.CallDecided",
+          "step": "expect_no_event"
+        },
+        {
+          "event": "metaharness.boundaries.FileRead",
+          "step": "expect_no_event"
+        },
+        {
+          "event": "metaharness.boundaries.FrameRead",
+          "step": "expect_no_event"
+        },
+        {
+          "event": "metaharness.observations.NativeStatusClassified",
+          "step": "expect_no_event"
+        },
+        {
+          "event": "metaharness.observations.PresenceRead",
+          "step": "expect_no_event"
+        },
+        {
+          "event": "metaharness.observations.ToolOutcomeRead",
+          "step": "expect_no_event"
+        },
+        {
+          "event": "metaharness.session.ClosureRecorded",
+          "step": "expect_no_event"
+        },
+        {
+          "event": "metaharness.session.CompletionClassified",
+          "step": "expect_no_event"
+        },
+        {
+          "event": "metaharness.session.PollingObserved",
+          "step": "expect_no_event"
+        },
+        {
+          "event": "metaharness.session.StreamClassified",
+          "step": "expect_no_event"
+        },
+        {
+          "event": "metaharness.spending.AdmissionRecorded",
+          "step": "expect_no_event"
+        },
+        {
+          "event": "metaharness.spending.FiniteLedgerRecorded",
+          "step": "expect_no_event"
+        },
+        {
+          "event": "metaharness.trace.CompletenessVerified",
+          "step": "expect_no_event"
+        },
+        {
+          "event": "metaharness.trace.DigestNamed",
+          "step": "expect_no_event"
+        },
+        {
+          "event": "metaharness.trace.FamilyClassified",
+          "step": "expect_no_event"
+        },
+        {
+          "event": "metaharness.trace.ProjectionRecorded",
+          "step": "expect_no_event"
+        },
+        {
+          "event": "metaharness.trace.RecordNormalized",
+          "step": "expect_no_event"
+        },
+        {
+          "event": "metaharness.trace.UnkClassified",
+          "step": "expect_no_event"
+        },
+        {
+          "event": "metaharness.trace.VendorRecordProjected",
+          "step": "expect_no_event"
+        },
+        {
+          "event": "metaharness.trace.VendorSourceRefused",
+          "step": "expect_no_event"
+        },
+        {
+          "event": "metaharness.workspace.ContextFilesRecorded",
+          "step": "expect_no_event"
+        },
+        {
+          "event": "metaharness.workspace.ProcessWritePlanned",
+          "step": "expect_no_event"
+        },
+        {
+          "event": "metaharness.workspace.ScratchCwdAttested",
+          "step": "expect_no_event"
+        }
+      ]
+    },
+    "metaharness.workspace.DeclareContextFiles/outcome/untracked-file-refused": {
+      "purpose": "`metaharness.workspace.DeclareContextFiles` answers `untracked-file-refused` for an input that satisfies that branch's guard",
+      "source": [
+        {
+          "kind": "type",
+          "name": "metaharness.workspace.ContextFileProbe"
+        },
+        {
+          "kind": "command",
+          "name": "metaharness.workspace.DeclareContextFiles"
+        },
+        {
+          "kind": "outcome",
+          "name": {
+            "command": "metaharness.workspace.DeclareContextFiles",
+            "outcome": "untracked-file-refused"
+          }
+        },
+        {
+          "kind": "event",
+          "name": "metaharness.boundaries.CallDecided"
+        },
+        {
+          "kind": "event",
+          "name": "metaharness.boundaries.FileRead"
+        },
+        {
+          "kind": "event",
+          "name": "metaharness.boundaries.FrameRead"
+        },
+        {
+          "kind": "event",
+          "name": "metaharness.observations.NativeStatusClassified"
+        },
+        {
+          "kind": "event",
+          "name": "metaharness.observations.PresenceRead"
+        },
+        {
+          "kind": "event",
+          "name": "metaharness.observations.ToolOutcomeRead"
+        },
+        {
+          "kind": "event",
+          "name": "metaharness.session.ClosureRecorded"
+        },
+        {
+          "kind": "event",
+          "name": "metaharness.session.CompletionClassified"
+        },
+        {
+          "kind": "event",
+          "name": "metaharness.session.PollingObserved"
+        },
+        {
+          "kind": "event",
+          "name": "metaharness.session.StreamClassified"
+        },
+        {
+          "kind": "event",
+          "name": "metaharness.spending.AdmissionRecorded"
+        },
+        {
+          "kind": "event",
+          "name": "metaharness.spending.FiniteLedgerRecorded"
+        },
+        {
+          "kind": "event",
+          "name": "metaharness.trace.CompletenessVerified"
+        },
+        {
+          "kind": "event",
+          "name": "metaharness.trace.DigestNamed"
+        },
+        {
+          "kind": "event",
+          "name": "metaharness.trace.FamilyClassified"
+        },
+        {
+          "kind": "event",
+          "name": "metaharness.trace.ProjectionRecorded"
+        },
+        {
+          "kind": "event",
+          "name": "metaharness.trace.RecordNormalized"
+        },
+        {
+          "kind": "event",
+          "name": "metaharness.trace.UnkClassified"
+        },
+        {
+          "kind": "event",
+          "name": "metaharness.trace.VendorRecordProjected"
+        },
+        {
+          "kind": "event",
+          "name": "metaharness.trace.VendorSourceRefused"
+        },
+        {
+          "kind": "event",
+          "name": "metaharness.workspace.ContextFilesRecorded"
+        },
+        {
+          "kind": "event",
+          "name": "metaharness.workspace.ProcessWritePlanned"
+        },
+        {
+          "kind": "event",
+          "name": "metaharness.workspace.ScratchCwdAttested"
+        },
+        {
+          "kind": "error",
+          "name": "metaharness.workspace.ContextUntracked"
+        }
+      ],
+      "steps": [
+        {
+          "command": "metaharness.workspace.DeclareContextFiles",
+          "input": {
+            "probe": {
+              "kind": "literal",
+              "value": "untracked"
+            }
+          },
+          "step": "execute_command"
+        },
+        {
+          "outcome": {
+            "command": "metaharness.workspace.DeclareContextFiles",
+            "outcome": "untracked-file-refused"
+          },
+          "step": "expect_outcome"
+        },
+        {
+          "error": "metaharness.workspace.ContextUntracked",
+          "step": "expect_error"
+        },
+        {
+          "event": "metaharness.boundaries.CallDecided",
+          "step": "expect_no_event"
+        },
+        {
+          "event": "metaharness.boundaries.FileRead",
+          "step": "expect_no_event"
+        },
+        {
+          "event": "metaharness.boundaries.FrameRead",
+          "step": "expect_no_event"
+        },
+        {
+          "event": "metaharness.observations.NativeStatusClassified",
+          "step": "expect_no_event"
+        },
+        {
+          "event": "metaharness.observations.PresenceRead",
+          "step": "expect_no_event"
+        },
+        {
+          "event": "metaharness.observations.ToolOutcomeRead",
+          "step": "expect_no_event"
+        },
+        {
+          "event": "metaharness.session.ClosureRecorded",
+          "step": "expect_no_event"
+        },
+        {
+          "event": "metaharness.session.CompletionClassified",
+          "step": "expect_no_event"
+        },
+        {
+          "event": "metaharness.session.PollingObserved",
+          "step": "expect_no_event"
+        },
+        {
+          "event": "metaharness.session.StreamClassified",
+          "step": "expect_no_event"
+        },
+        {
+          "event": "metaharness.spending.AdmissionRecorded",
+          "step": "expect_no_event"
+        },
+        {
+          "event": "metaharness.spending.FiniteLedgerRecorded",
+          "step": "expect_no_event"
+        },
+        {
+          "event": "metaharness.trace.CompletenessVerified",
+          "step": "expect_no_event"
+        },
+        {
+          "event": "metaharness.trace.DigestNamed",
+          "step": "expect_no_event"
+        },
+        {
+          "event": "metaharness.trace.FamilyClassified",
+          "step": "expect_no_event"
+        },
+        {
+          "event": "metaharness.trace.ProjectionRecorded",
+          "step": "expect_no_event"
+        },
+        {
+          "event": "metaharness.trace.RecordNormalized",
+          "step": "expect_no_event"
+        },
+        {
+          "event": "metaharness.trace.UnkClassified",
+          "step": "expect_no_event"
+        },
+        {
+          "event": "metaharness.trace.VendorRecordProjected",
+          "step": "expect_no_event"
+        },
+        {
+          "event": "metaharness.trace.VendorSourceRefused",
+          "step": "expect_no_event"
+        },
+        {
+          "event": "metaharness.workspace.ContextFilesRecorded",
+          "step": "expect_no_event"
+        },
+        {
+          "event": "metaharness.workspace.ProcessWritePlanned",
+          "step": "expect_no_event"
+        },
+        {
+          "event": "metaharness.workspace.ScratchCwdAttested",
+          "step": "expect_no_event"
         }
       ]
     },
@@ -19164,6 +22783,10 @@
         {
           "kind": "event",
           "name": "metaharness.trace.VendorSourceRefused"
+        },
+        {
+          "kind": "event",
+          "name": "metaharness.workspace.ContextFilesRecorded"
         },
         {
           "kind": "event",
@@ -19291,6 +22914,10 @@
           "step": "expect_no_event"
         },
         {
+          "event": "metaharness.workspace.ContextFilesRecorded",
+          "step": "expect_no_event"
+        },
+        {
           "event": "metaharness.workspace.ScratchCwdAttested",
           "step": "expect_no_event"
         }
@@ -19393,6 +23020,10 @@
         {
           "kind": "event",
           "name": "metaharness.trace.VendorSourceRefused"
+        },
+        {
+          "kind": "event",
+          "name": "metaharness.workspace.ContextFilesRecorded"
         },
         {
           "kind": "event",
@@ -19520,6 +23151,10 @@
           "step": "expect_no_event"
         },
         {
+          "event": "metaharness.workspace.ContextFilesRecorded",
+          "step": "expect_no_event"
+        },
+        {
           "event": "metaharness.workspace.ScratchCwdAttested",
           "step": "expect_no_event"
         }
@@ -19622,6 +23257,10 @@
         {
           "kind": "event",
           "name": "metaharness.trace.VendorSourceRefused"
+        },
+        {
+          "kind": "event",
+          "name": "metaharness.workspace.ContextFilesRecorded"
         },
         {
           "kind": "event",
@@ -19749,6 +23388,10 @@
           "step": "expect_no_event"
         },
         {
+          "event": "metaharness.workspace.ContextFilesRecorded",
+          "step": "expect_no_event"
+        },
+        {
           "event": "metaharness.workspace.ScratchCwdAttested",
           "step": "expect_no_event"
         }
@@ -19851,6 +23494,10 @@
         {
           "kind": "event",
           "name": "metaharness.trace.VendorSourceRefused"
+        },
+        {
+          "kind": "event",
+          "name": "metaharness.workspace.ContextFilesRecorded"
         },
         {
           "kind": "event",
@@ -19978,6 +23625,10 @@
           "step": "expect_no_event"
         },
         {
+          "event": "metaharness.workspace.ContextFilesRecorded",
+          "step": "expect_no_event"
+        },
+        {
           "event": "metaharness.workspace.ScratchCwdAttested",
           "step": "expect_no_event"
         }
@@ -20080,6 +23731,10 @@
         {
           "kind": "event",
           "name": "metaharness.trace.VendorSourceRefused"
+        },
+        {
+          "kind": "event",
+          "name": "metaharness.workspace.ContextFilesRecorded"
         },
         {
           "kind": "event",
@@ -20197,6 +23852,10 @@
           "step": "expect_no_event"
         },
         {
+          "event": "metaharness.workspace.ContextFilesRecorded",
+          "step": "expect_no_event"
+        },
+        {
           "event": "metaharness.workspace.ProcessWritePlanned",
           "step": "expect_no_event"
         },
@@ -20307,6 +23966,10 @@
         {
           "kind": "event",
           "name": "metaharness.trace.VendorSourceRefused"
+        },
+        {
+          "kind": "event",
+          "name": "metaharness.workspace.ContextFilesRecorded"
         },
         {
           "kind": "event",
@@ -20442,6 +24105,10 @@
           "step": "expect_no_event"
         },
         {
+          "event": "metaharness.workspace.ContextFilesRecorded",
+          "step": "expect_no_event"
+        },
+        {
           "event": "metaharness.workspace.ProcessWritePlanned",
           "step": "expect_no_event"
         }
@@ -20548,6 +24215,10 @@
         {
           "kind": "event",
           "name": "metaharness.trace.VendorSourceRefused"
+        },
+        {
+          "kind": "event",
+          "name": "metaharness.workspace.ContextFilesRecorded"
         },
         {
           "kind": "event",
@@ -20683,6 +24354,10 @@
           "step": "expect_no_event"
         },
         {
+          "event": "metaharness.workspace.ContextFilesRecorded",
+          "step": "expect_no_event"
+        },
+        {
           "event": "metaharness.workspace.ProcessWritePlanned",
           "step": "expect_no_event"
         }
@@ -20789,6 +24464,10 @@
         {
           "kind": "event",
           "name": "metaharness.trace.VendorSourceRefused"
+        },
+        {
+          "kind": "event",
+          "name": "metaharness.workspace.ContextFilesRecorded"
         },
         {
           "kind": "event",
@@ -20921,6 +24600,10 @@
         },
         {
           "event": "metaharness.trace.VendorSourceRefused",
+          "step": "expect_no_event"
+        },
+        {
+          "event": "metaharness.workspace.ContextFilesRecorded",
           "step": "expect_no_event"
         },
         {

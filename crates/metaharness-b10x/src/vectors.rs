@@ -18,7 +18,7 @@ use crate::{B10xLaunch, B10xSeams, PINNED_VERSIONS, argv, base_environment};
 /// What this adapter owes in the same shape as every other adapter.
 pub const CONTRACT_OBLIGATIONS: ContractObligations = ContractObligations {
     adapter: crate::ADAPTER_ID,
-    launch: Obligation::Filled(&["c1-observe-launch"]),
+    launch: Obligation::Filled(&["c1-observe-launch", "c1-context-files"]),
     recorded_wire: Obligation::Filled(&[
         "golden-loop-record",
         "provider-emulated-unpublished-tool",
@@ -34,6 +34,7 @@ pub const CONTRACT_OBLIGATIONS: ContractObligations = ContractObligations {
 };
 
 const LAUNCH_EXPECTED: &str = include_str!("../fixtures/c1/observe-launch.json");
+const CONTEXT_EXPECTED: &str = include_str!("../fixtures/c1/context-files.json");
 const GOLDEN_LOOP: &str = include_str!("../fixtures/golden/loop.jsonl");
 const GOLDEN_LOOP_EXPECTED: &str = include_str!("../fixtures/golden/loop.expected.jsonl");
 const GOLDEN_VERSION: &str = include_str!("../fixtures/golden/version.txt");
@@ -54,6 +55,7 @@ const CANCELLED_EXPECTED: &str = include_str!("../fixtures/enforcement/cancelled
 pub fn conformance_vectors() -> Vec<VectorOutcome> {
     vec![
         launch_vector(),
+        context_files_vector(),
         golden_loop_vector(GOLDEN_LOOP),
         enforcement_vector(
             "provider-emulated-unpublished-tool",
@@ -112,6 +114,41 @@ fn launch_vector() -> VectorOutcome {
         ),
     });
     compare(id, ConformanceTier::C1, LAUNCH_EXPECTED, &observed)
+}
+
+/// C1 — `--context` on this kind (design amendment a35): the loop's own `--context`, once per
+/// file, in the declared order, each naming metaharness's copy of the digested bytes under the
+/// run's scratch root and never the tree's file. Nothing is inlined into `--input`; the loop renders
+/// its own context package.
+fn context_files_vector() -> VectorOutcome {
+    compare(
+        "c1-context-files",
+        ConformanceTier::C1,
+        CONTEXT_EXPECTED,
+        &context_files_observed(),
+    )
+}
+
+fn context_files_observed() -> Value {
+    let mut launch = B10xLaunch::new(
+        "https://example.invalid/v1",
+        "b10x-emulated",
+        "/operator/repo",
+        "observe this run",
+    )
+    .with_context("/scratch/run/context/todo.py")
+    .with_context("/scratch/run/context/notes/closing.md");
+    "/opt/b10x/bin/b10x-harness".clone_into(&mut launch.program);
+    let mut args = argv(&launch);
+    let program = args.remove(0);
+    json!({
+        "program": program,
+        "args": args,
+        "env": base_environment(
+            Some("/operator"),
+            std::path::Path::new("/scratch/run/config"),
+        ),
+    })
 }
 
 fn compare(id: &str, tier: ConformanceTier, expectation: &str, observed: &Value) -> VectorOutcome {
@@ -287,6 +324,21 @@ mod tests {
             .filter(|outcome| !outcome.passed)
             .collect();
         assert!(failed.is_empty(), "{failed:#?}");
+    }
+
+    /// Regenerate the `c1-context-files` expectation (amendment a35). `#[ignore]`d because it
+    /// writes into the source tree; run it after a deliberate launch change and read the diff.
+    #[test]
+    #[ignore = "writes fixtures/c1/context-files.json from the current launch; run after a deliberate change, then read the diff"]
+    fn regenerate_the_context_files_expectation() {
+        let mut body =
+            serde_json::to_string_pretty(&context_files_observed()).expect("the expectation");
+        body.push('\n');
+        let path = concat!(
+            env!("CARGO_MANIFEST_DIR"),
+            "/fixtures/c1/context-files.json"
+        );
+        std::fs::write(path, body).expect("the expectation is written");
     }
 
     /// The golden loop is the pinned binary's own record, and the replay says so. A pin that moved

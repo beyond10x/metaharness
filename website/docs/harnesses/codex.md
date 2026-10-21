@@ -10,7 +10,7 @@ Pinned to **0.153.4**. Adapter class: `harness`.
 
 ```bash
 metaharness run codex --hermetic -p "…"
-metaharness conformance codex     # 21 vectors, 4 of which run a real process and the real hook
+metaharness conformance codex     # 22 vectors, 4 of which run a real process and the real hook
 metaharness doctor codex
 ```
 
@@ -29,6 +29,12 @@ credential**.
 `--strict-version` resolves `codex` on the `PATH` the child gets, reads its `--version` before
 anything is written for the child, and refuses one off the pin by name, exit 2 (design amendment
 a34; a run without the flag warns, and H9 reads the version the rollout records).
+
+`--context <file>` puts each declared file **inline in the prompt**, ahead of the task, verbatim
+inside a tag whose closing line the file does not contain (design amendment a35; the checks are on
+[the CLI reference](../reference/cli.md#--context-files-the-run-is-handed)). Inline because
+`codex exec` 0.153.4 does not expand an `@path` mention: a relayed probe on 2026-10-20 saw no
+mention grow the input or reach the model.
 
 ## The hermetic floor on Codex
 

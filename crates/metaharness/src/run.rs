@@ -226,6 +226,8 @@ pub(crate) struct LaunchFacts {
     pub(crate) record_silences: &'static [(metaharness_protocol::HermeticRow, &'static str)],
     pub(crate) pinned_versions: Vec<String>,
     pub(crate) transcript: TranscriptRef,
+    /// What the launch handed the child with `--context`, for the opening record (amendment a35).
+    pub(crate) context_files: Vec<metaharness_protocol::ContextFile>,
 }
 
 /// One live run: events out, commands in.
@@ -630,6 +632,22 @@ impl Run {
         emission
     }
 
+    /// The same emission with what the launch handed the child (amendment a35).
+    ///
+    /// The run's to fill, like [`Run::with_reach`]: no vendor record says which files metaharness
+    /// put in front of the child, and every adapter's reader leaves the list empty. Empty stays
+    /// empty, so a run that declared nothing writes no key.
+    fn with_context_files(&self, emission: Emission) -> Emission {
+        if self.launch.context_files.is_empty() {
+            return emission;
+        }
+        let mut emission = emission;
+        if let Event::SessionStarted { context_files, .. } = &mut emission.event {
+            context_files.clone_from(&self.launch.context_files);
+        }
+        emission
+    }
+
     /// The same emission with its `operations` filled in.
     ///
     /// For a call no seam covered. The adapter leaves the field empty because resolution needs the
@@ -702,7 +720,8 @@ impl Run {
                 continue;
             }
             let closes_window = matches!(emission.event, Event::TurnEnded { .. });
-            self.outbox.push_back(self.with_reach(emission));
+            self.outbox
+                .push_back(self.with_context_files(self.with_reach(emission)));
             if closes_window {
                 self.abandon_pending("the turn ended", warning::PENDING_CALL_ABANDONED);
             }
@@ -1264,7 +1283,11 @@ impl Run {
         self.retain_wire();
         self.bridge.set_census(self.census.clone());
         let emissions = self.bridge.finish();
-        self.outbox.extend(emissions);
+        // An opening record a seam held to the end (codex, amendment a34) still names what the
+        // launch handed the child (a35).
+        for emission in emissions {
+            self.outbox.push_back(self.with_context_files(emission));
+        }
         self.stop_loopback();
         self.finished = true;
     }

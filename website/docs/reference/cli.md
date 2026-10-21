@@ -36,6 +36,40 @@ the beyond10x loop, which it observes — see [the b10x adapter](../harnesses/b1
 | `--max-turns <N>` | — | A ceiling on turns. |
 | `--cwd <DIR>` | scratch | A named working directory for the child, **which it can write to**. Alone, the operator's real tree: trades two hermetic rows for real work — see below. |
 | `--scratch-cwd` | off | Declares the `--cwd` directory as the embedder's **disposable scratch copy**. H7 is attested `declared`, H11 is measured from the copy, and `--hermetic strict` passes on the pair when the record's cwd is the copy; on b10x that is the directory the loop reports, and where it reports none (`--substrate <socket>`) H7 is `unk` and it exits 3 — see below. Refused without `--cwd`. |
+| `--context <FILE>` | *(none)* | A file the run is handed before it starts, named relative to the `--cwd` tree. Repeatable, **every kind**. See below. |
+
+### `--context`: files the run is handed
+
+Each file is opened beneath the `--cwd` tree without following a symbolic link, read once, and the
+same bytes are digested and handed over:
+
+| kind | where the files go | `channel` in the record |
+|---|---|---|
+| `claude` | the value of `--append-system-prompt`; `-p` carries the task alone | `system-prompt` |
+| `codex` | inline in the prompt, ahead of the task | `user-prompt` |
+| `b10x` | metaharness's copy of the bytes, through the loop's own `--context`; the loop wraps the file itself (`<context kind="provided_context" trust="operator" …>`, no preamble of ours) in its standing instruction | `system-prompt` |
+
+On `claude` and `codex` the list is introduced as reference data, not instructions, and wrapped in
+`<context-files-N>`; each file sits between `<context-file-N path="…" bytes="…" sha256="…">` and
+`</context-file-N>`; each `N` is the smallest number whose closing line no file (for the wrapper)
+or not this file (for the file) contains. On `b10x` the loop's own rendering applies, and it
+escapes `<` and `&` in the file's text, so the model reads the loop's escaped form of the digested
+bytes. `session.started.context_files` lists each file's `path`, `sha256`, `bytes` and `channel`,
+and the key is absent when no file was declared.
+
+Claude Code is not given the files in its user turn because 2.1.304 and 2.1.305 turn an `@path`
+there into a file read that no tool call, hook or record shows — see
+[the claude adapter](../harnesses/claude.md). The task text is still the user turn, and the same
+holds for an `@path` in it.
+
+Refused before the spawn, naming the path: no `--cwd`; an absolute path or one with `..`; a path
+that is or passes through a symbolic link; something other than a regular file; content that is not
+UTF-8 text; a file git's index does not name in the tree (a `.git` gitfile, as an embedder's scratch
+copy has, is followed; nothing is fetched to answer); more than **16** files; more than **65,536**
+bytes of content and rendered path together. The byte cap bounds what the files add, not the task:
+every argument the launch builds is then measured against Linux's limit on one argument (131,072
+bytes with its terminating NUL, `MAX_ARG_STRLEN`), and one that does not fit is refused by name —
+the argument, its size and each context file with its size — before the spawn.
 
 ### Hermeticity
 
@@ -117,7 +151,9 @@ scope travels sealed in `Frame.subjects`, and a flag would be a second, unsealed
 | `--prices <FILE>` | A rate card, so the record states what the run cost; the loop has no vendor catalogue behind it. |
 | `--write-scope <GLOB=SCOPE>` | `<glob>=allowed\|partial-only\|denied`, ordered, first match wins. The operation is refused, never the run. |
 | `--scope-announce stated\|silent` | Whether the scope is also stated in the instruction; `silent` is an experiment control. |
-| `--context <FILE>` | A file the run is given before it starts; paid on every turn of a stateless loop. A missing file refuses the run. |
+
+`--context` was on this list until design amendment a35; it reaches every kind now, see
+[above](#--context-files-the-run-is-handed).
 
 What the launch emits, and how the seam reads the record back, is on
 [the b10x adapter](../harnesses/b10x.md).

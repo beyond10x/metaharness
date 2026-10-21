@@ -1,0 +1,28 @@
+{
+  "args": [
+    "run",
+    "--base-url",
+    "https://example.invalid/v1",
+    "--model",
+    "b10x-emulated",
+    "--workspace",
+    "/operator/repo",
+    "--execution-path",
+    "metaharness",
+    "--json",
+    "--no-session",
+    "--approve-up-to",
+    "high",
+    "--context",
+    "/scratch/run/context/todo.py",
+    "--context",
+    "/scratch/run/context/notes/closing.md",
+    "--input",
+    "observe this run"
+  ],
+  "env": {
+    "PATH": "/operator/.local/bin:/usr/local/bin:/usr/bin:/bin",
+    "XDG_CONFIG_HOME": "/scratch/run/config"
+  },
+  "program": "/opt/b10x/bin/b10x-harness"
+}

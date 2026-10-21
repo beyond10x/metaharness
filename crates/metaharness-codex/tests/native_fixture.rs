@@ -221,6 +221,7 @@ fn launch(root: &Path, endpoint: &str, mode: Mode) -> LaunchPlan {
             Some("Execute the fixture's one command, then return its final answer.".to_owned());
     }
     let context = LaunchContext {
+        context_files: Vec::new(),
         scratch_root: root.to_path_buf(),
         cwd: root.join("work"),
         credentials_file: None,

@@ -217,6 +217,52 @@ was amended and the amendment is named here.
   (`guard_strict_version`): `codex` resolved on the child's `PATH`, its `--version` read with the
   plan's environment within 5 seconds, exit 2 when unpinned, unreadable or late. Observed: 0.153.4
   admitted, codex-cli 0.160.0 refused with nothing reaching the fixture provider.
+- `--context <FILE>` (`RunSpec::context`, builder `with_context`) is **widened from b10x to every
+  kind** (design amendment a35, `story:session-request-carries-context-files`, Atlas ADR 0098). It
+  was refused on `claude` and `codex` as `ScopeUnsupported`, which now names `--write-scope` alone.
+  - **On b10x `--context` is narrowed, not widened.** It now requires `--cwd`, and it refuses an
+    absolute path, a path outside the tree, a file git does not track, a symbolic link, content
+    that is not text, and a list past either cap — every one of which the previous release passed
+    to the loop's own `--context` unchecked. A b10x caller that handed the loop such a file now gets
+    exit 2 before the spawn.
+  - The file is named relative to `--cwd`, which is required, opened beneath that tree with
+    `openat2` and `RESOLVE_BENEATH | RESOLVE_NO_SYMLINKS`, read once, and the same bytes are digested
+    and handed over. Claude Code and codex get them introduced as reference data, not instructions;
+    the b10x loop wraps them itself.
+  - **Claude Code gets the files as the value of `--append-system-prompt`**, and `-p` carries the
+    task alone; **codex gets them inline in the prompt**, ahead of the task. The list is wrapped in
+    `<context-files-N>` and each file sits between `<context-file-N path="…" bytes="…" sha256="…">`
+    and `</context-file-N>`; each `N` is the smallest index whose closing line the files do not
+    contain. The b10x loop gets metaharness's copy of the bytes, under the run's scratch root,
+    through its own `--context`.
+  - Refused before the spawn, exit 2, naming the path (`Refusal::ContextFile`): no `--cwd`; an
+    absolute path or one with `..`; a path that is or passes through a symbolic link; not a regular
+    file; not there; not UTF-8 text without a NUL; not tracked by git in the tree, through a `.git`
+    gitfile too (`git ls-files` with a constructed environment that fetches nothing:
+    `GIT_NO_LAZY_FETCH=1`, `protocol.allow=never`); more than 16 files; more than 65,536 bytes of
+    content and rendered path together.
+  - Every argument the Claude and codex launches build is measured against Linux's single-argument
+    limit (131,072 bytes with the NUL, `MAX_ARG_STRLEN`) and refused by name before the spawn —
+    the argument, its size and each context file with its size — instead of failing with `E2BIG`.
+    This applies to a run without `--context` too.
+  - `session.started.context_files` lists each file's `path`, `sha256`, `bytes` and `channel`:
+    `system-prompt` on Claude Code and on b10x, whose loop renders a `--context` file into its
+    standing instruction under `trust="operator"` (escaping `<` and `&`), and `user-prompt` on
+    codex. The key is absent when no file was declared, so no committed stream, fixture or trace
+    document changes.
+  - A file tracked in an initialised submodule of the tree is accepted: the tracked check runs
+    `git ls-files --recurse-submodules`, with the same exact match.
+  - Measured on Claude Code 2.1.304 and 2.1.305: an `@path` in the user turn (`-p`, stdin,
+    stream-json input) is read into the request as a synthesised Read result that no tool call, hook
+    or event shows; in `--append-system-prompt` and `--system-prompt` it stays text.
+    `metaharness_claude::MENTION_CANARIES` records it per pinned version, a test refuses a pin
+    without a row, and the native fixture, which `task check` does not run, re-measures each binary.
+    **The task text, which stays in `-p`, is still exposed**; a run's task should not hold an
+    `@path` it does not want read.
+  - One C1 vector per kind, `c1-context-files`: `contract-result-claude.json` 28 → 29,
+    `-codex.json` 21 → 22, `-b10x.json` 7 → 8. `metaharness.workspace.DeclareContextFiles` adds
+    thirteen ESS scenarios, one per refusal production raises and one accepted (90 → 103). The
+    Claude native fixture gains two cases, 7 → 9 per binary.
 
 ### Added
 

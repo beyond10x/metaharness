@@ -29,9 +29,10 @@ use std::fmt::Write as _;
 use std::path::PathBuf;
 
 use metaharness_protocol::{
-    ConformanceTier, ContractObligations, CredentialSource, DecisionMode, Digest, EventStream,
-    HermeticAttestation, HermeticMode, HermeticRow, Kind, Obligation, PluginContent, PluginTree,
-    RunId, RunSpec, Seam, ToolSurface, TranscriptRef, VectorOutcome, tree_digest,
+    ConformanceTier, ContractObligations, CredentialSource, DecisionMode, DeclaredContextFile,
+    Digest, EventStream, HermeticAttestation, HermeticMode, HermeticRow, Kind, Obligation,
+    PluginContent, PluginTree, RunId, RunSpec, Seam, ToolSurface, TranscriptRef, VectorOutcome,
+    tree_digest,
 };
 use serde_json::{Value, json};
 
@@ -52,6 +53,7 @@ pub const CONTRACT_OBLIGATIONS: ContractObligations = ContractObligations {
         "c1-plugin-injection",
         "c1-marketplace-plugin",
         "c1-scratch-cwd-declaration",
+        "c1-context-files",
     ]),
     recorded_wire: Obligation::Filled(&["golden-transcript"]),
     recorded_hook_input: Obligation::Filled(&["golden-hook-input"]),
@@ -479,7 +481,7 @@ fn golden_hook_vector(input: &str) -> VectorOutcome {
 }
 
 /// The recorded expectations, paired with the case that produces them.
-const LAUNCH_FIXTURES: [(&str, &str); 5] = [
+const LAUNCH_FIXTURES: [(&str, &str); 6] = [
     (
         "c1-strict-hermetic",
         include_str!("../fixtures/c1/strict-hermetic.json"),
@@ -496,6 +498,10 @@ const LAUNCH_FIXTURES: [(&str, &str); 5] = [
     (
         "c1-plugin-empty-refusal",
         include_str!("../fixtures/c1/plugin-empty-refusal.json"),
+    ),
+    (
+        "c1-context-files",
+        include_str!("../fixtures/c1/context-files.json"),
     ),
 ];
 
@@ -588,9 +594,35 @@ fn launch_case(id: &str) -> Option<(RunSpec, LaunchContext)> {
                 content: PluginContent::Empty,
             });
         }
+        // Two `--context` files in a named tree (amendment a35): each is rendered verbatim ahead
+        // of the task inside a tag whose closing line it does not contain, and the second carries
+        // the first tag's closing line, so the vector pins the tag moving too.
+        "c1-context-files" => {
+            spec.cwd = Some(PathBuf::from("/operator/repo"));
+            spec.context = vec!["todo.py".into(), "notes/closing.md".into()];
+            context.cwd = PathBuf::from("/operator/repo");
+            context.context_files = synthetic_context_files();
+        }
         _ => return None,
     }
     Some((spec, context))
+}
+
+/// The two synthesised files the context vectors render: invented names, invented bytes.
+fn synthetic_context_files() -> Vec<DeclaredContextFile> {
+    [
+        ("todo.py", "def add(items, item):\n    items.append(item)\n"),
+        (
+            "notes/closing.md",
+            "a file may say </context-file-0> and stay inside\n",
+        ),
+    ]
+    .into_iter()
+    .map(|(path, text)| {
+        DeclaredContextFile::new(path.to_owned(), text.as_bytes().to_vec())
+            .expect("synthesised text")
+    })
+    .collect()
 }
 
 fn base_spec() -> RunSpec {
@@ -605,6 +637,7 @@ fn base_spec() -> RunSpec {
 /// A synthetic world: no path, name or value here comes from a real machine.
 fn base_context() -> LaunchContext {
     LaunchContext {
+        context_files: Vec::new(),
         scratch_root: PathBuf::from("/scratch/run-1"),
         cwd: PathBuf::from("/scratch/run-1/work"),
         credentials_file: Some(PathBuf::from("/operator/.claude/.credentials.json")),
@@ -1052,6 +1085,23 @@ mod tests {
         );
         std::fs::write(path, replay_as(GOLDEN_RUN, GOLDEN_TRANSCRIPT))
             .expect("the expectation is written");
+    }
+
+    /// Regenerate the `c1-context-files` launch expectation from the current plan (amendment
+    /// a35). `#[ignore]`d because it writes into the source tree; run it after a deliberate change
+    /// to the rendering and read the diff, which is the change.
+    #[test]
+    #[ignore = "writes fixtures/c1/context-files.json from the current plan; run after a deliberate change, then read the diff"]
+    fn regenerate_the_context_files_launch_expectation() {
+        let (spec, context) = launch_case("c1-context-files").expect("the case is registered");
+        let plan = plan_launch(&spec, &context).expect("the case plans");
+        let mut text = serde_json::to_string_pretty(&observed_plan(&plan)).expect("serializes");
+        text.push('\n');
+        let path = concat!(
+            env!("CARGO_MANIFEST_DIR"),
+            "/fixtures/c1/context-files.json"
+        );
+        std::fs::write(path, text).expect("the expectation is written");
     }
 
     /// The same operation for the three synthesised C2 expectations, whose inputs are committed

@@ -433,6 +433,7 @@ impl HarnessSeam for ScriptedSeam {
                 available_operations: None,
                 // The claude wire this models names no withheld tool: *it did not say*.
                 withheld: None,
+                context_files: Vec::new(),
                 adapter: metaharness_claude::ADAPTER_ID.to_string(),
                 adapter_class: "harness".to_string(),
                 harness_version: text_of(&value, "harness_version"),

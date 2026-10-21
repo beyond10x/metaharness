@@ -12,7 +12,7 @@ surface.
 
 ```bash
 metaharness run claude --hermetic -p "…"
-metaharness conformance claude    # 28 vectors, no model / no network / no credential
+metaharness conformance claude    # 29 vectors, no model / no network / no credential
 metaharness doctor claude
 ```
 
@@ -23,6 +23,35 @@ metaharness doctor claude
 3. Streams the session out as protocol events on stdout; takes steering on stdin.
 4. Retains the raw transcript.
 5. Exits on the [hermetic floor's](../hermetic.md) verdict.
+
+:::warning 2.1.304 and 2.1.305 read the files a prompt mentions, and nothing records it
+Claude Code expands an `@path` in prompt text — the `-p` argument, stdin, a stream-json user
+message — into a synthesised Read result in the request it sends: no tool call, no `PreToolUse`
+hook, no `tool.requested`, no line in the transcript. Paths outside the working tree, through
+symbolic links, untracked files and directories expand alike, under every hermetic mode. Measured
+against the native fixture's stub endpoint (design amendment a35). **This holds for the task you
+pass with `-p`**: an `@path` in it is read with nothing to show for it.
+:::
+
+`--context <file>` therefore does **not** use the user turn. The declared files go to the value of
+`--append-system-prompt`, verbatim inside tags whose closing lines they do not contain, introduced
+as reference data and not instructions; `-p` carries the task alone. Neither pinned binary expands a
+mention there, and the block arrives byte-exact in the request's `system` field. The trade is that
+the files' text carries system-prompt authority, and `session.started.context_files` names each
+file with `"channel": "system-prompt"` so a reviewer can see which text that was. The checks are on
+[the CLI reference](../reference/cli.md#--context-files-the-run-is-handed).
+
+| route for `@marker.txt` | 2.1.304 | 2.1.305 |
+|---|---|---|
+| the `-p` argument | expanded | expanded |
+| stdin, with `-p` | expanded | expanded |
+| stdin, `--input-format stream-json` | expanded | expanded |
+| `--append-system-prompt` | not expanded | not expanded |
+| `--system-prompt` | not expanded | not expanded |
+
+The adapter records this per pinned version (`MENTION_CANARIES`). A pin without a row fails a unit
+test; a row copied from the previous pin passes it, so the measurement is the native fixture's
+canary case, run beside the H11 canary on each pin move — `task check` does not run it.
 
 ## Built-in plugins
 

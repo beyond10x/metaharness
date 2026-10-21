@@ -9,13 +9,13 @@ use std::collections::BTreeMap;
 
 use metaharness_protocol::{
     COMMAND_FORMAT, COMMAND_NAMES, CONTROL_PLANE_EVENTS, CloseReason, Command, CommandLine,
-    CommandOutcome, DecidedBy, Decision, DecisionCensus, DecisionMode, Digest, EVENT_FORMAT,
-    EVENT_NAMES, Emission, EntityList, Event, EventStream, EvidenceLine, Frame, FramingError,
-    Handoff, HermeticAttestation, HermeticMode, ImposedControl, Kind, Line, McpServerRef, NodeRef,
-    Operation, OperationSet, PermissionDenial, PluginRef, RateLimitInfo, RefusalCode, Refused,
-    RunId, RunSpec, Seam, StepOutcome, StepRef, SubjectScope, ToolSurface, TranscriptRef, Usage,
-    WithheldTool, WorkflowRef, ir_family, parse_command_line, parse_event_line, project,
-    required_commands, warning_code,
+    CommandOutcome, ContextChannel, ContextFile, DecidedBy, Decision, DecisionCensus, DecisionMode,
+    Digest, EVENT_FORMAT, EVENT_NAMES, Emission, EntityList, Event, EventStream, EvidenceLine,
+    Frame, FramingError, Handoff, HermeticAttestation, HermeticMode, ImposedControl, Kind, Line,
+    McpServerRef, NodeRef, Operation, OperationSet, PermissionDenial, PluginRef, RateLimitInfo,
+    RefusalCode, Refused, RunId, RunSpec, Seam, StepOutcome, StepRef, SubjectScope, ToolSurface,
+    TranscriptRef, Usage, WithheldTool, WorkflowRef, ir_family, parse_command_line,
+    parse_event_line, project, required_commands, warning_code,
 };
 use serde_json::json;
 
@@ -185,6 +185,13 @@ fn session_events() -> Vec<Event> {
                     loaded_by: "--plugin-dir in the argv".into(),
                 }],
             },
+            // What the run was handed with `--context` (amendment a35).
+            context_files: vec![ContextFile {
+                path: "tests/test_todo.py".into(),
+                sha256: Digest::of(b"def test_add(): ...\n"),
+                bytes: 20,
+                channel: ContextChannel::SystemPrompt,
+            }],
         },
         ended_event(),
     ]
@@ -612,6 +619,49 @@ fn a_withheld_tool_crosses_the_wire_and_its_silence_is_not_an_empty_list() {
         withheld.is_none(),
         "an older record is silence, not an empty list"
     );
+}
+
+/// Amendment a35's field, from both sides: a run handed files carries each one's path, sha256 and
+/// byte count under `context_files`, and a run handed none carries **no key** — the exception to
+/// § 2.1 that `HermeticAttestation::declared` set, because the list is additive and its absence can
+/// conceal nothing. A record written before the field existed parses to the same empty list.
+#[test]
+fn context_files_cross_the_wire_and_are_absent_when_none_was_declared() {
+    let mut stream = EventStream::new(RunId::new("r-1"));
+
+    let written =
+        serde_json::to_string(&stream.stamp(Emission::untimed(session_events().remove(0))))
+            .expect("serializes");
+    let object: serde_json::Value = serde_json::from_str(&written).expect("an object");
+    assert_eq!(
+        object["context_files"],
+        json!([{
+            "path": "tests/test_todo.py",
+            "sha256": Digest::of(b"def test_add(): ...\n").as_str(),
+            "bytes": 20,
+            "channel": "system-prompt",
+        }])
+    );
+    let Event::SessionStarted { context_files, .. } =
+        parse_event_line(&written).expect("parses").event
+    else {
+        panic!("expected session.started");
+    };
+    assert_eq!(context_files.len(), 1);
+
+    let mut none = session_events().remove(0);
+    if let Event::SessionStarted { context_files, .. } = &mut none {
+        context_files.clear();
+    }
+    let written =
+        serde_json::to_string(&stream.stamp(Emission::untimed(none))).expect("serializes");
+    assert!(!written.contains("context_files"), "{written}");
+    let Event::SessionStarted { context_files, .. } =
+        parse_event_line(&written).expect("parses").event
+    else {
+        panic!("expected session.started");
+    };
+    assert_eq!(context_files, Vec::<ContextFile>::new());
 }
 
 /// The projection is total: every event lands in exactly one family or on the control-plane

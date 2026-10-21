@@ -7,9 +7,10 @@ use std::collections::BTreeMap;
 use std::path::PathBuf;
 
 use metaharness_claude::{
-    ADAPTER_ID, BUILTIN_PLUGINS, HOOK_TIMEOUT_SECONDS, LaunchContext, LaunchRefusal,
-    PINNED_VERSIONS, TranscriptReader, builtin_plugin_source, builtin_plugins, capabilities,
-    conformance_vectors, parse_hook_input, plan_launch, render_hook_response, render_operation,
+    ADAPTER_ID, BUILTIN_PLUGINS, CONTEXT_CHANNEL, HOOK_TIMEOUT_SECONDS, LaunchContext,
+    LaunchRefusal, MENTION_CANARIES, Mention, PINNED_VERSIONS, TranscriptReader,
+    builtin_plugin_source, builtin_plugins, capabilities, conformance_vectors, mention_canary,
+    parse_hook_input, plan_launch, render_hook_response, render_operation,
 };
 use metaharness_protocol::{
     ConformanceTier, CredentialSource, Decision, DecisionCensus, DecisionMode, Digest, Event,
@@ -18,6 +19,7 @@ use metaharness_protocol::{
 
 fn context() -> LaunchContext {
     LaunchContext {
+        context_files: Vec::new(),
         scratch_root: PathBuf::from("/scratch/run-9"),
         cwd: PathBuf::from("/scratch/run-9/work"),
         credentials_file: Some(PathBuf::from("/operator/.claude/.credentials.json")),
@@ -71,6 +73,46 @@ fn every_pinned_version_declares_the_plugins_its_binary_compiles_in() {
         builtin_plugins("2.1.303"),
         None,
         "an unpinned binary has no list"
+    );
+}
+
+/// Correction round 1, condition 3: every pinned version records its `@`-mention canary, measured
+/// by the native fixture's `native_at_mentions_expand_in_the_user_turn_and_not_in_the_system_prompt`
+/// on that binary, and no row outlives its pin. A pin without a row fails here, the way a pin
+/// without its built-in list does; a row copied from the previous pin does not, and only the native
+/// canary (ignored in `task check`) measures the new binary. The launch's channel rests on
+/// the row: the context block goes to `--append-system-prompt` because no pinned binary expands a
+/// mention there, and every one expands it in every user-turn route measured.
+#[test]
+fn every_pinned_version_records_its_mention_canary_and_the_context_channel_rests_on_it() {
+    let listed: Vec<&str> = MENTION_CANARIES.iter().map(|row| row.version).collect();
+    assert_eq!(
+        listed, PINNED_VERSIONS,
+        "one canary row per pinned version, in the pin's order"
+    );
+    assert_eq!(
+        mention_canary("2.1.303"),
+        None,
+        "an unpinned binary has no row"
+    );
+    for row in MENTION_CANARIES {
+        assert_eq!(
+            row.append_system_prompt,
+            Mention::Text,
+            "{}: the context block may only go where mentions stay text",
+            row.version
+        );
+        assert_eq!(
+            [row.prompt_argument, row.stdin_text, row.stdin_stream_json],
+            [Mention::Expanded; 3],
+            "{}: measured on 2026-10-21, every user-turn route expands; a row that says otherwise \
+             is a new measurement and moves the task-text story",
+            row.version
+        );
+    }
+    assert_eq!(
+        CONTEXT_CHANNEL,
+        metaharness_protocol::ContextChannel::SystemPrompt
     );
 }
 
@@ -257,11 +299,12 @@ fn the_plans_attestation_reaches_the_opening_event() {
 #[test]
 fn every_conformance_vector_passes_without_a_model_a_network_or_a_credential() {
     let outcomes = conformance_vectors();
-    // Five recorded launch expectations, the four computed launch vectors that carry observe
-    // mode, the declared scratch copy (a27), plugin injection (a10, crossing #4) and the pinned
-    // marketplace placement (a16), three synthesised replays, the two golden recorded-wire
-    // vectors (CT-2) and the version pair (CT-3).
-    assert_eq!(outcomes.len(), 15);
+    // Six recorded launch expectations (the sixth is a35's `--context` block, in
+    // `--append-system-prompt`), the four computed launch vectors that carry observe mode, the
+    // declared scratch copy (a27), plugin injection (a10, crossing #4) and the pinned marketplace
+    // placement (a16), three synthesised replays, the two golden recorded-wire vectors (CT-2) and
+    // the version pair (CT-3).
+    assert_eq!(outcomes.len(), 16);
     for outcome in &outcomes {
         assert!(outcome.passed, "{}: {}", outcome.id, outcome.detail);
         assert!(matches!(
