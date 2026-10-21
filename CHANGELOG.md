@@ -24,14 +24,15 @@ was amended and the amendment is named here.
 
 - `shell_quote`, `shell_quote_path` and `PathNotUtf8::escaped` in `metaharness-claude` and `metaharness-codex`; `HOOK_COMMAND_PLUGIN_VARIABLES` and `SCRATCH_PATH_NAMES_PLUGIN_VARIABLE` in `metaharness-claude`; `metaharness::SCRATCH_PATH_NOT_UTF8` and `metaharness::SCRATCH_PATH_NAMES_PLUGIN_VARIABLE` (a37).
 - The loopback's upstream TLS leg is tested against a rustls upstream on 127.0.0.1 under a CA the test generates; an untrusted certificate is refused before the credential is sent. Dev-dependency `rcgen` 0.14.
-
-### Security
-
-- Security: update rustls, rustls-webpki and webpki-roots.
 - `run claude --catalogue <FILE>` and `mcp-serve --catalogue <FILE>`: a `tool-contract/1` document whose entries, each under its `mcp` rendering, are the run's whole tool set, in place of the three verbs; `--catalogue` implies `--tool-surface owned`. A live launch with one is unverified (a40).
 - Refusals before the spawn, exit 2: `run codex|b10x --catalogue`, `catalogue-not-carried`; `--catalogue` with `--tool-surface native`, `catalogue-needs-owned-surface`; `--catalogue` with `--allow-program` on `run claude` or `mcp-serve`, `catalogue-with-allow-program`; a file that is not a catalogue, `catalogue-unreadable`, `catalogue-not-tool-contract` or `catalogue-malformed`; a scratch copy that reads back as another catalogue, `catalogue-copy-differs` (a40).
 - `catalogue-unreadable` also covers a path that is not a regular file and a file past 4 MiB; `catalogue-malformed` also covers a document whose scratch copy would be past 4 MiB or would not read back as the same catalogue (a40).
 - `CallerCatalogue`, `CatalogueEntry`, `CatalogueError` (with `CatalogueError::problems`), `Server::with_catalogue`, `CATALOGUE_UNREADABLE`, `CATALOGUE_NOT_TOOL_CONTRACT`, `CATALOGUE_MALFORMED`, `CATALOGUE_BYTES_MAX` and `render_scratch_copy` in `metaharness-tools`; `Metaharness::with_catalogue`, `metaharness::CATALOGUE_NOT_CARRIED`, `metaharness::CATALOGUE_NEEDS_OWNED_SURFACE`, `metaharness::CATALOGUE_WITH_ALLOW_PROGRAM`, `metaharness::CATALOGUE_COPY_DIFFERS` and the three tools codes re-exported; `catalogue_path` in `metaharness-claude` (a40).
+
+### Security
+
+- Security: update rustls, rustls-webpki and webpki-roots.
+- Security: the Claude tool-call seam fails closed.
 
 ## [0.11.0] — 2026-10-21
 

@@ -3603,3 +3603,137 @@ constant, so no change to the adapter could fail it. Its names now come from the
 under the operator's `TMPDIR`. It said "Nothing was started" though it fires after the scratch
 write, after a loopback proxy has started when the run uses one, and after the `--strict-version`
 probe when that flag is set. Decisions 3 and 6 now say when it runs and what its message says.
+
+### Amendment a41 — the Claude seam hook fails closed (2026-10-21)
+
+Operator decision, 2026-10-21. This answers the open question a37 § 5 left for Claude.
+
+**1. The defect.** `build_hook` wrote the one `PreToolUse` settings hook as `type: command` with a
+`command` and a `timeout`, and with no `onFailure`. Both pinned binaries default that key to
+`continue`. So when the seam hook could not start, timed out, exited with a code other than `0` or
+`2`, or printed JSON that is invalid or fails validation, the vendor reported the failure and the
+call went ahead without a decision from the seam. § 7.7 rule 2 covers a *decision* that is slow,
+from metaharness's side. It never covered a hook process the vendor could not run, or output the
+vendor could not read. The Safety envelope calls that case a silent allow: "a decision path that
+answers without consulting the embedder".
+
+**2. The decision.** The hook entry carries `"onFailure": "block"`. The definition that § 7.8 and
+§ 8.4 O7 assert as a value is now `type: command`, `onFailure: "block"`, and neither `async` nor
+`asyncRewake`. The two absences are also conditions of `block` itself (§ 3), so what § 7.8 already
+asserts is what lets the new key take effect.
+
+**3. What the pinned binaries say. Read from strings, not driven (invariant 4).**
+
+| reading | 2.1.304 | 2.1.305 |
+|---|---|---|
+| binary, sha256 | `ea0f1357…f27912` | `86cb722a…e656ef` |
+| the key, on a `type: command` settings hook | `onFailure`, in the command-hook schema (`onFailure:At()` in `_s()`) | the same |
+| accepted values, default | `["continue","block"]`, optional; `continue` by default | the same |
+| when `block` applies to a command hook | `case"command":return e.onFailure==="block"&&e.async!==!0&&e.asyncRewake!==!0` (`a1e`) | the same text (`k1e`) |
+| what it converts | an outcome `cancelled` not caused by an abort ("timed out") and `non_blocking_error` ("failed") become `blocking`, with no verdict `hook_timed_out` or `hook_failed`; not on `Stop`, `SubagentStop`, `TaskCompleted` or `TeammateIdle` | the same |
+
+The schema's own description, word for word at both pins: "What a failure of this hook does: it
+could not start (a missing script or plugin directory), timed out, exited with a code other than 0
+or 2, or printed JSON that is invalid or fails validation. 'continue' (default): the failure is
+reported and the action goes ahead. 'block': the failure counts as exit code 2, so the action the
+event guards (a tool call, a permission request, a prompt) is blocked. Ignored for async hooks and
+on Stop, SubagentStop, TaskCompleted and TeammateIdle."
+
+At both pins the runner produces the two converted outcomes on these paths: a spawn failure; an
+exit other than `0` or `2`; an error thrown before the spawn, which includes the plugin-variable
+check of a37 § 6; the hook's own timeout (`cancelled`, `timedOut`); and stdout that fails the hook
+schema, or starts with `{`, ends with `}` and does not parse (a `validationError`). The evidence
+sits in the wave's scratch record and is not committed: `claude-2.1.30{4,5}.sha256`,
+`claude-2.1.30{4,5}-onFailure.txt` (schema, predicate, conversion),
+`claude-2.1.30{4,5}-hook-outcomes.txt` (runner outcomes), `claude-2.1.30{4,5}-stdout-parser.txt`
+(the stdout parser) and `claude-2.1.304-zodchunk.txt` (the object constructor).
+
+**4. A key the binary does not know, and a value it does not accept.** The hook schema is a zod
+object without a catch-all, so an unknown key is stripped silently. A binary that did not know
+`onFailure` would drop it and run the hook as `continue`, while the settings file still showed the
+key. The value in the file therefore proves nothing about a binary that does not read it. What ties
+the two together is the version pin (H9, `--strict-version`), and a pin move re-reads § 3 and § 5.
+A value outside the enum is not stripped under `PreToolUse` or `PermissionRequest`. Both binaries
+treat such an entry as an unloadable guard: "a PreToolUse/PermissionRequest hook that cannot be
+loaded may be what guards the permissions declared beside it, so nothing it sits in is applied
+until the entry is fixed or removed". What a run does after that was not driven. Both pins accept
+`"block"`, so neither case applies to this launch.
+
+**5. What `block` cannot reach, and what the hook program does about it.** The stdout parser (`JZ`
+at 2.1.304, `Iee` at 2.1.305, with the same rules) does not count any of the following as a
+failure:
+
+- output that does not start with `{` is plain text;
+- output that starts with `{` and does not end with `}` is plain text;
+- two or more lines, each a document that fails the schema or is empty, are "several JSON
+  documents" and plain text;
+- a document whose top level carries `async: true` is a hook announcing itself as async;
+- a valid document with no `permissionDecision` decides nothing.
+
+With exit `0`, each of these is a success with no decision, and the vendor's own permission
+pipeline decides, as it does for abstain (§ 6). Nothing failed, so `onFailure` cannot act.
+
+Only the hook program can close this. Until now it printed the response file's bytes verbatim. It
+now forwards a reply in two cases only:
+
+- an empty file, which is abstain and prints nothing, as before;
+- a single line that begins with
+  `{"hookSpecificOutput":{"hookEventName":"PreToolUse","permissionDecision":"allow"` or with the
+  same prefix ending in `"deny"`, and that ends with `}}`.
+
+Those are the shapes `render_hook_response` writes for allow, deny and replace, and a test holds
+the two together. The program denies any other reply with a reason and exits `0`, as on its other
+fail-closed paths. That includes a reply it cannot read. It still parses no JSON (Q16). Suppose a
+forwarded line has the shape and is not valid JSON. It is one line that starts with `{` and ends
+with `}`, so the vendor reads it as a validation error, a `non_blocking_error`, and blocks the call
+under `block`. For every reply metaharness writes, the printed bytes are unchanged: the writer ends
+each body with one newline, and the program strips that newline and prints the line with one
+newline.
+
+**6. Each failure, who refuses the call, and what shows it.**
+
+| failure | who refuses | evidence | test |
+|---|---|---|---|
+| the program cannot start: missing, not executable, a spawn error, or a37 § 6's throw | the vendor, under `block` | strings, both pins; not driven | `launch::tests::the_vendor_blocks_the_call_when_the_seam_hook_cannot_start` |
+| the program runs past the vendor's 60 s timeout | the vendor, under `block` | strings, both pins; not driven | `launch::tests::the_vendor_blocks_the_call_when_the_seam_hook_times_out` |
+| the program prints invalid JSON | the vendor, for a line with the decision shape; the program, for anything else | strings for the vendor; a driven test for the program | `launch::tests::the_vendor_blocks_the_call_when_the_seam_hook_prints_invalid_json`; `hook::tests::an_answer_that_is_not_a_hook_decision_is_denied_rather_than_passed_through` |
+| the program exits with a code other than `0` or `2`, which none of its own paths does (a kill, or a shell error) | the vendor, under `block`, by the same conversion as a failed start | strings, both pins; not driven | none of its own; the conversion is the one the cannot-start test pins |
+| the channel cannot be reached | the program | driven | `hook::tests::a_channel_that_cannot_be_reached_is_denied_with_a_reason` |
+| metaharness does not answer | metaharness at its deadline (§ 7.7 rule 2), or else the program at its own 57 s budget, both before the vendor's 60 s | driven, with the budget shortened | `hook::tests::an_answer_that_never_comes_is_denied_on_the_programs_own_budget` |
+
+The three vendor tests pin what metaharness controls: the key on the hook in the settings document.
+They also pin the vendor reading as a recorded string vector with one row per pinned version, and
+those rows must equal `PINNED_VERSIONS`. A pin move without a new reading fails the tests.
+
+**7. What this supersedes, for Claude only.** a37 § 5's open question. § 7.2's rows "…on hook
+**timeout**" and "…on hook **crash or non-JSON output**": the vendor blocks, read from strings and
+not driven. § 12 Q4 and Q10 stay open as driven questions with the same closing commands, and a
+driven answer now also checks this reading. § 7.7 rule 2 does not change, and the guarantee still
+does not depend on the vendor agreeing.
+
+**8. Still unverified.**
+
+- No vendor was driven. That a call blocked under `block` does not run, and what the transcript
+  records for it (a `permission_denials` entry or something else), are read and not observed. The
+  run loop asserts nothing about such a record.
+- The conversion skips a hook the runner never asked: one with an `if` it cannot test, or one
+  refused for a remote run. This hook has no `if`. The remote-run case was not traced.
+- The program checks a reply's shape, not its content. A reply with the decision shape plus a
+  top-level `"async":true`, or with a second `permissionDecision` key, would still be forwarded.
+  Only metaharness writes the responses directory, and its writer produces neither.
+
+**9. Codex 0.153.4, a finding; Codex does not change here.** Its command hook,
+`HookHandlerConfig::Command`, has six fields: `command`, `commandWindows`, `timeout`, `async`,
+`statusMessage` and `additionalContextLimit`. It has no failure-policy key, so there is nothing to
+set, and no string `onFailure`, `on_failure`, `fail_open` or `fail_closed` appears outside unrelated
+type names. The binary carries the strings "hook timed out after", "hook exited with code", "hook
+exited without a status code", "hook process terminated without an exit code" and "hook returned
+invalid pre-tool-use JSON output". What then happens to the call is compiled control flow that
+strings do not show, so it is unverified. The Codex hook program forwards the response bytes
+verbatim, as the Claude one did before this amendment, so § 5's gap applies there too, and the
+vendor's handling of it is unknown (`codex-0.153.4-hook-failure.txt`).
+
+**10. What moved.** The settings document gains one key on the hook entry. serde_json writes keys in
+sorted order, so `"onFailure": "block"` sits between `command` and `timeout`. No C1 fixture and no
+spawn vector carries the settings document, and none of them moved. The hook program's text moved
+(§ 5). Its output for every reply metaharness writes did not.
