@@ -18,7 +18,7 @@ relations:
 - decides: story:caller-supplied-catalogue-on-every-kind
 - decides: story:loopback-tls-leg-tested
 - decides: story:website-drops-npm-leftovers
-revision: 1
+revision: 3
 ---
 ## Status
 
@@ -30,17 +30,25 @@ time; one unit implemented, reviewed and merged before the next.
 
 ## Units
 
+Units ran in parallel from unit 2's first adversary pass on (`b10x-chef-orchestrator` rule 5, 2026-10-21: at
+most 3 Opus or 5 Haiku agents at once), each in its own managed tree; merges went into
+`integration/adr-0096-wave-5` in the order below.
+
 | unit | story | commit | merge | adversary passes |
 |---|---|---|---|---|
-| 1 | `story:claude-h11-memory-walk-shapes` | — | — | — |
-| 2 | `story:hook-program-quotes-channel-paths` | — | — | — |
-| 3 | `story:session-close-decides-absent-fields` | — | — | — |
-| 4 | `story:caller-supplied-catalogue-on-every-kind` | — | — | — |
-| 5 | `story:loopback-tls-leg-tested` | — | — | — |
-| 6 | `story:website-drops-npm-leftovers` | — | — | — |
+| 1 | `story:claude-h11-memory-walk-shapes` | `48668eb` | `4a72d8c` | 1 (`review-result:adr0096-w5-h11-adversary-1`) |
+| 6 | `story:website-drops-npm-leftovers` | `7b96b12` | `83d15d0` | 0 (coordinator decision: two deleted config files, built site identical) |
+| 3 | `story:session-close-decides-absent-fields` | `ae0b45f` | `bc3f398` | 1 (`review-result:adr0096-w5-session-close-adversary-1`) |
+| 2 | `story:hook-program-quotes-channel-paths` | `aff22dc` | `6ad241c` | 2 (`review-result:adr0096-w5-hook-quoting-adversary-1`, `-2`) |
+| 5 | `story:loopback-tls-leg-tested` | `5c4de3f` | `5b6d2b4` | 1 (`review-result:adr0096-w5-loopback-tls-adversary-1`) |
+| 7 | TLS dependency update (no story) | `ceffb6d` | `3bc0de4` | 0; approved by `b10x-chef-orchestrator` under exception 6 |
+| 4 | `story:caller-supplied-catalogue-on-every-kind` | `1bdc5b2` | `875fc71` | 2 (`review-result:adr0096-w5-catalogue-adversary-1`, `-2`) |
+
+Across units: `review-result:adr0096-w5-independent-review` (10 read-only slices over units 1-5 and unit 4 at
+fix round 1, 2026-10-21, on the operator's request).
 
 Each unit: `aep:implementor` in its own managed tree, then `aep:adversary` (at most 2 passes), the
-coordinator verifies the last correction; the whole gate on the integration branch before close.
+coordinator verified the last correction; the whole gate on the integration branch before close.
 
 ## Proposal and approval
 
@@ -81,3 +89,36 @@ Conditions (verbatim):
 
 - Cleanup (exception 6): `wt-0612033e7f95` gc'd (removed, archive kept); `release/0.11.0` deleted with `-d`
   against its upstream `origin/main` (the primary checkout's `main` is behind, so `-d` against `HEAD` refused).
+- Opening store commit `ca40260`.
+- Unit 1 committed `48668eb` (gate 81 test binaries, 1012 passed, 0 failed, 49 ignored; conformance 103/103),
+  merged `4a72d8c`; `b10x-chef-orchestrator` verified it and accepted D3. The H11 consumer list went to the
+  orchestrator before the merge (condition 1).
+- `b10x-chef-orchestrator` answered B to "close after unit 2 or run units 3-6": run units 3-6, then close; the
+  push to `main` and release 0.12.0 need its word at close.
+- Unit 6 committed `7b96b12` (82 binaries, 1014/0/49, 103/103; built site digest unchanged), merged `83d15d0`;
+  no adversary pass (coordinator decision).
+- Unit 3 committed `ae0b45f` (82 binaries, 1017/0/48, 103/103), merged `bc3f398`; adversary pass 1 found
+  nothing and added 3 cases.
+- Unit 2: adversary pass 1 NEEDS-CHANGE, fix round 1 (86 binaries, 1029/0/49), adversary pass 2 PASS;
+  committed `aff22dc` (87 binaries, 1031/0/49, 103/103), merged `6ad241c`. The callers that can reach the
+  non-UTF-8 refusal went to the orchestrator (condition 2). One pre-existing warning was routed outside the
+  unit, withheld until release 0.12.0.
+- Unit 5 committed `5c4de3f` (82 binaries, 1018/0/49, 103/103), merged `5b6d2b4`; the adversary's
+  production-line test kept. The TLS stack on the credential leg was behind its current releases (pre-existing).
+- Unit 7 (TLS dependency update, exception 6): rustls 0.23.46, rustls-webpki 0.103.16, webpki-roots 1.0.10 and a
+  CHANGELOG Security line; committed `ceffb6d` (90 binaries, 1044/0/48, 103/103), merged `3bc0de4`.
+- `b10x-chef-orchestrator` (on the operator's "A"): wave 5 is not pushed until the wave-6 fix is in the same
+  push; wave 6 starts from the wave-5 integration head; the release trigger moves after wave 6 merges.
+- Unit 4: implementor partial (Claude met with synthetic vectors, b10x refused, Codex refused); the orchestrator
+  corrected a40 § 2 with Codex source citations at `rust-v0.153.4` and set the rule that a claim about a vendor
+  binary cites its source at the pinned tag as file:line. Adversary pass 1 NEEDS-CHANGE; fix round 1 (94
+  binaries, 1100/0/49); findings 5 and 7 became `story:codex-catalogue-on-app-server` and
+  `story:several-tool-contract-families-per-session` on the orchestrator's word. Adversary pass 2 NEEDS-CHANGE;
+  fix round 2 also took the independent review's s7-1, s7-2, s9-1, s10-5 (94 binaries, 1112/0/49, 103/103);
+  committed `1bdc5b2`, merged `875fc71`. The story stays active: the Codex arm is open.
+- Independent review (10 slices, operator's request): 0 blockers; findings triaged in the review-result;
+  w5 warnings filed as `story:h11-claims-match-what-was-measured`, `story:vendor-claims-labelled`,
+  `story:adversary-tests-have-positive-controls` and `story:catalogue-road-leftovers`.
+- `b10x-chef-orchestrator` (ADR 0096 decision 7): `story:retire-trace-formats-beside-trace-ir` filed as a draft.
+- State at close: wave 5 is not pushed. It goes to `main` in one push with wave 6 (`approval-record:adr-0096-wave-6`).
+  Release 0.12.0 is held for `b10x-chef-orchestrator`'s word.

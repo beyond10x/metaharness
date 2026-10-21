@@ -1,0 +1,13 @@
+{
+  "at": "2026-10-21T18:43:34Z",
+  "actor": "human:timo",
+  "artifact": "story:loopback-tls-leg-tested",
+  "kind": "story",
+  "revision": 6,
+  "change": {
+    "change": "evidence",
+    "kind": "test_result",
+    "source": "task check, one step at a time, on integration/adr-0096-wave-6 at 5ddebbd: 6 steps exit 0, 96 test binaries, 1128 passed, 0 failed, 49 ignored, conformance 103/103 on ESS 0.67.0",
+    "reference": "gate log combined-5-test.log in the wave's cache directory metaharness-wave-adr0096/w6/combined-gate"
+  }
+}

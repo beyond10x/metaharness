@@ -11,7 +11,7 @@ refs:
   reference: adr-0096
 relations:
 - decides: story:claude-seam-fails-closed
-revision: 1
+revision: 3
 ---
 ## Status
 
@@ -22,12 +22,12 @@ head). Integration branch `integration/adr-0096-wave-6`, created from the final 
 
 ## Units
 
-| unit | story | commit | merge | adversary passes |
+| unit | story | commit | merge | review passes |
 |---|---|---|---|---|
-| 1 | `story:claude-seam-fails-closed` | — | — | — |
+| 1 | `story:claude-seam-fails-closed` | `cacb923` | `5ddebbd` | 1 (`aep:security-reviewer`; its record waits until release 0.12.0 is out) |
 
-Unit 1: `aep:implementor`, then `aep:security-reviewer` (at most 2 passes); the coordinator verifies the
-last correction; the whole gate on the integration branch before close.
+Unit 1: `aep:implementor`, then `aep:security-reviewer` (at most 2 passes; 1 used); the coordinator verified
+the last correction; the whole gate on the integration branch before close.
 
 ## Proposal and approval
 
@@ -49,3 +49,17 @@ Conditions (from `b10x-chef-orchestrator`, 2026-10-21):
   merges, so one push carries waves 5 and 6.
 
 ## Log
+
+- Unit 1 committed `cacb923` (91 test binaries, 1054 passed, 0 failed, 48 ignored; conformance 103/103);
+  security review: confirmed, no change needed. Amendment path and head sha sent to `b10x-chef-orchestrator`
+  before the merge.
+- `integration/adr-0096-wave-6` created at the wave-5 head `875fc71`; unit 1 merged `5ddebbd` (parents
+  `875fc71`, `cacb923`).
+- Combined gate: task check, one step at a time, on `integration/adr-0096-wave-6` at `5ddebbd`: 6 steps exit 0,
+  96 test binaries, 1128 passed, 0 failed, 49 ignored, conformance 103/103 on ESS 0.67.0 (gate log
+  `combined-5-test.log` in the wave's cache directory `metaharness-wave-adr0096/w6/combined-gate`).
+- Dash check at `5ddebbd`: the test binaries run in a `debian:stable-slim` container: claude lib 136 passed,
+  0 failed, 4 ignored; the unit's review file 3 passed; all 10 named cases ok (`run-combined.out` in
+  `metaharness-wave-adr0096/w6/dash`).
+- State at close: not pushed. Waves 5 and 6 go to `main` in one push; the combined head sha and the gate result
+  go to `b10x-chef-orchestrator` first. Release 0.12.0 is held for its word.

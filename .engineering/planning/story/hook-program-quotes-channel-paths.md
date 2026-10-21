@@ -2,7 +2,7 @@
 format: aep.planning-md/3
 id: story:hook-program-quotes-channel-paths
 kind: story
-status: active
+status: implemented
 title: The generated hook program quotes its channel paths
 relations:
 - decomposes: epic:loom-agent-work-through-metaharness
@@ -25,10 +25,11 @@ scope:
   path: crates/metaharness/src/spawn_codex_vectors.rs
 - confidence: cited
   path: crates/metaharness/src/spawn_vectors.rs
-revision: 6
+revision: 8
 transitions:
 - {from: "draft", to: "proposed", at: "2026-10-21T12:00:25Z", actor: "human:timo", revision: 5}
 - {from: "proposed", to: "active", at: "2026-10-21T12:00:25Z", actor: "human:timo", revision: 6}
+- {from: "active", to: "implemented", at: "2026-10-21T18:43:46Z", actor: "human:timo", revision: 8, decided_on: {"recorded":{"test_result":1,"review_outcome":3,"ess_conformance_coverage_v1":1}}}
 ---
 # Story: the generated hook program quotes its channel paths
 
@@ -83,3 +84,30 @@ Derived 2026-10-21 by `story-scoper` at `main` `5df311b`.
   `crates/metaharness/src/builder.rs` and `refusal.rs` (the non-UTF-8 refusal), `spawn_vectors.rs`,
   `spawn_codex_vectors.rs`, `CHANGELOG.md`, a design amendment.
 - Size: S to M. Shares Claude `launch.rs` with unit 1 (other regions); sequential after it.
+
+## Delivered
+
+Commit `aff22dc`, merged `6ad241c` into `integration/adr-0096-wave-5`; two `aep:adversary` passes
+(`review-result:adr0096-w5-hook-quoting-adversary-1`, NEEDS-CHANGE, corrected in one round;
+`review-result:adr0096-w5-hook-quoting-adversary-2`, PASS, 87 test binaries, 1031 passed, 0 failed, 49
+ignored). Decision D1, amendment a37: the Claude and Codex hook programs and the vendor hook `command` carry
+their paths as POSIX single-quoted words (`shell_quote`, `shell_quote_path`); the Codex `config.toml`
+strings escape every control character by TOML basic-string rules, parsed back in a test with the `toml`
+crate (dev-dependency of `metaharness-codex` only); the Codex C1 fixtures move by two bytes each. A scratch
+root that is not UTF-8 is refused on every kind right after the scratch directory is created
+(`scratch-path-not-utf8`, exit 2). A Claude scratch root containing `${CLAUDE_PLUGIN_ROOT}` or
+`${CLAUDE_PLUGIN_DATA}` is refused before the spawn (`scratch-path-names-plugin-variable`, exit 2; pass 1
+F1). The orchestrator's condition (which callers can reach the non-UTF-8 refusal) was reported; the root
+comes only from `TMPDIR` (`crates/metaharness/src/builder.rs:847`, `:1128` at the scoping base). Adversary cases kept in `crates/metaharness-claude/tests/adversary_w5u2.rs`,
+`crates/metaharness-codex/tests/adversary_w5u2.rs`, `crates/metaharness/tests/adversary_w5u2.rs` and
+`crates/metaharness-cli/tests/adversary_w5u2_adv2.rs`; the coordinator corrected a37 (the fish sentence,
+the `--mcp-config` expansion scope) and the CHANGELOG Added line after pass 2.
+
+Whole gate at the wave-6 head: task check, one step at a time, on `integration/adr-0096-wave-6` at
+`5ddebbd`: 6 steps exit 0, 96 test binaries, 1128 passed, 0 failed, 49 ignored, conformance 103/103 on ESS
+0.67.0.
+
+Deviations: operator paths (`--cwd`, `--hooks`, `--driver`, `--plugin-dir`) are still rendered through the
+display form; a37 scopes its claim to paths under the scratch root. The shell Codex runs its hook command
+with is unverified (a37 § 1). One pre-existing warning from pass 2 went outside this unit and is withheld
+until release 0.12.0.

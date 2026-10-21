@@ -2,7 +2,7 @@
 format: aep.planning-md/3
 id: story:claude-h11-memory-walk-shapes
 kind: story
-status: active
+status: implemented
 title: Which memory-file shapes the Claude H11 walk counts
 refs:
 - provider: atlas
@@ -41,10 +41,11 @@ scope:
   path: spec/coverage.md
 - confidence: inferred
   path: spec/domains/workspace.yaml
-revision: 7
+revision: 9
 transitions:
 - {from: "draft", to: "proposed", at: "2026-10-21T12:00:25Z", actor: "human:timo", revision: 6}
 - {from: "proposed", to: "active", at: "2026-10-21T12:00:25Z", actor: "human:timo", revision: 7}
+- {from: "active", to: "implemented", at: "2026-10-21T18:43:46Z", actor: "human:timo", revision: 9, decided_on: {"recorded":{"test_result":1,"review_outcome":2,"ess_conformance_coverage_v1":1}}}
 ---
 # Story: which memory-file shapes the Claude H11 walk counts
 
@@ -131,3 +132,30 @@ Derived 2026-10-21 by `story-scoper` at main 5df311b. Every line is **cited** (r
 - **Size:** M, or L with the declared-copy flip and its ESS change; 12–20 files; no paid or native run for the gate — inferred
 
 Scoper's contradictions with the story body: line reference stale (`:1948` → `:2033`); the walk is shared with Codex and b10x; the conformance scenario `memory-above-the-copy-fails-strict` flips under C; canary count 12, not 9; "pinned without a canary reads gap" is reachable only for a leaking row or an unpinned version; the canary covers the cwd and one level above, not `$HOME/.claude/CLAUDE.md`.
+
+## Delivered
+
+Commit `48668eb`, merged `4a72d8c` into `integration/adr-0096-wave-5`; one `aep:adversary` pass
+(`review-result:adr0096-w5-h11-adversary-1`, CONFIRMED, two red documentation drifts), corrected by the
+implementor in one round and verified by the coordinator (81 test binaries, 1012 passed, 0 failed, 49
+ignored, conformance 103/103). Decision C, amendment a36: Claude's H11 reads `ok` when the launch imposed
+`--setting-sources ""` and a fresh scratch `CLAUDE_CONFIG_DIR`, held to the memory canary recorded for the
+record's version (`MEMORY_CANARIES` beside `PINNED_VERSIONS`: 2.1.304 and 2.1.305, 12 planted, the control
+sent 12, 0 reached the launch under `none` or `loopback`). A record without a version reads `unk`; a version
+without a canary row, a canary that reached the launch, or a control that saw fewer than planted reads
+`gap`. The ancestor walk looks for the six shapes the pinned binaries read and names what it finds as
+information; `LaunchRefusal::MemoryAncestorsFound` no longer fires for Claude, and Codex and b10x keep the
+two-shape walk. An `ok` H11 says managed memory is neither walked nor probed. ESS:
+`memory-above-the-copy-fails-strict` becomes `memory-above-the-copy-is-reported`, conformance stays 103; the
+c1 vector `memory-ancestor-refusal` becomes `memory-ancestor-reported`. CHANGELOG [Unreleased] carries one
+Breaking line. The orchestrator's condition (every consumer of the H11 result listed before the merge) was
+reported and accepted. Adversary cases kept in `crates/metaharness/tests/adversary_w5u1_h11.rs`.
+
+Whole gate at the wave-6 head: task check, one step at a time, on `integration/adr-0096-wave-6` at
+`5ddebbd`: 6 steps exit 0, 96 test binaries, 1128 passed, 0 failed, 49 ignored, conformance 103/103 on ESS
+0.67.0.
+
+Deviations: the adversary's I6 (`golden-transcript` fails on a float only when `metaharness-claude` is
+tested alone; serde_json feature unification, untouched by the diff) stays open. The independent review of
+2026-10-21 found the H11 `ok` text wider than what the canary probes and the canary re-probe ungated; that
+is `story:h11-claims-match-what-was-measured` (draft).

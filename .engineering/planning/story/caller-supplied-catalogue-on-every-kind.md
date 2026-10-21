@@ -16,6 +16,7 @@ relations:
 - depends_on: story:trace-ir-domain
 - depends_on: story:strict-hermetic-with-embedder-scratch-cwd
 - depends_on: story:metaharness-tools-adopts-tool-contract
+- depends_on: story:codex-catalogue-on-app-server
 scope:
 - confidence: inferred
   path: crates/metaharness-b10x/src/launch.rs
@@ -35,7 +36,7 @@ scope:
   path: crates/metaharness/src/run.rs
 - confidence: inferred
   path: docs/design/metaharness-protocol-v0.1.md
-revision: 15
+revision: 16
 transitions:
 - {from: "draft", to: "proposed", at: "2026-10-21T12:00:26Z", actor: "human:timo", revision: 14, decided_on: {"recorded":{"review_outcome":4}}}
 - {from: "proposed", to: "active", at: "2026-10-21T12:00:26Z", actor: "human:timo", revision: 15, decided_on: {"recorded":{"review_outcome":4}}}
@@ -111,3 +112,42 @@ protocol design.
 
 - `inferable` — the catalogue file format is the `tool-contract/1` profile from `tools` (ADR 0095
   point 2); settled by the edge above.
+
+## Delivered
+
+**Delivered in part; this story stays `active` because the Codex arm is open.** The Codex arm is
+`story:codex-catalogue-on-app-server` (draft), on which this story now depends.
+
+Commit `1bdc5b2`, merged `875fc71` into `integration/adr-0096-wave-5`; two `aep:adversary` passes
+(`review-result:adr0096-w5-catalogue-adversary-1`, NEEDS-CHANGE; `review-result:adr0096-w5-catalogue-adversary-2`,
+NEEDS-CHANGE, no blocker), two fix rounds, the second also taking four findings of the independent review
+(`review-result:adr0096-w5-independent-review`: s7-1, s7-2, s9-1, s10-5); fix round 2 gate 94 test
+binaries, 1112 passed, 0 failed, 49 ignored, conformance 103/103. Amendment a40.
+
+- **Claude: carried.** `run claude --catalogue <FILE>` and `mcp-serve --catalogue <FILE>` make a
+  `tool-contract/1` document's entries the run's whole tool set in place of the three verbs; the launch
+  removes the built-in tools and every ambient MCP server; `session.started.offered_tools` lists the
+  catalogue's names. The vector is synthetic (decision D2); a live launch with a catalogue is unverified.
+- **b10x: refused by name** (`catalogue-not-carried`), which the story allows for this kind.
+- **Codex: refused by name** (`catalogue-not-carried`). a40 § 2 cites, at `rust-v0.153.4`, the switches
+  and the app-server fields a carrying launch would use; none has been driven here, and a rollout's record
+  lists no tools. The acceptance is not met for Codex.
+- Refusals before the spawn: `catalogue-needs-owned-surface`, `catalogue-with-allow-program` (decided by
+  the coordinator after pass 1: an ignored flag is refused, a27), `catalogue-unreadable` (not a regular
+  file, past 4 MiB), `catalogue-malformed`, and `catalogue-copy-differs` after the scratch write.
+- The scratch copy escapes the 37 scalar values the YAML reader refuses or folds as a line break and is
+  read back before the spawn; one leading byte order mark is stripped. The server checks each call's
+  arguments against the entry's declared input fields and performs nothing on a mismatch.
+- Adversary cases kept in `crates/metaharness-tools/tests/adversary_w5u4.rs` and
+  `crates/metaharness/tests/adversary_w5u4.rs`. Vector `c1-caller-catalogue` moves checked 29 → 30,
+  `c1-caller-catalogue-refusal` 22 → 23; every other vector fixture is byte-identical.
+
+Whole gate at the wave-6 head: task check, one step at a time, on `integration/adr-0096-wave-6` at
+`5ddebbd`: 6 steps exit 0, 96 test binaries, 1128 passed, 0 failed, 49 ignored, conformance 103/103 on ESS
+0.67.0.
+
+Deviations and what stays open: argument value types are not checked (a string where a number belongs
+reaches the harness verb, which refuses it); a FIFO swapped in between the stat and the open can still
+block the open. Both, with the review's s8-3, s8-4 and s7-5, are `story:catalogue-road-leftovers`
+(draft). One document is one tool-contract family, so a session cannot get two families
+(`story:several-tool-contract-families-per-session`, draft, unscheduled).
