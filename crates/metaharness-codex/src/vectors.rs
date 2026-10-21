@@ -62,6 +62,13 @@ const OUTPUT: &str = r#"{"timestamp":"2026-08-22T10:00:03.000Z","type":"response
 const TOKENS: &str = r#"{"timestamp":"2026-08-22T10:00:04.000Z","type":"event_msg","payload":{"type":"token_count","info":{"total_token_usage":{"input_tokens":100,"cached_input_tokens":40,"cache_write_input_tokens":10,"output_tokens":20,"reasoning_output_tokens":6,"total_tokens":120}},"rate_limits":{"limit_name":"weekly","plan_type":"pro","primary":{"used_percent":12.5}}}}"#;
 const COMPLETE: &str = r#"{"timestamp":"2026-08-22T10:00:05.000Z","type":"event_msg","payload":{"type":"task_complete","turn_id":"t1","duration_ms":4200,"time_to_first_token_ms":800}}"#;
 const APRIL_SHAPE: &str = r#"{"timestamp":"2026-04-01T10:00:02.000Z","type":"response_item","payload":{"type":"exec_command_begin","call_id":"call-9","command":["ls"]}}"#;
+/// The records 0.153.4 writes between `session_meta` and the first `turn_context`, in the order a
+/// native run wrote them (`docs/research/2026-10-21-codex-0.153.4-record-surface.md`).
+const PREAMBLE_MESSAGE: &str = r#"{"timestamp":"2026-08-22T10:00:01.100Z","type":"response_item","payload":{"type":"message","role":"developer","content":[{"type":"input_text","text":"<permissions instructions>"}]}}"#;
+const WORLD_STATE: &str = r#"{"timestamp":"2026-08-22T10:00:01.200Z","type":"world_state","payload":{"full":true,"state":{"agents_md":{}}}}"#;
+const TURN_CONTEXT: &str = r#"{"timestamp":"2026-08-22T10:00:01.300Z","type":"turn_context","payload":{"turn_id":"t1","model":"a-model","personality":"pragmatic"}}"#;
+const TURN_CONTEXT_FOREIGN: &str = r#"{"timestamp":"2026-08-22T10:00:01.300Z","type":"turn_context","payload":{"turn_id":"t1","model":"a-model","personality":"friendly"}}"#;
+const TURN_CONTEXT_SILENT: &str = r#"{"timestamp":"2026-08-22T10:00:01.300Z","type":"turn_context","payload":{"turn_id":"t1","model":"a-model"}}"#;
 
 /// Every free vector this adapter carries: the launch face, then the replay face.
 #[must_use]
@@ -73,6 +80,9 @@ pub fn conformance_vectors() -> Vec<VectorOutcome> {
         vector_version_gate(),
         vector_drifted_shape_is_opaque_not_fatal(),
         vector_nothing_is_dropped(),
+        vector_output_style_recorded(),
+        vector_output_style_foreign(),
+        vector_output_style_absent(),
         golden_rollout_vector(GOLDEN_ROLLOUT),
         golden_hook_vector(GOLDEN_HOOK_INPUT),
         golden_version_pair_vector(GOLDEN_ROLLOUT),
@@ -352,6 +362,7 @@ fn base_context() -> LaunchContext {
         inputs_digest: Some(Digest::of(b"the copied input tree")),
         plugins: Vec::new(),
         loopback: None,
+        config_layers: Vec::new(),
     }
 }
 
@@ -665,7 +676,10 @@ fn vector_full_session() -> VectorOutcome {
 fn vector_version_gate() -> VectorOutcome {
     let id = "CX2-version-gate";
     let mut reader = reader();
-    let emitted = reader.push_line(META_UNPINNED);
+    // The opening record and its warning are held until the record that completes it, and
+    // released together (amendment a34).
+    let mut emitted = reader.push_line(META_UNPINNED);
+    emitted.extend(reader.push_line(TURN_CONTEXT));
     let warned = emitted.iter().any(
         |line| matches!(&line.event, Event::Warning { code, .. } if code == "version_outside_pin"),
     );
@@ -734,6 +748,155 @@ fn vector_nothing_is_dropped() -> VectorOutcome {
     }
 }
 
+/// C2 — **the opening record carries the personality the first `turn_context` recorded**, which is
+/// what the launch wrote (amendment a34). The record arrives after `session_meta`, so the reader
+/// holds the opening record, and everything after it, until that record: nothing is emitted before
+/// it, the opening record keeps `session_meta`'s timestamp, and every held record keeps its order
+/// and its own line.
+fn vector_output_style_recorded() -> VectorOutcome {
+    output_style_vector(
+        "CX2-output-style-recorded",
+        TURN_CONTEXT,
+        Some(crate::PERSONALITY),
+    )
+}
+
+/// C2 — a personality other than the launch's is carried **verbatim**. The reader states what the
+/// record says and decides nothing; the floor compares it with what the launch wrote and reads
+/// `gap` (amendment a34).
+fn vector_output_style_foreign() -> VectorOutcome {
+    output_style_vector(
+        "CX2-output-style-foreign",
+        TURN_CONTEXT_FOREIGN,
+        Some("friendly"),
+    )
+}
+
+fn output_style_vector(id: &str, turn_context: &str, expected: Option<&str>) -> VectorOutcome {
+    let mut reader = reader();
+    let mut faults = Vec::new();
+    for line in [META, TASK_STARTED, PREAMBLE_MESSAGE, WORLD_STATE] {
+        let early = reader.push_line(line);
+        if !early.is_empty() {
+            faults.push(format!(
+                "{:?} was emitted before the record that completes the opening record",
+                names(&early)
+            ));
+        }
+    }
+    let released = reader.push_line(turn_context);
+    let seen = names(&released);
+    let order = [
+        "session.started",
+        "turn.started",
+        "opaque",
+        "opaque",
+        "opaque",
+    ];
+    if seen != order {
+        faults.push(format!("released {seen:?}, expected {order:?}"));
+    }
+    match released.first() {
+        Some(Emission {
+            at,
+            event: Event::SessionStarted { output_style, .. },
+        }) => {
+            if output_style.as_deref() != expected {
+                faults.push(format!(
+                    "the opening record's output style is {output_style:?}, expected {expected:?}"
+                ));
+            }
+            if at.as_deref() != Some("2026-08-22T10:00:00.000Z") {
+                faults.push(format!(
+                    "the opening record is stamped {at:?}, not session_meta's"
+                ));
+            }
+        }
+        other => faults.push(format!("the first release is {other:?}")),
+    }
+    let lines: Vec<Option<u64>> = released
+        .iter()
+        .filter_map(|emission| match &emission.event {
+            Event::Opaque { source_line, .. } => Some(*source_line),
+            _ => None,
+        })
+        .collect();
+    if lines != [Some(3), Some(4), Some(5)] {
+        faults.push(format!("the held records cite lines {lines:?}"));
+    }
+    let after = reader.push_line(CALL);
+    if names(&after) != ["tool.requested"] {
+        faults.push(format!(
+            "after the release a call emitted {:?}",
+            names(&after)
+        ));
+    }
+    if faults.is_empty() {
+        VectorOutcome::passed(id, ConformanceTier::C2)
+    } else {
+        VectorOutcome::failed(id, ConformanceTier::C2, faults.join("; "))
+    }
+}
+
+/// C2 — **a record that names no personality leaves the opening record without one**, which is
+/// `unk`, never the launch's value (invariant 3). Three shapes: a `turn_context` with no
+/// `personality`; no `turn_context` before the first record that is not one of the preamble's
+/// (the hold is bounded by that record, so a drifted record cannot hold the stream open); and a
+/// stream that ends while the record is held, which `finish` releases.
+fn vector_output_style_absent() -> VectorOutcome {
+    let id = "CX2-output-style-absent";
+    let mut faults = Vec::new();
+
+    let mut silent = reader();
+    for line in [META, TASK_STARTED, WORLD_STATE] {
+        silent.push_line(line);
+    }
+    let released = silent.push_line(TURN_CONTEXT_SILENT);
+    expect_unstyled_opening("a turn_context with no personality", &released, &mut faults);
+
+    let mut drifted = reader();
+    drifted.push_line(META);
+    drifted.push_line(TASK_STARTED);
+    let released = drifted.push_line(CALL);
+    expect_unstyled_opening("a call before any turn_context", &released, &mut faults);
+    if names(&released) != ["session.started", "turn.started", "tool.requested"] {
+        faults.push(format!(
+            "a call before any turn_context released {:?}",
+            names(&released)
+        ));
+    }
+
+    let mut ended = reader();
+    ended.push_line(META);
+    ended.push_line(TASK_STARTED);
+    let released = ended.finish();
+    expect_unstyled_opening("a stream that ended while held", &released, &mut faults);
+    if names(&released) != ["session.started", "turn.started"] {
+        faults.push(format!(
+            "a stream that ended while held released {:?}",
+            names(&released)
+        ));
+    }
+
+    if faults.is_empty() {
+        VectorOutcome::passed(id, ConformanceTier::C2)
+    } else {
+        VectorOutcome::failed(id, ConformanceTier::C2, faults.join("; "))
+    }
+}
+
+fn expect_unstyled_opening(shape: &str, released: &[Emission], faults: &mut Vec<String>) {
+    match released.first().map(|emission| &emission.event) {
+        Some(Event::SessionStarted {
+            output_style: None,
+            ..
+        }) => {}
+        other => faults.push(format!(
+            "{shape}: the first release is {other:?}, expected an opening record with no output style"
+        )),
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -765,6 +928,9 @@ mod tests {
             "CX2-version-gate",
             "CX2-drift-opaque",
             "CX2-nothing-dropped",
+            "CX2-output-style-recorded",
+            "CX2-output-style-foreign",
+            "CX2-output-style-absent",
             "golden-rollout",
             "golden-hook-input",
             "golden-version-pair",

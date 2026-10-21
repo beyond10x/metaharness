@@ -58,6 +58,8 @@ fn h7(observed: &str, planned: &str) -> (Verdict, String) {
             builtin_plugins: &[],
             endpoint_key_posture: None,
             planned_mcp_servers: &[],
+            planned_output_style: None,
+            record_silences: &[],
         },
     );
     let row = rows

@@ -30,6 +30,17 @@
 //! which is correct even for a payload that arrives with no id at all. The three are kept apart on
 //! purpose, because collapsing any two of them would deliver a decision to the wrong blocked
 //! process.
+//!
+//! **The two sources are merged in one order, and the opening record is first in it — except for
+//! a hook request read before the rollout's `session_meta`, which comes out ahead of it.** 0.153.4
+//! does not produce one: it writes `session_meta` before any provider request, so before any call a
+//! hook could hold, and in every driven session here the opening record came out first. The
+//! exception predates amendment a34. The reader
+//! holds `session.started` until the first `turn_context` completes it (amendment a34), and a hook
+//! can publish before the tail has read that record: the hook channel is read before the rollout.
+//! A blocked hook never waits behind the hold. Its request releases the opening record at once,
+//! without the personality the record had not yet stated — so H1b reads `unk` on that run — and
+//! the call follows it onto the run loop's ordinary path.
 
 use std::collections::BTreeMap;
 
@@ -159,12 +170,19 @@ impl CodexSeam {
 impl HarnessSeam for CodexSeam {
     fn push_line(&mut self, line: &str) -> Vec<Emission> {
         if let Some(emissions) = self.hook_request(line) {
-            return emissions;
+            // A blocked hook never waits behind the held opening record (amendment a34): its
+            // request releases the record at once, as it stands, and the call follows it onto the
+            // run loop's ordinary path — admitted, decided or deadlined, abandoned on a halt.
+            let mut released = self.reader.release_opening_record();
+            released.extend(emissions);
+            return released;
         }
         self.reader.push_line(line)
     }
 
     fn finish(&mut self) -> Vec<Emission> {
+        // Never a call: the reader holds only the preamble's records, and a hook request is never
+        // held. `Run::wind_up` puts these straight into the outbox, without admitting them.
         self.reader.finish()
     }
 
@@ -406,6 +424,104 @@ mod tests {
         assert_eq!(value["call_id"], "abcd1234");
     }
 
+    /// A hook can publish before the tail has read the `turn_context` that completes the opening
+    /// record: the hook channel is read before the rollout. A blocked hook must never wait behind
+    /// the hold (amendment a34), so its request releases the opening record at once — without the
+    /// personality, which the record had not yet stated, so H1b reads `unk` — and the call goes on
+    /// the run loop's ordinary path in the same breath. The `turn_context` that arrives afterwards
+    /// completes nothing: the opening record has already gone out.
+    #[test]
+    fn a_hook_request_during_the_hold_releases_the_opening_record_at_once() {
+        let mut seam = seam();
+        assert_eq!(
+            seam.push_line(
+                r#"{"timestamp":"2026-08-22T10:00:00.000Z","type":"session_meta","payload":{"id":"s","cli_version":"0.153.4","cwd":"/scratch/work"}}"#,
+            ),
+            []
+        );
+        let raw = r#"{"hook_event_name":"PreToolUse","tool_name":"Bash","tool_use_id":"call-7","tool_input":{"command":"ls"}}"#;
+        let emitted = seam.push_line(&hook_request_line("k7", raw));
+        let names: Vec<&str> = emitted.iter().map(|line| line.event.name()).collect();
+        assert_eq!(names, ["session.started", "tool.requested"]);
+        match &emitted[0].event {
+            Event::SessionStarted { output_style, .. } => assert_eq!(*output_style, None),
+            other => panic!("{other:?}"),
+        }
+        match &emitted[1].event {
+            Event::ToolRequested {
+                call_id,
+                decision_required,
+                seam,
+                ..
+            } => {
+                assert_eq!(call_id, "call-7");
+                assert!(decision_required);
+                assert_eq!(*seam, Seam::Hook);
+            }
+            other => panic!("{other:?}"),
+        }
+        assert_eq!(seam.routes().get("call-7").map(String::as_str), Some("k7"));
+        let later = seam.push_line(
+            r#"{"timestamp":"2026-08-22T10:00:01.000Z","type":"turn_context","payload":{"turn_id":"t1","personality":"pragmatic"}}"#,
+        );
+        let names: Vec<&str> = later.iter().map(|line| line.event.name()).collect();
+        assert_eq!(names, ["opaque"], "the opening record went out once");
+    }
+
+    /// `Run::wind_up` puts what `finish` returns straight into the outbox, without `admit`, so
+    /// `finish` must never return a call. Held records are only the preamble's — the opening
+    /// record, its version warning, `turn.started`, `opaque` — and a hook request is never held.
+    #[test]
+    fn finish_never_returns_a_call() {
+        let mut seam = seam();
+        for line in [
+            r#"{"timestamp":"2026-08-22T10:00:00.000Z","type":"session_meta","payload":{"id":"s","cli_version":"0.999.0","cwd":"/scratch/work"}}"#,
+            r#"{"timestamp":"2026-08-22T10:00:00.001Z","type":"event_msg","payload":{"type":"task_started","turn_id":"t1"}}"#,
+            r#"{"timestamp":"2026-08-22T10:00:00.002Z","type":"response_item","payload":{"type":"message","role":"developer","content":[]}}"#,
+            r#"{"timestamp":"2026-08-22T10:00:00.003Z","type":"world_state","payload":{"full":true,"state":{}}}"#,
+        ] {
+            assert_eq!(seam.push_line(line), [], "held: {line}");
+        }
+        let emitted = seam.finish();
+        let names: Vec<&str> = emitted.iter().map(|line| line.event.name()).collect();
+        assert_eq!(
+            names,
+            [
+                "session.started",
+                "warning",
+                "turn.started",
+                "opaque",
+                "opaque"
+            ]
+        );
+
+        let mut called = seam_with_hook_during_hold();
+        let names: Vec<&str> = called
+            .finish()
+            .iter()
+            .map(|line| line.event.name())
+            .collect();
+        assert!(!names.contains(&"tool.requested"), "{names:?}");
+    }
+
+    /// A seam whose hook request arrived during the hold, with nothing after it.
+    fn seam_with_hook_during_hold() -> CodexSeam {
+        let mut seam = seam();
+        seam.push_line(
+            r#"{"timestamp":"2026-08-22T10:00:00.000Z","type":"session_meta","payload":{"id":"s","cli_version":"0.153.4","cwd":"/scratch/work"}}"#,
+        );
+        let emitted = seam.push_line(&hook_request_line(
+            "k1",
+            r#"{"tool_name":"Bash","tool_use_id":"call-1","tool_input":{"command":"ls"}}"#,
+        ));
+        assert_eq!(
+            emitted.len(),
+            2,
+            "the hook released the hold and was emitted"
+        );
+        seam
+    }
+
     /// A payload with no `tool_use_id` is presented under the rendezvous name rather than under an
     /// id metaharness made up, and the decision still reaches the process that is holding it.
     #[test]
@@ -431,8 +547,11 @@ mod tests {
         let emitted = seam.push_line(
             r#"{"timestamp":"2026-08-22T10:00:02.000Z","type":"response_item","payload":{"type":"custom_tool_call","call_id":"call-1","name":"exec","arguments":"{\"command\":\"ls\"}"}}"#,
         );
-        assert_eq!(emitted.len(), 1);
-        match &emitted[0].event {
+        // The call is the first record that is not the preamble's, so it also releases the held
+        // opening record and its off-pin warning ahead of itself (amendment a34).
+        let names: Vec<&str> = emitted.iter().map(|line| line.event.name()).collect();
+        assert_eq!(names, ["session.started", "warning", "tool.requested"]);
+        match &emitted[2].event {
             Event::ToolRequested {
                 call_id,
                 seam,

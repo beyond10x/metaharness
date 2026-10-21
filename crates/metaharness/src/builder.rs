@@ -736,6 +736,8 @@ fn start_b10x(
         // The b10x loop binds its tools in-process; there is no MCP server to configure and
         // nothing for one to be compared against.
         planned_mcp_servers: Vec::new(),
+        planned_output_style: None,
+        record_silences: &[],
         pinned_versions: metaharness_b10x::PINNED_VERSIONS
             .iter()
             .map(ToString::to_string)
@@ -865,7 +867,13 @@ fn start_claude(
         list_declared_copy_memory_files(&spec, &plan.cwd, &mut plan.attestation);
         // Before any file is written for the child and before the runner sees the plan: a strict
         // run off the pin spawns nothing (a33).
-        guard_claude_strict_version(&spec, runner, &plan)?;
+        guard_strict_version(
+            &spec,
+            runner,
+            &plan.program,
+            &plan.env,
+            &metaharness_claude::PINNED_VERSIONS,
+        )?;
 
         // The plan names four pieces of I/O and performs none of them, because a pure function
         // that wrote to a disk would be a pure function nobody could test. This is where they
@@ -919,6 +927,10 @@ fn start_claude(
             // Read off the document the launch actually wrote, so H5 compares the record against
             // the file the vendor was handed rather than against a second guess at its contents.
             planned_mcp_servers: configured_mcp_servers(plan.mcp_config.as_ref()),
+            // Claude's launch writes no output style: `--setting-sources ""` leaves the default,
+            // and the record must name it.
+            planned_output_style: None,
+            record_silences: &[],
             pinned_versions: metaharness_claude::PINNED_VERSIONS
                 .iter()
                 .map(ToString::to_string)
@@ -1113,12 +1125,30 @@ fn start_codex(
         inputs_digest: None,
         plugins: plugin_trees(&spec),
         loopback: codex_loopback_params(loopback.as_ref()),
+        // The layers H1b and H2 depend on (a34): read here, decided in the plan.
+        config_layers: codex_config_layers(
+            &spec,
+            &cwd,
+            &metaharness_codex::CONFIG_LAYER_PATHS
+                .iter()
+                .map(PathBuf::from)
+                .collect::<Vec<_>>(),
+        ),
     };
     let mut plan =
         metaharness_codex::plan_launch(&spec, &context).map_err(|refusal| Refusal::Launch {
             detail: refusal.to_string(),
         })?;
     list_declared_copy_memory_files(&spec, &plan.cwd, &mut plan.attestation);
+    // Before any file is written for the child and before the runner sees the plan: a strict run
+    // off the pin spawns nothing (amendment a34, the guard a33 built for Claude).
+    guard_strict_version(
+        &spec,
+        runner,
+        &plan.program,
+        &plan.env,
+        &metaharness_codex::PINNED_VERSIONS,
+    )?;
 
     let channel = crate::spawn_codex::CodexHookChannel::create(scratch.path())?;
     materialise_codex(&plan, scratch.path(), &channel)?;
@@ -1164,6 +1194,11 @@ fn start_codex(
         // The codex config writes an empty `[mcp_servers]` table by name, so the launch gives one
         // and H5 compares against nothing — which is what the table says.
         planned_mcp_servers: Vec::new(),
+        // The personality the scratch config.toml sets: H1b compares the rollout's first
+        // turn_context with it, and reads `unk` when the record names none (amendment a34).
+        planned_output_style: Some(metaharness_codex::PERSONALITY),
+        // Why the pinned rollout leaves H1a, H4 and H5 `unk`, printed in those rows (a34).
+        record_silences: &metaharness_codex::RECORD_SILENCES,
         pinned_versions: metaharness_codex::PINNED_VERSIONS
             .iter()
             .map(ToString::to_string)
@@ -2004,12 +2039,12 @@ fn list_declared_copy_memory_files(
     }
 }
 
-/// How long `--strict-version` waits for `claude --version` before it kills the child and refuses
-/// (design amendment a33). `--version` answers in well under a second; a binary that does not exit
-/// in this long is not one a strict run should start.
+/// How long `--strict-version` waits for a vendor binary's `--version` before it kills the child
+/// and refuses (design amendments a33 and a34). `--version` answers in well under a second; a binary
+/// that does not exit in this long is not one a strict run should start.
 const VERSION_PROBE_DEADLINE: std::time::Duration = std::time::Duration::from_secs(5);
 
-/// What asking a Claude Code binary for its `--version` produced.
+/// What asking a vendor binary for its `--version` produced.
 #[derive(Debug, Clone, PartialEq, Eq)]
 enum VersionProbe {
     /// The version token it printed.
@@ -2020,13 +2055,14 @@ enum VersionProbe {
     TimedOut(std::time::Duration),
 }
 
-/// The version a Claude Code binary reports for `--version`, read without a model call and within
-/// `deadline` (a33).
+/// The version a vendor binary reports for `--version`, read without a model call and within
+/// `deadline` (a33; the Codex launch since a34).
 ///
 /// Run with the plan's own constructed environment, so the probe reads no operator config home and
-/// holds no credential. `2.1.304 (Claude Code)` reduces to its first token that starts with a
-/// digit, as `doctor` reduces it. A child still running at the deadline is killed and reaped.
-fn claude_version(
+/// holds no credential. `2.1.304 (Claude Code)` and `codex-cli 0.153.4` each reduce to their first
+/// token that starts with a digit, as `doctor` reduces them. A child still running at the deadline
+/// is killed and reaped.
+fn vendor_version(
     program: &std::path::Path,
     env: &BTreeMap<String, String>,
     deadline: std::time::Duration,
@@ -2077,14 +2113,12 @@ fn claude_version(
         })
 }
 
-/// `--strict-version`'s refusal for a Claude binary whose probe came back as `probe`, or `None`
-/// when it is on the pin. No readable version, and no answer in time, are refusals too: the flag
-/// asks for evidence, and its absence is not evidence (invariant 3).
-fn claude_version_refusal(probe: &VersionProbe, program: &str) -> Option<Refusal> {
+/// `--strict-version`'s refusal for a binary whose probe came back as `probe`, or `None` when it is
+/// one of `pinned`. No readable version, and no answer in time, are refusals too: the flag asks for
+/// evidence, and its absence is not evidence (invariant 3).
+fn strict_version_refusal(probe: &VersionProbe, program: &str, pinned: &[&str]) -> Option<Refusal> {
     let observed = match probe {
-        VersionProbe::Reported(version)
-            if metaharness_claude::PINNED_VERSIONS.contains(&version.as_str()) =>
-        {
+        VersionProbe::Reported(version) if pinned.contains(&version.as_str()) => {
             return None;
         }
         VersionProbe::Reported(version) => version.clone(),
@@ -2096,46 +2130,85 @@ fn claude_version_refusal(probe: &VersionProbe, program: &str) -> Option<Refusal
     };
     Some(Refusal::Launch {
         detail: format!(
-            "--strict-version requires one of {:?}; {program} reported {observed}, so the run is \
-             refused before the spawn",
-            metaharness_claude::PINNED_VERSIONS,
+            "--strict-version requires one of {pinned:?}; {program} reported {observed}, so the \
+             run is refused before the spawn",
         ),
     })
 }
 
-/// `--strict-version` over a Claude launch, before anything is spawned (a33).
+/// `--strict-version` over a vendor launch, before anything is written for the child or spawned
+/// (a33 for Claude; a34 for Codex, whose launch never read the flag).
 ///
-/// The binary is resolved on the child's own `PATH`, the way the spawn resolves it, and asked for
-/// its version with the plan's environment, within [`VERSION_PROBE_DEADLINE`]. A runner that
-/// launches no executable — synthetic replay — has no binary to ask, so it reports no version and
-/// strict refuses, as the b10x launch does.
-fn guard_claude_strict_version(
+/// `program` is resolved on the child's own `PATH` from `env`, the way the spawn resolves it, and
+/// asked for its version with that environment, within [`VERSION_PROBE_DEADLINE`]; the version must
+/// be one of `pinned`. A runner that launches no executable — synthetic replay — has no binary to
+/// ask, so it reports no version and strict refuses, as the b10x launch does.
+fn guard_strict_version(
     spec: &RunSpec,
     runner: &dyn ProcessRunner,
-    plan: &metaharness_claude::LaunchPlan,
+    program: &str,
+    env: &BTreeMap<String, String>,
+    pinned: &[&str],
 ) -> Result<(), Refusal> {
     if !spec.strict_version {
         return Ok(());
     }
-    let (program, probe) = if runner.requires_executable() {
-        let child_path = plan.env.get("PATH").map_or("", String::as_str);
-        match crate::doctor::resolve_on(&plan.program, child_path) {
-            Ok(program) => {
-                let probe = claude_version(&program, &plan.env, VERSION_PROBE_DEADLINE);
-                (program.display().to_string(), probe)
+    let (resolved, probe) = if runner.requires_executable() {
+        let child_path = env.get("PATH").map_or("", String::as_str);
+        match crate::doctor::resolve_on(program, child_path) {
+            Ok(resolved) => {
+                let probe = vendor_version(&resolved, env, VERSION_PROBE_DEADLINE);
+                (resolved.display().to_string(), probe)
             }
             Err(_) => (
-                format!("{} (not on {child_path})", plan.program),
+                format!("{program} (not on {child_path})"),
                 VersionProbe::Unreadable,
             ),
         }
     } else {
-        (plan.program.clone(), VersionProbe::Unreadable)
+        (program.to_owned(), VersionProbe::Unreadable)
     };
-    match claude_version_refusal(&probe, &program) {
+    match strict_version_refusal(&probe, &resolved, pinned) {
         Some(refusal) => Err(refusal),
         None => Ok(()),
     }
+}
+
+/// The config layers codex reads outside the scratch `CODEX_HOME` that exist for this run (a34),
+/// the counterpart of [`claude_managed_settings`].
+///
+/// `machine` are the machine-level candidates — in production
+/// [`metaharness_codex::CONFIG_LAYER_PATHS`] — each counted by existing, as
+/// [`managed_settings_found`] counts them. Under a named cwd (`--cwd`, with or without
+/// `--scratch-cwd`) a project `.codex/config.toml` counts too: in the cwd and in each directory
+/// above it up to the nearest one holding `.git`, or in the cwd alone when none does. That bound is
+/// this launch's choice, not a reading of the binary's discovery rule; it keeps the operator's own
+/// `~/.codex` above a repository from reading as a project layer. A scratch cwd is a directory
+/// metaharness made and holds none.
+fn codex_config_layers(spec: &RunSpec, cwd: &Path, machine: &[PathBuf]) -> Vec<PathBuf> {
+    let mut found = managed_settings_found(machine);
+    if spec.cwd.is_none() {
+        return found;
+    }
+    let mut chain = Vec::new();
+    let mut rooted = false;
+    for dir in cwd.ancestors() {
+        chain.push(dir);
+        if dir.join(".git").exists() {
+            rooted = true;
+            break;
+        }
+    }
+    if !rooted {
+        chain.truncate(1);
+    }
+    found.extend(
+        chain
+            .into_iter()
+            .map(|dir| dir.join(".codex").join("config.toml"))
+            .filter(|candidate| candidate.is_file()),
+    );
+    found
 }
 
 /// The managed-settings sources out of `candidates` that exist on this machine (a33).
@@ -3866,7 +3939,18 @@ mod claude_version_tests {
     use std::path::{Path, PathBuf};
     use std::time::{Duration, Instant};
 
-    use super::{VersionProbe, claude_version, claude_version_refusal, managed_settings_found};
+    use super::{
+        VersionProbe, managed_settings_found, strict_version_refusal,
+        vendor_version as claude_version,
+    };
+
+    /// The shared refusal (a34 made it generic), over the Claude pin these cases were written for.
+    fn claude_version_refusal(
+        probe: &VersionProbe,
+        program: &str,
+    ) -> Option<crate::refusal::Refusal> {
+        strict_version_refusal(probe, program, &metaharness_claude::PINNED_VERSIONS)
+    }
 
     /// A script standing in for the vendor binary.
     fn fake_claude(dir: &Path, body: &str) -> PathBuf {
@@ -3963,5 +4047,334 @@ mod claude_version_tests {
             managed_settings_found(&[empty.path().join("managed-settings.json")]),
             Vec::<PathBuf>::new()
         );
+    }
+}
+
+#[cfg(test)]
+mod codex_record_rows_tests {
+    //! Amendment a34 through `start_codex`: H1b decided from the record the rollout reader
+    //! completes, H1a/H4/H5 still `unk` and saying why, H2 naming only the file the launch writes,
+    //! strict still exit 3; and `--strict-version` read before anything is written or spawned.
+
+    use std::collections::BTreeMap;
+    use std::path::{Path, PathBuf};
+    use std::time::Duration;
+
+    use metaharness_protocol::{
+        CredentialSource, DecisionMode, HermeticMode, HermeticRow, Kind, RunSpec, Verdict,
+    };
+
+    use super::{Input, Metaharness, codex_config_layers, guard_strict_version};
+    use crate::audit::RunExit;
+    use crate::auditor::FakeAuditor;
+    use crate::clock::ManualClock;
+    use crate::process::{HarnessProcess, LaunchPlanView, ProcessRunner};
+    use crate::refusal::Refusal;
+    use crate::run::Run;
+    use crate::scripted::{ScriptedLog, ScriptedRunner};
+
+    /// A pinned 0.153.4 rollout over `cwd`, in the order the native run wrote it, with the
+    /// personality its first `turn_context` recorded (or none) and a successful completion.
+    fn rollout(cwd: &Path, personality: Option<&str>) -> Vec<String> {
+        let context =
+            personality.map_or_else(String::new, |value| format!(r#","personality":"{value}""#));
+        vec![
+            format!(
+                r#"{{"timestamp":"2026-10-21T00:00:00.000Z","type":"session_meta","payload":{{"id":"s-1","session_id":"s-1","cli_version":"{}","cwd":"{}"}}}}"#,
+                metaharness_codex::PINNED_VERSIONS[0],
+                cwd.display()
+            ),
+            r#"{"timestamp":"2026-10-21T00:00:00.001Z","type":"event_msg","payload":{"type":"task_started","turn_id":"t1"}}"#.to_owned(),
+            r#"{"timestamp":"2026-10-21T00:00:00.002Z","type":"world_state","payload":{"full":true,"state":{}}}"#.to_owned(),
+            format!(
+                r#"{{"timestamp":"2026-10-21T00:00:00.003Z","type":"turn_context","payload":{{"turn_id":"t1","model":"m"{context}}}}}"#
+            ),
+            r#"{"timestamp":"2026-10-21T00:00:01.000Z","type":"event_msg","payload":{"type":"task_complete","turn_id":"t1","error":null,"last_agent_message":"done"}}"#.to_owned(),
+        ]
+    }
+
+    /// A strict Codex run over an embedder's declared copy — so H7 and H11 are decided and nothing
+    /// but the record rows can hold the verdict — drained to its end.
+    fn codex_strict_run(personality: Option<&str>) -> (tempfile::TempDir, Run) {
+        codex_strict_run_in(personality, |_| {})
+    }
+
+    /// [`codex_strict_run`], with `prepare` given the copy before the launch looks at it.
+    fn codex_strict_run_in(
+        personality: Option<&str>,
+        prepare: impl FnOnce(&Path),
+    ) -> (tempfile::TempDir, Run) {
+        let root = tempfile::tempdir().unwrap();
+        let copy = root.path().join("copy");
+        std::fs::create_dir(&copy).unwrap();
+        prepare(&copy);
+        let canonical = std::fs::canonicalize(&copy).unwrap();
+        let mut runner =
+            ScriptedRunner::of_lines(rollout(&canonical, personality), ScriptedLog::new());
+        let mut run = Metaharness::new(Kind::Codex)
+            .with_hermetic(HermeticMode::Strict)
+            .with_decisions(DecisionMode::Observe)
+            .with_credentials(CredentialSource::None)
+            .with_cwd(&copy)
+            .with_scratch_cwd()
+            .start_with_clock(
+                Input::Prompt("vector".to_owned()),
+                &mut runner,
+                &mut metaharness_codex::CodexSeams,
+                Box::new(ManualClock::new()),
+            )
+            .expect("a declared copy plans");
+        run.drain().unwrap();
+        (root, run)
+    }
+
+    fn verdict(run: &Run, row: HermeticRow) -> (Verdict, String) {
+        let rows = run.hermetic_floor();
+        let found = rows.iter().find(|verdict| verdict.row == row).unwrap();
+        (found.verdict, found.detail.clone())
+    }
+
+    fn exit(run: &Run) -> RunExit {
+        let report = run
+            .audit(&mut FakeAuditor::missing())
+            .expect("no auditor was asked for");
+        run.exit(Some(&report))
+    }
+
+    /// The acceptance statement: strict on Codex still exits 3, now with H1b `ok` — read from the
+    /// record, compared with what the launch wrote — and H1a, H4 and H5 `unk`, each saying why.
+    #[test]
+    fn a_codex_strict_run_reads_h1b_from_the_record_and_still_exits_three() {
+        let (_root, run) = codex_strict_run(Some(metaharness_codex::PERSONALITY));
+        let (h1b, detail) = verdict(&run, HermeticRow::H1b);
+        assert_eq!(h1b, Verdict::Ok, "{detail}");
+        assert!(detail.contains(metaharness_codex::PERSONALITY), "{detail}");
+        for (row, why) in metaharness_codex::RECORD_SILENCES {
+            let (found, detail) = verdict(&run, row);
+            assert_eq!(found, Verdict::Unk, "{}: {detail}", row.id());
+            assert!(detail.contains(why), "{}: {detail}", row.id());
+        }
+        let (h2, detail) = verdict(&run, HermeticRow::H2);
+        assert_eq!(h2, Verdict::Ok, "{detail}");
+        assert!(!detail.contains("hooks.json"), "{detail}");
+        for row in [HermeticRow::H7, HermeticRow::H9, HermeticRow::H11] {
+            let (found, detail) = verdict(&run, row);
+            assert_eq!(found, Verdict::Ok, "{}: {detail}", row.id());
+        }
+        assert_eq!(exit(&run), RunExit::NoVerdict);
+    }
+
+    /// A record that names a personality the launch did not write is a gap, and a gap outranks the
+    /// three unknowns: strict exits 1.
+    #[test]
+    fn a_codex_record_naming_another_personality_reads_gap() {
+        let (_root, run) = codex_strict_run(Some("friendly"));
+        let (h1b, detail) = verdict(&run, HermeticRow::H1b);
+        assert_eq!(h1b, Verdict::Gap, "{detail}");
+        assert!(detail.contains("friendly"), "{detail}");
+        assert_eq!(exit(&run), RunExit::Gap);
+    }
+
+    /// A record that names no personality leaves H1b `unk`: what the launch wrote is not evidence
+    /// of what was in force (invariant 3).
+    #[test]
+    fn a_codex_record_naming_no_personality_reads_unk() {
+        let (_root, run) = codex_strict_run(None);
+        let (h1b, detail) = verdict(&run, HermeticRow::H1b);
+        assert_eq!(h1b, Verdict::Unk, "{detail}");
+    }
+
+    /// `--strict-version` on a Codex launch is read before anything is written or spawned. A runner
+    /// that launches no executable has no binary to ask, so it reports no version and strict
+    /// refuses — as the Claude and b10x launches do — and the runner never sees the plan.
+    #[test]
+    fn a_strict_version_codex_launch_is_refused_before_the_runner_sees_the_plan() {
+        let log = ScriptedLog::new();
+        let root = tempfile::tempdir().unwrap();
+        let mut runner = ScriptedRunner::of_lines(
+            rollout(root.path(), Some(metaharness_codex::PERSONALITY)),
+            log.clone(),
+        );
+        let refused = Metaharness::new(Kind::Codex)
+            .with_decisions(DecisionMode::Observe)
+            .with_credentials(CredentialSource::None)
+            .with_strict_version(true)
+            .start_with_clock(
+                Input::Prompt("vector".to_owned()),
+                &mut runner,
+                &mut metaharness_codex::CodexSeams,
+                Box::new(ManualClock::new()),
+            );
+        let Err(Refusal::Launch { detail }) = refused else {
+            panic!("a strict-version codex launch with no readable version started");
+        };
+        assert!(detail.contains("--strict-version"), "{detail}");
+        assert!(detail.contains("no readable version"), "{detail}");
+        assert!(
+            detail.contains(metaharness_codex::PINNED_VERSIONS[0]),
+            "{detail}"
+        );
+        assert_eq!(log.spawns(), 0, "the runner was handed the plan");
+    }
+
+    /// A runner that launches a real executable, which this test never lets it do.
+    struct Executable;
+
+    impl ProcessRunner for Executable {
+        fn start(&mut self, _plan: &LaunchPlanView) -> std::io::Result<Box<dyn HarnessProcess>> {
+            Err(std::io::Error::other("this test spawns nothing"))
+        }
+    }
+
+    /// A script standing in for the codex binary, printing what `codex --version` prints.
+    fn fake_codex(dir: &Path, version: &str) -> PathBuf {
+        use std::os::unix::fs::PermissionsExt as _;
+        let path = dir.join("codex");
+        std::fs::write(&path, format!("#!/bin/sh\necho 'codex-cli {version}'\n")).unwrap();
+        std::fs::set_permissions(&path, std::fs::Permissions::from_mode(0o700)).unwrap();
+        path
+    }
+
+    /// The guard with the child's `PATH` holding only `dir`, retried past the one transient a
+    /// freshly written script can raise when another test thread forks while it is open
+    /// (`ETXTBSY`), which reads as no readable version.
+    fn guard(dir: &Path, settled: impl Fn(&Result<(), Refusal>) -> bool) -> Result<(), Refusal> {
+        let mut spec = RunSpec::new(Kind::Codex);
+        spec.strict_version = true;
+        let env = BTreeMap::from([("PATH".to_owned(), dir.display().to_string())]);
+        let mut last = Ok(());
+        for _ in 0..20 {
+            last = guard_strict_version(
+                &spec,
+                &Executable,
+                "codex",
+                &env,
+                &metaharness_codex::PINNED_VERSIONS,
+            );
+            if settled(&last) {
+                break;
+            }
+            std::thread::sleep(Duration::from_millis(25));
+        }
+        last
+    }
+
+    /// The guard unit 2 built for Claude, reused for Codex: `codex` is resolved on the child's
+    /// `PATH`, its `--version` read with the launch's environment, and a binary off the pin is
+    /// refused by name; the pinned one is admitted; a `PATH` with no `codex` is refused too.
+    #[test]
+    fn strict_version_resolves_codex_on_the_childs_path_and_refuses_one_off_the_pin() {
+        let off_pin = tempfile::tempdir().unwrap();
+        fake_codex(off_pin.path(), "0.160.0");
+        let refused = guard(
+            off_pin.path(),
+            |result| matches!(result, Err(Refusal::Launch { detail }) if detail.contains("0.160.0")),
+        );
+        let Err(Refusal::Launch { detail }) = refused else {
+            panic!("0.160.0 was admitted");
+        };
+        assert!(detail.contains("--strict-version"), "{detail}");
+        assert!(
+            detail.contains(&off_pin.path().join("codex").display().to_string()),
+            "{detail}"
+        );
+
+        let pinned = tempfile::tempdir().unwrap();
+        fake_codex(pinned.path(), metaharness_codex::PINNED_VERSIONS[0]);
+        assert!(guard(pinned.path(), Result::is_ok).is_ok());
+
+        let empty = tempfile::tempdir().unwrap();
+        let Err(Refusal::Launch { detail }) = guard(empty.path(), |_| true) else {
+            panic!("a PATH with no codex was admitted");
+        };
+        assert!(detail.contains("not on"), "{detail}");
+    }
+
+    /// Amendment a34, the a33 precedent: the launch looks for the config layers the binary reads
+    /// outside the scratch home. Machine candidates count by existing (injected here; no test reads
+    /// the real `/etc`). A project `.codex/config.toml` counts only under a named cwd, in the cwd
+    /// and each directory above it up to the nearest one holding `.git` — the cwd alone when there
+    /// is none — so a scratch run never reports a directory metaharness made, and the operator's
+    /// own `~/.codex` above a repository is not taken for a project layer.
+    #[test]
+    fn codex_config_layers_reports_machine_and_project_layers_and_nothing_else() {
+        let machine = tempfile::tempdir().unwrap();
+        let managed = machine.path().join("managed_config.toml");
+        std::fs::write(&managed, "[features]\npersonality = false\n").unwrap();
+        let candidates = [managed.clone(), machine.path().join("requirements.toml")];
+
+        let world = tempfile::tempdir().unwrap();
+        let repo = world.path().join("repo");
+        let sub = repo.join("sub");
+        std::fs::create_dir_all(sub.join(".codex")).unwrap();
+        std::fs::create_dir_all(repo.join(".git")).unwrap();
+        std::fs::create_dir_all(repo.join(".codex")).unwrap();
+        std::fs::create_dir_all(world.path().join(".codex")).unwrap();
+        for dir in [&sub, &repo, &world.path().to_path_buf()] {
+            std::fs::write(
+                dir.join(".codex/config.toml"),
+                "personality = \"friendly\"\n",
+            )
+            .unwrap();
+        }
+
+        let mut named = RunSpec::new(Kind::Codex);
+        named.cwd = Some(sub.clone());
+        assert_eq!(
+            codex_config_layers(&named, &sub, &candidates),
+            vec![
+                managed.clone(),
+                sub.join(".codex/config.toml"),
+                repo.join(".codex/config.toml"),
+            ],
+            "the walk stops at the repository root"
+        );
+
+        // No `.git` above: the cwd's own layer and nothing above it.
+        let loose = tempfile::tempdir().unwrap();
+        let inner = loose.path().join("inner");
+        std::fs::create_dir_all(inner.join(".codex")).unwrap();
+        std::fs::create_dir_all(loose.path().join(".codex")).unwrap();
+        std::fs::write(inner.join(".codex/config.toml"), "").unwrap();
+        std::fs::write(loose.path().join(".codex/config.toml"), "").unwrap();
+        let mut loose_spec = RunSpec::new(Kind::Codex);
+        loose_spec.cwd = Some(inner.clone());
+        assert_eq!(
+            codex_config_layers(&loose_spec, &inner, &[]),
+            vec![inner.join(".codex/config.toml")]
+        );
+
+        // A scratch cwd metaharness made: machine layers only.
+        let scratch = RunSpec::new(Kind::Codex);
+        assert_eq!(
+            codex_config_layers(&scratch, &sub, &candidates),
+            vec![managed]
+        );
+        assert_eq!(
+            codex_config_layers(&scratch, &sub, &[]),
+            Vec::<PathBuf>::new()
+        );
+    }
+
+    /// End to end through `start_codex`: a project layer in the declared copy is found, H2 reads
+    /// as attested unavailable (advisory) and H1b reads `unk` naming it although the record names
+    /// the personality the launch wrote. Strict stays exit 3.
+    #[test]
+    fn a_project_layer_in_the_declared_copy_makes_h1b_unk_and_names_it() {
+        let (_root, run) = codex_strict_run_in(Some(metaharness_codex::PERSONALITY), |copy| {
+            std::fs::create_dir_all(copy.join(".codex")).unwrap();
+            std::fs::write(
+                copy.join(".codex/config.toml"),
+                "personality = \"friendly\"\n",
+            )
+            .unwrap();
+        });
+        let (h1b, detail) = verdict(&run, HermeticRow::H1b);
+        assert_eq!(h1b, Verdict::Unk, "{detail}");
+        assert!(detail.contains(".codex/config.toml"), "{detail}");
+        let (h2, detail) = verdict(&run, HermeticRow::H2);
+        assert_eq!(h2, Verdict::Gap, "{detail}");
+        assert!(detail.contains(".codex/config.toml"), "{detail}");
+        assert_eq!(exit(&run), RunExit::NoVerdict);
     }
 }

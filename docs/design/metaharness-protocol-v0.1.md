@@ -1234,7 +1234,7 @@ when its unobservability is a property of the mechanism rather than of the run.
 | # | control | imposed by | asserted how | unknown means | gating? |
 |---|---|---|---|---|---|
 | H1a | config home is scratch — **plugins** | `CLAUDE_CONFIG_DIR` / `CODEX_HOME` to a fresh directory. **a10: a declared `--plugin-dir` is copied into the run's own scratch tree and digested before the copy, so the declared set is a pinned artifact and not a directory that can change under the run** | record: loaded plugins are **exactly** the declared set | no plugin list ⇒ `unk` | **gating** |
-| H1b | …and **output style** | same | record: output style is the default | no output style ⇒ `unk`. Split from H1a because they fail independently and one unknown must not mask the other (**F11**) | **gating** |
+| H1b | …and **output style** | same. **a34: the Codex launch also writes `personality = "pragmatic"`, the pinned binary's own default, into the scratch `config.toml`** | record: output style is the default. **a34: where the launch wrote one, the record must name exactly it — Codex's is the personality the first `turn_context` records, the session's record of the setting and not proof of what the model was told; another value is `gap`, and a config layer the launch does not reach (`/etc/codex`, a project `.codex/config.toml`) makes the row `unk`** | no output style ⇒ `unk`. Split from H1a because they fail independently and one unknown must not mask the other (**F11**) | **gating** |
 | H2 | settings sources excluded | `--setting-sources` with user/project/local omitted — the empty value, which V20 shows is the vendor's own defined no-sources case | launch: the flag is in the argv. The *absence of allow rules that would shadow the seam* is **not separately observable in any record** | — | **advisory.** The mechanism, not the run, is what cannot be observed; § 7.3 already refuses `can_use_tool` rather than trusting this row |
 | H3 | the environment is constructed, not inherited | an explicit allowlist; everything else dropped — including `ANTHROPIC_BASE_URL`, `ANTHROPIC_MODEL`, `HTTP(S)_PROXY`, `CLAUDE_CODE_*`, `DISABLE_*`, `SSH_AUTH_SOCK`, `GIT_*`, and `PATH` reduced to a stated set | **launch:** the constructed child environment, as a value, before spawning (§ 8.4 O7) | n/a — launch assertion | **gating** |
 | H4 | no API key unless declared | `ANTHROPIC_API_KEY` is not in the allowlist unless the run declares `credentials: api_key` | record: credential source in the opening record | absent ⇒ `unk` | **gating** |
@@ -2789,3 +2789,113 @@ the cwd out of every request at both pins — the binary's behaviour, not a cont
 No event or frame wire change. `FloorInputs` gains `builtin_plugins` and `endpoint_key_posture`;
 `contract_result`'s provider reads `claude 2.1.304, 2.1.305`; the c1 refusal fixture for a memory
 ancestor carries the new sentence.
+
+### Amendment a34 — Codex reads H1b from its record and says why H1a, H4 and H5 stay unknown (2026-10-21)
+
+`story:codex-strict-record-rows` (Atlas ADR 0098). **Decision D1 = B** (the story's wave,
+2026-10-20): invariant 3 and a13 stand — *"vendor adapters still owe their record of those ambient
+vendor surfaces"* — so no record row is decided from what the Codex launch imposed, and
+`--hermetic strict` stays exit 3 on Codex. Deciding H1a, H4 and H5 from the launch (option A) is
+open for the operator. Seven decisions; the evidence is
+`docs/research/2026-10-21-codex-0.153.4-record-surface.md`, credential-free, no paid run. Decisions
+2, 4 and 5 were corrected by the unit's first adversary pass, the same day, before anything shipped.
+
+**1. The launch writes `personality`, and H1b compares the record with it.** The scratch
+`config.toml` sets `personality = "pragmatic"` (`metaharness_codex::PERSONALITY`), the 0.153.4
+binary's own default: every native session whose config named none recorded `"pragmatic"`, so no
+recorded setting changes. Where a launch wrote an output style (`FloorInputs::planned_output_style`)
+H1b reads `ok` when the record names exactly that value and the launch attested no layer it does not
+control (decision 5), `gap` when the record names another value, and `unk` when it names none; the
+written value is the comparison and never the evidence. Where a launch writes none (Claude, b10x)
+the row is unchanged: the record must name the default.
+
+**What the record is, and is not.** `turn_context.personality` is the personality the session
+*recorded* — the setting as the binary resolved it — and not proof of what the model was told. Two
+observations at 0.153.4 say so: with `/etc/codex/managed_config.toml` setting
+`[features] personality = false` the session still recorded `"pragmatic"`; and every request the
+native fixture's provider received carried the base prompt's generic `## Personality` paragraph and
+none of the binary's pragmatic template, on sessions that recorded `"pragmatic"`. Which layers
+change the *recorded* value was observed too: the launch's key wins over `/etc/codex/config.toml`;
+`/etc/codex/managed_config.toml` and a project's `.codex/config.toml` win over it. Under the
+`read-only` sandbox a project's file is read only when the project is trusted; under the
+`workspace-write` sandbox every `--cwd` launch uses, an untrusted project's file was read too, with
+no trust entry (the unit's adversary in six probe cases, the research page in one). A row that
+compares recorded values therefore answers only while no such layer exists, which is decision 5.
+
+**2. The opening record is completed from the first `turn_context`.** `session_meta` names no
+personality; the first `turn_context` does, one record later. Two readings were open — the floor
+reads the later event, or the opening record is completed from it — and the second is taken: the
+first needs a wire field or an event the floor could read, and this amendment changes no wire. The
+rollout reader holds `session.started`, and everything after it, from `session_meta` until that
+record and sets `output_style` from its `personality`, verbatim, or leaves it absent. The hold covers
+only the preamble records the pinned binary writes in between — `task_started`, the non-assistant
+context messages, `world_state` — and any other record releases it unchanged, as does the end of the
+record, so a drifted record cannot hold the stream open behind the opening record; and a line is
+held only when what it produced is a `turn.started` or an `opaque`, so the hold never holds a call.
+Event order and every timestamp are unchanged; only when `session.started` is emitted moves. Two
+things follow:
+
+- **A hook request releases the hold at once.** The hook channel is read before the rollout tail,
+  and two native sessions delivered a hook's request before the rollout's record of the same call;
+  a hook can therefore publish before the tail has read the `turn_context`. A blocked hook must not
+  wait behind the opening record: the codex seam releases it as it stands — without the personality,
+  so H1b reads `unk` on that run — and the call follows it onto the run loop's ordinary path,
+  admitted, decided or deadlined, abandoned on a halt. *Corrected:* the first build held the call
+  behind the opening record; an adversary showed that `Run::wind_up` puts what `finish` releases
+  straight into the outbox without admitting it (a call presented and never decided, and missed by
+  a halt's abandonment), and that a hook waiting past the child's grace failed the run with
+  *"metaharness holds none pending"*. The codex `finish` now never returns a call.
+- `metaharness project --from codex-rollout` cites each held event's own record line
+  (`RolloutReader::push_line_sourced`), not the line that released it — a28's source-line rule.
+
+The golden 0.144.0 record's expected stream moves on one line: its opening record's `output_style`
+reads `"pragmatic"`, the personality its own `turn_context` names.
+
+**3. H1a, H4 and H5 stay `unk` on Codex and say why.** No record of 0.153.4 — `session_meta`,
+`turn_context`, `world_state` — carries a plugin list, a credential source or an MCP server list. The
+adapter states that per row (`metaharness_codex::RECORD_SILENCES`) and the floor appends the
+statement to its own sentence (`FloorInputs::record_silences`); it decides nothing. The H1a sentence
+also says why the scratch home is not the answer: `apps`, `remote_plugin` and `plugins` are on by
+default in a scratch `CODEX_HOME`, and what they load under a ChatGPT login is unverified.
+
+**4. H2's attestation names only what the launch writes.** It named `{home}/hooks.json` as a source
+*"written by this launch"*; no launch writes one (§ 7.4, the seam is `[hooks]` in `config.toml`). It
+now names `{home}/config.toml` alone, and claims it is the whole of it only when decision 5 finds no
+other layer.
+
+**5. The launch looks for the config layers it does not reach** (a33's managed-settings precedent).
+Before planning, the caller checks which of `metaharness_codex::CONFIG_LAYER_PATHS` exist —
+`/etc/codex/config.toml`, `/etc/codex/managed_config.toml`, `/etc/codex/requirements.toml`, every
+machine-level config path the 0.153.4 binary's strings name on Linux — and, under a named cwd
+(`--cwd`, with or without `--scratch-cwd`), a project `.codex/config.toml` in the cwd and each
+directory above it up to the nearest one holding `.git` (the cwd alone when none does; that bound is
+this launch's choice, not the binary's discovery rule, and it keeps the operator's own `~/.codex`
+above a repository from reading as a project layer). It hands them to the plan
+(`LaunchContext::config_layers`). When any exists the launch attests **H2 unavailable** and **H1b
+unavailable**, each naming them, instead of claiming either; the floor then reads a record that
+names the launch's personality as H1b **`unk`** with that reason — a managed layer can change what
+the model is told while the recorded personality stays `"pragmatic"` — and a record naming another
+value as `gap`, as before. None exists on this machine (2026-10-21), so H1b reads `ok` and H2
+imposed here. Unit tests inject the paths; nothing reads a real `/etc`. The walk counts a project
+file whatever its trust, since under `workspace-write` trust does not decide whether it is read.
+
+**The check covers file layers only.** The 0.153.4 binary also names the layer sources
+`cloud_requirements` and `cloud_managed_config`, which are not files: no check here sees them, and
+what they set under a ChatGPT login is unverified. The H1b and H2 claims say so in their own text
+rather than claiming *no layer*.
+
+**6. `--strict-version` refuses an off-pin Codex binary before anything is written or spawned.** The
+Codex launch never read the flag. It now runs a33's guard, made generic (`guard_strict_version`):
+`codex` resolved on the child's own `PATH`, its `--version` read with the plan's environment within
+5 seconds, and a refusal by name, exit 2, when the version is not pinned, not readable or late; a
+runner that launches no executable is refused under the flag. Observed: 0.153.4 admitted, codex-cli
+0.160.0 refused with nothing reaching the fixture provider. a33's recorded race — the probe and the
+spawn resolve the binary separately — holds here too; H9 still reads the record's version.
+
+**7. Strict on Codex.** A clean credential-free run on a machine with no config layer outside the
+scratch home now reads H1b `ok` and H1a, H4 and H5 `unk`, each with its reason, and exits 3 —
+observed through the built driver.
+
+No event or frame wire change. `FloorInputs` gains `planned_output_style` and `record_silences`;
+`metaharness_codex::LaunchContext` gains `config_layers`; `conformance codex` checks 21 vectors
+(three opening-record replays); the c1 launch fixtures carry the `personality` line.

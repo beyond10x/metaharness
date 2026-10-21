@@ -32,13 +32,47 @@
 //! neighbouring field — the `output` array as a result record, a cost multiplied out of tokens —
 //! would turn *this vendor does not say* into *this vendor says fine*, which is the failure the
 //! whole protocol is arranged against.
+//!
+//! # The opening record, completed from the first turn (amendment a34)
+//!
+//! | `session.started` field | this vendor |
+//! |---|---|
+//! | `output_style` | **carried, one record late** — the personality the first `turn_context` records, which is the session's record of the setting and not proof of what the model was told. A hook request that arrives first releases the opening record without it. The reader holds the opening record from `session_meta` until that record and completes it; the hold covers only the preamble records the pinned binary writes in between, so the stream order and every timestamp are unchanged |
+//! | `plugins`, `mcp_servers`, `credential_source` | **absent** — no record of 0.153.4 carries them; [`RECORD_SILENCES`] says so in the floor's own rows |
 
 use metaharness_protocol::{
-    Digest, Emission, Event, HermeticAttestation, RateLimitInfo, TranscriptRef, Usage,
+    Digest, Emission, Event, HermeticAttestation, HermeticRow, RateLimitInfo, TranscriptRef, Usage,
 };
 use serde_json::Value;
 
 use crate::{ADAPTER_ID, PINNED_VERSIONS};
+
+/// Why the opening record this reader produces is silent on three gating rows, for the floor to
+/// print beside each `unk` (amendment a34).
+///
+/// Each is a statement about the pinned binary's record, observed on a credential-free 0.153.4 run
+/// (`docs/research/2026-10-21-codex-0.153.4-record-surface.md`): `session_meta`, `turn_context`
+/// and `world_state` carry no plugin list, no credential source and no MCP server list. Each row
+/// stays `unk`, because what the launch imposed is metaharness's own claim and deciding a record
+/// row from it is open under invariant 3 (decision D1 = B keeps amendment a13 as written).
+pub const RECORD_SILENCES: [(HermeticRow, &str); 3] = [
+    (
+        HermeticRow::H1a,
+        "codex-cli 0.153.4's rollout lists no plugins, and the scratch CODEX_HOME is not shown to \
+         be the whole plugin surface (the apps and remote_plugin features are on by default); \
+         deciding H1a from what the launch imposed is open under invariant 3",
+    ),
+    (
+        HermeticRow::H4,
+        "codex-cli 0.153.4's rollout does not record which credential the session used; deciding \
+         H4 from the environment the launch built is open under invariant 3",
+    ),
+    (
+        HermeticRow::H5,
+        "codex-cli 0.153.4's rollout lists no MCP servers; deciding H5 from the empty \
+         [mcp_servers] the launch wrote is open under invariant 3",
+    ),
+];
 
 /// Reads one rollout line at a time and emits protocol events.
 ///
@@ -65,6 +99,16 @@ pub struct RolloutReader {
     /// What metaharness's own seam decided, handed in rather than computed here: the census
     /// counts what *metaharness* did and no vendor record can see it (design D6, finding F10).
     census: metaharness_protocol::DecisionCensus,
+    /// The opening record and every emission after it, each with the line it was read from, held
+    /// from `session_meta` until the record that completes the opening record (amendment a34).
+    ///
+    /// The recorded output style is a per-turn fact in a rollout — `turn_context.personality` —
+    /// and the first `turn_context` arrives after `session_meta`, so the opening record is held
+    /// until it and completed from it. The hold covers only the records 0.153.4 writes between
+    /// the two (see [`is_preamble`]); any other record releases it with the field still absent,
+    /// so a record that drifted cannot hold the stream open, and [`RolloutReader::finish`]
+    /// releases whatever is still held.
+    held: Option<Vec<(u64, Emission)>>,
 }
 
 impl RolloutReader {
@@ -83,7 +127,27 @@ impl RolloutReader {
             terminal_failure: false,
             last_usage: None,
             census: metaharness_protocol::DecisionCensus::default(),
+            held: None,
         }
+    }
+
+    /// Whether the opening record is being held for the record that completes it (amendment
+    /// a34). A seam that emits events of its own — the codex hook channel — releases it first, with
+    /// [`RolloutReader::release_opening_record`], so `session.started` stays the first event.
+    #[must_use]
+    pub fn holding_opening_record(&self) -> bool {
+        self.held.is_some()
+    }
+
+    /// Release whatever is held, the opening record first and without the field the record never
+    /// supplied. Empty when nothing is held.
+    pub fn release_opening_record(&mut self) -> Vec<Emission> {
+        self.held
+            .take()
+            .unwrap_or_default()
+            .into_iter()
+            .map(|(_, emission)| emission)
+            .collect()
     }
 
     /// Whether a `task_complete` has been seen — the rollout's nearest thing to a terminal
@@ -103,7 +167,21 @@ impl RolloutReader {
     }
 
     /// One rollout line in, zero or more events out.
+    ///
+    /// Zero while the opening record is held for the record that completes it (amendment a34);
+    /// the release then carries everything held, in order.
     pub fn push_line(&mut self, line: &str) -> Vec<Emission> {
+        self.push_line_sourced(line)
+            .into_iter()
+            .map(|(_, emission)| emission)
+            .collect()
+    }
+
+    /// [`RolloutReader::push_line`], each emission paired with the 1-based rollout line it was
+    /// read from — which, for an emission released from the hold, is an earlier line than this
+    /// one. A replay that cites record lines (`metaharness project --from codex-rollout`,
+    /// amendment a28) reads them from here rather than from the line that released them.
+    pub fn push_line_sourced(&mut self, line: &str) -> Vec<(u64, Emission)> {
         self.line_number += 1;
         if line.trim().is_empty() {
             return Vec::new();
@@ -111,11 +189,13 @@ impl RolloutReader {
         let Ok(record) = serde_json::from_str::<Value>(line) else {
             // Not JSON at all: preserved, never dropped and never fatal — the vendor's format
             // carries no stability guarantee, so an unreadable line is a fact about the record.
-            return vec![Emission::untimed(self.opaque(None, None, line))];
+            let emitted = vec![Emission::untimed(self.opaque(None, None, line))];
+            return self.hold_or_release(Opening::Releases, emitted);
         };
         let at = record["timestamp"].as_str().map(ToString::to_string);
         let record_type = record["type"].as_str().unwrap_or_default().to_string();
         let payload = &record["payload"];
+        let opens = record_type == "session_meta" && !self.saw_meta;
 
         let events = match record_type.as_str() {
             "session_meta" => self.session_meta(payload, line),
@@ -128,13 +208,74 @@ impl RolloutReader {
             }
             _ => vec![self.opaque(Some(&record_type), payload["type"].as_str(), line)],
         };
-        events
+        let emitted: Vec<Emission> = events
             .into_iter()
             .map(|event| match &at {
                 Some(timestamp) => Emission::at(timestamp.clone(), event),
                 None => Emission::untimed(event),
             })
-            .collect()
+            .collect();
+        let effect = if opens {
+            Opening::Opens
+        } else if record_type == "turn_context" && payload.is_object() {
+            // The personality the session recorded, verbatim, or nothing: a
+            // `turn_context` without one completes the opening record with the field absent.
+            Opening::Completes(payload["personality"].as_str().map(ToString::to_string))
+        } else if is_preamble(&record_type, payload)
+            && emitted.iter().all(|emission: &Emission| {
+                matches!(
+                    &emission.event,
+                    Event::TurnStarted { .. } | Event::Opaque { .. }
+                )
+            })
+        {
+            // Held only when what the line produced is a turn boundary or an opaque record, so the
+            // hold — and therefore what `finish` can release — never holds a call, a result or
+            // text, whatever a later mapping makes of a preamble record.
+            Opening::Held
+        } else {
+            Opening::Releases
+        };
+        self.hold_or_release(effect, emitted)
+    }
+
+    /// Apply one line's effect on the held opening record to the emissions the line produced.
+    fn hold_or_release(&mut self, effect: Opening, emitted: Vec<Emission>) -> Vec<(u64, Emission)> {
+        let line = self.line_number;
+        let tagged = emitted.into_iter().map(|emission| (line, emission));
+        let Some(mut held) = self.held.take() else {
+            if matches!(effect, Opening::Opens) {
+                self.held = Some(tagged.collect());
+                return Vec::new();
+            }
+            return tagged.collect();
+        };
+        match effect {
+            Opening::Completes(output_style) => {
+                if let Some((
+                    _,
+                    Emission {
+                        event:
+                            Event::SessionStarted {
+                                output_style: style,
+                                ..
+                            },
+                        ..
+                    },
+                )) = held.first_mut()
+                {
+                    *style = output_style;
+                }
+            }
+            Opening::Opens | Opening::Held => {
+                held.extend(tagged);
+                self.held = Some(held);
+                return Vec::new();
+            }
+            Opening::Releases => {}
+        }
+        held.extend(tagged);
+        held
     }
 
     /// The events owed after the last line.
@@ -143,7 +284,30 @@ impl RolloutReader {
     /// terminal `session.ended` is built here, from the last `task_complete` and the last
     /// `token_count`. Explicit errors take precedence; a legacy final message is
     /// positive success evidence. A bare completion remains unknown.
+    ///
+    /// An opening record still held is released first, without the field the record never
+    /// supplied (amendment a34).
     pub fn finish(&mut self) -> Vec<Emission> {
+        self.finish_sourced()
+            .into_iter()
+            .map(|(_, emission)| emission)
+            .collect()
+    }
+
+    /// [`RolloutReader::finish`], each emission paired with the rollout line it was read from; the
+    /// terminal record, which no line carries, cites the last line read.
+    pub fn finish_sourced(&mut self) -> Vec<(u64, Emission)> {
+        let mut owed = self.held.take().unwrap_or_default();
+        owed.extend(
+            self.terminal()
+                .into_iter()
+                .map(|emission| (self.line_number, emission)),
+        );
+        owed
+    }
+
+    /// The terminal `session.ended`, when a `task_complete` was seen.
+    fn terminal(&mut self) -> Vec<Emission> {
         let Some((at, complete)) = self.last_complete.take() else {
             return Vec::new();
         };
@@ -204,7 +368,10 @@ impl RolloutReader {
             // one; absent here rather than copied from a turn that has not happened yet.
             model: None,
             permission_mode: None,
+            // `session_meta` does not say where the credential came from (RECORD_SILENCES).
             credential_source: None,
+            // Completed from the first `turn_context.personality` before this record is emitted
+            // (amendment a34); absent if the record names none.
             output_style: None,
             cwd: payload["cwd"].as_str().map(ToString::to_string),
             offered_tools: None,
@@ -392,6 +559,39 @@ impl RolloutReader {
             digest: Digest::of(line.as_bytes()),
             source_line: Some(self.line_number),
         }
+    }
+}
+
+/// What one rollout line does to the held opening record (amendment a34).
+enum Opening {
+    /// The first `session_meta`: the opening record is produced and held.
+    Opens,
+    /// A `turn_context`: the opening record takes its output style — the personality the record
+    /// names, or none — and is released with everything held behind it.
+    Completes(Option<String>),
+    /// One of the records the pinned binary writes between the two: held behind the opening record.
+    Held,
+    /// Anything else: the opening record is released as it stands.
+    Releases,
+}
+
+/// Whether a record is one the pinned binary writes between `session_meta` and the first
+/// `turn_context`, which the hold may keep behind the opening record (amendment a34).
+///
+/// 0.153.4 writes `task_started`, the developer and user context messages and `world_state`
+/// there, observed on a credential-free native run; the 0.144.0 golden record writes the same
+/// kinds. Nothing that is the model's — an assistant message, a call, its output, usage — is a
+/// preamble record, so a record without a `turn_context` releases the opening record at the first
+/// such line rather than holding the stream behind it.
+fn is_preamble(record_type: &str, payload: &Value) -> bool {
+    match record_type {
+        "world_state" => true,
+        "event_msg" => payload["type"].as_str() == Some("task_started"),
+        "response_item" => {
+            payload["type"].as_str() == Some("message")
+                && payload["role"].as_str() != Some("assistant")
+        }
+        _ => false,
     }
 }
 

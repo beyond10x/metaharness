@@ -27,7 +27,7 @@ byte.
 | file | record |
 |---|---|
 | `contract-result-claude.json` | `checked: 24` — 7 launch, 3 synthesised replays, 3 golden (CT-2/CT-3), 8 control, 3 spawn |
-| `contract-result-codex.json` | `checked: 17` — **6 launch**, 4 synthesised replays, 3 golden, **4 spawn**. Was `10` until 2026-08-23, when the launch face CT-4 recorded as a named gap was filled (+6: two of them the loopback door's, LP-4) and the spawn tier gained the allow round trip (+1) |
+| `contract-result-codex.json` | `checked: 21` — **7 launch**, 7 synthesised replays, 3 golden, **4 spawn**. Was `10` until 2026-08-23, when the launch face CT-4 recorded as a named gap was filled (+6: two of them the loopback door's, LP-4) and the spawn tier gained the allow round trip (+1); `18` from amendment a27's declared-copy launch vector; `21` from 2026-10-21, when amendment a34's three opening-record replays (`CX2-output-style-recorded`, `-foreign`, `-absent`) were added |
 | `contract-result-b10x.json` | `checked: 7` — one recorded launch, one byte-exact recorded loop replay, one capture-banner/version-pin pair and four provider-emulated enforcement outcomes (unpublished tool, approval denial, budget stop and cancellation). The hook-input row is N/A because the observe-only adapter has no metaharness hook seam |
 
 The adapters' counts differ and always will: they are counts of *that adapter's* vectors, not a

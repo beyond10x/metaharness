@@ -47,3 +47,9 @@ paths in release executables. This is a further path redaction, not a new captur
 record order, tool calls and identifiers remain as recorded. Expected streams were regenerated.
 Use workspace feature resolution when regenerating: it matches the released CLI and avoids
 changing floating-point serialization through a different dependency feature selection.
+
+On 2026-10-21 `rollout.expected.jsonl` was regenerated for amendment a34 and one line moved: the
+opening record's `output_style` reads `"pragmatic"`, the personality this record's first
+`turn_context` (line 8) names, where it read `null`. The reader now holds the opening record until
+that record and completes it from it; the input, the event order, every timestamp and every other
+line are unchanged.
