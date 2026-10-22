@@ -3,7 +3,7 @@
 What changed. The design document carries *why*; where code and design disagreed, the design
 was amended and the amendment is named here.
 
-## [Unreleased]
+## [0.13.0] — 2026-10-22
 
 ### Added
 
@@ -11,7 +11,7 @@ was amended and the amendment is named here.
 
 ### Changed
 
-- **Breaking** for a library caller that matches `FramingError` exhaustively: it gains `NotUtf8 { valid_up_to }`, which `parse_command_bytes` returns for a command line that is not UTF-8 (a44).
+- **Breaking:** `FramingError` gains `NotUtf8 { valid_up_to }`, which `parse_command_bytes` returns for a command line that is not UTF-8; a library caller that matches `FramingError` exhaustively needs the new arm (a44).
 - `Run::poll_event` no longer writes `stream.closed` in the poll that sees the child's stream end. That poll returns `Progress` or the first event wind-up queued, and the marker comes on a later poll, so commands handed over before each poll are answered before it (a44 § 4).
 - `README.md`, the status page and the quickstart scope `METAHARNESS_LIVE=1` to the commands that check it (`metaharness aep drive run`, `resume` and `eval run`, the `aep-eval` runner with `--spend`, the ignored live tests) and say that a plain `metaharness run` does not check it; `crates/metaharness-cli/tests/live_scope_documented.rs` holds every page that names the variable to that.
 
