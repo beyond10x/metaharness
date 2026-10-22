@@ -44,7 +44,7 @@ fn call(server: &mut Server, name: &str, arguments: &Value) -> (bool, String) {
 }
 
 fn released(family: &str) -> CallerCatalogue {
-    let document = tool_contract::documents::get(family, "v1alpha1").expect("released at 0.2.0");
+    let document = tool_contract::documents::get(family, "v1alpha1").expect("released at 0.4.0");
     CallerCatalogue::from_text(Path::new("released.yaml"), document.yaml).expect("a catalogue")
 }
 
@@ -236,13 +236,19 @@ fn a_struct_inside_the_arguments_refuses_a_key_outside_its_fields_and_a_missing_
         assert!(text.contains("nothing was done"), "{arguments}: {text}");
         assert!(!text.contains("hello catalogue"), "{arguments}: {text}");
     }
-    let (failed, text) = call(
-        &mut server,
-        "fs_read",
-        &every_shape_call(json!({"window": {"from": 1, "to": null}})),
-    );
-    assert!(!failed, "{text}");
-    assert!(text.contains("hello catalogue"), "{text}");
+    // The positive control: the struct check admits a window with its required field given and
+    // its optional one null.
+    let admitted = every_shape_call(json!({"window": {"from": 1, "to": null}}));
+    let problems = problems_of(&every_shape(), "fs_read", &admitted);
+    assert!(problems.is_empty(), "{admitted}: {problems:?}");
+    // Through the server the call reaches harness, which since 0.16.1 refuses a field the
+    // performed entry's schema does not declare (`crates/harness-wire/src/undeclared.rs:66` at
+    // `330e2cde`). `file_read` declares none of the fields this caller's document adds, so the
+    // call is refused there, by name, and nothing is read.
+    let (failed, text) = call(&mut server, "fs_read", &admitted);
+    assert!(failed, "{text}");
+    assert!(text.contains("is not an argument of `file_read`"), "{text}");
+    assert!(!text.contains("hello catalogue"), "{text}");
 }
 
 /// The a45 § 3 example, verbatim: the refusal names the JSON kind received, not only the path and

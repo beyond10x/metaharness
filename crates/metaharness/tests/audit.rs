@@ -81,6 +81,7 @@ fn inputs<'a>(spec: &'a RunSpec, pins: &'a [String], plugins: &'a [String]) -> F
         declared_plugins: plugins,
         builtin_plugins: &[],
         endpoint_key_posture: None,
+        secret_key_source: None,
         planned_mcp_servers: &[],
         planned_output_style: None,
         record_silences: &[],
@@ -1080,6 +1081,7 @@ fn h4_of(record: Event, posture: Option<&str>) -> (Verdict, String) {
         &[record],
         &FloorInputs {
             endpoint_key_posture: posture,
+            secret_key_source: None,
             ..inputs(&spec, &pins(), &[])
         },
     );

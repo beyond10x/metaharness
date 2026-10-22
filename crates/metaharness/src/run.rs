@@ -224,6 +224,9 @@ pub(crate) struct LaunchFacts {
     pub(crate) builtin_plugins: Vec<crate::audit::BuiltinPlugin>,
     /// The H4 sentence this kind's launch attests over its own endpoint placeholder (a33).
     pub(crate) endpoint_key_posture: Option<&'static str>,
+    /// The `credential_source` this kind's loop records for a key named by a secret, for H4
+    /// (amendment a50 § 7). `None` for a kind with no secret route.
+    pub(crate) secret_key_source: Option<&'static str>,
     /// The output style this kind's launch wrote, for H1b (amendment a34).
     pub(crate) planned_output_style: Option<&'static str>,
     /// Why this kind's opening record is silent on a record-asserted row (amendment a34).

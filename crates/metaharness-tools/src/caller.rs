@@ -218,6 +218,76 @@ impl CatalogueEntry {
         struct_problems(&self.input_schema, given, None, &mut problems);
         problems
     }
+
+    /// The arguments as the call is performed: every struct field given as null that its schema
+    /// does not mark required is taken out, at every depth the schema declares a struct, because
+    /// such a null reads as absent (amendments a45 § 2 and a50 § 2). A null list item or map value
+    /// is a value rather than a field and is kept, and so is anything the schema does not declare.
+    /// Meant for arguments [`argument_problems`](Self::argument_problems) found nothing wrong
+    /// with, so no required field is null by then.
+    #[must_use]
+    pub fn without_absent_nulls(&self, mut arguments: Value) -> Value {
+        if let Value::Object(given) = &mut arguments {
+            drop_absent_nulls(&self.input_schema, given);
+        }
+        arguments
+    }
+}
+
+/// Takes out of a struct each field given as null that `schema` does not mark required, then does
+/// the same inside each remaining value its schema declares.
+fn drop_absent_nulls(schema: &Value, given: &mut Map<String, Value>) {
+    let required: Vec<&str> = schema
+        .get("required")
+        .and_then(Value::as_array)
+        .into_iter()
+        .flatten()
+        .filter_map(Value::as_str)
+        .collect();
+    given.retain(|key, value| !value.is_null() || required.contains(&key.as_str()));
+    let Some(properties) = schema.get("properties").and_then(Value::as_object) else {
+        return;
+    };
+    for (key, value) in given.iter_mut() {
+        if let Some(field) = properties.get(key) {
+            drop_absent_nulls_inside(field, value);
+        }
+    }
+}
+
+/// [`drop_absent_nulls`] for every struct inside `value`, read as [`value_problems`] reads it.
+fn drop_absent_nulls_inside(schema: &Value, value: &mut Value) {
+    if let Some(choices) = schema.get("anyOf").and_then(Value::as_array) {
+        if let Some(choice) = choices
+            .iter()
+            .find(|choice| of_declared_kind(choice, value))
+        {
+            drop_absent_nulls_inside(choice, value);
+        }
+        return;
+    }
+    match value {
+        Value::Array(items) => {
+            if let Some(item) = schema.get("items") {
+                for each in items {
+                    drop_absent_nulls_inside(item, each);
+                }
+            }
+        }
+        Value::Object(given) => {
+            if schema.get("properties").is_some() {
+                drop_absent_nulls(schema, given);
+            } else if let Some(each) = schema
+                .get("additionalProperties")
+                .filter(|each| each.is_object())
+            {
+                for entry in given.values_mut() {
+                    drop_absent_nulls_inside(each, entry);
+                }
+            }
+        }
+        Value::Null | Value::Bool(_) | Value::Number(_) | Value::String(_) => {}
+    }
 }
 
 /// The problems of an object whose schema has `properties`: keys outside them, required fields

@@ -170,6 +170,14 @@ impl Metaharness {
         self
     }
 
+    /// The API key's name in the operator's secret store, `<namespace>/<name>`: b10x only, beside
+    /// [`CredentialSource::ApiKey`] (design amendment a50). The loop reads the key itself.
+    #[must_use]
+    pub fn with_api_key_secret(mut self, name: impl Into<String>) -> Self {
+        self.spec.api_key_secret = Some(name.into());
+        self
+    }
+
     /// The model to ask for.
     #[must_use]
     pub fn with_model(mut self, model: impl Into<String>) -> Self {
@@ -616,22 +624,10 @@ fn start_b10x(
     // whose absence made every launch of this arm fail before it read an argument. The base also
     // points profile discovery at scratch: harness 0.8.0 reads `$XDG_CONFIG_HOME/b10x/harness.toml`,
     // and inheriting the operator's `[default]` profile would silently change this run's policy.
-    if spec.credentials == CredentialSource::ApiKey {
-        // The argv names the variable; this puts it in the child's environment, and without both
-        // halves `--api-key-env` points at something that is not there. Absent from the operator's
-        // environment is refused by name rather than launched unauthenticated: a run that silently
-        // dropped its credential would fail at the first request with the endpoint's word for it,
-        // which is a worse explanation than this one. The Claude adapter refuses the same way for
-        // `ANTHROPIC_API_KEY`.
-        let key = std::env::var(B10X_API_KEY_VARIABLE).map_err(|_| Refusal::Launch {
-            detail: format!(
-                "the run declared credentials: api-key and {B10X_API_KEY_VARIABLE} was not in the \
-                 caller's environment. Set it, or use --credentials none for an endpoint that \
-                 authenticates nobody"
-            ),
-        })?;
-        env.insert(B10X_API_KEY_VARIABLE.to_owned(), key);
-    }
+    let credential_environment =
+        b10x_credential_environment(&spec, |name| std::env::var(name).ok())?;
+    let h3 = b10x_h3_how(&spec, &credential_environment);
+    env.extend(credential_environment);
     if spec.toolchain.is_some() {
         // The child locates its toolchain the way the tools themselves do, and with `env_clear`
         // it can only do that if it is told where to look. Passed by name and only when a
@@ -656,7 +652,7 @@ fn start_b10x(
         },
         ImposedControl {
             row: HermeticRow::H3,
-            how: "the child environment is constructed from PATH, scratch XDG_CONFIG_HOME and only explicitly declared credential or toolchain variables".to_owned(),
+            how: h3,
         },
         ImposedControl {
             row: HermeticRow::H8,
@@ -768,6 +764,7 @@ fn start_b10x(
         declared_plugins: Vec::new(),
         builtin_plugins: crate::vectors::builtin_plugins(Kind::B10x),
         endpoint_key_posture: None,
+        secret_key_source: Some(metaharness_b10x::SECRET_KEY_SOURCE),
         // The b10x loop binds its tools in-process; there is no MCP server to configure and
         // nothing for one to be compared against.
         planned_mcp_servers: Vec::new(),
@@ -988,6 +985,7 @@ fn start_claude(
             // The sentence this launch attests on H4 when it hands the child its own endpoint
             // placeholder, so the floor reads that key from the attestation (a33).
             endpoint_key_posture: Some(metaharness_claude::ENDPOINT_KEY_POSTURE),
+            secret_key_source: None,
             // Read off the document the launch actually wrote, so H5 compares the record against
             // the file the vendor was handed rather than against a second guess at its contents.
             planned_mcp_servers: configured_mcp_servers(plan.mcp_config.as_ref()),
@@ -1267,6 +1265,7 @@ fn start_codex(
         declared_plugins: declared_plugins(&plan.attestation),
         builtin_plugins: crate::vectors::builtin_plugins(Kind::Codex),
         endpoint_key_posture: None,
+        secret_key_source: None,
         // The codex config writes an empty `[mcp_servers]` table by name, so the launch gives one
         // and H5 compares against nothing — which is what the table says.
         planned_mcp_servers: Vec::new(),
@@ -1906,6 +1905,17 @@ pub fn check_spec(spec: &RunSpec) -> Result<(), Refusal> {
             ),
         });
     }
+    // A key named in the operator's secret store is read by the b10x loop itself (amendment a50).
+    // Neither vendor arm has been designed for it, so the name is refused rather than dropped.
+    if spec.api_key_secret.is_some() && spec.kind != Kind::B10x {
+        return Err(Refusal::Launch {
+            detail: format!(
+                "--api-key-secret is the b10x loop's: it is the only harness that reads its key \
+                 from the operator's secret store by name, and {} has no secret route yet",
+                spec.kind.as_str()
+            ),
+        });
+    }
     // A scope reaches a vendor arm through the frame it is already sealed into. See the variant.
     // `--context` is no longer here: amendment a35 gave it every kind.
     if (!spec.write_scope.is_empty() || spec.scope_announce == ScopeAnnounce::Silent)
@@ -1929,6 +1939,21 @@ fn b10x_credential(
     let refuse = |detail: &str| Refusal::Launch {
         detail: detail.to_owned(),
     };
+    // A secret name is an API key's name (amendment a50 § 5). Beside any other source it is a
+    // second credential, whichever flag the caller meant, so it is refused before the source's own
+    // rules are read.
+    if spec.api_key_secret.is_some() && spec.credentials != CredentialSource::ApiKey {
+        let source = match spec.credentials {
+            CredentialSource::None => "none",
+            CredentialSource::OperatorLogin => "operator-login",
+            CredentialSource::Loopback => "loopback",
+            CredentialSource::ApiKey => "api-key",
+        };
+        return Err(refuse(&format!(
+            "--api-key-secret and --credentials {source} are two credentials for one request; the \
+             secret names an API key, so it goes with --credentials api-key and nothing else"
+        )));
+    }
     Ok(match spec.credentials {
         // The designed shape for a foreign endpoint: no credential in the child, and the far end
         // decides. `model_endpoint`'s own documentation requires exactly this.
@@ -1969,7 +1994,16 @@ fn b10x_credential(
                      itself and metaharness copies nothing",
                 ));
             }
-            launch.from_environment(B10X_API_KEY_VARIABLE)
+            match &spec.api_key_secret {
+                // The loop reads the key from the store by this name; metaharness holds the name
+                // and never the key (amendment a50 § 4).
+                Some(name) => {
+                    metaharness_b10x::validate_api_key_secret(name)
+                        .map_err(|detail| Refusal::Launch { detail })?;
+                    launch.from_secret(name.clone())
+                }
+                None => launch.from_environment(B10X_API_KEY_VARIABLE),
+            }
         }
         CredentialSource::OperatorLogin => {
             return Err(refuse(
@@ -1986,6 +2020,83 @@ fn b10x_credential(
             ));
         }
     })
+}
+
+/// The variables the credential route adds to the constructed child environment, read through
+/// `lookup` (the caller's environment in production).
+///
+/// - `--credentials api-key` with a secret name (amendment a50 § 6): the key is never looked up.
+///   The loop opens the store over the session bus, so the two variables its client finds that
+///   bus by are forwarded by name when the caller has them, and nothing else is.
+/// - `--credentials api-key` without one: the argv names `OPENAI_API_KEY` and this puts it in the
+///   child's environment; without both halves `--api-key-env` points at something that is not
+///   there. Absent from the caller's environment is refused by name rather than launched
+///   unauthenticated: a run that dropped its credential without a word would fail at the first request
+///   with the endpoint's word for it, which is a worse explanation than this one. The Claude
+///   adapter refuses the same way for `ANTHROPIC_API_KEY`.
+/// - Any other source adds nothing and reads nothing.
+fn b10x_credential_environment(
+    spec: &RunSpec,
+    lookup: impl Fn(&str) -> Option<String>,
+) -> Result<Vec<(String, String)>, Refusal> {
+    if spec.credentials != CredentialSource::ApiKey {
+        return Ok(Vec::new());
+    }
+    if spec.api_key_secret.is_some() {
+        return Ok(metaharness_b10x::SECRET_SERVICE_SESSION_BUS_VARIABLES
+            .iter()
+            .filter_map(|name| lookup(name).map(|value| ((*name).to_owned(), value)))
+            .collect());
+    }
+    let key = lookup(B10X_API_KEY_VARIABLE).ok_or_else(|| Refusal::Launch {
+        detail: format!(
+            "the run declared credentials: api-key and {B10X_API_KEY_VARIABLE} was not in the \
+             caller's environment. Set it, or use --credentials none for an endpoint that \
+             authenticates nobody"
+        ),
+    })?;
+    Ok(vec![(B10X_API_KEY_VARIABLE.to_owned(), key)])
+}
+
+/// H3's sentence for a b10x launch, built from the variables [`b10x_credential_environment`]
+/// returned for it, so the record says what the child was given rather than what it might be.
+///
+/// On the secret route (amendment a50 § 6, D46) it names each session-bus variable that was
+/// forwarded and each the caller did not have; the values are never written. Every other route
+/// keeps the sentence it had.
+fn b10x_h3_how(spec: &RunSpec, credential_environment: &[(String, String)]) -> String {
+    if spec.credentials != CredentialSource::ApiKey || spec.api_key_secret.is_none() {
+        return "the child environment is constructed from PATH, scratch XDG_CONFIG_HOME and only \
+                explicitly declared credential or toolchain variables"
+            .to_owned();
+    }
+    let (forwarded, missing): (Vec<&str>, Vec<&str>) =
+        metaharness_b10x::SECRET_SERVICE_SESSION_BUS_VARIABLES
+            .iter()
+            .copied()
+            .partition(|name| {
+                credential_environment
+                    .iter()
+                    .any(|(variable, _)| variable == name)
+            });
+    let given = match forwarded.as_slice() {
+        [] => "no session-bus variable".to_owned(),
+        [one] => format!("the session-bus variable {one}, forwarded from the caller"),
+        many => format!(
+            "the session-bus variables {}, forwarded from the caller",
+            many.join(" and ")
+        ),
+    };
+    let absent = if missing.is_empty() {
+        String::new()
+    } else {
+        format!(" (the caller had no {})", missing.join(" and no "))
+    };
+    format!(
+        "the child environment is constructed from PATH, scratch XDG_CONFIG_HOME, {given}{absent}, \
+         and only explicitly declared toolchain variables; the loop reads its key from the secret \
+         store by name"
+    )
 }
 
 /// The spec, as the argv `b10x-harness run` is actually spawned with.
@@ -3931,6 +4042,262 @@ mod b10x_launch_tests {
             check_spec(&priced).is_ok(),
             "b10x is the one that takes one"
         );
+    }
+
+    // --- a50: the key named by a secret ------------------------------------------------------
+
+    /// The fixture name. Nothing here opens a store; it is a string in an argv.
+    const FIXTURE_SECRET: &str = "llm/opencode-go-api-key";
+
+    fn secret_spec(source: CredentialSource, name: &str) -> RunSpec {
+        let mut spec = spec();
+        spec.credentials = source;
+        spec.api_key_secret = Some(name.to_owned());
+        spec
+    }
+
+    fn refused(spec: &RunSpec) -> String {
+        match b10x_launch(spec, std::path::Path::new("/work"), &[]) {
+            Err(Refusal::Launch { detail }) => detail,
+            other => panic!("expected a refusal, got {other:?}"),
+        }
+    }
+
+    #[test]
+    fn a_secret_named_run_is_pointed_at_the_name_and_at_no_variable() {
+        let argv = argv_of(&secret_spec(CredentialSource::ApiKey, FIXTURE_SECRET));
+        assert_eq!(
+            value_after(&argv, "--api-key-secret").as_deref(),
+            Some(FIXTURE_SECRET)
+        );
+        assert!(
+            !argv
+                .iter()
+                .any(|word| word.starts_with("--api-key-env") || word.starts_with("--api-key-file")),
+            "{argv:?}"
+        );
+    }
+
+    #[test]
+    fn the_builder_names_a_secret_as_the_command_line_does() {
+        let built = super::Metaharness::new(Kind::B10x).with_api_key_secret(FIXTURE_SECRET);
+        assert_eq!(built.spec.api_key_secret.as_deref(), Some(FIXTURE_SECRET));
+        assert_eq!(
+            RunSpec::new(Kind::B10x).api_key_secret,
+            None,
+            "no spec names a secret it was not given"
+        );
+    }
+
+    #[test]
+    fn a_secret_name_of_the_wrong_shape_is_refused_naming_the_value() {
+        for bad in ["opencode-go-api-key", "llm/", "/opencode-go-api-key", ""] {
+            let said = refused(&secret_spec(CredentialSource::ApiKey, bad));
+            assert!(said.contains(&format!("`{bad}`")), "{said}");
+            assert!(said.contains("<namespace>/<name>"), "{said}");
+        }
+    }
+
+    #[test]
+    fn a_secret_name_beside_another_source_is_two_credentials_for_one_request() {
+        for source in [
+            CredentialSource::None,
+            CredentialSource::OperatorLogin,
+            CredentialSource::Loopback,
+        ] {
+            let said = refused(&secret_spec(source, FIXTURE_SECRET));
+            let word = match source {
+                CredentialSource::None => "none",
+                CredentialSource::OperatorLogin => "operator-login",
+                CredentialSource::Loopback => "loopback",
+                CredentialSource::ApiKey => unreachable!(),
+            };
+            assert!(
+                said.contains(&format!(
+                    "--api-key-secret and --credentials {word} are two credentials for one request"
+                )),
+                "{said}"
+            );
+        }
+        // A subscription source beside a secret under `none` is still the secret's refusal: the
+        // name is the second credential whichever order the flags came in.
+        let mut beside_subscription = secret_spec(CredentialSource::None, FIXTURE_SECRET);
+        beside_subscription.subscription_token_file = Some("/a/store.json".to_owned());
+        assert!(
+            refused(&beside_subscription).contains("two credentials for one request"),
+            "{}",
+            refused(&beside_subscription)
+        );
+    }
+
+    #[test]
+    fn a_secret_name_beside_a_subscription_source_is_the_existing_refusal_word_for_word() {
+        const EXISTING: &str = "a subscription token and --credentials api-key are two \
+                                credentials for one request, and they travel under different \
+                                header names. Use --credentials none alongside a subscription \
+                                source: the loop reads it itself and metaharness copies nothing";
+        for (file, env) in [(Some("/a/store.json"), None), (None, Some("A_TOKEN"))] {
+            let mut spec = secret_spec(CredentialSource::ApiKey, FIXTURE_SECRET);
+            spec.subscription_token_file = file.map(ToOwned::to_owned);
+            spec.subscription_token_env = env.map(ToOwned::to_owned);
+            assert_eq!(refused(&spec), EXISTING);
+        }
+    }
+
+    #[test]
+    fn a_vendor_arm_is_refused_the_secret_name_by_name() {
+        for kind in [Kind::Claude, Kind::Codex] {
+            let mut spec = RunSpec::new(kind);
+            spec.credentials = CredentialSource::ApiKey;
+            spec.api_key_secret = Some(FIXTURE_SECRET.to_owned());
+            match check_spec(&spec) {
+                Err(Refusal::Launch { detail }) => {
+                    assert!(
+                        detail.contains("--api-key-secret is the b10x loop's"),
+                        "{detail}"
+                    );
+                    assert!(detail.contains(kind.as_str()), "{detail}");
+                }
+                other => panic!("{kind:?} should be refused, got {other:?}"),
+            }
+        }
+        assert!(
+            check_spec(&secret_spec(CredentialSource::ApiKey, FIXTURE_SECRET)).is_ok(),
+            "b10x is the kind that takes one"
+        );
+    }
+
+    /// D29 and a50 § 8: on the secret route `OPENAI_API_KEY` is never looked up, and the two
+    /// session-bus variables are forwarded as the caller has them, and only when it has them.
+    #[test]
+    fn the_secret_route_reads_no_key_and_forwards_only_the_session_bus() {
+        let asked = std::cell::RefCell::new(Vec::<String>::new());
+        let environment = |name: &str| {
+            asked.borrow_mut().push(name.to_owned());
+            Some(format!("value-of-{name}"))
+        };
+        let spec = secret_spec(CredentialSource::ApiKey, FIXTURE_SECRET);
+        let env = super::b10x_credential_environment(&spec, environment).expect("planned");
+        assert_eq!(
+            env,
+            vec![
+                (
+                    "DBUS_SESSION_BUS_ADDRESS".to_owned(),
+                    "value-of-DBUS_SESSION_BUS_ADDRESS".to_owned()
+                ),
+                (
+                    "XDG_RUNTIME_DIR".to_owned(),
+                    "value-of-XDG_RUNTIME_DIR".to_owned()
+                ),
+            ]
+        );
+        assert_eq!(
+            *asked.borrow(),
+            ["DBUS_SESSION_BUS_ADDRESS", "XDG_RUNTIME_DIR"],
+            "metaharness looked up a variable it has no use for on this route"
+        );
+
+        let absent = super::b10x_credential_environment(&spec, |_| None).expect("planned");
+        assert!(
+            absent.is_empty(),
+            "a variable the caller lacks is not invented: {absent:?}"
+        );
+    }
+
+    #[test]
+    fn without_a_name_the_key_variable_is_read_and_the_bus_is_not() {
+        let mut spec = spec();
+        spec.credentials = CredentialSource::ApiKey;
+        let asked = std::cell::RefCell::new(Vec::<String>::new());
+        let env = super::b10x_credential_environment(&spec, |name: &str| {
+            asked.borrow_mut().push(name.to_owned());
+            Some("a-fixture-value".to_owned())
+        })
+        .expect("planned");
+        assert_eq!(
+            env,
+            vec![("OPENAI_API_KEY".to_owned(), "a-fixture-value".to_owned())]
+        );
+        assert_eq!(*asked.borrow(), ["OPENAI_API_KEY"]);
+        let refusal =
+            super::b10x_credential_environment(&spec, |_| None).expect_err("no key, no launch");
+        assert!(
+            refusal
+                .to_string()
+                .contains("OPENAI_API_KEY was not in the caller's environment"),
+            "{refusal}"
+        );
+        let none = super::b10x_credential_environment(&self::spec(), |_| {
+            panic!("a run with no key route reads nothing")
+        })
+        .expect("planned");
+        assert_eq!(none, Vec::<(String, String)>::new());
+    }
+
+    /// D46: on the secret route H3 says which session-bus variables the child was given, from what
+    /// the environment builder returned, and never a value.
+    #[test]
+    fn h3_on_the_secret_route_names_what_was_forwarded() {
+        let spec = secret_spec(CredentialSource::ApiKey, FIXTURE_SECRET);
+        let given = |names: &[&str]| -> Vec<(String, String)> {
+            names
+                .iter()
+                .map(|name| ((*name).to_owned(), format!("value-of-{name}")))
+                .collect()
+        };
+
+        let both = super::b10x_h3_how(
+            &spec,
+            &given(&["DBUS_SESSION_BUS_ADDRESS", "XDG_RUNTIME_DIR"]),
+        );
+        assert!(
+            both.contains(
+                "the session-bus variables DBUS_SESSION_BUS_ADDRESS and XDG_RUNTIME_DIR, \
+                 forwarded from the caller, and only"
+            ),
+            "{both}"
+        );
+
+        let one = super::b10x_h3_how(&spec, &given(&["XDG_RUNTIME_DIR"]));
+        assert!(
+            one.contains(
+                "the session-bus variable XDG_RUNTIME_DIR, forwarded from the caller (the caller \
+                 had no DBUS_SESSION_BUS_ADDRESS)"
+            ),
+            "{one}"
+        );
+
+        let none = super::b10x_h3_how(&spec, &[]);
+        assert!(
+            none.contains(
+                "no session-bus variable (the caller had no DBUS_SESSION_BUS_ADDRESS and no \
+                 XDG_RUNTIME_DIR)"
+            ),
+            "{none}"
+        );
+
+        for how in [&both, &one, &none] {
+            assert!(!how.contains("value-of-"), "{how}");
+            assert!(!how.contains("OPENAI_API_KEY"), "{how}");
+            assert!(how.contains("secret store by name"), "{how}");
+        }
+        assert_ne!(both, none);
+        assert_ne!(one, none);
+    }
+
+    /// Off the secret route the sentence is the one H3 always had, whatever the environment held.
+    #[test]
+    fn h3_off_the_secret_route_is_unchanged() {
+        let mut keyed = spec();
+        keyed.credentials = CredentialSource::ApiKey;
+        let key = vec![("OPENAI_API_KEY".to_owned(), "a-fixture-value".to_owned())];
+        for (spec, environment) in [(keyed, key), (spec(), Vec::new())] {
+            assert_eq!(
+                super::b10x_h3_how(&spec, &environment),
+                "the child environment is constructed from PATH, scratch XDG_CONFIG_HOME and only \
+                 explicitly declared credential or toolchain variables"
+            );
+        }
     }
 }
 

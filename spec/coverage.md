@@ -213,10 +213,18 @@ Two boundaries are stated rather than claimed. `metaharness.source` is observed
 as the constant `metaharness.event/1`; whether it ever carries a vendor format
 name is `story:project-reads-vendor-transcripts`'s open question and is marked
 `UNMAPPED:` in the domain. The b10x golden record is read as captured from
-`b10x-harness 0.15.1` (re-recorded 2026-10-20, over a 0.15.0 capture that had
-replaced the 0.9.1 capture this suite was written against) and no count of its
-nodes is declared, so neither re-recording moved a trace scenario; the 0.15.1
-one adds the `started` line's `cwd`, which no scenario reads. Reading a vendor record through
+`b10x-harness 0.18.0` (re-recorded 2026-10-22 under amendment a50, over a 0.15.1
+capture of 2026-10-20, which had replaced a 0.15.0 capture, which had replaced
+the 0.9.1 capture this suite was written against) and no count of its nodes is
+declared, so no re-recording added or removed a trace scenario; the 0.15.1 one
+added the `started` line's `cwd`, which no scenario reads, and the 0.18.0 one
+differs from it only in two `captured_at` stamps and one context digest, so the
+only expectation it moved is the `transcript_digest` of
+`SummarizeRecord/outcome/harness-record-summarized` (`spec/domains/trace.yaml`;
+`spec/conformance.json` regenerated on ESS 0.67.0, 116 scenarios). The
+secret-named key route a50 adds (`--api-key-secret`) is
+covered by Rust tests and by no scenario here; it is one of the credential
+rules this suite does not claim. Reading a vendor record through
 `metaharness project` itself, changing any reader or the projection, and
 publishing a `trace-ir/1` schema remain outside this suite.
 

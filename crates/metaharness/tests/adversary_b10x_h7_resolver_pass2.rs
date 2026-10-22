@@ -57,6 +57,7 @@ fn h7(observed: &str, planned: &str) -> (Verdict, String) {
             declared_plugins: &[],
             builtin_plugins: &[],
             endpoint_key_posture: None,
+            secret_key_source: None,
             planned_mcp_servers: &[],
             planned_output_style: None,
             record_silences: &[],

@@ -309,6 +309,7 @@ fn every_builder_method_sets_one_field_of_the_one_options_type() {
         subscription_token_file: None,
         subscription_token_env: None,
         subscription_token_pointer: None,
+        api_key_secret: None,
         effort: Some("medium".to_string()),
         max_turns: Some(30),
         max_budget_usd: None,

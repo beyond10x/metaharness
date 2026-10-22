@@ -82,7 +82,7 @@ fn the_published_names_are_the_mcp_renderings_in_document_order() {
 
 #[test]
 fn a_released_tools_contract_reads_as_a_catalogue() {
-    let released = tool_contract::documents::get("fs", "v1alpha1").expect("released at 0.2.0");
+    let released = tool_contract::documents::get("fs", "v1alpha1").expect("released at 0.4.0");
     let catalogue = CallerCatalogue::from_text(Path::new("fs.yaml"), released.yaml)
         .expect("the format's own released document is a catalogue");
     let published: Vec<&str> = catalogue
@@ -510,7 +510,7 @@ fn a_mapped_entry_is_performed_as_the_entry_harness_maps_it_to() {
 
 /// A released document as the run's catalogue.
 fn released(family: &str) -> CallerCatalogue {
-    let document = tool_contract::documents::get(family, "v1alpha1").expect("released at 0.2.0");
+    let document = tool_contract::documents::get(family, "v1alpha1").expect("released at 0.4.0");
     CallerCatalogue::from_text(Path::new("released.yaml"), document.yaml).expect("a catalogue")
 }
 
@@ -643,6 +643,51 @@ fn an_offset_that_is_not_an_integer_is_refused_naming_offset_and_integer() {
     );
     assert!(!failed, "{text}");
     assert!(text.contains("alpha"), "{text}");
+}
+
+/// a50 § 2 (D45): a null on a field that is not required is taken out before the call goes to
+/// harness, at every struct depth; a null list item is a value and stays.
+#[test]
+fn a_null_on_a_field_that_is_not_required_is_taken_out_before_the_call() {
+    let text = every_shape_text();
+    let catalogue =
+        CallerCatalogue::from_text(Path::new("catalogue.yaml"), &text).expect("still a catalogue");
+    let entry = &catalogue.entries()[0];
+    let given = json!({
+        "path": "README.md",
+        "offset": null,
+        "blob": "",
+        "lines": [1, null],
+        "env": {"a": true},
+        "kind": "file",
+        "window": {"from": 1, "to": null},
+    });
+    assert_eq!(entry.argument_problems(&given), Vec::<String>::new());
+    assert_eq!(
+        entry.without_absent_nulls(given),
+        json!({
+            "path": "README.md",
+            "blob": "",
+            "lines": [1, null],
+            "env": {"a": true},
+            "kind": "file",
+            "window": {"from": 1},
+        })
+    );
+
+    let given = json!({
+        "path": "README.md",
+        "blob": "",
+        "lines": [],
+        "env": {},
+        "kind": "file",
+        "window": null,
+    });
+    assert_eq!(entry.argument_problems(&given), Vec::<String>::new());
+    assert_eq!(
+        entry.without_absent_nulls(given),
+        json!({"path": "README.md", "blob": "", "lines": [], "env": {}, "kind": "file"})
+    );
 }
 
 /// One step from a value to a value the published schema declares inside it.
@@ -781,7 +826,12 @@ fn of_the_declared_kind(schema: &Value, value: &Value) -> bool {
 }
 
 /// Every catalogue the walk reads: the synthetic fixture, the fixture with every shape of the
-/// grammar, and every document `b10x-tool-contract` releases.
+/// grammar, and every document `b10x-tool-contract` releases that renders its commands for MCP.
+///
+/// `b10x-tool-contract` 0.4.0 also releases `build-test/v1alpha1`, whose commands carry no
+/// `renderings` at all, so none has a name a tool can carry and the reader refuses the document.
+/// That refusal is asserted here, entry by entry, and only a document refused for that reason
+/// alone is left out of the walk.
 fn every_catalogue() -> Vec<(String, CallerCatalogue)> {
     let mut catalogues = vec![
         ("the fixture".to_owned(), caller()),
@@ -791,13 +841,28 @@ fn every_catalogue() -> Vec<(String, CallerCatalogue)> {
                 .expect("a catalogue"),
         ),
     ];
+    let mut unrendered = Vec::new();
     for document in tool_contract::documents::all() {
-        catalogues.push((
-            format!("{}/{}", document.toolset, document.version),
-            CallerCatalogue::from_text(Path::new("released.yaml"), document.yaml)
-                .expect("a released document is a catalogue"),
-        ));
+        let name = format!("{}/{}", document.toolset, document.version);
+        match CallerCatalogue::from_text(Path::new("released.yaml"), document.yaml) {
+            Ok(catalogue) => catalogues.push((name, catalogue)),
+            Err(CatalogueError::Malformed { problems, .. })
+                if !document.yaml.contains("mcp")
+                    && !problems.is_empty()
+                    && problems
+                        .iter()
+                        .all(|problem| problem.contains("no `mcp` rendering")) =>
+            {
+                unrendered.push(name);
+            }
+            Err(error) => panic!("{name}: a released document is a catalogue: {error}"),
+        }
     }
+    assert_eq!(
+        unrendered,
+        ["build-test/v1alpha1"],
+        "the released documents with no MCP rendering"
+    );
     catalogues
 }
 

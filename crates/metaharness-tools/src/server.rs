@@ -52,8 +52,9 @@ impl Server {
     ///
     /// `tools/list` answers one tool per entry, by its `mcp` rendering. A call to an entry harness
     /// maps is performed through `verbs` as that entry, on the road a contract name takes through
-    /// `tool_invoke`, so the `expected_sha256` refusal holds on it too; `expected_sha256: null`
-    /// asks for no check and is performed, as on that road (amendment a45 § 2). A call to an
+    /// `tool_invoke`, so the `expected_sha256` refusal holds on it too. Every field given as null
+    /// that the entry's schema does not mark required, at any struct depth, reads as absent and is
+    /// taken out before the call is performed (amendments a45 § 2 and a50 § 2). A call to an
     /// entry nothing here performs, or to any name outside the catalogue (the three verbs
     /// included), answers `isError` and does nothing. So does a call whose arguments the entry's
     /// published input schema does not admit: not an object, a key outside its input fields, a
@@ -181,6 +182,11 @@ impl Server {
                 problems.join("; ")
             ));
         }
+        // A null on a field that is not required reads as absent (a45 § 2), so it is taken out
+        // before the call goes to harness (a50 § 2, D45). Since 0.16.1 harness refuses a field its
+        // entry's schema does not declare (`crates/harness-wire/src/undeclared.rs:66` at
+        // `330e2cde`), so a null passed as given would refuse a call the published schema admits.
+        let arguments = entry.without_absent_nulls(arguments);
         let invoke = json!({
             "name": INVOKE_VERB,
             "arguments": {"name": entry.contract_name, "arguments": arguments},
@@ -229,6 +235,18 @@ impl Server {
                          that check yet, so nothing was done. Call `{named}` without \
                          `expected_sha256` to write without the check."
                     ));
+                }
+                // So the null is taken out before the call is performed: since 0.16.1 harness
+                // refuses a field its entry's schema does not declare
+                // (`crates/harness-wire/src/undeclared.rs:66` at `330e2cde`), and neither
+                // `file_write` nor `file_edit` declares `expected_sha256`. A call through the
+                // caller's catalogue arrives with every absent null already taken out; this is the
+                // `tool_invoke` road, where no caller catalogue says which fields are required.
+                if name.as_str() == INVOKE_VERB
+                    && let Some(inner) = object.get_mut("arguments").and_then(Value::as_object_mut)
+                    && inner.get("expected_sha256").is_some_and(Value::is_null)
+                {
+                    inner.remove("expected_sha256");
                 }
                 object.insert("name".to_owned(), Value::from(entry));
             }

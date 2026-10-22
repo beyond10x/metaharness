@@ -81,12 +81,35 @@ relative name, or one that reaches `/proc` or `/dev/fd` (such as `/proc/self/cwd
 spelled.
 
 On the b10x kind the record's cwd is the directory the loop itself reported in its opening record
-(`b10x-harness` 0.15.1), never metaharness's plan. A strict or `--audit` b10x run whose other
+(`b10x-harness` since 0.15.1), never metaharness's plan. A strict or `--audit` b10x run whose other
 gating rows hold exits 0 when that is the directory metaharness created or the declared copy, and
 1 when it is another directory. When the loop names none — under `--substrate <socket>`, or for a
 directory whose name is not UTF-8 — the record's cwd is `null` and H7 is `unk`, *"the loop did not
 report its working directory"*, so the run exits 3. A strict `--cwd` run without the declaration
 exits 1, on H7 and H11; bare `--hermetic` without `--audit` owes no verdict and exits 0.
+
+## The b10x credential routes
+
+The b10x child's environment stays constructed on every credential route (H3): `PATH`, a scratch
+`XDG_CONFIG_HOME`, the declared toolchain variables, and what the route adds.
+
+| Route | Added to the child's environment | H4 holds the record to |
+|---|---|---|
+| no key declared | nothing | a `credential_source` that names no API key |
+| `--credentials api-key` | `OPENAI_API_KEY`, read by name from the caller's environment; refused before the spawn when absent | a `credential_source` that names an API key |
+| `--credentials api-key --api-key-secret <namespace>/<name>` | no key: `DBUS_SESSION_BUS_ADDRESS` and `XDG_RUNTIME_DIR`, each only when the caller has it, and nothing else | `api-key:secrets` exactly; any other value is a gap, because the key reached the loop by a road the run did not declare |
+
+On the secret route the loop opens the operator's secret store over the session bus and reads the
+key itself, so the key never enters metaharness or the child's environment. The two variables are
+the ones the pinned loop's store client finds that bus by: the address, or the runtime directory
+its default socket sits in. Neither holds a credential. H3's imposed sentence on this route names
+each of the two that was forwarded, or says none was, and each the caller lacked, so the
+attestation shows whether the child was given a way to reach the bus. The record's `api-key:secrets` is the
+string `b10x-harness` 0.18.0 writes for that flag and no other (design amendment a50).
+
+**Unverified:** whether the store opens in that environment, with no `HOME` and everything else
+cleared. No run has shown it. Until one does, a secret-named run that fails at its first request
+may be failing here, and the floor's verdict says nothing about it.
 
 ## The three modes
 
