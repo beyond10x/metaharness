@@ -195,65 +195,219 @@ pub struct CatalogueEntry {
 
 impl CatalogueEntry {
     /// Why a call's arguments are not ones this entry's input schema admits, each problem naming
-    /// the field; empty when the call may be performed.
+    /// the value; empty when the call may be performed.
     ///
-    /// Three things are refused: arguments that are not an object, a key that is not one of the
-    /// entry's input fields, and a required field (one whose type is not `Optional<…>`) the call
-    /// leaves out or gives as null. They are read from the published schema's top level
-    /// (`properties`, `required`, `additionalProperties: false`), so the server refuses what it
-    /// published and nothing else (amendment a40 § 5). A field's value is not checked against its
-    /// type here; the entry that performs the call reads it.
-    pub(crate) fn argument_problems(&self, arguments: &Value) -> Vec<String> {
+    /// Everything is read from the published schema, so the server refuses what it published and
+    /// nothing else (amendments a40 § 5 and a45). The arguments must be an object with no key
+    /// outside the entry's input fields, giving every required field (one whose type is not
+    /// `Optional<…>`) a value other than null. Every value given is then held to its declared
+    /// type, at every depth the schema declares: a struct's fields under the same two rules, a
+    /// list's items and a map's values. An `integer` is a JSON number held as an `i64` or a `u64`,
+    /// an enum is one of its strings, and null on a field that is not required reads as absent.
+    /// A value is named by its path (`offset`, `window.from`, `edits[1].old`, `env["key"]`) and
+    /// with its declared type, and so is a required field left out or given as null.
+    #[must_use]
+    pub fn argument_problems(&self, arguments: &Value) -> Vec<String> {
         let Value::Object(given) = arguments else {
             return vec![format!(
                 "its arguments are {}, and they must be an object of its input fields",
                 json_kind(arguments)
             )];
         };
-        let declared: Vec<&str> = self
-            .input_schema
-            .get("properties")
-            .and_then(Value::as_object)
-            .map(|properties| properties.keys().map(String::as_str).collect())
-            .unwrap_or_default();
         let mut problems = Vec::new();
-        for key in given.keys() {
-            if declared.contains(&key.as_str()) {
-                continue;
-            }
-            problems.push(if declared.is_empty() {
-                format!("`{key}` is given, and it has no input fields")
-            } else {
-                format!(
-                    "`{key}` is not one of its input fields, which are {}",
-                    declared
-                        .iter()
-                        .map(|name| format!("`{name}`"))
-                        .collect::<Vec<_>>()
-                        .join(", ")
-                )
-            });
-        }
-        let required = self
-            .input_schema
-            .get("required")
-            .and_then(Value::as_array)
-            .into_iter()
-            .flatten()
-            .filter_map(Value::as_str);
-        for name in required {
-            match given.get(name) {
-                None => problems.push(format!("`{name}` is required and the call leaves it out")),
-                Some(Value::Null) => {
-                    problems.push(format!(
-                        "`{name}` is required and the call gives it as null"
-                    ));
-                }
-                Some(_) => {}
-            }
-        }
+        struct_problems(&self.input_schema, given, None, &mut problems);
         problems
     }
+}
+
+/// The problems of an object whose schema has `properties`: keys outside them, required fields
+/// left out or null (each named with its declared type), then each value given against its
+/// field's schema. `at` is the object's path, `None` for a call's arguments.
+fn struct_problems(
+    schema: &Value,
+    given: &Map<String, Value>,
+    at: Option<&str>,
+    problems: &mut Vec<String>,
+) {
+    let properties = schema.get("properties").and_then(Value::as_object);
+    let declared: Vec<&str> = properties
+        .map(|properties| properties.keys().map(String::as_str).collect())
+        .unwrap_or_default();
+    let path_of = |name: &str| at.map_or_else(|| name.to_owned(), |at| format!("{at}.{name}"));
+    for key in given.keys() {
+        if declared.contains(&key.as_str()) {
+            continue;
+        }
+        let fields = declared
+            .iter()
+            .map(|name| format!("`{name}`"))
+            .collect::<Vec<_>>()
+            .join(", ");
+        problems.push(match (at, declared.is_empty()) {
+            (None, true) => format!("`{key}` is given, and it has no input fields"),
+            (None, false) => format!("`{key}` is not one of its input fields, which are {fields}"),
+            (Some(at), true) => format!("`{at}.{key}` is given, and `{at}` has no fields"),
+            (Some(at), false) => {
+                format!("`{at}.{key}` is not one of the fields of `{at}`, which are {fields}")
+            }
+        });
+    }
+    let required = schema
+        .get("required")
+        .and_then(Value::as_array)
+        .into_iter()
+        .flatten()
+        .filter_map(Value::as_str);
+    for name in required {
+        let path = path_of(name);
+        let declared = properties
+            .and_then(|properties| properties.get(name))
+            .map(|field| format!(", and its declared type is {}", declared_type(field)))
+            .unwrap_or_default();
+        match given.get(name) {
+            None => problems.push(format!(
+                "`{path}` is required and the call leaves it out{declared}"
+            )),
+            Some(Value::Null) => problems.push(format!(
+                "`{path}` is required and the call gives it as null{declared}"
+            )),
+            Some(_) => {}
+        }
+    }
+    for (key, value) in given {
+        // Null on a required field is refused above; on any other field it reads as absent.
+        if value.is_null() {
+            continue;
+        }
+        if let Some(field) = properties.and_then(|properties| properties.get(key)) {
+            value_problems(field, value, &path_of(key), problems);
+        }
+    }
+}
+
+/// The problems of one value against the schema published for it, named by `path`.
+fn value_problems(schema: &Value, value: &Value, path: &str, problems: &mut Vec<String>) {
+    // Only `Optional` outside a field publishes `anyOf`: its inner schema, or null.
+    if let Some(choices) = schema.get("anyOf").and_then(Value::as_array) {
+        match choices
+            .iter()
+            .find(|choice| of_declared_kind(choice, value))
+        {
+            Some(choice) => value_problems(choice, value, path, problems),
+            None => problems.push(mistyped(path, value, schema)),
+        }
+        return;
+    }
+    if !of_declared_kind(schema, value) {
+        problems.push(mistyped(path, value, schema));
+        return;
+    }
+    match value {
+        Value::String(text) => {
+            if let Some(values) = schema.get("enum").and_then(Value::as_array)
+                && !values.iter().any(|named| named.as_str() == Some(text))
+            {
+                problems.push(format!(
+                    "`{path}` is a string that is not one of its values, and its declared type is \
+                     {}",
+                    declared_type(schema)
+                ));
+            }
+        }
+        Value::Array(items) => {
+            if let Some(item) = schema.get("items") {
+                for (index, each) in items.iter().enumerate() {
+                    value_problems(item, each, &format!("{path}[{index}]"), problems);
+                }
+            }
+        }
+        Value::Object(given) => {
+            if schema.get("properties").is_some() {
+                struct_problems(schema, given, Some(path), problems);
+            } else if let Some(each) = schema
+                .get("additionalProperties")
+                .filter(|each| each.is_object())
+            {
+                for (key, entry) in given {
+                    let key = Value::from(key.as_str());
+                    value_problems(each, entry, &format!("{path}[{key}]"), problems);
+                }
+            }
+        }
+        Value::Null | Value::Bool(_) | Value::Number(_) => {}
+    }
+}
+
+/// Whether `value` is of the JSON kind `schema`'s `type` names. A schema without a `type` names
+/// no kind; one whose `type` this module does not publish admits nothing.
+fn of_declared_kind(schema: &Value, value: &Value) -> bool {
+    match schema.get("type").and_then(Value::as_str) {
+        None => true,
+        Some("string") => value.is_string(),
+        Some("integer") => value.is_i64() || value.is_u64(),
+        Some("boolean") => value.is_boolean(),
+        Some("array") => value.is_array(),
+        Some("object") => value.is_object(),
+        Some("null") => value.is_null(),
+        Some(_) => false,
+    }
+}
+
+/// A value of the wrong kind, named by its path, the kind it is and the type it is declared.
+///
+/// `serde_json` holds a number written as an integer inside 64 bits as an `i64` or a `u64`, with
+/// one exception without its `arbitrary_precision` feature: `-0`, which it then holds as the float
+/// `-0.0` (with the feature, as the `i64` 0; a45 § 2). So a number held as neither is negative
+/// zero, or one written with a fraction or an exponent, or one outside 64 bits.
+fn mistyped(path: &str, value: &Value, schema: &Value) -> String {
+    let found = match value {
+        Value::Number(number) if number.is_i64() || number.is_u64() => json_kind(value),
+        Value::Number(number)
+            if number
+                .as_f64()
+                .is_some_and(|float| float.to_bits() == (-0.0_f64).to_bits()) =>
+        {
+            "negative zero, a number not held as a 64-bit integer"
+        }
+        Value::Number(_) => "a number written with a fraction or an exponent, or outside 64 bits",
+        other => json_kind(other),
+    };
+    format!(
+        "`{path}` is {found}, and its declared type is {}",
+        declared_type(schema)
+    )
+}
+
+/// The declared type in the schema's words: `` `integer` ``, `` `integer` or `null` ``,
+/// `` `string`, one of `directory`, `file` ``.
+fn declared_type(schema: &Value) -> String {
+    if let Some(choices) = schema.get("anyOf").and_then(Value::as_array) {
+        return choices
+            .iter()
+            .map(declared_type)
+            .collect::<Vec<_>>()
+            .join(" or ");
+    }
+    let mut words = format!(
+        "`{}`",
+        schema
+            .get("type")
+            .and_then(Value::as_str)
+            .unwrap_or("any value")
+    );
+    if let Some(values) = schema.get("enum").and_then(Value::as_array) {
+        let values = values
+            .iter()
+            .filter_map(Value::as_str)
+            .map(|named| format!("`{named}`"))
+            .collect::<Vec<_>>()
+            .join(", ");
+        write!(words, ", one of {values}").expect("a String takes any text");
+    }
+    if let Some(encoding) = schema.get("contentEncoding").and_then(Value::as_str) {
+        write!(words, ", {encoding}-encoded").expect("a String takes any text");
+    }
+    words
 }
 
 fn json_kind(value: &Value) -> &'static str {

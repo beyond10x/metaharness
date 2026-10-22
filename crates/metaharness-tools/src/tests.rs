@@ -777,7 +777,8 @@ fn a_contract_write_asking_for_a_digest_check_is_refused_because_the_served_one_
     // tool-contract/1 gives `code.write` and `code.edit` an `expected_sha256` precondition whose
     // failure is `precondition-failed`, nothing changed. Harness `0.15.1` performs both entries
     // without reading the field, so a contract name carrying it is refused rather than performed
-    // with the guard dropped — whatever it holds, the file's own digest and `null` included.
+    // with the guard dropped, whatever digest it holds, the file's own included. Null asks for no
+    // check (a45 § 2), which the next case holds.
     const DIGEST_OF_README: &str =
         "ca8380141fe6ae546862de4378a80805c5c86eaf8f67a6b91cea383f1bee7527";
     let dir = tree();
@@ -790,10 +791,6 @@ fn a_contract_write_asking_for_a_digest_check_is_refused_because_the_served_one_
         (
             "code.edit",
             json!({"path": "README.md", "old": "hello", "new": "bye", "expected_sha256": DIGEST_OF_README}),
-        ),
-        (
-            "code.write",
-            json!({"path": "README.md", "text": "replaced\n", "expected_sha256": null}),
         ),
     ] {
         let answer = server
@@ -817,6 +814,43 @@ fn a_contract_write_asking_for_a_digest_check_is_refused_because_the_served_one_
             std::fs::read_to_string(dir.path().join("README.md")).expect("on disk"),
             "hello harness\n",
             "{contract} changed nothing"
+        );
+    }
+}
+
+#[test]
+fn a_contract_write_giving_the_digest_as_null_reads_as_without_it_and_is_performed() {
+    // `expected_sha256` is optional on `code.write` and `code.edit`, and null on a field that is
+    // not required reads as absent (a45 § 2, D21). So a call giving it as null asks for no digest
+    // check: it is the call without the field, and it is performed. The guard is one, on this road
+    // and on the catalogue's.
+    let dir = tree();
+    let readme = dir.path().join("README.md");
+    let mut server = server(dir.path());
+    for (contract, arguments, after) in [
+        (
+            "code.write",
+            json!({"path": "README.md", "text": "replaced\n", "expected_sha256": null}),
+            "replaced\n",
+        ),
+        (
+            "code.edit",
+            json!({"path": "README.md", "old": "replaced", "new": "edited", "expected_sha256": null}),
+            "edited\n",
+        ),
+    ] {
+        let answer = server
+            .handle(&request(
+                1,
+                "tools/call",
+                &json!({"name": INVOKE_VERB, "arguments": {"name": contract, "arguments": arguments}}),
+            ))
+            .expect("answered");
+        assert_eq!(answer["result"]["isError"], false, "{contract}: {answer}");
+        assert_eq!(
+            std::fs::read_to_string(&readme).expect("on disk"),
+            after,
+            "{contract} was performed"
         );
     }
 }

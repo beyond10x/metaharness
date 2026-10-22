@@ -2692,7 +2692,9 @@ outcome is `precondition-failed` and nothing changes. Harness 0.15.1 builds both
 `expected_sha256: None` (`local.rs:520,543`), and its catalogue never reads the field
 (`catalogue.rs:476-483`). Performing such a call would drop the guard and change a file the
 contract says stays as it was. So the server refuses a contract-named `tool_invoke` whose arguments
-carry `expected_sha256`, whatever the value, `null` included. The refusal is `isError: true`,
+carry `expected_sha256`, whatever the value, `null` included. *(Amended by a45 § 2: `null` reads as
+absent and asks for no check, so a call giving it is performed as the call without it.)* The
+refusal is `isError: true`,
 names `precondition-failed`, says the served implementation does not run that check yet, and
 nothing runs. It is keyed on a translated name and the field, not on a list of commands. Of the
 five mapped commands only `code.write` and `code.edit` declare the field, and it is the only
@@ -3517,7 +3519,9 @@ naming the entry and each field, and nothing is performed (`CatalogueEntry::argu
 `additionalProperties: false` while the server passed any arguments on. The a32 road drops a field
 the entry does not read, and harness `dir.list` then lists `"."` (harness `f087013`,
 `crates/harness-catalogue/src/catalogue.rs:486`), so `fs_list {"dir": "x"}` listed the workspace
-root. A field's value is not checked against its type here; the harness entry reads it. The check
+root. A field's value is not checked against its type here; the harness entry reads it. *(Superseded
+by a45: every value in the arguments is checked against the type the entry published for it, at
+every depth, before the call is performed.)* The check
 comes before the a32 § 5 guard, so `expected_sha256` reaches that guard only on an entry that
 declares it, such as `code.write`.
 
@@ -4202,6 +4206,109 @@ written flat.
   channel after its last hand-over before the marker is answered by nothing (§ 4).
 - The specification models no steering line (`spec/domains/session.yaml` leaves steering
   precedence unmapped), and this amendment adds no scenario to it.
+
+### Amendment a45 — a catalogue call's arguments are checked against their declared types (2026-10-22)
+
+`story:mcp-arguments-checked-against-declared-types`, decisions D1–D4 by the wave's coordinator,
+2026-10-22. Written before the code (invariant 8).
+
+**1. The defect.** a40 § 5 checked a call's arguments against the top level of the entry's
+published `inputSchema` only: an object, no key outside the input fields, every required field given
+a value other than null. It left each value's type to the harness entry that performs the call. That
+entry reads leniently. `fs.read` takes `offset`, `limit` and `max_bytes` with `Value::as_u64`
+(harness `f087013`, `crates/harness-catalogue/src/catalogue.rs:470-472`), so a value that is not an
+unsigned integer reads as absent. Observed on 0.12.0: `fs_read` with `offset` `"second"`, `1.5` or
+`false` answered the file from line 1, and `offset: 2` from line 2. At `8444f4c` the red run of this
+amendment's acceptance test shows the same for `"second"`, `1.5`, `false`, `1.0`, `"2"` and `1e0`:
+each answered `isError: false` with the file from line 1. The schema the model was given says
+`integer`, and the answer did not say that the field had been dropped.
+
+**2. The decision.** Before a call to an entry is performed, every value in its arguments is held to
+the schema the entry published for it, at every depth that schema declares: a top-level field, a
+struct's field, a list's items, a map's values. The check reads the published schema (the shapes
+§ 5 of a40 lists), so the server refuses what it published and nothing else.
+
+- **Kinds.** `string`, `boolean`, `array` and `object` are the JSON kinds of those names. Bytes is a
+  `string`; its base64 is not decoded, because `contentEncoding` annotates a string and does not
+  constrain it.
+- **`integer` (D3)** is a JSON number `serde_json` holds as an `i64` or a `u64`. `1.0`, `1e0`,
+  `1.5` and `-0.0` are refused, and so is a number outside 64 bits, `"2"` and `false`. No range is
+  checked: the published schema declares none, and range checks are not this story.
+- **`-0` depends on the build.** Without `serde_json`'s `arbitrary_precision` feature, the crate
+  `metaharness-tools` built alone, `-0` is held as the float `-0.0`: the one number written as an
+  integer inside 64 bits that is held as neither, so it is refused. With the feature it keeps its
+  text and is read as the `i64` 0, which is indistinguishable from `0` after parsing, so it is
+  admitted. The workspace and the `metaharness` binary build with the feature, enabled by
+  `entity-core` through the pinned AEP crates (`cargo tree -p metaharness-cli -e features -i
+  serde_json`, measured 2026-10-22), so the binary admits `-0` as 0. Refusing it there would need
+  the call's raw text, which the server does not keep. D23's "`-0` stays refused" holds only for
+  the crate built alone; whether the binary must refuse it too is open.
+- **An enum** is a `string` that is one of its values. Another string is refused and the refusal
+  lists the values.
+- **Null (D2).** On a struct field that is not `required`, null reads as absent and is accepted, at
+  every depth. On a required field it is refused, as a40 refused it at the top level. In a list's
+  items or a map's values null is admitted only where the published schema says `anyOf` with
+  `null`, which is an `Optional` there.
+- **The digest guard follows the same rule (D21).** a32 § 5's `expected_sha256` guard comes after
+  this check and reads null as absent too: null asks for no check. A `code.write` or `code.edit`
+  call giving `expected_sha256: null` is the call without the field, and it is performed. The guard
+  is one, so this holds on the catalogue road and on a contract-named `tool_invoke` alike, and a32
+  § 5's "`null` included" is amended where it is written. Until this amendment both were refused
+  as calls "with `expected_sha256`", the catalogue road's after its argument check had accepted
+  the null.
+- **A struct inside the arguments** is held to the three top-level rules too: no key outside its
+  fields, and every required field given a value other than null.
+
+**3. The answer (D1).** A refused call answers as a40 § 5's refusal does: a tool result marked
+`isError`, naming the entry and every value refused, and nothing is performed. A value is named by
+its path, `offset`, `window.from`, `edits[1].old` or `env["key"]` (a map key written as a JSON
+string), and the refusal names the JSON kind it is and the declared type in the schema's words. A
+required field the call leaves out or gives as null is named with its declared type too, at every
+depth (D22): `` `path` is required and the call gives it as null, and its declared type is
+`string` ``. It quotes no value the caller sent, only map keys and keys outside the declared
+fields, as a40 already did. A number that is not an `i64` or a `u64` is named for what it is
+(D23). Negative zero (`-0.0`, and `-0` where the build holds it as a float, § 2) is named as
+negative zero, a number not held as a 64-bit integer. Any other is named as a number written with
+a fraction or an exponent, or outside 64 bits:
+
+```text
+`fs_read` was called with arguments its input schema does not admit, so nothing was done: `offset` is a string, and its declared type is `integer`.
+```
+
+**4. Where it is.** `CatalogueEntry::argument_problems` (`crates/metaharness-tools/src/caller.rs`)
+holds the whole check and becomes public, so a caller and a test can ask an entry that nothing in
+the run performs: the server refuses such an entry before its arguments are read. The server's call
+site is unchanged. A call to an entry nothing performs is refused first. The argument check comes
+next, and the a32 § 5 `expected_sha256` guard after it. A call that passes is performed with the
+same arguments, byte for byte.
+
+**5. What does not change.** `tools/list` and every published schema. A run without `--catalogue`:
+the three verbs' road types `tool_invoke.arguments` only as `object`, and it is not checked (D4).
+
+**6. The test.** `every_declared_argument_of_every_catalogue_entry_refuses_a_value_of_each_wrong_kind`
+(`crates/metaharness-tools/tests/caller_catalogue.rs`) walks the synthetic fixture, the fixture with
+one field of every shape of the grammar, and every document `b10x-tool-contract` 0.2.0 releases
+(`code-editor`, `fs`, `process`). For every declared value of every entry, top-level and inside, it
+sends null, a boolean, an integer, `1.0`, `1.5`, a number outside 64 bits, `-0`, a string, an
+array and an object, leaving out the kinds the declared type admits. `-0` is what § 2 says the build
+holds: the test asserts which, then expects negative zero or the integer 0. Each must be refused
+with one problem naming the path, what was sent in § 3's words and the declared type, except null
+where D2 accepts it. Every required field, top-level and inside, is also left out, and must be refused with
+one problem naming its path and declared type. An entry the run performs is also called through the
+server, which must answer with that refusal. The walk fails unless it reaches every kind the
+published schemas use, an `anyOf`, an enum, a struct's field inside an argument, a list item and a
+map value. D21 is held on both roads by a write and an edit that give `expected_sha256: null` and
+must change the file: `a_contract_write_giving_the_digest_as_null_reads_as_without_it_and_is_performed`
+(`crates/metaharness-tools/src/tests.rs`) through `tool_invoke`, and
+`a_null_expected_sha256_reads_as_absent_and_the_write_is_performed`
+(`crates/metaharness-tools/tests/adversary_w8u1.rs`) on the catalogue road.
+
+**7. Limits.**
+
+- A value of the declared kind and outside the range the entry takes is still read by the entry as
+  it reads it. `fs.read` reads `offset` with `Value::as_u64`, which gives nothing for `-1`, so by
+  that code `offset: -1` reads as absent and answers from line 1 (read from the code, not run).
+- The base64 of a `Bytes` value is not checked. No released document declares one.
 
 ### Amendment a46 — a resumed cap is never narrowed below the assumed charge (2026-10-22)
 
