@@ -54,6 +54,10 @@ errors:
     fields: []
   - name: metaharness.spending.UncappedAuthorizationRequired
     fields: []
+  - name: metaharness.spending.CapBelowAssumedCharge
+    fields: []
+  - name: metaharness.spending.NarrowingRefused
+    fields: []
 
 commands:
   - name: metaharness.spending.RecordFiniteLedger
@@ -92,6 +96,38 @@ commands:
     # consistency need production money/reservation tests, not float arithmetic.
     # UNMAPPED: METAHARNESS_LIVE=1, missing flags and model-free maps are outer
     # admission rules in spend_terms_with_live; this command receives parsed terms.
+
+  - name: metaharness.spending.NarrowResumedCap
+    # A resumed --budget-usd against the remembered finite terms (amendment a46).
+    # The floor is the remembered assumed charge; before a46 a lower cap was
+    # persisted and every later resume refused the run's terms as invalid.
+    # The examples are those observed terms ($1, $0.10, $0.05): a comparison of
+    # two inputs gives the witness search no literal to reach them from.
+    input:
+      - {name: remembered_cap_micro_usd, type: Integer, example: 1000000}
+      - {name: assumed_micro_usd_per_run, type: Integer, example: 100000}
+      - {name: narrowed_cap_micro_usd, type: Integer, example: 50000}
+    outcomes:
+      - name: cap-below-assumed-charge
+        when:
+          all:
+            - narrowed_cap_micro_usd > 0
+            - narrowed_cap_micro_usd < assumed_micro_usd_per_run
+            - assumed_micro_usd_per_run <= remembered_cap_micro_usd
+        error: metaharness.spending.CapBelowAssumedCharge
+      - name: cap-narrowed
+        when:
+          all:
+            - assumed_micro_usd_per_run > 0
+            - narrowed_cap_micro_usd >= assumed_micro_usd_per_run
+            - narrowed_cap_micro_usd <= remembered_cap_micro_usd
+        accepts: nothing
+      - name: narrowing-refused
+        error: metaharness.spending.NarrowingRefused
+    # narrowing-refused is a zero cap, a raise or invalid remembered terms; the
+    # implementation checks the remembered terms first. UNMAPPED: a cap below the
+    # ledger's reserved spend is not decided here (amendment a46, D7); the next
+    # reservation refuses it as an exhausted cap.
 
   - name: metaharness.spending.CheckUncappedAuthorization
     # Classify a raw operator reference, preserving missing and blank evidence.

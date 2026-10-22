@@ -1932,6 +1932,11 @@ reference, persisted in the launch and admission ledger. It still requires the l
 opt-in. An omitted budget never selects it. Finite and uncapped flags conflict;
 neither a giant finite amount nor a zero charge represents an uncapped policy.
 
+> **Amendment a46, 2026-10-22.** A resume narrows the finite cap down to the remembered assumed
+> charge and no further. A cap equal to the charge is admitted. A lower one is refused when it is
+> written, before the launch record is touched, so no resume persists terms that the next resume
+> would refuse as invalid.
+
 Every invocation receives a durable admission before spawning. Under finite terms
 that admission reserves the positive assumed charge; under uncapped terms it records
 the invocation and authorization without inventing a reservation amount. Reservation
@@ -4189,3 +4194,77 @@ written flat.
   channel after its last hand-over before the marker is answered by nothing (§ 4).
 - The specification models no steering line (`spec/domains/session.yaml` leaves steering
   precedence unmapped), and this amendment adds no scenario to it.
+
+### Amendment a46 — a resumed cap is never narrowed below the assumed charge (2026-10-22)
+
+Coordinator decisions D5 and D7, 2026-10-22, `story:narrowed-cap-refused-before-persist`.
+
+**1. The defect.** a19 says a resume may only narrow the finite cap.
+`resumed_spend_terms_with_live` refused a zero cap and a raise, and did not compare the new cap
+with the remembered assumed charge. Observed on 0.12.0: a run started with a cap of $1 and an
+assumed charge of $0.10 per launch; `metaharness aep drive resume <run> --budget-usd 0.05` exited
+`0` and wrote the $0.05 cap into the launch record; the next resume with no flag refused the
+remembered terms as invalid. No model was launched. The run could not be resumed at all after
+that. The remembered terms are checked before any flag is read, so every later resume refused,
+and the only way back to a valid cap was a raise, which a resume may not make.
+
+**2. The decision.** On resume, a finite cap given with `--budget-usd` must be at least the
+remembered assumed charge. A cap equal to the charge is admitted. A lower cap is refused with
+`CapBelowAssumedCharge`, whose message names the remembered cap, the assumed charge and the cap
+that was asked for, in dollars, and says that nothing was written and no model session was
+launched. `metaharness aep drive resume` prints that message on standard error and exits `1`, as
+it does for the zero and raise refusals: every error the resume returns reaches
+`metaharness_aep::execute`, which maps it to exit `1`. The check is the last one in
+`resumed_spend_terms_with_live`. The remembered terms have
+already been validated, and the zero and raise checks have already run, so the check sees only a
+positive cap no higher than the remembered one. It is the start-time rule (a first assumed charge
+above the cap is refused before allocation) applied to the terms a resume would persist.
+
+**3. Nothing is persisted.** `Host::prepare` calls `spending::policy`, which calls this function,
+and the pinned AEP CLI calls `prepare` before it takes the run lock or writes the launch record.
+At AEP `2481b48`, `crates/edge/aep-cli/src/drive.rs:778` calls `prepare`, `:804` takes the lock
+and `:809` writes the record. The refusal leaves the launch record, the spend ledger and the lock
+untouched, and no executor is built, so no model is launched.
+
+**4. What does not change.** A resume without `--budget-usd` keeps its remembered terms. Terms
+that are already invalid are refused as invalid, as before; this amendment does not repair a run
+that an earlier release left in that state. The zero and raise refusals keep their wording.
+Uncapped policies are unaffected.
+
+**5. Limits.**
+
+- D7: a cap at or above the charge but below the amount the run's ledger has already reserved
+  (`spent_micro_usd`) is not refused here, because `prepare` has no run directory to read the
+  ledger from. It persists. The next reservation then stops the run as a spend stop, as any
+  exhausted cap does, and the run still resumes. A cap equal to the charge therefore admits one
+  more launch only when nothing has been reserved yet.
+- The rule compares exact millionths of a dollar, the unit `--budget-usd` is parsed into.
+
+**6. The specification.** `metaharness.spending.NarrowResumedCap` in `spec/domains/spending.yaml`
+takes the remembered cap, the remembered assumed charge and the narrowed cap as three `Integer`
+inputs in millionths. It has three outcomes: `cap-below-assumed-charge`, which is error
+`CapBelowAssumedCharge`; `cap-narrowed`; and `narrowing-refused`, which is error
+`NarrowingRefused` and covers a zero cap, a raise and invalid remembered terms. The error outcome
+is declared first: ESS 0.67.0 answers an error at an earlier step of its precedence order than an
+acceptance and refuses a declaration order that disagrees (`ESS-COMMAND-004`). Each input carries
+the observed value as its `example:` ($1, $0.10, $0.05): ESS's witness search tries each literal a
+guard writes and one either side, and a comparison of two inputs writes no literal, so without
+examples no candidate reaches `0 < narrowed < assumed <= cap`. The production arm in
+`crates/metaharness-aep/src/drive/ess_conformance.rs` writes the remembered terms into a launch
+record the way `prepare` reads them, calls `spending::policy` on it, and reads
+`cap-below-assumed-charge` from the typed error, whose fields must equal the input. The authored
+scenario `narrowed-cap-below-assumed-charge` sends four steps: the observed terms; the cap narrowed
+to exactly the charge (admitted); the cap left at the remembered cap (admitted); and a $0.10 cap
+whose charge is $0.10, narrowed to $0.05 (refused). The two last steps place each `<=` against the
+remembered cap at its bound; without them, ESS's mutation audit leaves both `<=`-to-`<` mutants
+alive.
+
+**7. The operator's help.** `--budget-usd` on `metaharness aep drive resume` is the pinned AEP
+argument `aep_cli::drive::ResumeArgs::budget_usd`. Its help at AEP `2481b48` says only that a resume
+may lower the original cap and may not raise it. `HostedResumeArgs` replaces both its short and its
+long help with clap's `mut_arg`, so the help states that the cap stops at the remembered assumed
+charge and that a lower cap is refused before anything is written. The override names the
+argument by its id `budget_usd`. `mut_arg` panics when the id is gone, and the unit test
+`resume_budget_help_states_the_assumed_charge_floor` first asserts that the pinned `ResumeArgs`
+still declares that id, so an upstream rename fails that test by name. When AEP's own help states
+the floor, the override can be removed.

@@ -12,3 +12,4 @@ scenarios:
   - scenarios/close-unsteered-budget-word-outranks-positive-verdict.yaml
   - scenarios/close-unsteered-explicit-error-outranks-success.yaml
   - scenarios/finite-charge-above-positive-cap.yaml
+  - scenarios/narrowed-cap-below-assumed-charge.yaml

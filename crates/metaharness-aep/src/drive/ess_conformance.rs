@@ -1825,6 +1825,100 @@ fn execute(command: &str, input: &Value) -> Observed {
                 "metaharness.spending.InvalidFiniteTerms",
             )
         }
+        "metaharness.spending.NarrowResumedCap" => {
+            // ESS's integer witnesses may be encoded as 1.0. Accept only an exact integral
+            // spelling in u64 range; never round a floating-point amount.
+            let micro = |field: &str| {
+                let encoded = input[field].to_string();
+                encoded
+                    .strip_suffix(".0")
+                    .unwrap_or(&encoded)
+                    .parse::<u64>()
+                    .ok()
+            };
+            let cap = micro("remembered_cap_micro_usd");
+            let charge = micro("assumed_micro_usd_per_run");
+            let asked = micro("narrowed_cap_micro_usd");
+            let narrowed = asked.map_or_else(
+                || "-1".to_owned(),
+                |value| format!("{}.{:06}", value / 1_000_000, value % 1_000_000),
+            );
+            // The remembered terms reach the host as a resume reads them: from the launch record.
+            // A value outside u64 stays as written, so the record is refused rather than repaired.
+            let held = |parsed: Option<u64>, field: &str| {
+                parsed.map_or_else(|| input[field].clone(), Value::from)
+            };
+            let launch: Launch = serde_json::from_value(json!({
+                "task": null,
+                "map": null,
+                "project": null,
+                "root": null,
+                "pause_on_approval": false,
+                "plugin_dirs": [],
+                "spend_policy": {
+                    "mode": "finite",
+                    "cap_micro_usd": held(cap, "remembered_cap_micro_usd"),
+                    "assumed_micro_usd_per_run": held(charge, "assumed_micro_usd_per_run"),
+                },
+            }))
+            .unwrap();
+            let decided = spending::policy(
+                &tests::b10x_map(),
+                Some(&launch),
+                Some(&narrowed),
+                None,
+                &SpendOptions::default(),
+                true,
+            );
+            // An admission must carry the narrowed cap and the remembered charge, and a refusal
+            // must name the terms it was given; anything else is an outcome no scenario expects.
+            match decided {
+                Ok(admitted) => {
+                    let admitted = serde_json::to_value(&admitted).unwrap();
+                    let narrowed_terms = json!({
+                        "mode": "finite",
+                        "cap_micro_usd": asked,
+                        "assumed_micro_usd_per_run": charge,
+                    });
+                    Observed {
+                        outcome: if admitted == narrowed_terms {
+                            "cap-narrowed".to_owned()
+                        } else {
+                            format!("admitted {admitted}")
+                        },
+                        ..Observed::default()
+                    }
+                }
+                Err(refused) => match refused.downcast_ref::<CapBelowAssumedCharge>() {
+                    Some(below)
+                        if (
+                            Some(below.remembered.cap_micro_usd),
+                            Some(below.remembered.assumed_micro_usd_per_run),
+                            Some(below.narrowed_micro_usd),
+                        ) == (cap, charge, asked) =>
+                    {
+                        checked(
+                            false,
+                            "",
+                            "cap-below-assumed-charge",
+                            "metaharness.spending.CapBelowAssumedCharge",
+                        )
+                    }
+                    Some(below) => checked(
+                        false,
+                        "",
+                        &format!("refusal naming other terms: {below}"),
+                        "metaharness.spending.CapBelowAssumedCharge",
+                    ),
+                    None => checked(
+                        false,
+                        "",
+                        "narrowing-refused",
+                        "metaharness.spending.NarrowingRefused",
+                    ),
+                },
+            }
+        }
         "metaharness.spending.CheckUncappedAuthorization" => {
             let reference = match input["reference_evidence"].as_str().unwrap() {
                 "missing" => None,
@@ -2097,7 +2191,7 @@ fn ess_generated_scenarios_drive_production_targets() {
     if external.is_none() {
         assert_eq!(
             scenarios.len(),
-            107,
+            111,
             "review and update coverage deliberately"
         );
         assert_eq!(
@@ -2113,6 +2207,7 @@ fn ess_generated_scenarios_drive_production_targets() {
             "DeclareScratchWorkingDirectory",
             "DeclareContextFiles",
             "CheckFiniteTerms",
+            "NarrowResumedCap",
             "CheckUncappedAuthorization",
             "ReadSealedFrame",
             "GovernCodexCall",

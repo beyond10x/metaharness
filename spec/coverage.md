@@ -12,14 +12,14 @@ ess verify conform synthesize --path spec --scenarios spec --suite-format 5 --st
 ```
 
 `--scenarios spec` selects the authored scenarios `spec/ess-inputs.yaml` lists;
-without it ESS selects none and writes the 104 generated ones only.
+without it ESS selects none and writes the 107 generated ones only.
 `task check` validates both manifests, checks suite drift, and executes the
 production target in `crates/metaharness-aep/src/drive/ess_conformance.rs`.
 CI installs ESS 0.67.0 from commit
 `4579d8049bb5b83749b46059dfc0982de7633485`. Use that compiler locally.
 
-The committed count is **107 selected scenarios** (104 generated, 3 authored):
-107 passed, zero failed, skipped, unsupported or synthesis refusals. Unknown suite versions, steps,
+The committed count is **111 selected scenarios** (107 generated, 4 authored):
+111 passed, zero failed, skipped, unsupported or synthesis refusals. Unknown suite versions, steps,
 bindings, shapes and predicates fail closed. The target handles only the
 constructs this suite uses; extending the specification may require extending it.
 
@@ -33,7 +33,7 @@ constructs this suite uses; extending the specification may require extending it
 | Tool decisions | Production Codex mapping and answer_events consult a real AEP engine; malformed, patch and unsupported calls are denied. |
 | Workspace and file containment | The production name predicate and owned tool server operate on a selected directory; an outside symlink is refused. This does not prove process or cgroup isolation. |
 | Context files (`metaharness.workspace.DeclareContextFiles`, amendment a35) | Each probe is a real start of all three kinds over `ScriptedRunner` in a git work tree the target made, whose `.git` is a gitfile naming a sibling git directory. Every refusal production raises (no `--cwd`, an empty path, absolute, `..`, a path that is not UTF-8, symbolic link, not a regular file, not there, not text, untracked, count cap, byte cap: twelve, one outcome each) must come from every kind before the spawn with the same reason, and the target maps the refusal type exhaustively, so a thirteenth fails to compile; the accepted probe reads `session.started.context_files` off each run and compares every digest with the tree's bytes. No vendor process or model starts. |
-| Accounting | Real finite and uncapped policy functions execute. Ledger views read files written by SpendBudget and AdmissionBudget, including persisted invocation count. |
+| Accounting | Real finite and uncapped policy functions execute. A resumed narrowing (amendment a46) goes through `spending::policy` over a launch record carrying the remembered terms. Ledger views read files written by SpendBudget and AdmissionBudget, including persisted invocation count. |
 | Session format (`trace-ir/1`, domain `metaharness.trace`) | The production projection `project_document` and the three production readers run over committed inputs only: one framed event per wire kind, classified by the node the writer emits; completeness over three marker shapes built through the production `EventStream`; the digest over the framed bytes beside the vendor's reference; the two recorded `evals/aep/runs` streams retained as rendered documents whose view is read back from disk and re-projected; the three golden vendor records normalized through `ClaudeSeams`, `RolloutReader` and `B10xSeams`; the same three records through the verb's own library entry, `metaharness::project_vendor_record` (`metaharness project --from`, amendment a28), with the source name, the record digest, the unclaimed attestation and the census against the adapter's expected stream read off the rendered document, and the event stream's name refused as a `--from`; the same three records and the recorded `decomposer-clean` stream summarized to `trace-ir-summary/1` (`metaharness project --to trace-ir-summary`, amendment a42), every summary field pinned as its rendered JSON text, `null` included. No vendor process or model starts. |
 
 The immutable Recorded entities expose existing observations: a closed stream and
@@ -508,3 +508,57 @@ terminal, a `session_start` after node 0 taken as opening, a usage fold without
 `num_turns` taken as terminal, and a non-finite cost written as `null`. No
 committed record tells the first six apart from the production code, and no
 committed record carries a non-finite cost.
+
+## Amendment a46 extension — a resumed cap narrowed below the assumed charge
+
+Protocol amendment a46 (2026-10-22) refuses a resumed `--budget-usd` below the
+run's remembered assumed charge, while the host prepares the resume and before
+AEP takes the run lock or rewrites the launch record. The domain
+`metaharness.spending` gains the command `NarrowResumedCap` and the errors
+`CapBelowAssumedCharge` and `NarrowingRefused`. The command takes three `Integer`
+inputs in millionths of a dollar: the remembered cap, the remembered assumed
+charge and the narrowed cap. Each carries the observed value as its `example:`
+($1, $0.10, $0.05). The guards compare inputs with each other, which gives ESS's
+witness search no literal to start from, so without the examples it finds no
+witness for `cap-below-assumed-charge` (`ESS-SYNTH-003`). The error outcome is
+declared before `cap-narrowed`, because ESS 0.67.0 refuses a declaration order
+that disagrees with its precedence order (`ESS-COMMAND-004`).
+
+There are three generated scenarios, one per outcome. `cap-below-assumed-charge`
+sends $1, $0.10 and $0.05, and then a narrowed cap of one millionth.
+`cap-narrowed` sends a $1 cap and a charge of one millionth, narrowed to $0.05.
+`narrowing-refused` sends a zero charge, a zero narrowed cap, and a zero
+remembered cap under a $0.10 charge and under a one-millionth charge. The authored
+scenario `narrowed-cap-below-assumed-charge` has four steps:
+
+1. the observed terms, refused with `CapBelowAssumedCharge`;
+2. the cap narrowed to exactly the charge, admitted;
+3. the cap left at the remembered $1, admitted;
+4. a $0.10 cap whose charge is $0.10, narrowed to $0.05, refused.
+
+The production arm writes the remembered terms into an `aep_cli::drive::Launch`
+record as a resume reads them, and calls `spending::policy` with the narrowed cap
+as `--budget-usd` and live spending admitted. An admission counts as `cap-narrowed`
+only when the policy it returns is the finite policy with the narrowed cap and
+the remembered charge. A refusal counts as `cap-below-assumed-charge` only when
+it is the typed `CapBelowAssumedCharge` and its fields equal the input. Any other
+refusal counts as `narrowing-refused`. The suite moves from 107 to 111 scenarios
+(107 generated, 4 authored), zero refused, regenerated with ESS 0.67.0.
+
+Hardening evidence, 2026-10-22: each defect was planted, run and restored, and the
+suite was rerun green. Both were measured when the authored scenario had only its
+first two steps. Removing the floor failed 2 of 111: the generated
+`cap-below-assumed-charge` and the authored scenario, each observed as
+`cap-narrowed`. Writing the floor as `<=` failed 1 of 111: the authored scenario's
+step at exactly the charge, observed as `cap-below-assumed-charge`.
+
+Mutation audit, 2026-10-22, the command in the previous section: 117 mutants, 116
+killed, none survived, one inconclusive (`ProjectRecordedRun/decomposer-clean-recorded`,
+as before), none unwitnessed. All 10 `NarrowResumedCap` mutants are killed. Steps
+3 and 4 were added because, with the first two steps only, both mutants that turn
+a `<=` against the remembered cap into `<` survived.
+
+UNMAPPED (amendment a46, D7): a cap at or above the charge but below the amount
+the run's ledger has already reserved. `prepare` has no run directory to read the
+ledger from, so that cap persists. The next reservation then refuses it as an
+exhausted cap.

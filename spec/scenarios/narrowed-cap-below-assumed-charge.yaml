@@ -1,0 +1,41 @@
+type: ess-scenario/1
+domain: metaharness.spending
+scenario: narrowed-cap-below-assumed-charge
+summary: >-
+  A resume narrowing a $1 cap to $0.05 under an assumed charge of $0.10 per launch is refused
+  before anything is persisted; narrowing it to exactly the charge is admitted.
+
+timeline:
+  - at: 2026-10-22T00:00:00Z
+    command: metaharness.spending.NarrowResumedCap
+    input:
+      remembered_cap_micro_usd: 1000000
+      assumed_micro_usd_per_run: 100000
+      narrowed_cap_micro_usd: 50000
+    outcome: cap-below-assumed-charge
+    error: {name: metaharness.spending.CapBelowAssumedCharge}
+
+  - at: 2026-10-22T00:00:01Z
+    command: metaharness.spending.NarrowResumedCap
+    input:
+      remembered_cap_micro_usd: 1000000
+      assumed_micro_usd_per_run: 100000
+      narrowed_cap_micro_usd: 100000
+    outcome: cap-narrowed
+
+  - at: 2026-10-22T00:00:02Z
+    command: metaharness.spending.NarrowResumedCap
+    input:
+      remembered_cap_micro_usd: 1000000
+      assumed_micro_usd_per_run: 100000
+      narrowed_cap_micro_usd: 1000000
+    outcome: cap-narrowed
+
+  - at: 2026-10-22T00:00:03Z
+    command: metaharness.spending.NarrowResumedCap
+    input:
+      remembered_cap_micro_usd: 100000
+      assumed_micro_usd_per_run: 100000
+      narrowed_cap_micro_usd: 50000
+    outcome: cap-below-assumed-charge
+    error: {name: metaharness.spending.CapBelowAssumedCharge}

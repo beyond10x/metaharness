@@ -5,6 +5,10 @@ was amended and the amendment is named here.
 
 ## [Unreleased]
 
+### Fixed
+
+- `metaharness aep drive resume --budget-usd` refuses a cap below the run's remembered assumed charge before it writes anything, naming the remembered cap, the charge and the cap asked for; it persisted the cap, and every later resume of the run refused its terms as invalid. A cap equal to the charge is admitted, and `metaharness aep drive resume --help` states the floor for `--budget-usd` (a46).
+
 ## [0.13.0] — 2026-10-22
 
 ### Added

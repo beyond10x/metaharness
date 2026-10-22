@@ -7,6 +7,35 @@ mod tests {
         assert!(help.contains("--uncapped-budget"), "finite caps must not stand in for uncapped authority");
         assert!(help.contains("--spend-authorization"));
     }
+    /// Amendment a46 § 7: the pinned AEP help for a resumed `--budget-usd` says only that the cap
+    /// may be lowered. The host replaces that help by the argument's id, so the pinned `ResumeArgs`
+    /// must still declare the id: renamed upstream, the override names nothing and the operator
+    /// reads AEP's text again.
+    #[test]
+    fn resume_budget_help_states_the_assumed_charge_floor() {
+        let upstream =
+            <aep_cli::drive::ResumeArgs as clap::Args>::augment_args(clap::Command::new("resume"));
+        assert!(
+            upstream
+                .get_arguments()
+                .any(|argument| argument.get_id() == "budget_usd"),
+            "the pinned AEP `ResumeArgs` no longer declares `budget_usd`, the argument whose help \
+             `HostedResumeArgs` replaces with the assumed-charge floor (a46 § 7)"
+        );
+        let hosted = <HostedResumeArgs as clap::Args>::augment_args(clap::Command::new("resume"));
+        let budget = hosted
+            .get_arguments()
+            .find(|argument| argument.get_id() == "budget_usd")
+            .expect("the hosted resume keeps the pinned `--budget-usd`");
+        assert_eq!(budget.get_long(), Some("budget-usd"));
+        for help in [budget.get_help(), budget.get_long_help()] {
+            let help = help.expect("`--budget-usd` carries help").to_string();
+            assert!(
+                help.contains("assumed charge") && help.contains("below"),
+                "`--budget-usd` on resume does not state the assumed-charge floor: {help}"
+            );
+        }
+    }
     #[test]
     fn governed_codex_is_selected_as_an_adjudicating_harness() {
         let selected = Harness::named("codex").expect("the existing adapter is available to drive");
@@ -2652,6 +2681,95 @@ profile: test.reading
             .expect_err("remembered zero must not authorize unlimited free launches")
             .to_string();
         assert!(malformed.contains("invalid"), "{malformed}");
+    }
+#[test]
+    fn a_resume_cannot_narrow_its_cap_below_the_assumed_charge() {
+        let map = b10x_map();
+        let remembered = SpendTerms {
+            cap_micro_usd: 1_000_000,
+            assumed_micro_usd_per_run: 100_000,
+        };
+        for (written, named) in [
+            ("0.05", "$0.050000"),
+            ("0.099999", "$0.099999"),
+            ("0.000001", "$0.000001"),
+        ] {
+            let refused = resumed_spend_terms_with_live(&map, Some(remembered), Some(written), true)
+                .expect_err("a cap below the assumed charge is refused when it is written")
+                .to_string();
+            for amount in ["$1.000000", "$0.100000", named] {
+                assert!(refused.contains(amount), "{written}: {refused}");
+            }
+        }
+        for (written, cap) in [("0.1", 100_000), ("0.5", 500_000), ("1", 1_000_000)] {
+            let narrowed = resumed_spend_terms_with_live(&map, Some(remembered), Some(written), true)
+                .expect("a cap at or above the assumed charge narrows authority");
+            assert_eq!(
+                narrowed,
+                Some(SpendTerms {
+                    cap_micro_usd: cap,
+                    ..remembered
+                })
+            );
+            assert_eq!(
+                resumed_spend_terms_with_live(&map, narrowed, None, true)
+                    .expect("the next unchanged resume reads what this one admitted"),
+                narrowed
+            );
+        }
+    }
+#[test]
+    fn a_narrowing_below_the_assumed_charge_never_reaches_the_launch_record() {
+        let map = b10x_map();
+        let launch = |policy: serde_json::Value| -> Launch {
+            serde_json::from_value(serde_json::json!({
+                "task": null,
+                "map": null,
+                "project": null,
+                "root": null,
+                "pause_on_approval": false,
+                "plugin_dirs": [],
+                "spend_policy": policy,
+            }))
+            .expect("a launch record carrying finite terms")
+        };
+        let options = SpendOptions::default();
+        let remembered = launch(serde_json::json!({
+            "mode": "finite",
+            "cap_micro_usd": 1_000_000,
+            "assumed_micro_usd_per_run": 100_000,
+        }));
+        match spending::policy(&map, Some(&remembered), Some("0.05"), None, &options, true) {
+            Ok(persisted) => {
+                let persisted = serde_json::to_value(&persisted).unwrap();
+                let next = spending::policy(&map, Some(&launch(persisted.clone())), None, None, &options, true)
+                    .map(|policy| serde_json::to_value(policy).unwrap());
+                panic!(
+                    "narrowing $1 to $0.05 under a $0.10 assumed charge was admitted and would be \
+                     persisted as {persisted}; the next unchanged resume answers {next:?}"
+                );
+            }
+            Err(refused) => {
+                let refused = refused.to_string();
+                for amount in ["$1.000000", "$0.100000", "$0.050000"] {
+                    assert!(refused.contains(amount), "{refused}");
+                }
+            }
+        }
+        let equal = spending::policy(&map, Some(&remembered), Some("0.1"), None, &options, true)
+            .expect("a cap equal to the assumed charge is admitted");
+        let equal = serde_json::to_value(&equal).unwrap();
+        assert_eq!(
+            equal,
+            serde_json::json!({
+                "mode": "finite",
+                "cap_micro_usd": 100_000,
+                "assumed_micro_usd_per_run": 100_000,
+            })
+        );
+        let next = spending::policy(&map, Some(&launch(equal.clone())), None, None, &options, true)
+            .expect("the next unchanged resume reads the equal cap back");
+        assert_eq!(serde_json::to_value(&next).unwrap(), equal);
     }
 #[test]
     fn the_rendering_offers_a_shell_only_when_the_capability_is_admitted() {
