@@ -22,7 +22,9 @@ metaharness doctor claude
 2. Installs a blocking `PreToolUse` hook and answers its calls **per call**.
 3. Streams the session out as protocol events on stdout; takes steering on stdin.
 4. Retains the raw transcript.
-5. Exits on the [hermetic floor's](../hermetic.md) verdict.
+5. Exits when the stream completes: `0` when it closed complete on the vendor's terminal record,
+   `3` otherwise. `--audit` or `--hermetic strict` adds the [hermetic floor's](../hermetic.md)
+   verdict to that exit and prints the floor's rows on stderr.
 
 :::warning 2.1.304 and 2.1.305 read the files a prompt mentions, and nothing records it
 Claude Code expands an `@path` in prompt text — the `-p` argument, stdin, a stream-json user

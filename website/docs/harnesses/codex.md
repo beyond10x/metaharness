@@ -10,7 +10,7 @@ Pinned to **0.153.4**. Adapter class: `harness`.
 
 ```bash
 metaharness run codex --hermetic -p "…"
-metaharness conformance codex     # 23 vectors, 4 of which run a real process and the real hook
+metaharness conformance codex     # 24 vectors, 4 of which run a real process and the real hook
 metaharness doctor codex
 ```
 
@@ -103,7 +103,17 @@ belongs to some other code path — the observed one honours the grant.
 
 One caveat travels with the observation: the child's `PATH` resolved codex **0.144.0** while the
 pin is 0.145.0 (the two-install warning fired, as it must). The grant is a driven fact about
-0.144.0 and an inference about 0.145.0 until one machine holds one install.
+0.144.0 and an inference about 0.145.0 until one machine holds one install. No record of that run
+is kept under `docs/research/`.
+
+On the current pin, **0.153.4**, the grant is read from a recorded run that spent nothing:
+`docs/research/2026-10-03-native-codex-fixture.md`, the installed binary against a fixture
+provider. The real hook was answered `allow` through the production renderer and the command
+wrote its marker (rows *Command exit0* and *Command exit7*); answered `deny`, the same command
+wrote none (row *Hook denial*). `crates/metaharness-codex/tests/native_fixture.rs` is the probe.
+Design amendment **a49** records what that run shows and what it does not: a fixture provider,
+not a hosted model, and an `allow` the probe wrote (`answer_hooks`), not one metaharness's observe
+loop wrote inside a `metaharness run` process.
 :::
 
 Also not claimed: the turn tier, the registration tier, and the `apply_patch` rendering.

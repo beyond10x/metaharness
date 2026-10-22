@@ -211,16 +211,32 @@ fn render_site(sources: &[Source<'_>], landing: &str, commit: &str) -> Result<Fi
     Ok(files)
 }
 
-/// Validate all thirteen documentation pages, the landing page, local links and assets.
+/// The published pages in reading order: each page's route key and its Markdown source.
+///
+/// The publication allowlist, read-only, so a test outside this crate can hold every published
+/// page to the source a claim on it counts.
+pub fn pages() -> impl Iterator<Item = (&'static str, &'static str)> {
+    content::PAGES.iter().map(|page| (page.key, page.markdown))
+}
+
+/// How many pages a run validated or built, counted from the pages it was given.
+fn pages_phrase(sources: &[Source<'_>]) -> String {
+    format!("{} documentation pages", sources.len())
+}
+
+fn check_summary(sources: &[Source<'_>], landing: &str) -> Result<String, String> {
+    render_site(sources, landing, "1111111111111111111111111111111111111111")?;
+    Ok(format!(
+        "Metaharness: {}, landing, links, anchors and assets valid",
+        pages_phrase(sources)
+    ))
+}
+
+/// Validate every documentation page, the landing page, local links and assets.
 /// # Errors
 /// Returns an error for invalid Markdown, duplicate routes or broken links and fragments.
 pub fn check() -> Result<(), String> {
-    render_site(
-        content::PAGES,
-        LANDING,
-        "1111111111111111111111111111111111111111",
-    )?;
-    println!("Metaharness: 13 documentation pages, landing, links, anchors and assets valid");
+    println!("{}", check_summary(content::PAGES, LANDING)?);
     Ok(())
 }
 
@@ -231,11 +247,16 @@ pub fn check() -> Result<(), String> {
 pub fn build(out: &Path, commit: &str) -> Result<(), String> {
     let files = render_site(content::PAGES, LANDING, commit)?;
     output::write(out, &files)?;
-    println!(
-        "Built 13 documentation pages and landing at {}",
-        out.display()
-    );
+    println!("{}", build_summary(content::PAGES, out));
     Ok(())
+}
+
+fn build_summary(sources: &[Source<'_>], out: &Path) -> String {
+    format!(
+        "Built {} and landing at {}",
+        pages_phrase(sources),
+        out.display()
+    )
 }
 #[cfg(test)]
 mod tests {
@@ -266,6 +287,38 @@ mod tests {
             }
         }
         render_site(&sources, r#"<main id="main">Fixture</main>"#, commit)
+    }
+
+    /// The count the check and the build print is the number of pages they were given, never a
+    /// typed number: a page added to or dropped from the allowlist moves it.
+    #[test]
+    fn the_check_names_the_number_of_pages_it_validated() {
+        let three = [
+            Source {
+                key: "index",
+                group: "Test",
+                markdown: "# Index",
+            },
+            Source {
+                key: "status",
+                group: "Test",
+                markdown: "# Status",
+            },
+            Source {
+                key: "harnesses/b10x",
+                group: "Test",
+                markdown: "# b10x",
+            },
+        ];
+        let summary = check_summary(&three, r#"<main id="main">Fixture</main>"#).unwrap();
+        assert!(summary.contains(" 3 documentation pages"), "{summary}");
+        let built = build_summary(&three, Path::new("site"));
+        assert_eq!(built, "Built 3 documentation pages and landing at site");
+        let published = check_summary(content::PAGES, LANDING).unwrap();
+        assert!(
+            published.contains(&format!(" {} documentation pages", content::PAGES.len())),
+            "{published}"
+        );
     }
 
     #[test]

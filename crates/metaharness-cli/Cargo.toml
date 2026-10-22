@@ -26,6 +26,7 @@ metaharness-tools = { path = "../metaharness-tools" }
 serde_json = { workspace = true }
 
 [dev-dependencies]
+metaharness-docs = { path = "../metaharness-docs" }
 tempfile = { workspace = true }
 
 [lints]
