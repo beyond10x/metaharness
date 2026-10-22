@@ -150,6 +150,19 @@ impl RolloutReader {
             .collect()
     }
 
+    /// Record a hook request's call under the vendor's id, so the completion that carries the same
+    /// id in the same turn is correlated with it (amendment a47). The events are the invalidation
+    /// owed when the id was already recorded for another turn or input; empty otherwise.
+    pub(crate) fn observe_hook_request(
+        &mut self,
+        id: &str,
+        tool: &str,
+        turn_id: Option<&str>,
+        input: &Value,
+    ) -> Vec<Event> {
+        self.observations.hooked(id, tool, turn_id, input)
+    }
+
     /// Whether a `task_complete` has been seen — the rollout's nearest thing to a terminal
     /// record.
     #[must_use]

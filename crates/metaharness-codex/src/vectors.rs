@@ -13,7 +13,8 @@
 //!   names verified structurally, content invented here so no session's words travel with the
 //!   code). A vector is one recorded stimulus and its complete expectation over the emitted event
 //!   names and the load-bearing fields — a reader that dropped a record or guessed a missing field
-//!   fails here, with the difference in the detail.
+//!   fails here, with the difference in the detail. The `MEDIATED_*` lines (amendment a47) are
+//!   written from the 0.153.4 source at the lines each one cites, with values invented here.
 //!
 //! No path, name or value in the C1 fixtures comes from a real machine.
 
@@ -22,10 +23,12 @@ use std::path::PathBuf;
 
 use metaharness_protocol::{
     ConformanceTier, ContractObligations, CredentialSource, DeclaredContextFile, Digest, Emission,
-    Event, EventStream, HermeticAttestation, HermeticMode, HermeticRow, Kind, Obligation, RunId,
-    RunSpec, ToolSurface, TranscriptRef, VectorOutcome,
+    Event, EventStream, HarnessSeam, HermeticAttestation, HermeticMode, HermeticRow, Kind,
+    Obligation, RunId, RunSpec, Seam, ToolSurface, TranscriptRef, VectorOutcome,
 };
 use serde_json::{Value, json};
+
+use crate::bridge::{CodexSeam, hook_request_line};
 
 use crate::launch::{
     CodexLogin, LaunchContext, LaunchPlan, LaunchRefusal, LoopbackParams, plan_launch,
@@ -71,6 +74,18 @@ const WORLD_STATE: &str = r#"{"timestamp":"2026-08-22T10:00:01.200Z","type":"wor
 const TURN_CONTEXT: &str = r#"{"timestamp":"2026-08-22T10:00:01.300Z","type":"turn_context","payload":{"turn_id":"t1","model":"a-model","personality":"pragmatic"}}"#;
 const TURN_CONTEXT_FOREIGN: &str = r#"{"timestamp":"2026-08-22T10:00:01.300Z","type":"turn_context","payload":{"turn_id":"t1","model":"a-model","personality":"friendly"}}"#;
 const TURN_CONTEXT_SILENT: &str = r#"{"timestamp":"2026-08-22T10:00:01.300Z","type":"turn_context","payload":{"turn_id":"t1","model":"a-model"}}"#;
+/// Amendment a47: one code-mode `exec` call that ran two commands, in the 0.153.4 shapes and with
+/// values invented here. The rollout records the outer call under the model's `call_*` id. Each
+/// command reaches the seam twice: its `PreToolUse` request, under the `exec-<uuid>` id code mode
+/// minted (`codex-rs/core/src/tools/code_mode/mod.rs:374`, `core/src/hook_runtime.rs:184-203`,
+/// `hooks/src/schema.rs:278-296`), and its `item_completed`, under the same id and turn id
+/// (`core/src/tools/events.rs:563-586`, `core/src/session/mod.rs:2439-2464`).
+const MEDIATED_CALL: &str = r#"{"timestamp":"2026-08-22T10:00:02.000Z","type":"response_item","payload":{"type":"custom_tool_call","status":"completed","call_id":"call_fixture","name":"exec","input":"await tools.exec_command({cmd: \"true\"}); await tools.exec_command({cmd: \"exit 7\"});"}}"#;
+const MEDIATED_HOOK_ZERO: &str = r#"{"session_id":"01a0-fixture","turn_id":"t1","transcript_path":null,"cwd":"/scratch/work","hook_event_name":"PreToolUse","model":"a-model","permission_mode":"bypassPermissions","tool_name":"Bash","tool_input":{"command":"true"},"tool_use_id":"exec-00000000-0000-4000-8000-000000000000"}"#;
+const MEDIATED_DONE_ZERO: &str = r#"{"timestamp":"2026-08-22T10:00:02.400Z","type":"event_msg","payload":{"type":"item_completed","thread_id":"01a0-fixture","turn_id":"t1","item":{"type":"CommandExecution","id":"exec-00000000-0000-4000-8000-000000000000","command":["/bin/bash","-lc","true"],"cwd":"file:///scratch/work","parsed_cmd":[],"source":"unified_exec_startup","status":"completed","aggregated_output":"","exit_code":0},"started_at_ms":1787392802100,"completed_at_ms":1787392802400}}"#;
+const MEDIATED_HOOK_SEVEN: &str = r#"{"session_id":"01a0-fixture","turn_id":"t1","transcript_path":null,"cwd":"/scratch/work","hook_event_name":"PreToolUse","model":"a-model","permission_mode":"bypassPermissions","tool_name":"Bash","tool_input":{"command":"exit 7"},"tool_use_id":"exec-00000000-0000-4000-8000-000000000007"}"#;
+const MEDIATED_DONE_SEVEN: &str = r#"{"timestamp":"2026-08-22T10:00:02.800Z","type":"event_msg","payload":{"type":"item_completed","thread_id":"01a0-fixture","turn_id":"t1","item":{"type":"CommandExecution","id":"exec-00000000-0000-4000-8000-000000000007","command":["/bin/bash","-lc","exit 7"],"cwd":"file:///scratch/work","parsed_cmd":[],"source":"unified_exec_startup","status":"failed","aggregated_output":"","exit_code":7},"started_at_ms":1787392802500,"completed_at_ms":1787392802800}}"#;
+const MEDIATED_OUTPUT: &str = r#"{"timestamp":"2026-08-22T10:00:03.000Z","type":"response_item","payload":{"type":"custom_tool_call_output","call_id":"call_fixture","output":"Script completed\n"}}"#;
 
 /// Every free vector this adapter carries: the launch face, then the replay face.
 #[must_use]
@@ -82,6 +97,7 @@ pub fn conformance_vectors() -> Vec<VectorOutcome> {
         vector_version_gate(),
         vector_drifted_shape_is_opaque_not_fatal(),
         vector_nothing_is_dropped(),
+        vector_mediated_exec_exit(),
         vector_output_style_recorded(),
         vector_output_style_foreign(),
         vector_output_style_absent(),
@@ -791,6 +807,72 @@ fn vector_nothing_is_dropped() -> VectorOutcome {
     }
 }
 
+/// C2 — **a command run through the code-mode `exec` tool reaches `tool.result` with its exit**
+/// (amendment a47). The seam reads the rollout and the hook requests merged, as on a live run. Each
+/// completion is joined to the hook request that carried its id, in the same turn; exit 0 is a
+/// success and exit 7 an error, both from the retained completion, and nothing is left unverified.
+fn vector_mediated_exec_exit() -> VectorOutcome {
+    let id = "CX2-mediated-exec-exit";
+    let mut seam = CodexSeam::new(
+        TranscriptRef {
+            path: None,
+            digest: None,
+            bytes: None,
+        },
+        HermeticAttestation::none(HermeticMode::Off),
+        Seam::Hook,
+    );
+    let mut emitted = Vec::new();
+    for line in [
+        META.to_owned(),
+        TASK_STARTED.to_owned(),
+        TURN_CONTEXT.to_owned(),
+        MEDIATED_CALL.to_owned(),
+        hook_request_line("hook-zero", MEDIATED_HOOK_ZERO),
+        MEDIATED_DONE_ZERO.to_owned(),
+        hook_request_line("hook-seven", MEDIATED_HOOK_SEVEN),
+        MEDIATED_DONE_SEVEN.to_owned(),
+        MEDIATED_OUTPUT.to_owned(),
+        COMPLETE.to_owned(),
+    ] {
+        emitted.extend(seam.push_line(&line));
+    }
+    emitted.extend(seam.finish());
+    let outcome = |call: &str| {
+        emitted.iter().rev().find_map(|line| match &line.event {
+            Event::ToolResult {
+                call_id,
+                is_error,
+                exit_code,
+                outcome_source,
+                ..
+            } if call_id == call => Some((*is_error, *exit_code, outcome_source.clone())),
+            _ => None,
+        })
+    };
+    let retained = Some("retained_tool_completion".to_owned());
+    let zero = outcome("exec-00000000-0000-4000-8000-000000000000");
+    let seven = outcome("exec-00000000-0000-4000-8000-000000000007");
+    let unverified = emitted
+        .iter()
+        .filter(|line| {
+            matches!(&line.event, Event::Warning { code, .. } if code == "TOOL_OUTCOME_UNVERIFIED")
+        })
+        .count();
+    if zero == Some((Some(false), Some(0), retained.clone()))
+        && seven == Some((Some(true), Some(7), retained))
+        && unverified == 0
+    {
+        VectorOutcome::passed(id, ConformanceTier::C2)
+    } else {
+        VectorOutcome::failed(
+            id,
+            ConformanceTier::C2,
+            format!("exit 0 read {zero:?}, exit 7 read {seven:?}, {unverified} unverified"),
+        )
+    }
+}
+
 /// C2 — **the opening record carries the personality the first `turn_context` recorded**, which is
 /// what the launch wrote (amendment a34). The record arrives after `session_meta`, so the reader
 /// holds the opening record, and everything after it, until that record: nothing is emitted before
@@ -972,6 +1054,7 @@ mod tests {
             "CX2-version-gate",
             "CX2-drift-opaque",
             "CX2-nothing-dropped",
+            "CX2-mediated-exec-exit",
             "CX2-output-style-recorded",
             "CX2-output-style-foreign",
             "CX2-output-style-absent",

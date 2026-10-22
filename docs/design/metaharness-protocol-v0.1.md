@@ -1148,7 +1148,7 @@ Pinned to **0.145.0**.
 | …where the hook is **declared** | — | **a7 correction.** `[hooks]` in **`config.toml`**, `PascalCase` event keys. `$CODEX_HOME/hooks.json` is **not a source this binary reads** — a `hooks.json` is a *plugin manifest's* file — and an unrecognised key under `[hooks]` is **dropped without failing the config load** | so a misconfigured seam is indistinguishable from a run in which nothing was attempted, and § 7.8's rule applies here with no discount: the seam is asserted from a hook request that arrived |
 | …what makes it **fire** in a scratch home | — | **a7, driven.** `--dangerously-bypass-hook-trust` on `exec`: a hook in a fresh `CODEX_HOME` is not *managed* and has no persisted trust, so without the flag it never runs. `codex features list` reports `hooks stable true` | the flag's name says the opposite of what it does here: the danger it warns of is running *somebody else's* hook unvetted, and the only hook in the scratch home is the one metaharness wrote into it |
 | …the hook's **tool vocabulary** | — | **a7, driven, and it is a third vocabulary.** The hook receives `tool_name: "Bash"` for a shell call — Claude Code's word, on this vendor's wire — while the *rollout* records the same call as `custom_tool_call{name:"exec"}` and the binary's model-facing list calls it `shell` | a rendering table built from the record would deny every shell call in frame mode and report it as a frame decision. The adapter renders to the **hook's** word |
-| …**correlating** the two records of one call | — | **a7: not possible by id.** The hook's `tool_use_id` (`exec-96257928-…`) and the rollout's `call_id` (`call_u3Igtq…`) are different namespaces for one call | the adapter emits both and joins neither; `turn_id` is carried on both sides for a reader that wants the join |
+| …**correlating** the two records of one call | — | **a7: not possible by id.** The hook's `tool_use_id` (`exec-96257928-…`) and the rollout's `call_id` (`call_u3Igtq…`) are different namespaces for one call. **a47: true of the rollout's *call* record only. The `exec-` id is the id code mode minted for the command the call ran, and that command's `item_completed` carries it as `item.id`, under the same `turn_id` (0.153.4 source, cited in a47 § 2)** | the adapter emits both and does not join the hook to the call record. **a47: it joins the hook request to the command's completion, by that id and the turn id on both sides, so the command's exit reaches `tool.result`** |
 | `thread/inject` | turn (injection) | method verified present (V14); undriven | frame text between turns |
 | `turn/steer` | mid-turn | method verified present (V14); **undriven** | claimed, not proven. Declared as `unverified` in the adapter's capability set, which means an embedder that requires it gets a refusal, not a silent no-op |
 | `turn/interrupt` | kill | verified (V14) | |
@@ -2035,6 +2035,14 @@ contradiction is sticky for that call. Incomplete commands stay unknown. Structu
 failed/declined outcomes are errors; command success requires completed status with
 measured exit0. Missing or inconsistent required metadata cannot become success.
 Patch status can prove success/failure without pretending there is a numeric exit code.
+
+> **Amendment a47, 2026-10-22.** An observed call includes a `PreToolUse` request that carried
+> the vendor's `tool_use_id` for a `Bash` command. A completion is matched to it by that id and by
+> `turn_id`, which must then be present on both sides and equal. A command Codex 0.153.4 runs
+> through the code-mode `exec` tool completes under that id, and no call record in the rollout
+> carries it (a47 § 2). A command completion's `exit_code` of -1 is the vendor's placeholder, not
+> an exit: it reaches `tool.result` as null, and with `failed` or `declined` the call is still an
+> error (a47 § 5).
 
 Raw call-output content may arrive before or after structured completion. It remains
 content, never an outcome decoder. A subsequent tool.result for the same call can enrich
@@ -4189,3 +4197,116 @@ written flat.
   channel after its last hand-over before the marker is answered by nothing (§ 4).
 - The specification models no steering line (`spec/domains/session.yaml` leaves steering
   precedence unmapped), and this amendment adds no scenario to it.
+
+### Amendment a47 — a mediated Codex command's completion joins its hook request by id (2026-10-22)
+
+**1. The defect.** On Codex 0.153.4 a shell command the model runs through the code-mode `exec`
+tool reached `tool.result` with `exit_code`, `is_error` and `outcome_source` null, followed by
+`TOOL_OUTCOME_UNVERIFIED` "completion has no matching observed call", although the vendor's
+`item_completed` record stated the exit. a22 correlates a completion's `item.id` with a call the
+rollout records. The rollout records the outer `exec` call as `custom_tool_call` under the model's
+`call_*` id. The command that call ran completes under an `exec-<uuid>` id, and no rollout call
+carries that id. § 7.4 and `crates/metaharness-codex/src/bridge.rs` said the hook's id and the
+rollout's id are different namespaces and that the adapter joins neither.
+
+**2. What the source says.** Read at tag `rust-v0.153.4` (tag object `042fb41b`, commit
+`3d2ee51c`; `codex-rs/Cargo.toml:150` is `version = "0.153.4"`). Paths are under `codex-rs/`.
+
+| fact | where |
+|---|---|
+| a tool called from code-mode JavaScript gets the id `exec-<uuid>` | `core/src/tools/code_mode/mod.rs:374`, `code-mode-protocol/src/lib.rs:51` (`PUBLIC_TOOL_NAME = "exec"`); dispatched at `core/src/tools/code_mode/mod.rs:387-393` |
+| that id is the invocation's `call_id` | `core/src/tools/router.rs:358-374` |
+| the `PreToolUse` hook receives the invocation's `call_id` as `tool_use_id`, and the turn context's `sub_id` as `turn_id` | `core/src/tools/registry.rs:567-574`, `core/src/hook_runtime.rs:184-203` (`:193`, `:202`), `hooks/src/schema.rs:278-296` |
+| a shell command's hook names the tool `Bash`, with `tool_input.command` | `core/src/tools/handlers/unified_exec/exec_command.rs:504-515`, `core/src/tools/hook_names.rs:54-55` |
+| the outer custom `exec` call raises no hook | `core/src/tools/registry.rs:129-138` (no hook payload for a payload that is not a function call) |
+| the command's completion item takes the same `call_id` as `item.id` | `core/src/tools/handlers/unified_exec/exec_command.rs:144-174`, `core/src/unified_exec/process_manager.rs:522-527`, `core/src/tools/events.rs:563-586` (`id` at `:573`, `exit_code` at `:586`) |
+| `item_completed` carries the turn context's `sub_id` as `turn_id`, as `task_started` does | `core/src/session/mod.rs:2439-2464`, `protocol/src/protocol.rs:1936-1946`, `core/src/tasks/regular.rs:50-51` |
+| an exit of 0 is `status: "completed"`, any other exit `"failed"`, both with `exit_code` | `core/src/tools/events.rs:514-532`, `protocol/src/items.rs:198-215` |
+| `codex exec` writes a paginated rollout, which keeps `item_completed`; `item_started` and the hook events are not kept | `exec/src/lib.rs:1199`, `rollout/src/policy.rs:91-104`, `:189-191` |
+| nothing in the rollout ties `exec-<uuid>` to the outer `call_*` | `protocol/src/items.rs:236-273` (no parent field) |
+
+So the hook request and the completion name one command with one id and one turn id. The outer
+`call_*` joins neither. a7 measured the hook against the rollout's *call* record, and "not possible
+by id" stays true of that pair. It is false of the hook against the rollout's *completion* record.
+
+**3. The rule.** The Codex seam records a hook request as an observed call when its payload carries
+the vendor's `tool_use_id` and names the tool `Bash`. The record is keyed by that id and holds the
+payload's `turn_id` and `tool_input`. A completion whose `item.id` matches no call the rollout
+recorded is looked up among these. It is correlated when it is a `CommandExecution`, both sides
+carry a `turn_id`, the two are equal, and its `status` and `exit_code` are an outcome a22 supports.
+The `tool.result` then carries `exit_code`, `is_error` and `outcome_source:
+"retained_tool_completion"` under the `exec-*` id, the id the decision-bearing `tool.requested`
+carried. Nothing is matched by order, command text or output: the id and the turn id are the
+vendor's. The reader's own turn counter is not compared on this path. Hook requests and rollout
+lines arrive on separate channels, so the counter records when a line was read, not which turn it
+belongs to.
+
+A completion whose id a rollout call record carries keeps a22's path unchanged. That is a direct
+call, where the hook's `tool_use_id` is the model's `call_*` as well.
+
+These stay unknown, `tool.result` null:
+
+- a completion that matches neither a rollout call nor a hook request, with
+  `TOOL_OUTCOME_UNVERIFIED` "completion has no matching observed call", as before;
+- a completion whose turn id differs from the hook's, or where either side has none, with
+  "completion does not match the observed call family or turn"; the call stays unknown afterwards;
+- a completion of the wrong family, or with unsupported metadata, as a22 says;
+- a hook whose payload had no `tool_use_id`. The call is presented under the rendezvous name, which
+  the vendor never wrote, so no completion can match it;
+- a second hook request under the same id with another turn id or input. As with a reused rollout
+  id, a null `tool.result` and `TOOL_OUTCOME_UNVERIFIED` "a call identifier was reused with
+  another turn or request; its outcome is now unknown" follow it, and the call stays unknown;
+- a hook for any tool other than `Bash`. An `apply_patch` called from code mode is not joined by
+  this amendment;
+- a rollout read without the run's hook requests, as the viewer reads one. Only the live seam sees
+  `tool_use_id`.
+
+**4. What does not change.** The wire: no event, field or code is added. The outer call's
+`tool.result`, from `custom_tool_call_output`, stays content only. A decision is still routed by
+the hook process's rendezvous name.
+
+**5. The vendor's -1 is not an exit.** Codex writes `exit_code: -1` when it has no exit to report.
+At the same tag a model's command reaches that value in three places:
+
+| what happened | `status` | where |
+|---|---|---|
+| the command could not be started, or it was rejected | `failed`, `declined` | `core/src/tools/events.rs:534-559` (the literal at `:540` and `:553`) |
+| a unified-exec command ended and its exit status is unknown | `failed`, because -1 is not 0 (`core/src/tools/events.rs:527-531`) | `unwrap_or(-1)` at `core/src/unified_exec/process_manager.rs:752` and `core/src/unified_exec/async_watcher.rs:215` |
+
+The same value is also written at `core/src/unified_exec/async_watcher.rs:409`, for a started
+command that failed with a message, and in the process layer when waiting on the child fails or a
+status carries neither a code nor a signal (`utils/pty/src/pty.rs:247`, `utils/pty/src/pipe.rs:293`,
+`utils/pty/src/process.rs:35-48`, which reports a signal as 128 plus its number). On Unix a process
+exits with 0 to 255, so -1 is never its exit there. On Windows a process exiting with 0xFFFFFFFF
+also reads -1 after the cast at `utils/pty/src/pty.rs:246`, and the adapter cannot tell that exit
+from the placeholder. All of this was read from source; no run of this repository has produced a -1.
+
+a22's rules passed -1 through as a number, and § 3 extended that to every code-mode command. **This
+amendment changes a22's pass-through there**, on the direct and the mediated path alike: a
+`CommandExecution` completion whose `exit_code` is -1 has no exit code. With `status` `failed` or
+`declined`, its `tool.result` carries `exit_code: null`, `is_error: true` and `outcome_source:
+"retained_tool_completion"`, as a declined command without a code already did. With `completed` it
+stays unsupported metadata, as any nonzero exit does. No warning is added, because the failure is
+known and only the number is not. The specification reads the outcome as `failure-without-code`,
+`numeric_exit: false`. Only -1 is read this way; every other exit passes as before. A Windows exit
+of 0xFFFFFFFF loses its number this way, and none is ever invented (invariant 3).
+
+**6. Amends.** a22's `tool.result` paragraph: "an observed call" includes a hook request carrying
+the vendor's id, by § 3, and a command's -1 is no exit code, by § 5. § 7.4's correlation row: the
+hook's `tool_use_id` is the completion's `item.id`. The module comment of
+`crates/metaharness-codex/src/bridge.rs`.
+
+**7. Evidence.** The story's acceptance (exit 0 and exit 7 of a recorded 0.153.4 rollout reach
+`tool.result`) is met on the live seam, which reads the rollout together with the run's hook
+requests; the same rollout read on its own still yields null and `TOOL_OUTCOME_UNVERIFIED` for both
+commands (invariant 3, § 3's last bullet). The C2 vector `CX2-mediated-exec-exit` and
+`crates/metaharness-codex/tests/observations.rs` read sanitized lines in the 0.153.4 shape through
+the seam: a hook request and a completion of exit 0, and another of exit 7, each beside the outer
+`custom_tool_call`. They are written from the source above, not copied from a retained session.
+The vector moves the codex contract record's `checked` from 23 to 24. The same test file reads a -1
+with `failed` and with `declined` on a direct call and on a mediated command (§ 5). The
+specification adds the evidence classes `tool-mediated-success`, `tool-mediated-failure`,
+`tool-exit-placeholder` and `tool-mediated-exit-placeholder` to `ReadToolOutcome`, and the authored
+scenario `codex-mediated-exec-exit-reaches-tool-result` reads the last two as
+`failure-without-code`. `spec/conformance.json` is regenerated with ESS 0.67.0 and holds 108
+scenarios.

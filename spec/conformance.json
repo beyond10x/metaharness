@@ -1,6 +1,7 @@
 {
   "coverage": {
     "authored": [
+      "metaharness.observations/authored/codex-mediated-exec-exit-reaches-tool-result",
       "metaharness.session/authored/close-unsteered-budget-word-outranks-positive-verdict",
       "metaharness.session/authored/close-unsteered-explicit-error-outranks-success",
       "metaharness.spending/authored/finite-charge-above-positive-cap"
@@ -16,6 +17,11 @@
         "disposition": "accepted",
         "scenario": "metaharness.session/authored/close-unsteered-explicit-error-outranks-success"
       },
+      "scenarios/codex-mediated-exec-exit-reaches-tool-result.yaml": {
+        "digest": "sha256:529eaaa7d56503e9a81494ffa809bc5b45a53dc2b7b03bfbe166338dc7342dc9",
+        "disposition": "accepted",
+        "scenario": "metaharness.observations/authored/codex-mediated-exec-exit-reaches-tool-result"
+      },
       "scenarios/finite-charge-above-positive-cap.yaml": {
         "digest": "sha256:332e92c68316fd0ce92c57508642b8d8c62b2a0d1fde7a08bc4aa84c9ce3e4a1",
         "disposition": "accepted",
@@ -23,7 +29,7 @@
       }
     },
     "counts": {
-      "authored": 3,
+      "authored": 4,
       "generated": 104,
       "outside": 0,
       "refused": 0
@@ -148,9 +154,9 @@
     }
   },
   "provenance": {
-    "contract_digest": "e3fe34944868b6c1c9034d58a6bbfbbfb4dbaeef6da541402f22b776b6754e1d",
+    "contract_digest": "0b39ef4d591a6a1dbcdd1b846cdd7e44f1f173d41a2ec64a38a5e53c01468c19",
     "scenario_initial_state": "empty",
-    "spec_digest": "2a362c0e71311afb19c96dbcc56749ec113e97256553f7a71f4774405d0cd83c",
+    "spec_digest": "3b642feed51162dca76b5f7554e0918f90dc386180dfe6393a4922331a289987",
     "specification_version": "v1",
     "suite_version": "ess-conformance/35",
     "system": "metaharness"
@@ -3584,6 +3590,23 @@
         {
           "event": "metaharness.workspace.ScratchCwdAttested",
           "step": "expect_no_event"
+        },
+        {
+          "command": "metaharness.observations.ReadToolOutcome",
+          "input": {
+            "evidence": {
+              "kind": "literal",
+              "value": "tool-mediated-failure"
+            }
+          },
+          "step": "execute_command"
+        },
+        {
+          "outcome": {
+            "command": "metaharness.observations.ReadToolOutcome",
+            "outcome": "command-failure"
+          },
+          "step": "expect_outcome"
         }
       ]
     },
@@ -3834,6 +3857,23 @@
         {
           "event": "metaharness.workspace.ScratchCwdAttested",
           "step": "expect_no_event"
+        },
+        {
+          "command": "metaharness.observations.ReadToolOutcome",
+          "input": {
+            "evidence": {
+              "kind": "literal",
+              "value": "tool-mediated-success"
+            }
+          },
+          "step": "execute_command"
+        },
+        {
+          "outcome": {
+            "command": "metaharness.observations.ReadToolOutcome",
+            "outcome": "command-success"
+          },
+          "step": "expect_outcome"
         }
       ]
     },
@@ -4084,6 +4124,40 @@
         {
           "event": "metaharness.workspace.ScratchCwdAttested",
           "step": "expect_no_event"
+        },
+        {
+          "command": "metaharness.observations.ReadToolOutcome",
+          "input": {
+            "evidence": {
+              "kind": "literal",
+              "value": "tool-exit-placeholder"
+            }
+          },
+          "step": "execute_command"
+        },
+        {
+          "outcome": {
+            "command": "metaharness.observations.ReadToolOutcome",
+            "outcome": "failure-without-code"
+          },
+          "step": "expect_outcome"
+        },
+        {
+          "command": "metaharness.observations.ReadToolOutcome",
+          "input": {
+            "evidence": {
+              "kind": "literal",
+              "value": "tool-mediated-exit-placeholder"
+            }
+          },
+          "step": "execute_command"
+        },
+        {
+          "outcome": {
+            "command": "metaharness.observations.ReadToolOutcome",
+            "outcome": "failure-without-code"
+          },
+          "step": "expect_outcome"
         }
       ]
     },
@@ -4584,6 +4658,257 @@
         {
           "event": "metaharness.workspace.ScratchCwdAttested",
           "step": "expect_no_event"
+        }
+      ]
+    },
+    "metaharness.observations/authored/codex-mediated-exec-exit-reaches-tool-result": {
+      "purpose": "A code-mode exec joined to its hook by id and turn reads exit 0 as success and 7 as failure; an unmatched completion stays unverified; the vendor's -1 reads as failure without code.",
+      "source": [
+        {
+          "kind": "domain",
+          "name": "metaharness.observations"
+        },
+        {
+          "kind": "type",
+          "name": "metaharness.observations.ToolEvidence"
+        },
+        {
+          "kind": "command",
+          "name": "metaharness.observations.ReadToolOutcome"
+        },
+        {
+          "kind": "outcome",
+          "name": {
+            "command": "metaharness.observations.ReadToolOutcome",
+            "outcome": "command-failure"
+          }
+        },
+        {
+          "kind": "outcome",
+          "name": {
+            "command": "metaharness.observations.ReadToolOutcome",
+            "outcome": "command-success"
+          }
+        },
+        {
+          "kind": "outcome",
+          "name": {
+            "command": "metaharness.observations.ReadToolOutcome",
+            "outcome": "failure-without-code"
+          }
+        },
+        {
+          "kind": "outcome",
+          "name": {
+            "command": "metaharness.observations.ReadToolOutcome",
+            "outcome": "unverified"
+          }
+        },
+        {
+          "kind": "event",
+          "name": "metaharness.observations.ToolOutcomeRead"
+        }
+      ],
+      "steps": [
+        {
+          "command": "metaharness.observations.ReadToolOutcome",
+          "input": {
+            "evidence": {
+              "kind": "literal",
+              "value": "tool-mediated-success"
+            }
+          },
+          "step": "execute_command"
+        },
+        {
+          "outcome": {
+            "command": "metaharness.observations.ReadToolOutcome",
+            "outcome": "command-success"
+          },
+          "step": "expect_outcome"
+        },
+        {
+          "event": "metaharness.observations.ToolOutcomeRead",
+          "payload": {
+            "failed": false,
+            "known": true,
+            "numeric_exit": true
+          },
+          "shape": {
+            "failed": {
+              "holds": "primitive",
+              "kind": "boolean"
+            },
+            "known": {
+              "holds": "primitive",
+              "kind": "boolean"
+            },
+            "numeric_exit": {
+              "holds": "primitive",
+              "kind": "boolean"
+            }
+          },
+          "step": "expect_event"
+        },
+        {
+          "command": "metaharness.observations.ReadToolOutcome",
+          "input": {
+            "evidence": {
+              "kind": "literal",
+              "value": "tool-mediated-failure"
+            }
+          },
+          "step": "execute_command"
+        },
+        {
+          "outcome": {
+            "command": "metaharness.observations.ReadToolOutcome",
+            "outcome": "command-failure"
+          },
+          "step": "expect_outcome"
+        },
+        {
+          "event": "metaharness.observations.ToolOutcomeRead",
+          "payload": {
+            "failed": true,
+            "known": true,
+            "numeric_exit": true
+          },
+          "shape": {
+            "failed": {
+              "holds": "primitive",
+              "kind": "boolean"
+            },
+            "known": {
+              "holds": "primitive",
+              "kind": "boolean"
+            },
+            "numeric_exit": {
+              "holds": "primitive",
+              "kind": "boolean"
+            }
+          },
+          "step": "expect_event"
+        },
+        {
+          "command": "metaharness.observations.ReadToolOutcome",
+          "input": {
+            "evidence": {
+              "kind": "literal",
+              "value": "tool-unmatched"
+            }
+          },
+          "step": "execute_command"
+        },
+        {
+          "outcome": {
+            "command": "metaharness.observations.ReadToolOutcome",
+            "outcome": "unverified"
+          },
+          "step": "expect_outcome"
+        },
+        {
+          "event": "metaharness.observations.ToolOutcomeRead",
+          "payload": {
+            "failed": false,
+            "known": false,
+            "numeric_exit": false
+          },
+          "shape": {
+            "failed": {
+              "holds": "primitive",
+              "kind": "boolean"
+            },
+            "known": {
+              "holds": "primitive",
+              "kind": "boolean"
+            },
+            "numeric_exit": {
+              "holds": "primitive",
+              "kind": "boolean"
+            }
+          },
+          "step": "expect_event"
+        },
+        {
+          "command": "metaharness.observations.ReadToolOutcome",
+          "input": {
+            "evidence": {
+              "kind": "literal",
+              "value": "tool-exit-placeholder"
+            }
+          },
+          "step": "execute_command"
+        },
+        {
+          "outcome": {
+            "command": "metaharness.observations.ReadToolOutcome",
+            "outcome": "failure-without-code"
+          },
+          "step": "expect_outcome"
+        },
+        {
+          "event": "metaharness.observations.ToolOutcomeRead",
+          "payload": {
+            "failed": true,
+            "known": true,
+            "numeric_exit": false
+          },
+          "shape": {
+            "failed": {
+              "holds": "primitive",
+              "kind": "boolean"
+            },
+            "known": {
+              "holds": "primitive",
+              "kind": "boolean"
+            },
+            "numeric_exit": {
+              "holds": "primitive",
+              "kind": "boolean"
+            }
+          },
+          "step": "expect_event"
+        },
+        {
+          "command": "metaharness.observations.ReadToolOutcome",
+          "input": {
+            "evidence": {
+              "kind": "literal",
+              "value": "tool-mediated-exit-placeholder"
+            }
+          },
+          "step": "execute_command"
+        },
+        {
+          "outcome": {
+            "command": "metaharness.observations.ReadToolOutcome",
+            "outcome": "failure-without-code"
+          },
+          "step": "expect_outcome"
+        },
+        {
+          "event": "metaharness.observations.ToolOutcomeRead",
+          "payload": {
+            "failed": true,
+            "known": true,
+            "numeric_exit": false
+          },
+          "shape": {
+            "failed": {
+              "holds": "primitive",
+              "kind": "boolean"
+            },
+            "known": {
+              "holds": "primitive",
+              "kind": "boolean"
+            },
+            "numeric_exit": {
+              "holds": "primitive",
+              "kind": "boolean"
+            }
+          },
+          "step": "expect_event"
         }
       ]
     },
