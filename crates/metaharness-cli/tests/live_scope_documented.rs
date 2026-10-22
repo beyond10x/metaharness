@@ -2,8 +2,8 @@
 //!
 //! The variable is read by `metaharness aep drive run` and `metaharness aep drive resume` for a
 //! step map with an `llm` step (`crates/metaharness-aep/src/drive/spending.rs`), by
-//! `metaharness aep drive eval run` (`crates/metaharness-aep/src/eval.rs`), by `aep-eval native
-//! --spend` and `aep-eval driven --spend` (`crates/metaharness-aep-eval/src/lib.rs`) and by the
+//! `metaharness aep drive eval run` (`crates/metaharness-aep/src/eval.rs`), by `aep-eval driven
+//! --spend` (`crates/metaharness-aep-eval/src/lib.rs`) and by the
 //! ignored live tests. `metaharness run` does not read it: it is the embedder's launch command and
 //! spawns the harness with the operator's credentials whatever the variable holds. A page that
 //! states the variable as the guard of live runs in general tells a reader that a plain `run` is

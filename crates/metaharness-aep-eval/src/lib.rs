@@ -1,4 +1,4 @@
-//! One Rust runner for the AEP comparison's native and driven arms.
+//! One Rust runner for the AEP comparison's free preflight and its two driven arms.
 //!
 //! Fixture assembly and every pre-spend assertion live here once. The model-facing commands are
 //! deliberately ordinary child processes: metaharness remains the component that drives a
@@ -7,19 +7,24 @@
 use std::env;
 use std::ffi::OsStr;
 use std::fs::{self, File};
-use std::io::Write as _;
+use std::io::{BufRead as _, BufReader, Read as _, Write as _};
+use std::net::{Ipv4Addr, SocketAddr, TcpListener, TcpStream};
 use std::path::{Path, PathBuf};
 use std::process::{Command, ExitStatus, Stdio};
-use std::time::Instant;
+use std::sync::Arc;
+use std::sync::atomic::{AtomicBool, Ordering};
+use std::thread;
+use std::time::Duration;
 
 use clap::{Args, Parser, Subcommand, ValueEnum};
 use serde_json::{Value, json};
 
 const TASK_ID: &str = "EVAL-1";
-const NATIVE_TASK_ID: &str = "NATIVE-1";
 const DRIVER_MOUNTED: &str = "/toolchain/driver/aep";
 const PREFLIGHT_PROCESS_WRITE_SUBTREE: &str = ".engineering/preflight-planning";
-const NATIVE_PROCESS_WRITE_SUBTREE: &str = ".engineering/planning";
+/// The confined preflight's store, one level inside the writable subtree: the driver locks its
+/// writer fence in the store's parent directory, which must be writable too.
+const PREFLIGHT_STORE: &str = ".engineering/preflight-planning/store";
 /// The plugin directory the fixture copies out of the `agentplugins` checkout, and the skill file
 /// that proves the copy is the tree the eval means. Named here so a test can decide which
 /// directory this runner reads without assembling a fixture.
@@ -37,13 +42,11 @@ pub struct Cli {
     pub command: EvalCommand,
 }
 
-/// The three evaluation operations.
+/// The two evaluation operations.
 #[derive(Subcommand, Debug)]
 pub enum EvalCommand {
     /// Assemble the shared fixture and prove its lifecycle is visible under confinement.
     Preflight(CommonArgs),
-    /// Let b10x-harness walk the projected workflow itself.
-    Native(NativeArgs),
     /// Let AEP drive the workflow through either harness arm.
     Driven(DrivenArgs),
 }
@@ -69,59 +72,6 @@ pub struct CommonArgs {
     /// Delegated cgroup root used by substrate's execution probe.
     #[arg(long, value_name = "DIR", env = "EVAL_B10X_CGROUP_ROOT")]
     pub cgroup_root: Option<PathBuf>,
-}
-
-/// Native workflow-walk options.
-#[derive(Args, Debug)]
-pub struct NativeArgs {
-    /// Shared checkout and machine paths.
-    #[command(flatten)]
-    pub common: CommonArgs,
-    /// Cross the paid boundary after every free check passes.
-    #[arg(long)]
-    pub spend: bool,
-    /// Exact spend cap in USD. Required with `--spend`.
-    #[arg(long, value_name = "USD")]
-    pub budget_usd: Option<String>,
-    /// Provider rate card used to enforce and report the spend cap.
-    #[arg(long, value_name = "FILE", env = "EVAL_PRICES")]
-    pub prices: Option<PathBuf>,
-    /// Endpoint origin and API prefix.
-    #[arg(long, default_value = "https://api.anthropic.com/v1")]
-    pub endpoint: String,
-    /// Exact endpoint model identifier.
-    #[arg(long, default_value = "claude-opus-5")]
-    pub model: String,
-    /// Context window declared for the model.
-    #[arg(long, default_value_t = 200_000)]
-    pub context_window: u64,
-    /// Wire spoken to the endpoint.
-    #[arg(long, default_value = "anthropic-messages")]
-    pub wire: String,
-    /// OAuth credential document, fetched by the harness at call time.
-    #[arg(long, value_name = "FILE", env = "EVAL_B10X_TOKEN_FILE")]
-    pub token_file: Option<PathBuf>,
-    /// JSON pointer to the token in the credential document.
-    #[arg(long, default_value = "/claudeAiOauth/accessToken")]
-    pub token_pointer: String,
-    /// Retreat bound on every workflow section.
-    #[arg(long, default_value_t = 2)]
-    pub max_attempts: u32,
-    /// Wall-clock ceiling on the whole walk.
-    #[arg(long, default_value_t = 1_800_000)]
-    pub max_duration_ms: u64,
-    /// Model turns allowed per step.
-    #[arg(long, default_value_t = 12)]
-    pub max_turns: u32,
-    /// Output tokens offered per turn.
-    #[arg(long, default_value_t = 8_000)]
-    pub max_output_tokens_per_turn: u32,
-    /// Risk ceiling for the declared unattended walk.
-    #[arg(long, default_value = "high")]
-    pub approve_up_to: String,
-    /// Step map to project; `none` projects the bare workflow.
-    #[arg(long, value_name = "FILE")]
-    pub flow_map: Option<PathBuf>,
 }
 
 /// Which harness answers AEP drive's model steps.
@@ -226,146 +176,12 @@ fn run(cli: Cli) -> Result<i32, String> {
             );
             Ok(0)
         }
-        EvalCommand::Native(args) => native(args),
         EvalCommand::Driven(args) => driven(args),
     }
 }
 
 // One linear orchestration is easier to audit against the paid boundary than a command assembled
 // across callbacks: every free check is visibly above the `if !args.spend` return.
-#[allow(clippy::too_many_lines)]
-fn native(args: NativeArgs) -> Result<i32, String> {
-    authorize_native(args.spend, args.budget_usd.as_deref())?;
-    let resolved = resolve(&args.common)?;
-    build_metaharness(&resolved)?;
-    ensure_cgroup_scope(&resolved)?;
-    check_native_binary(&resolved)?;
-    let fixture = prepare(&resolved, "native", NATIVE_TASK_ID)?;
-    preflight(&resolved, &fixture)?;
-
-    let script_dir = resolved.repo.join("evals/aep");
-    let map = args
-        .flow_map
-        .clone()
-        .unwrap_or_else(|| script_dir.join("driven.steps.yaml"));
-    let flow = fixture.work.join("flow.yaml");
-    project_flow(&resolved, &fixture, &map, &flow, args.max_attempts)?;
-    rewrite_driver_paths(&flow)?;
-    let context = write_context(&fixture.work)?;
-    let hooks = write_hooks(&resolved, &fixture, &map)?;
-    probe_governor(&resolved, &fixture, &map, args.max_attempts)?;
-    let plan = fixture.work.join("plan.txt");
-    run_to_file(
-        Command::new(&resolved.b10x_binary)
-            .arg("workflow")
-            .arg("plan")
-            .arg("--flow")
-            .arg(&flow),
-        &plan,
-        None,
-    )?;
-    println!("plan: {}", plan.display());
-
-    if !args.spend {
-        println!("Everything free has run. No model was started.");
-        println!(
-            "Paid form: METAHARNESS_LIVE=1 cargo run -p metaharness-aep-eval -- native --spend --budget-usd <USD>{}",
-            render_source_repositories(&args.common)
-        );
-        println!("record: {}", fixture.work.display());
-        return Ok(0);
-    }
-
-    let budget = parse_usd_microunits(
-        args.budget_usd
-            .as_deref()
-            .ok_or_else(|| "`--spend` requires `--budget-usd <USD>`".to_owned())?,
-    )?;
-    let prices = args
-        .prices
-        .unwrap_or_else(|| script_dir.join("opus-5-prices.json"));
-    require_file(&prices, "rate card")?;
-    let token_file = token_file(args.token_file)?;
-    require_file(&token_file, "OAuth credential document")?;
-    let _paid_lock = paid_lock(&resolved.scratch_root)?;
-    let input = fs::read_to_string(fixture.project.join(".engineering/task.yaml"))
-        .map_err(|error| format!("read task input: {error}"))?;
-    let stdout = fixture.work.join("native.jsonl");
-    let stderr = fixture.work.join("native.err");
-    let mut command = Command::new(&resolved.b10x_binary);
-    command
-        .arg("workflow")
-        .arg("run")
-        .arg("--flow")
-        .arg(&flow)
-        .arg("--input")
-        .arg(input)
-        .arg("--hooks")
-        .arg(&hooks)
-        .arg("--max-attempts")
-        .arg(args.max_attempts.to_string())
-        .arg("--base-url")
-        .arg(&args.endpoint)
-        .arg("--model")
-        .arg(&args.model)
-        .arg("--wire")
-        .arg(&args.wire)
-        .arg("--context-window")
-        .arg(args.context_window.to_string())
-        .arg("--max-duration-ms")
-        .arg(args.max_duration_ms.to_string())
-        .arg("--max-turns")
-        .arg(args.max_turns.to_string())
-        .arg("--max-output-tokens-per-turn")
-        .arg(args.max_output_tokens_per_turn.to_string())
-        .arg("--oauth-token-file")
-        .arg(&token_file)
-        .arg("--oauth-token-pointer")
-        .arg(&args.token_pointer)
-        .arg("--workspace")
-        .arg(&fixture.project)
-        .arg("--substrate-embedded")
-        .arg("--cgroup-root")
-        .arg(&resolved.cgroup_root)
-        .arg("--allow-program")
-        .arg(DRIVER_MOUNTED)
-        .arg("--driver")
-        .arg(&resolved.protocol)
-        .arg("--process-write-subtree")
-        .arg(NATIVE_PROCESS_WRITE_SUBTREE)
-        .arg("--context")
-        .arg(&context)
-        .arg("--plugin-dir")
-        .arg(&fixture.plugin)
-        .arg("--approve-up-to")
-        .arg(&args.approve_up_to)
-        .arg("--session-dir")
-        .arg(fixture.work.join("sessions"))
-        .arg("--prices")
-        .arg(&prices)
-        .arg("--max-cost-microunits")
-        .arg(budget.to_string())
-        .arg("--json");
-    prepend_path(&mut command, &[resolved.aep_repo.join("target/debug")])?;
-    println!(
-        "walking native arm: model {}, cap ${}, record {}",
-        args.model,
-        format_microunits(budget),
-        fixture.work.display()
-    );
-    let started = Instant::now();
-    let status = run_to_files(&mut command, &stdout, &stderr, None)?;
-    println!(
-        "native exit {} after {}s",
-        status.code().unwrap_or(1),
-        started.elapsed().as_secs()
-    );
-    print_native_census(&stdout, &fixture.work.join("sessions"))?;
-    println!("record: {}", fixture.work.display());
-    Ok(status.code().unwrap_or(1))
-}
-
-// As in `native`, keep the pre-spend ordering in one audit-friendly procedure.
 #[allow(clippy::too_many_lines)]
 fn driven(args: DrivenArgs) -> Result<i32, String> {
     authorize_driven(
@@ -478,10 +294,6 @@ fn driven(args: DrivenArgs) -> Result<i32, String> {
     let failures = inspect_driven(&resolved, &fixture, args.arm, status)?;
     println!("record: {}", fixture.work.display());
     Ok(i32::from(failures != 0))
-}
-
-fn authorize_native(spend: bool, budget: Option<&str>) -> Result<(), String> {
-    authorize(spend, budget, env::var(LIVE_ENV).as_deref() == Ok("1"))
 }
 
 fn authorize_driven(
@@ -890,69 +702,580 @@ fn lifecycle_is_open(document: &str) -> Result<(), String> {
     Ok(())
 }
 
-fn preflight_confined(resolved: &Resolved, fixture: &Fixture) -> Result<(), String> {
-    require_file(&resolved.b10x_binary, "installed b10x harness")?;
-    let flow = fixture.work.join("confined-preflight.yaml");
-    fs::write(
-        &flow,
-        format!(
-            "id: lifecycle-preflight\nroot:\n  id: root\n  nodes:\n    - id: lifecycle\n      run:\n        state: preflight\n        kind: command\n        command: [\"{DRIVER_MOUNTED}\", \"artifact\", \"new\", \"decision-blocker\", \"confined-preflight\", \"--title\", \"Confined lifecycle preflight\", \"--store\", \"{PREFLIGHT_PROCESS_WRITE_SUBTREE}\", \"--format\", \"json\"]\n"
-        ),
-    )
-    .map_err(|error| format!("write confined preflight flow: {error}"))?;
-    let input = fs::read_to_string(fixture.project.join(".engineering/task.yaml"))
-        .map_err(|error| format!("read preflight input: {error}"))?;
-    let mut command = Command::new(&resolved.b10x_binary);
+/// The model name the scripted endpoint answers as. No provider serves it, and nothing reads it
+/// but the harness's own request.
+const SCRIPTED_MODEL: &str = "preflight-scripted";
+/// The one call id the scripted endpoint issues, and the one whose result it waits for.
+const SCRIPTED_CALL_ID: &str = "call_confined_preflight";
+/// The final message the scripted endpoint sends once the call's result has come back.
+const SCRIPTED_ANSWER: &str = "The confined preflight created its decision blocker.";
+/// The task text handed to the harness. The scripted endpoint answers it whatever it says.
+const CONFINED_PREFLIGHT_INPUT: &str =
+    "Create the confined-preflight decision blocker with the staged driver.";
+const CONFINED_PREFLIGHT_MAX_DURATION_MS: &str = "120000";
+const SCRIPTED_IO_TIMEOUT: Duration = Duration::from_secs(30);
+const SCRIPTED_CREATED_AT: u64 = 1_786_706_400;
+const SCRIPTED_REQUEST_LIMIT: usize = 64 * 1024 * 1024;
+
+/// Request headers that carry a credential to a model provider, matched whatever their case: a
+/// bearer or basic token, a proxy credential, a session cookie, and the Anthropic, Azure and
+/// Gemini key headers.
+const CREDENTIAL_HEADERS: [&str; 6] = [
+    "authorization",
+    "proxy-authorization",
+    "cookie",
+    "x-api-key",
+    "api-key",
+    "x-goog-api-key",
+];
+
+/// The argv of the one `run` call the scripted endpoint issues: the staged driver creating the
+/// preflight's decision blocker inside the one subtree the run may write.
+fn confined_preflight_argv() -> Vec<&'static str> {
+    vec![
+        DRIVER_MOUNTED,
+        "artifact",
+        "new",
+        "decision-blocker",
+        "confined-preflight",
+        "--title",
+        "Confined lifecycle preflight",
+        "--store",
+        PREFLIGHT_STORE,
+        "--format",
+        "json",
+    ]
+}
+
+/// A loopback endpoint speaking the `OpenAI` Responses wire that plays one fixed conversation. It
+/// answers the first request with one `run` call of the staged driver and the request carrying
+/// that call's result with a final message. No model is behind it, it binds 127.0.0.1 only, and
+/// it records every request it answered so the exchange can be judged afterwards.
+struct ScriptedEndpoint {
+    address: SocketAddr,
+    stop: Arc<AtomicBool>,
+    worker: thread::JoinHandle<Vec<ScriptedRequest>>,
+}
+
+impl ScriptedEndpoint {
+    fn start(argv: &[&str]) -> Result<Self, String> {
+        let listener = TcpListener::bind((Ipv4Addr::LOCALHOST, 0))
+            .map_err(|error| format!("bind the scripted endpoint on 127.0.0.1: {error}"))?;
+        let address = listener
+            .local_addr()
+            .map_err(|error| format!("read the scripted endpoint's address: {error}"))?;
+        let arguments = json!({ "argv": argv }).to_string();
+        let stop = Arc::new(AtomicBool::new(false));
+        let worker = {
+            let stop = Arc::clone(&stop);
+            thread::spawn(move || serve_script(&listener, &arguments, &stop))
+        };
+        Ok(Self {
+            address,
+            stop,
+            worker,
+        })
+    }
+
+    fn base_url(&self) -> String {
+        format!("http://{}/v1", self.address)
+    }
+
+    /// Stop accepting and return every request the endpoint answered.
+    fn finish(self) -> Result<ScriptedExchange, String> {
+        self.stop.store(true, Ordering::SeqCst);
+        // `accept` blocks, so one connection of our own wakes the worker to read the flag.
+        TcpStream::connect(self.address)
+            .map_err(|error| format!("wake the scripted endpoint to stop: {error}"))?;
+        let requests = self
+            .worker
+            .join()
+            .map_err(|_| "the scripted endpoint's worker panicked".to_owned())?;
+        Ok(ScriptedExchange { requests })
+    }
+}
+
+/// What one request to the scripted endpoint carried.
+#[derive(Debug)]
+struct ScriptedRequest {
+    method: String,
+    path: String,
+    /// A header named in [`CREDENTIAL_HEADERS`] was present.
+    authorization: bool,
+    /// The request's `tools` offered one named `run`.
+    offered_run: bool,
+    /// The `output` of a `function_call_output` input item answering [`SCRIPTED_CALL_ID`].
+    call_output: Option<String>,
+    problem: Option<String>,
+}
+
+impl ScriptedRequest {
+    fn failed(problem: String) -> Self {
+        Self {
+            method: String::new(),
+            path: String::new(),
+            authorization: false,
+            offered_run: false,
+            call_output: None,
+            problem: Some(problem),
+        }
+    }
+}
+
+/// Every request the scripted endpoint answered, in arrival order.
+#[derive(Debug)]
+struct ScriptedExchange {
+    requests: Vec<ScriptedRequest>,
+}
+
+impl ScriptedExchange {
+    /// Whether the harness held the one conversation the preflight scripts: a first request
+    /// offering `run`, then the request returning that call's result, no credential on either,
+    /// and nothing else.
+    fn verdict(&self) -> Result<(), String> {
+        let Some(first) = self.requests.first() else {
+            return Err("the harness sent no request to the scripted endpoint".to_owned());
+        };
+        for (index, request) in self.requests.iter().enumerate() {
+            let ordinal = index + 1;
+            if let Some(problem) = &request.problem {
+                return Err(format!(
+                    "request {ordinal} to the scripted endpoint: {problem}"
+                ));
+            }
+            if request.method != "POST" || !request.path.ends_with("/responses") {
+                return Err(format!(
+                    "request {ordinal} was `{} {}`, not a POST to the Responses route",
+                    request.method, request.path
+                ));
+            }
+            if request.authorization {
+                return Err(format!(
+                    "request {ordinal} carried an authorization header; the probe names no credential"
+                ));
+            }
+        }
+        if !first.offered_run {
+            return Err(
+                "the harness offered no `run` tool on its first request; it publishes `run` only when substrate can confine execution under the cgroup root"
+                    .to_owned(),
+            );
+        }
+        if self.call_output().is_none() {
+            return Err(format!(
+                "the harness never returned the scripted `run` call's result (call id {SCRIPTED_CALL_ID})"
+            ));
+        }
+        if self.requests.len() != 2 {
+            return Err(format!(
+                "expected exactly two requests (the call, then its result), observed {}",
+                self.requests.len()
+            ));
+        }
+        Ok(())
+    }
+
+    fn call_output(&self) -> Option<&str> {
+        self.requests
+            .iter()
+            .find_map(|request| request.call_output.as_deref())
+    }
+}
+
+fn serve_script(
+    listener: &TcpListener,
+    arguments: &str,
+    stop: &AtomicBool,
+) -> Vec<ScriptedRequest> {
+    let mut requests = Vec::new();
+    for stream in listener.incoming() {
+        if stop.load(Ordering::SeqCst) {
+            break;
+        }
+        let request = match stream {
+            Ok(mut stream) => answer_scripted(&mut stream, arguments, requests.len() + 1),
+            Err(error) => ScriptedRequest::failed(format!("accept a connection: {error}")),
+        };
+        requests.push(request);
+    }
+    requests
+}
+
+fn answer_scripted(stream: &mut TcpStream, arguments: &str, ordinal: usize) -> ScriptedRequest {
+    let timeouts = stream
+        .set_read_timeout(Some(SCRIPTED_IO_TIMEOUT))
+        .and_then(|()| stream.set_write_timeout(Some(SCRIPTED_IO_TIMEOUT)));
+    if let Err(error) = timeouts {
+        return ScriptedRequest::failed(format!("set the connection's timeouts: {error}"));
+    }
+    let mut request = match read_scripted_request(stream) {
+        Ok(request) => request,
+        Err(problem) => {
+            let _ = respond_scripted(stream, "400 Bad Request", "application/json", "{}");
+            return ScriptedRequest::failed(problem);
+        }
+    };
+    let (status, content_type, body) =
+        if request.method != "POST" || !request.path.ends_with("/responses") {
+            ("404 Not Found", "application/json", "{}".to_owned())
+        } else if request.call_output.is_some() {
+            (
+                "200 OK",
+                "text/event-stream",
+                server_sent_events(&scripted_answer_events(ordinal)),
+            )
+        } else {
+            (
+                "200 OK",
+                "text/event-stream",
+                server_sent_events(&scripted_call_events(ordinal, arguments)),
+            )
+        };
+    if let Err(error) = respond_scripted(stream, status, content_type, &body) {
+        request.problem = Some(format!("write the scripted response: {error}"));
+    }
+    request
+}
+
+fn read_scripted_request(stream: &mut TcpStream) -> Result<ScriptedRequest, String> {
+    let mut reader = BufReader::new(stream);
+    let mut line = String::new();
+    reader
+        .read_line(&mut line)
+        .map_err(|error| format!("read the request line: {error}"))?;
+    let mut parts = line.split_ascii_whitespace();
+    let method = parts.next().unwrap_or_default().to_owned();
+    let path = parts.next().unwrap_or_default().to_owned();
+    let mut content_length = None;
+    let mut authorization = false;
+    loop {
+        line.clear();
+        let read = reader
+            .read_line(&mut line)
+            .map_err(|error| format!("read a request header: {error}"))?;
+        if read == 0 {
+            return Err("the request ended inside its headers".to_owned());
+        }
+        let header = line.trim_end();
+        if header.is_empty() {
+            break;
+        }
+        let Some((name, value)) = header.split_once(':') else {
+            return Err(format!("malformed request header `{header}`"));
+        };
+        if name.eq_ignore_ascii_case("content-length") {
+            content_length = Some(
+                value
+                    .trim()
+                    .parse::<usize>()
+                    .map_err(|error| format!("content length `{}`: {error}", value.trim()))?,
+            );
+        } else if CREDENTIAL_HEADERS
+            .iter()
+            .any(|credential| name.eq_ignore_ascii_case(credential))
+        {
+            authorization = true;
+        }
+    }
+    let mut request = ScriptedRequest {
+        method,
+        path,
+        authorization,
+        offered_run: false,
+        call_output: None,
+        problem: None,
+    };
+    if request.method != "POST" {
+        return Ok(request);
+    }
+    let length = content_length.ok_or_else(|| "a POST without Content-Length".to_owned())?;
+    if length > SCRIPTED_REQUEST_LIMIT {
+        return Err(format!(
+            "a {length}-byte request body exceeds the scripted endpoint's limit"
+        ));
+    }
+    let mut body = vec![0; length];
+    reader
+        .read_exact(&mut body)
+        .map_err(|error| format!("read the request body: {error}"))?;
+    let body: Value = serde_json::from_slice(&body)
+        .map_err(|error| format!("parse the request body: {error}"))?;
+    request.offered_run = body
+        .get("tools")
+        .and_then(Value::as_array)
+        .is_some_and(|tools| {
+            tools.iter().any(|tool| {
+                tool.get("name")
+                    .or_else(|| tool.pointer("/function/name"))
+                    .and_then(Value::as_str)
+                    == Some("run")
+            })
+        });
+    request.call_output = body
+        .get("input")
+        .and_then(Value::as_array)
+        .and_then(|items| {
+            items.iter().find(|item| {
+                item.get("type").and_then(Value::as_str) == Some("function_call_output")
+                    && item.get("call_id").and_then(Value::as_str) == Some(SCRIPTED_CALL_ID)
+            })
+        })
+        .map(|item| match item.get("output") {
+            Some(Value::String(text)) => text.clone(),
+            Some(other) => other.to_string(),
+            None => String::new(),
+        });
+    Ok(request)
+}
+
+fn scripted_response(ordinal: usize, status: &str, output: &Value, usage: &Value) -> Value {
+    json!({
+        "id": format!("resp_preflight_{ordinal}"),
+        "object": "response",
+        "created_at": SCRIPTED_CREATED_AT,
+        "status": status,
+        "model": SCRIPTED_MODEL,
+        "output": output,
+        "incomplete_details": null,
+        "error": null,
+        "usage": usage,
+    })
+}
+
+fn scripted_usage() -> Value {
+    json!({
+        "input_tokens": 1,
+        "input_tokens_details": {"cached_tokens": 0},
+        "output_tokens": 1,
+        "output_tokens_details": {"reasoning_tokens": 0},
+        "total_tokens": 2,
+    })
+}
+
+/// The first turn: one completed `run` function call whose arguments are the staged driver's
+/// argv, streamed as the Responses wire streams a call.
+fn scripted_call_events(ordinal: usize, arguments: &str) -> Vec<Value> {
+    let id = format!("fc_preflight_{ordinal}");
+    let added = json!({
+        "id": id,
+        "type": "function_call",
+        "status": "in_progress",
+        "name": "run",
+        "call_id": SCRIPTED_CALL_ID,
+        "arguments": "",
+    });
+    let item = json!({
+        "id": id,
+        "type": "function_call",
+        "status": "completed",
+        "name": "run",
+        "call_id": SCRIPTED_CALL_ID,
+        "arguments": arguments,
+    });
+    vec![
+        json!({
+            "type": "response.created",
+            "response": scripted_response(ordinal, "in_progress", &json!([]), &Value::Null),
+        }),
+        json!({"type": "response.output_item.added", "output_index": 0, "item": added}),
+        json!({
+            "type": "response.function_call_arguments.delta",
+            "item_id": id,
+            "output_index": 0,
+            "delta": arguments,
+        }),
+        json!({"type": "response.output_item.done", "output_index": 0, "item": item}),
+        json!({
+            "type": "response.completed",
+            "response": scripted_response(ordinal, "completed", &json!([item]), &scripted_usage()),
+        }),
+    ]
+}
+
+/// The last turn: a final assistant message, which ends the harness's run as completed.
+fn scripted_answer_events(ordinal: usize) -> Vec<Value> {
+    let id = format!("msg_preflight_{ordinal}");
+    let item = json!({
+        "id": id,
+        "type": "message",
+        "status": "completed",
+        "role": "assistant",
+        "content": [{"type": "output_text", "text": SCRIPTED_ANSWER, "annotations": []}],
+    });
+    vec![
+        json!({
+            "type": "response.created",
+            "response": scripted_response(ordinal, "in_progress", &json!([]), &Value::Null),
+        }),
+        json!({
+            "type": "response.output_item.added",
+            "output_index": 0,
+            "item": {
+                "id": id,
+                "type": "message",
+                "status": "in_progress",
+                "role": "assistant",
+                "content": [],
+            },
+        }),
+        json!({
+            "type": "response.output_text.delta",
+            "item_id": id,
+            "output_index": 0,
+            "delta": SCRIPTED_ANSWER,
+        }),
+        json!({"type": "response.output_item.done", "output_index": 0, "item": item}),
+        json!({
+            "type": "response.completed",
+            "response": scripted_response(ordinal, "completed", &json!([item]), &scripted_usage()),
+        }),
+    ]
+}
+
+fn server_sent_events(events: &[Value]) -> String {
+    events.iter().fold(String::new(), |mut stream, event| {
+        stream.push_str("data: ");
+        stream.push_str(&event.to_string());
+        stream.push_str("\n\n");
+        stream
+    })
+}
+
+fn respond_scripted(
+    stream: &mut TcpStream,
+    status: &str,
+    content_type: &str,
+    body: &str,
+) -> std::io::Result<()> {
+    write!(
+        stream,
+        "HTTP/1.1 {status}\r\nContent-Type: {content_type}\r\nContent-Length: {}\r\nCache-Control: no-store\r\nConnection: close\r\n\r\n{body}",
+        body.len()
+    )?;
+    stream.flush()
+}
+
+/// What the confined preflight runs with: the harness, the driver it stages, the prepared
+/// project, the delegated cgroup root, and the directory its record goes to.
+struct ConfinedProbe<'a> {
+    b10x_binary: &'a Path,
+    driver: &'a Path,
+    project: &'a Path,
+    cgroup_root: &'a Path,
+    record: &'a Path,
+}
+
+/// `b10x-harness run` with the confinement flags, pointed at the scripted endpoint at
+/// `base_url`.
+///
+/// Every flag is a field of `RunCommand`/`RunOptions` in `crates/harness-cli/src/lib.rs` of the
+/// harness, and exists at both `330e2cde` (0.18.0) and `f0870131` (0.15.1):
+///
+/// | flag | 0.18.0 | 0.15.1 |
+/// |---|---|---|
+/// | `run` (`Run(Box<RunCommand>)`) | 436 | 443 |
+/// | `--input` | 1030 | 1043 |
+/// | `--base-url` | 572 | 597 |
+/// | `--model` | 575 | 600 |
+/// | `--wire openai-responses` (`Wire::OpenaiResponses`, `POST {base-url}/responses`) | 623, 226 | 636, 233 |
+/// | `--workspace` | 626 | 639 |
+/// | `--substrate-embedded` | 653 | 666 |
+/// | `--cgroup-root` | 675 | 688 |
+/// | `--driver` | 706 | 719 |
+/// | `--allow-program` | 716 | 729 |
+/// | `--process-write-subtree` | 723 | 736 |
+/// | `--approve-up-to high` (`ApproveUpTo::High`) | 948, 267 | 961, 274 |
+/// | `--max-duration-ms` | 794 | 807 |
+/// | `--no-session` | 773 | 786 |
+/// | `--json` | 1013 | 1026 |
+///
+/// No credential flag is passed: an unnamed credential sends no authorization header
+/// (`Credential::Unnamed`, 1611 and 1617; the harness's `tests/end_to_end.rs:615` at both). A
+/// typed `--base-url` leaves the provider bundle out (`apply_profiles`, 1365 and 1374), but a
+/// profile's permission keys still apply, so `XDG_CONFIG_HOME` names an empty directory and
+/// no operator profile is read (`crates/harness-cli/src/profile.rs:87-90` at both). The run
+/// exits 0 only when it completed (`stopped`, 3899 at both).
+fn confined_probe_command(probe: &ConfinedProbe<'_>, base_url: &str) -> Command {
+    let mut command = Command::new(probe.b10x_binary);
     command
-        .arg("workflow")
         .arg("run")
-        .arg("--flow")
-        .arg(&flow)
         .arg("--input")
-        .arg(&input)
+        .arg(CONFINED_PREFLIGHT_INPUT)
         .arg("--base-url")
-        .arg("http://127.0.0.1:9")
+        .arg(base_url)
         .arg("--model")
-        .arg("preflight-no-model")
+        .arg(SCRIPTED_MODEL)
         .arg("--wire")
-        .arg("anthropic-messages")
+        .arg("openai-responses")
         .arg("--workspace")
-        .arg(&fixture.project)
+        .arg(probe.project)
         .arg("--substrate-embedded")
         .arg("--cgroup-root")
-        .arg(&resolved.cgroup_root)
+        .arg(probe.cgroup_root)
         .arg("--allow-program")
         .arg(DRIVER_MOUNTED)
         .arg("--driver")
-        .arg(&resolved.protocol)
+        .arg(probe.driver)
         .arg("--process-write-subtree")
         .arg(PREFLIGHT_PROCESS_WRITE_SUBTREE)
         .arg("--approve-up-to")
         .arg("high")
+        .arg("--max-duration-ms")
+        .arg(CONFINED_PREFLIGHT_MAX_DURATION_MS)
         .arg("--no-session")
-        .arg("--json");
-    let result = output(&mut command, None)?;
+        .arg("--json")
+        .env(
+            "XDG_CONFIG_HOME",
+            probe.record.join("confined-preflight-config"),
+        );
+    command
+}
+
+/// Run the harness against the scripted endpoint, keep the record, and require both that the
+/// exchange went as scripted and that the staged driver's call created the blocker at `open`.
+fn confined_probe(probe: &ConfinedProbe<'_>) -> Result<(), String> {
+    let config = probe.record.join("confined-preflight-config");
+    fs::create_dir_all(&config).map_err(|error| format!("create {}: {error}", config.display()))?;
+    let store = probe.project.join(PREFLIGHT_STORE);
+    fs::create_dir_all(&store).map_err(|error| format!("create {}: {error}", store.display()))?;
+    let endpoint = ScriptedEndpoint::start(&confined_preflight_argv())?;
+    let mut command = confined_probe_command(probe, &endpoint.base_url());
+    let result = output(&mut command, None);
+    let exchange = endpoint.finish()?;
+    let result = result?;
     fs::write(
-        fixture.work.join("confined-preflight.jsonl"),
+        probe.record.join("confined-preflight.jsonl"),
         &result.stdout,
     )
     .map_err(|error| format!("write confined preflight record: {error}"))?;
-    fs::write(fixture.work.join("confined-preflight.err"), &result.stderr)
+    fs::write(probe.record.join("confined-preflight.err"), &result.stderr)
         .map_err(|error| format!("write confined preflight stderr: {error}"))?;
+    fs::write(
+        probe.record.join("confined-preflight.endpoint.txt"),
+        format!("{exchange:#?}\n"),
+    )
+    .map_err(|error| format!("write confined preflight exchange: {error}"))?;
     if !result.status.success() {
+        let exchange = match exchange.verdict() {
+            Ok(()) => "the scripted exchange completed".to_owned(),
+            Err(reason) => reason,
+        };
         return Err(format!(
-            "confined lifecycle preflight failed with {}: {}",
+            "confined lifecycle preflight failed with {}: {}; {exchange}",
             result.status.code().unwrap_or(1),
             result.stderr.trim()
         ));
     }
+    exchange
+        .verdict()
+        .map_err(|reason| format!("confined lifecycle preflight: {reason}"))?;
     let observed = output(
-        Command::new(&resolved.protocol)
-            .current_dir(&fixture.project)
+        Command::new(probe.driver)
+            .current_dir(probe.project)
             .arg("artifact")
             .arg("list")
             .arg("--store")
-            .arg(PREFLIGHT_PROCESS_WRITE_SUBTREE)
+            .arg(PREFLIGHT_STORE)
             .arg("--format")
             .arg("json"),
         None,
@@ -968,117 +1291,26 @@ fn preflight_confined(resolved: &Resolved, fixture: &Fixture) -> Result<(), Stri
     });
     if !created_open {
         return Err(format!(
-            "confined lifecycle preflight did not create decision-blocker at `open`: {}",
-            observed.stdout
+            "confined lifecycle preflight did not create decision-blocker at `open`: {}; the `run` call returned: {}",
+            observed.stdout,
+            exchange.call_output().unwrap_or_default()
         ));
     }
-    println!("confined lifecycle preflight: decision-blocker starts open; no model contacted");
-    preflight_operator_boundary(resolved, fixture, &input)?;
     Ok(())
 }
 
-fn preflight_operator_boundary(
-    resolved: &Resolved,
-    fixture: &Fixture,
-    input: &str,
-) -> Result<(), String> {
-    const REASON: &str = "The deterministic eval is ready for operator review.";
-    let flow = fixture.work.join("operator-preflight.yaml");
-    fs::write(
-        &flow,
-        format!(
-            "id: operator-boundary-preflight\nroot:\n  id: root\n  nodes:\n    - id: review\n      run:\n        state: preflight\n        kind: operator\n        prompt: {REASON}\n"
-        ),
-    )
-    .map_err(|error| format!("write operator preflight flow: {error}"))?;
-    let mut command = Command::new(&resolved.b10x_binary);
-    command
-        .arg("workflow")
-        .arg("run")
-        .arg("--flow")
-        .arg(&flow)
-        .arg("--input")
-        .arg(input)
-        // Port 9 is deliberately closed. Exit zero therefore proves the operator step did not
-        // become a provider turn, without standing up an endpoint that could hide a request.
-        .arg("--base-url")
-        .arg("http://127.0.0.1:9")
-        .arg("--model")
-        .arg("operator-preflight-no-model")
-        .arg("--wire")
-        .arg("anthropic-messages")
-        .arg("--workspace")
-        .arg(&fixture.project)
-        .arg("--substrate-embedded")
-        .arg("--cgroup-root")
-        .arg(&resolved.cgroup_root)
-        .arg("--no-session")
-        .arg("--json");
-    let result = output(&mut command, None)?;
-    fs::write(
-        fixture.work.join("operator-preflight.jsonl"),
-        &result.stdout,
-    )
-    .map_err(|error| format!("write operator preflight record: {error}"))?;
-    fs::write(fixture.work.join("operator-preflight.err"), &result.stderr)
-        .map_err(|error| format!("write operator preflight stderr: {error}"))?;
-    if !result.status.success() {
-        return Err(format!(
-            "operator boundary preflight failed with {}: {}",
-            result.status.code().unwrap_or(1),
-            result.stderr.trim()
-        ));
-    }
-    let events = result
-        .stdout
-        .lines()
-        .filter(|line| !line.trim().is_empty())
-        .map(|line| {
-            serde_json::from_str::<Value>(line)
-                .map_err(|error| format!("parse operator preflight event: {error}: {line}"))
-        })
-        .collect::<Result<Vec<_>, _>>()?;
-    let paused = events
-        .iter()
-        .filter(|event| event.get("kind").and_then(Value::as_str) == Some("flow-paused"))
-        .collect::<Vec<_>>();
-    if paused.len() != 1
-        || paused[0].get("path").and_then(Value::as_str) != Some("root.review")
-        || paused[0].get("reason").and_then(Value::as_str) != Some(REASON)
-        || paused[0].get("reached").and_then(Value::as_u64) != Some(1)
-        || paused[0].get("failed").and_then(Value::as_u64) != Some(0)
-        || events
-            .last()
-            .and_then(|event| event.get("kind"))
-            .and_then(Value::as_str)
-            != Some("flow-paused")
-    {
-        return Err(format!(
-            "operator boundary preflight did not end in the one declared handoff: {}",
-            result.stdout
-        ));
-    }
-    for forbidden in [
-        "step-finished",
-        "node-skipped",
-        "group-repeating",
-        "group-left",
-        "flow-finished",
-        "tool-requested",
-        "approval-required",
-        "hook-ran",
-    ] {
-        if events
-            .iter()
-            .any(|event| event.get("kind").and_then(Value::as_str) == Some(forbidden))
-        {
-            return Err(format!(
-                "operator boundary preflight emitted forbidden event `{forbidden}`: {}",
-                result.stdout
-            ));
-        }
-    }
-    println!("operator boundary preflight: one flow-paused handoff, exit 0; no model contacted");
+fn preflight_confined(resolved: &Resolved, fixture: &Fixture) -> Result<(), String> {
+    require_file(&resolved.b10x_binary, "installed b10x harness")?;
+    confined_probe(&ConfinedProbe {
+        b10x_binary: &resolved.b10x_binary,
+        driver: &resolved.protocol,
+        project: &fixture.project,
+        cgroup_root: &resolved.cgroup_root,
+        record: &fixture.work,
+    })?;
+    println!(
+        "confined lifecycle preflight: decision-blocker starts open; the `run` call came from a scripted endpoint on 127.0.0.1; no model contacted"
+    );
     Ok(())
 }
 
@@ -1172,128 +1404,10 @@ fn validate_native_pin(checkout_revision: &str, binary_banner: &str) -> Result<(
     Ok(())
 }
 
-fn project_flow(
-    resolved: &Resolved,
-    fixture: &Fixture,
-    map: &Path,
-    flow: &Path,
-    max_attempts: u32,
-) -> Result<(), String> {
-    let mut command = Command::new(&resolved.protocol);
-    command
-        .current_dir(&fixture.tree)
-        .arg("workflow")
-        .arg("flow")
-        .arg("--id")
-        .arg("adp/default")
-        .arg("--root")
-        .arg(&fixture.tree)
-        .arg("--max-attempts")
-        .arg(max_attempts.to_string())
-        .arg("--out")
-        .arg(flow);
-    if map != Path::new("none") {
-        command.arg("--map").arg(map);
-    }
-    checked(&mut command, None)
-}
-
-fn rewrite_driver_paths(flow: &Path) -> Result<(), String> {
-    let document = fs::read_to_string(flow)
-        .map_err(|error| format!("read projected flow {}: {error}", flow.display()))?;
-    let document = document
-        .replace("`aep ", &format!("`{DRIVER_MOUNTED} "))
-        .replace("[\"aep\", ", &format!("[\"{DRIVER_MOUNTED}\", "));
-    fs::write(flow, document)
-        .map_err(|error| format!("rewrite projected flow {}: {error}", flow.display()))
-}
-
-fn write_context(work: &Path) -> Result<PathBuf, String> {
-    let path = work.join("context.md");
-    fs::write(
-        &path,
-        format!(
-            "The `aep` command-line tool is mounted read-only at `{DRIVER_MOUNTED}`. Run it as `{DRIVER_MOUNTED} artifact …`; the bare name does not resolve here. The planning store is `.engineering/planning`.\n"
-        ),
-    )
-    .map_err(|error| format!("write context: {error}"))?;
-    Ok(path)
-}
-
-fn write_hooks(resolved: &Resolved, fixture: &Fixture, map: &Path) -> Result<PathBuf, String> {
-    let path = fixture.work.join("hooks.json");
-    let document = json!({
-        "version": 1,
-        "hooks": [
-            {
-                "on": "transition",
-                "command": [
-                    resolved.repo.join("target/debug/metaharness"),
-                    "aep", "drive", "transition",
-                    "--project", fixture.project,
-                    "--root", fixture.tree,
-                    "--task", fixture.project.join(".engineering/task.yaml"),
-                    "--map", map
-                ]
-            },
-            {
-                "on": "before-call",
-                "tools": ["file_write", "file_edit"],
-                "command": [resolved.repo.join("target/debug/metaharness"), "aep", "drive", "hook"]
-            }
-        ]
-    });
-    fs::write(
-        &path,
-        serde_json::to_vec_pretty(&document).map_err(|error| format!("encode hooks: {error}"))?,
-    )
-    .map_err(|error| format!("write hooks: {error}"))?;
-    Ok(path)
-}
-
 fn aep_drive_command(resolved: &Resolved) -> Command {
     let mut command = Command::new(resolved.repo.join("target/debug/metaharness"));
     command.args(["aep", "drive"]);
     command
-}
-
-fn probe_governor(
-    resolved: &Resolved,
-    fixture: &Fixture,
-    map: &Path,
-    max_attempts: u32,
-) -> Result<(), String> {
-    let probe = json!({
-        "hook": "transition",
-        "flow": "adp/default",
-        "path": "root",
-        "moment": "enter",
-        "attempt": 1,
-        "of": max_attempts,
-        "workspace": fixture.project,
-    });
-    let mut command = aep_drive_command(resolved);
-    command
-        .arg("transition")
-        .arg("--project")
-        .arg(&fixture.project)
-        .arg("--root")
-        .arg(&fixture.tree)
-        .arg("--task")
-        .arg(fixture.project.join(".engineering/task.yaml"))
-        .arg("--map")
-        .arg(map);
-    let result = output(&mut command, Some(probe.to_string().as_bytes()))?;
-    if result.status.code() != Some(0) {
-        return Err(format!(
-            "governor refused the first boundary (exit {}): {}{}",
-            result.status.code().unwrap_or(1),
-            result.stdout,
-            result.stderr
-        ));
-    }
-    println!("governor preflight: enter root -> proceed");
-    Ok(())
 }
 
 fn derive_b10x_map(source: &Path, target: &Path) -> Result<(), String> {
@@ -1573,35 +1687,6 @@ fn row(rows: &mut Vec<(String, bool)>, label: &str, passed: bool) {
     rows.push((label.to_owned(), passed));
 }
 
-fn print_native_census(stream: &Path, sessions: &Path) -> Result<(), String> {
-    let mut kinds = std::collections::BTreeMap::<String, usize>::new();
-    let mut refused = Vec::new();
-    let mut finished = None;
-    for event in json_lines(stream)? {
-        if let Some(kind) = event.get("kind").and_then(Value::as_str) {
-            *kinds.entry(kind.to_owned()).or_default() += 1;
-            if kind == "transition-refused" {
-                refused.push(event.clone());
-            } else if kind == "flow-finished" {
-                finished = Some(event);
-            }
-        }
-    }
-    println!("== census ==");
-    println!(
-        "events: {}",
-        kinds
-            .iter()
-            .map(|(kind, count)| format!("{kind} {count}"))
-            .collect::<Vec<_>>()
-            .join(", ")
-    );
-    println!("transition-refused: {}", refused.len());
-    println!("flow-finished: {}", finished.unwrap_or(Value::Null));
-    println!("sessions: {}", sessions.display());
-    Ok(())
-}
-
 fn json_lines(path: &Path) -> Result<Vec<Value>, String> {
     if !path.is_file() {
         return Ok(Vec::new());
@@ -1672,10 +1757,6 @@ fn parse_usd_microunits(value: &str) -> Result<u64, String> {
         return Err("the spend cap must be greater than zero".to_owned());
     }
     Ok(total)
-}
-
-fn format_microunits(value: u64) -> String {
-    format!("{}.{:06}", value / 1_000_000, value % 1_000_000)
 }
 
 fn token_file(explicit: Option<PathBuf>) -> Result<PathBuf, String> {
@@ -1768,21 +1849,6 @@ fn output(command: &mut Command, stdin: Option<&[u8]>) -> Result<Output, String>
         stdout: String::from_utf8_lossy(&result.stdout).into_owned(),
         stderr: String::from_utf8_lossy(&result.stderr).into_owned(),
     })
-}
-
-fn run_to_file(command: &mut Command, stdout: &Path, stdin: Option<&[u8]>) -> Result<(), String> {
-    let stderr = stdout.with_extension("err");
-    let status = run_to_files(command, stdout, &stderr, stdin)?;
-    if status.success() {
-        Ok(())
-    } else {
-        Err(format!(
-            "command {:?} failed with {}; see {}",
-            command,
-            status.code().unwrap_or(1),
-            stderr.display()
-        ))
-    }
 }
 
 fn run_to_files(
@@ -2145,14 +2211,14 @@ mod tests {
 
     #[test]
     fn project_points_at_tree_inside_workspace() {
-        let project = project_document("native");
+        let project = project_document("preflight");
         assert!(project.contains("protocols: protocols\n"));
         assert!(!project.contains("../../tree"));
     }
 
     #[test]
     fn current_aep_runtime_fixture_uses_current_git_store_schema() {
-        for shape in ["native", "driven"] {
+        for shape in ["preflight", "driven"] {
             let project = project_document(shape);
             assert!(project.contains("version: aep.project/5\n"), "{project}");
             assert!(project.contains("store:\n  git: {}\n"), "{project}");
@@ -2241,5 +2307,725 @@ mod tests {
             fs::read_to_string(target).unwrap(),
             "prompt: run `./.engineering/toolchain/aep plan artifact kinds`\nrun: [aep, plan, artifact, validate]\n"
         );
+    }
+
+    /// The arms this runner keeps, and the one it removed. Harness 0.18.0 removes the verb the
+    /// native arm walked with, so the arm is gone rather than left to fail at its first command.
+    #[test]
+    fn the_native_arm_is_refused_and_the_kept_arms_parse() {
+        let refusal = Cli::try_parse_from(["aep-eval", "native"])
+            .expect_err("`aep-eval native` is not a subcommand any more");
+        assert_eq!(
+            refusal.kind(),
+            clap::error::ErrorKind::InvalidSubcommand,
+            "{refusal}"
+        );
+        assert!(matches!(
+            Cli::try_parse_from(["aep-eval", "preflight"])
+                .expect("preflight parses")
+                .command,
+            EvalCommand::Preflight(_)
+        ));
+        for arm in ["b10x", "claude"] {
+            assert!(matches!(
+                Cli::try_parse_from(["aep-eval", "driven", "--arm", arm])
+                    .expect("a driven arm parses")
+                    .command,
+                EvalCommand::Driven(_)
+            ));
+        }
+    }
+
+    /// What names the `b10x-harness` binary in this workspace's Rust, as it reads in a copy of the
+    /// source lowercased with `_` read as `-`: the eval's `b10x_binary`, the driver's
+    /// `B10X_BINARY`, doctor's `resolve_on("b10x-harness", …)`, any `b10x_harness` binding.
+    const HARNESS_BINARY_MARKERS: [&str; 2] = ["b10x-binary", "b10x-harness"];
+
+    /// The adapter crate that renders `metaharness run b10x`'s argv without a `Command::new`.
+    const HARNESS_ARGV_RENDERER: &str = "crates/metaharness-b10x/src";
+
+    /// The verbs harness 0.18.0 removes (`workflow plan|run` and `events`), as the string literals
+    /// a call would pass. Assembled at run time so this file holds no such literal itself.
+    fn removed_harness_verb_literals() -> [String; 2] {
+        [["work", "flow"].concat(), ["eve", "nts"].concat()].map(|verb| format!("\"{verb}\""))
+    }
+
+    /// The removed-verb literals in sources that name the harness binary and never reach it: the
+    /// file, the `fn`, `const` or `static` that holds the literal, and why it is not harness argv.
+    /// An entry that exempts nothing fails the scan, so the list cannot outlive what it names.
+    const NOT_HARNESS_ARGV: [(&str, &str, &str); 6] = [
+        (
+            "crates/metaharness-aep-eval/src/lib.rs",
+            "REGROUPED_VERBS",
+            "AEP's own first-level verbs that moved under a group word; argv for `aep`, never for the harness",
+        ),
+        (
+            "crates/metaharness/src/viewer.rs",
+            "step_key",
+            "a key read from a recorded trace event's step object",
+        ),
+        (
+            "crates/metaharness/tests/stream_closed.rs",
+            "the_last_line_names_its_own_run_and_is_readable_alone",
+            "a key of the `stream.closed` record the test reads back",
+        ),
+        (
+            "crates/metaharness-aep/src/drive.rs",
+            "metaharness_frame",
+            "keys of the `metaharness.frame/1` document the driver mints",
+        ),
+        (
+            "crates/metaharness-aep/src/drive_tests.rs",
+            "governed_codex_uses_the_current_frame_coordinates_and_no_skill_exemption",
+            "prompt text the driver writes for the model, asserted by the test",
+        ),
+        (
+            "crates/metaharness-aep/src/drive_tests.rs",
+            "the_frame_carries_the_engines_lines_and_the_steps_coordinates",
+            "a key of the frame document the test reads back",
+        ),
+    ];
+
+    fn workspace_rust_sources(root: &Path, relative: &Path, into: &mut Vec<PathBuf>) {
+        if relative
+            .file_name()
+            .is_some_and(|name| NOT_AUTHORED_DIRS.iter().any(|excluded| name == *excluded))
+        {
+            return;
+        }
+        let full = root.join(relative);
+        if full.is_dir() {
+            let mut names: Vec<PathBuf> = fs::read_dir(&full)
+                .expect("a source directory is readable")
+                .map(|entry| PathBuf::from(entry.expect("a directory entry").file_name()))
+                .collect();
+            names.sort();
+            for name in names {
+                workspace_rust_sources(root, &relative.join(name), into);
+            }
+        } else if relative
+            .extension()
+            .is_some_and(|extension| extension == "rs")
+        {
+            into.push(relative.to_path_buf());
+        }
+    }
+
+    /// Where a command built at `start` stops taking arguments: the next `Command::new(` or the
+    /// next line that opens a function, whichever comes first.
+    fn command_span_end(text: &str, start: usize) -> usize {
+        let after = start + "Command::new(".len();
+        let next_command = text[after..]
+            .find("Command::new(")
+            .map_or(text.len(), |offset| after + offset);
+        let mut position = after;
+        for line in text[after..].split_inclusive('\n') {
+            let opened = line.trim_start();
+            if ["fn ", "pub fn ", "pub(crate) fn ", "async fn "]
+                .iter()
+                .any(|opening| opened.starts_with(opening))
+            {
+                return position.min(next_command);
+            }
+            position += line.len();
+        }
+        next_command
+    }
+
+    /// Where one source could hand a removed verb to the harness binary. In a source that names
+    /// the binary, and in the adapter that renders its argv, every string literal is read the way
+    /// an argv or a shell reads it. A literal is reported when a removed verb is a word of it in
+    /// verb position: its first word (so `"workflow"` itself), or the word after one that names
+    /// the binary or interpolates a value (`b10x-harness workflow`, `{binary} events`,
+    /// `$HARNESS workflow`). It is reported wherever it stands: in a `const`, in a caller that
+    /// adds arguments to a `Command` another function built, on a `Command` whose program was
+    /// bound to a local first, inside an `sh -c` string. Prose that uses the word mid-sentence is
+    /// not argv, and comments are not literals. A literal inside a `Command` built on the binary
+    /// names the line that built it.
+    ///
+    /// The literal reader is nested here so that the scan stays the five items
+    /// `tests/adversary_w8u7.rs` compiles from this file's text.
+    #[allow(clippy::too_many_lines)]
+    fn harness_verb_offences(relative: &Path, text: &str) -> Vec<String> {
+        /// Each string literal outside comments: the offset of its opening quote and its content.
+        fn string_literals(text: &str) -> Vec<(usize, &str)> {
+            let bytes = text.as_bytes();
+            let mut literals = Vec::new();
+            let mut at = 0;
+            while at < bytes.len() {
+                match bytes[at] {
+                    b'/' if bytes.get(at + 1) == Some(&b'/') => {
+                        at = text[at..].find('\n').map_or(bytes.len(), |end| at + end);
+                    }
+                    b'/' if bytes.get(at + 1) == Some(&b'*') => {
+                        let mut depth = 0_usize;
+                        while at < bytes.len() {
+                            if bytes[at..].starts_with(b"/*") {
+                                depth += 1;
+                                at += 2;
+                            } else if bytes[at..].starts_with(b"*/") {
+                                depth -= 1;
+                                at += 2;
+                                if depth == 0 {
+                                    break;
+                                }
+                            } else {
+                                at += 1;
+                            }
+                        }
+                    }
+                    b'\'' => {
+                        // A char literal is passed whole, so a quote inside it opens nothing; the
+                        // quote of a lifetime is passed alone.
+                        let rest = &text[at + 1..];
+                        at += if rest.starts_with('\\') {
+                            rest.get(2..)
+                                .and_then(|tail| tail.find('\''))
+                                .map_or(rest.len() + 1, |end| end + 4)
+                        } else {
+                            match rest.chars().next() {
+                                Some(first) if rest[first.len_utf8()..].starts_with('\'') => {
+                                    first.len_utf8() + 2
+                                }
+                                _ => 1,
+                            }
+                        };
+                    }
+                    b'"' => {
+                        let hashes = bytes[..at]
+                            .iter()
+                            .rev()
+                            .take_while(|byte| **byte == b'#')
+                            .count();
+                        let raw = at > hashes && bytes[at - hashes - 1] == b'r';
+                        let start = at + 1;
+                        let end = if raw {
+                            let closing = format!("\"{}", "#".repeat(hashes));
+                            text[start..]
+                                .find(&closing)
+                                .map_or(bytes.len(), |end| start + end)
+                        } else {
+                            let mut end = start;
+                            while end < bytes.len() && bytes[end] != b'"' {
+                                end += if bytes[end] == b'\\' { 2 } else { 1 };
+                            }
+                            end.min(bytes.len())
+                        };
+                        literals.push((at, &text[start..end]));
+                        at = end + 1 + if raw { hashes } else { 0 };
+                    }
+                    _ => at += 1,
+                }
+            }
+            literals
+        }
+
+        let read = text.to_ascii_lowercase().replace('_', "-");
+        if !relative.starts_with(HARNESS_ARGV_RENDERER)
+            && !HARNESS_BINARY_MARKERS
+                .iter()
+                .any(|marker| read.contains(marker))
+        {
+            return Vec::new();
+        }
+        let line_of = |at: usize| text[..at].matches('\n').count() + 1;
+        let harness_commands: Vec<(usize, usize)> = text
+            .match_indices("Command::new(")
+            .filter(|(start, _)| {
+                let constructor = read[*start..].lines().next().unwrap_or_default();
+                HARNESS_BINARY_MARKERS
+                    .iter()
+                    .any(|marker| constructor.contains(marker))
+            })
+            .map(|(start, _)| (start, command_span_end(text, start)))
+            .collect();
+        let verbs = removed_harness_verb_literals().map(|verb| verb.trim_matches('"').to_owned());
+        let quoting: &[char] = &['"', '\'', '`', '\\', ';', ',', '(', ')'];
+        let mut offences = Vec::new();
+        for (at, literal) in string_literals(text) {
+            let words: Vec<&str> = literal.split_whitespace().collect();
+            for verb in &verbs {
+                let in_verb_position = words.iter().enumerate().any(|(index, word)| {
+                    word.trim_matches(quoting) == verb
+                        && words.get(index.wrapping_sub(1)).is_none_or(|before| {
+                            let before = before.to_ascii_lowercase().replace('_', "-");
+                            before.starts_with(['{', '$'])
+                                || before.ends_with('}')
+                                || HARNESS_BINARY_MARKERS
+                                    .iter()
+                                    .any(|marker| before.contains(marker))
+                        })
+                });
+                if !in_verb_position {
+                    continue;
+                }
+                let place = harness_commands
+                    .iter()
+                    .find(|(start, end)| (*start..*end).contains(&at))
+                    .map_or_else(
+                        || "in a source that names the harness binary".to_owned(),
+                        |(start, _)| {
+                            format!(
+                                "handed to the harness binary built at line {}",
+                                line_of(*start)
+                            )
+                        },
+                    );
+                offences.push(format!(
+                    "{}:{}: \"{verb}\" {place}",
+                    relative.display(),
+                    line_of(at)
+                ));
+            }
+        }
+        offences
+    }
+
+    /// The `fn`, `const` or `static` a 1-based line of `text` stands in: the nearest one opened at
+    /// or above it.
+    fn enclosing_item(text: &str, line: usize) -> Option<&str> {
+        let lines: Vec<&str> = text.lines().take(line).collect();
+        lines.into_iter().rev().find_map(|source| {
+            let mut words = source.split_whitespace().peekable();
+            while words
+                .next_if(|word| ["pub", "pub(crate)", "async", "unsafe"].contains(word))
+                .is_some()
+            {}
+            match words.next() {
+                Some("fn" | "const" | "static") => words.next().and_then(|name| {
+                    name.split(|c: char| !(c.is_alphanumeric() || c == '_'))
+                        .next()
+                }),
+                _ => None,
+            }
+        })
+    }
+
+    /// The scan finds each removed verb wherever a literal in a source that names the harness
+    /// binary holds it, and nowhere a literal does not: not in a comment, not through a quote in
+    /// a char literal, and not in a source that never names the binary.
+    #[test]
+    fn the_harness_verb_scan_finds_each_removed_verb() {
+        let source = Path::new("crates/x/src/lib.rs");
+        for verb in removed_harness_verb_literals() {
+            let word = verb.trim_matches('"');
+            let built = format!(
+                "fn plan(resolved: &Resolved) {{\n    Command::new(&resolved.b10x_binary)\n        .arg({verb})\n        .arg(\"run\");\n}}\n"
+            );
+            let offences = harness_verb_offences(source, &built);
+            assert_eq!(offences.len(), 1, "{verb}: {offences:?}");
+            assert!(
+                offences[0].contains(":3: ") && offences[0].contains("built at line 2"),
+                "{offences:?}"
+            );
+
+            let rendered =
+                format!("fn argv() -> Vec<String> {{\n    vec![{verb}.to_owned()]\n}}\n");
+            let offences = harness_verb_offences(
+                &Path::new(HARNESS_ARGV_RENDERER).join("launch.rs"),
+                &rendered,
+            );
+            assert_eq!(offences.len(), 1, "{verb}: {offences:?}");
+
+            let kept_apart = format!(
+                "const KEY: &str = {verb};\nfn version(resolved: &Resolved) {{\n    Command::new(&resolved.b10x_binary).arg(\"--version\");\n}}\n"
+            );
+            let offences = harness_verb_offences(source, &kept_apart);
+            assert_eq!(offences.len(), 1, "{verb}: {offences:?}");
+            assert!(
+                offences[0].contains(":1: ")
+                    && offences[0].contains("in a source that names the harness binary"),
+                "{offences:?}"
+            );
+
+            let shell = format!(
+                "fn plan() {{\n    Command::new(\"/bin/sh\").arg(\"-c\").arg(r#\"B10X_HARNESS={word}; b10x-harness {word} --json\"#);\n}}\n"
+            );
+            let offences = harness_verb_offences(source, &shell);
+            assert_eq!(offences.len(), 1, "{verb}: {offences:?}");
+            assert!(offences[0].contains(":2: "), "{offences:?}");
+            for interpolated in ["{binary}", "{}", "$HARNESS"] {
+                let spawned = format!(
+                    "const B10X_BINARY: &str = \"b10x-harness\";\nconst LINE: &str = \"exec {interpolated} {word} --json\";\n"
+                );
+                let offences = harness_verb_offences(source, &spawned);
+                assert_eq!(offences.len(), 1, "{interpolated}: {offences:?}");
+            }
+
+            let not_literals = format!(
+                "// b10x-harness {word}\n/* {verb} /* {verb} */ {verb} */\n/// {verb}\nfn plan<'a>(binary: &'a str) -> &'a str {{\n    let quote = '\"';\n    {word}();\n    let again = '\\'';\n    let path = \"{word}.jsonl\";\n    let prose = \"aligned by {word} state, {{{word}:?}}\";\n    binary\n}}\n"
+            );
+            assert!(
+                harness_verb_offences(source, &not_literals).is_empty(),
+                "{verb}"
+            );
+
+            let unrelated = format!(
+                "fn flow(resolved: &Resolved) {{\n    Command::new(&resolved.protocol)\n        .arg({verb});\n}}\n"
+            );
+            assert!(
+                harness_verb_offences(source, &unrelated).is_empty(),
+                "{verb}"
+            );
+        }
+    }
+
+    /// An exemption names the item that holds the literal, so a removed verb added beside it in
+    /// the same file is still an offence.
+    #[test]
+    fn an_exemption_names_the_item_that_holds_the_literal() {
+        let text = "const PINNED: &str = \"x\";\n\npub(crate) fn plan(binary: &str) {\n    let words = [\n        \"a\",\n    ];\n}\n";
+        assert_eq!(enclosing_item(text, 1), Some("PINNED"));
+        assert_eq!(enclosing_item(text, 5), Some("plan"));
+        assert_eq!(enclosing_item(text, 2), Some("PINNED"));
+    }
+
+    /// No Rust source in the workspace hands a verb harness 0.18.0 removes to the harness binary.
+    /// Every literal holding one in a source that names the binary is an offence unless
+    /// [`NOT_HARNESS_ARGV`] names its item and says why, and every exemption is still used.
+    #[test]
+    fn no_source_file_passes_the_removed_verb_to_the_harness_binary() {
+        let repository = PathBuf::from(env!("CARGO_MANIFEST_DIR"))
+            .parent()
+            .and_then(Path::parent)
+            .expect("the repository root")
+            .to_path_buf();
+        let mut sources = Vec::new();
+        workspace_rust_sources(&repository, Path::new("crates"), &mut sources);
+        assert!(
+            sources.len() > 50,
+            "the crates resolve to Rust sources, not to nothing: {sources:?}"
+        );
+        let mut offences = Vec::new();
+        let mut exempted = [0_usize; NOT_HARNESS_ARGV.len()];
+        for relative in &sources {
+            let text = fs::read_to_string(repository.join(relative)).expect("a source is text");
+            let prefix = format!("{}:", relative.display());
+            for offence in harness_verb_offences(relative, &text) {
+                let line = offence
+                    .strip_prefix(&prefix)
+                    .and_then(|rest| rest.split(':').next())
+                    .and_then(|line| line.parse().ok())
+                    .expect("an offence names its line");
+                let item = enclosing_item(&text, line);
+                match NOT_HARNESS_ARGV
+                    .iter()
+                    .position(|(file, name, _)| relative == Path::new(file) && item == Some(*name))
+                {
+                    Some(entry) => exempted[entry] += 1,
+                    None => offences.push(offence),
+                }
+            }
+        }
+        assert!(
+            offences.is_empty(),
+            "{} place(s) may hand a removed verb to b10x-harness; change them, or name the item in NOT_HARNESS_ARGV with the reason it is not harness argv:\n{}",
+            offences.len(),
+            offences.join("\n")
+        );
+        let stale: Vec<String> = NOT_HARNESS_ARGV
+            .iter()
+            .zip(exempted)
+            .filter(|(_, count)| *count == 0)
+            .map(|((file, item, reason), _)| format!("{file} `{item}`: {reason}"))
+            .collect();
+        assert!(
+            stale.is_empty(),
+            "NOT_HARNESS_ARGV exempts what no longer exists: {stale:?}"
+        );
+    }
+
+    /// One HTTP/1.1 POST to the scripted endpoint over loopback, as the harness's client sends it;
+    /// returns the status line, the headers and the `data:` payloads of the event stream.
+    fn post_responses(
+        base_url: &str,
+        body: &Value,
+        authorization: bool,
+    ) -> (String, String, Vec<Value>) {
+        use std::io::{Read as _, Write as _};
+        let address = base_url
+            .strip_prefix("http://")
+            .and_then(|rest| rest.strip_suffix("/v1"))
+            .expect("a loopback base URL ending in /v1");
+        let mut stream = std::net::TcpStream::connect(address).expect("the endpoint accepts");
+        let body = body.to_string();
+        let credential = if authorization {
+            "Authorization: Bearer must-not-be-sent\r\n"
+        } else {
+            ""
+        };
+        write!(
+            stream,
+            "POST /v1/responses HTTP/1.1\r\nHost: {address}\r\nContent-Type: application/json\r\n{credential}Content-Length: {}\r\n\r\n{body}",
+            body.len()
+        )
+        .expect("write the request");
+        let mut response = String::new();
+        stream
+            .read_to_string(&mut response)
+            .expect("the endpoint closes after one response");
+        let (head, payload) = response.split_once("\r\n\r\n").expect("a header block");
+        let (status, headers) = head.split_once("\r\n").unwrap_or((head, ""));
+        let events = payload
+            .lines()
+            .filter_map(|line| line.strip_prefix("data: "))
+            .map(|event| serde_json::from_str(event).expect("each event is JSON"))
+            .collect();
+        (status.to_owned(), headers.to_owned(), events)
+    }
+
+    fn first_request(offer_run: bool) -> Value {
+        let tools = if offer_run {
+            json!([{"type": "function", "name": "file_read"}, {"type": "function", "name": "run"}])
+        } else {
+            json!([{"type": "function", "name": "file_read"}])
+        };
+        json!({
+            "model": SCRIPTED_MODEL,
+            "stream": true,
+            "input": [{"type": "message", "role": "user", "content": CONFINED_PREFLIGHT_INPUT}],
+            "tools": tools,
+        })
+    }
+
+    fn second_request() -> Value {
+        json!({
+            "model": SCRIPTED_MODEL,
+            "stream": true,
+            "input": [
+                {"type": "message", "role": "user", "content": CONFINED_PREFLIGHT_INPUT},
+                {"type": "function_call", "name": "run", "call_id": SCRIPTED_CALL_ID, "arguments": "{}"},
+                {"type": "function_call_output", "call_id": SCRIPTED_CALL_ID, "output": "exit 0"},
+            ],
+            "tools": [{"type": "function", "name": "run"}],
+        })
+    }
+
+    /// The scripted endpoint plays the whole conversation the confined preflight needs, over
+    /// loopback and with no model behind it: the first request is answered with one `run` call
+    /// of the staged driver, and the request that returns that call's result with a final
+    /// message. What it saw is the preflight's evidence, so the exchange judges itself.
+    #[test]
+    fn the_scripted_endpoint_calls_the_staged_driver_once_then_answers() {
+        let endpoint = ScriptedEndpoint::start(&confined_preflight_argv()).unwrap();
+        let base_url = endpoint.base_url();
+        assert!(base_url.starts_with("http://127.0.0.1:"), "{base_url}");
+
+        let (status, headers, events) = post_responses(&base_url, &first_request(true), false);
+        assert_eq!(status, "HTTP/1.1 200 OK");
+        assert!(
+            headers.contains("Content-Type: text/event-stream"),
+            "{headers}"
+        );
+        let kinds: Vec<&str> = events
+            .iter()
+            .filter_map(|event| event["type"].as_str())
+            .collect();
+        assert_eq!(
+            kinds,
+            [
+                "response.created",
+                "response.output_item.added",
+                "response.function_call_arguments.delta",
+                "response.output_item.done",
+                "response.completed",
+            ]
+        );
+        let call = &events[3]["item"];
+        assert_eq!(call["type"], "function_call");
+        assert_eq!(call["name"], "run");
+        assert_eq!(call["call_id"], SCRIPTED_CALL_ID);
+        let arguments: Value =
+            serde_json::from_str(call["arguments"].as_str().expect("arguments are a string"))
+                .expect("arguments are JSON");
+        assert_eq!(arguments, json!({"argv": confined_preflight_argv()}));
+        assert_eq!(arguments["argv"][0], DRIVER_MOUNTED);
+        assert_eq!(events[2]["delta"], call["arguments"]);
+        assert_eq!(events[4]["response"]["output"][0], *call);
+
+        let (status, _, events) = post_responses(&base_url, &second_request(), false);
+        assert_eq!(status, "HTTP/1.1 200 OK");
+        let answer = events
+            .iter()
+            .find(|event| event["type"] == "response.output_item.done")
+            .expect("a finished item");
+        assert_eq!(answer["item"]["type"], "message");
+        assert_eq!(answer["item"]["content"][0]["text"], SCRIPTED_ANSWER);
+        assert_eq!(
+            events.last().expect("a last event")["type"],
+            "response.completed"
+        );
+
+        let exchange = endpoint.finish().unwrap();
+        assert_eq!(exchange.requests.len(), 2, "{exchange:?}");
+        assert!(exchange.requests[0].offered_run);
+        assert_eq!(exchange.requests[1].call_output.as_deref(), Some("exit 0"));
+        exchange.verdict().unwrap();
+    }
+
+    /// Each way the conversation can go wrong is named by the exchange rather than discovered
+    /// later as a missing artifact.
+    #[test]
+    fn the_scripted_exchange_names_what_went_wrong() {
+        let silent = ScriptedEndpoint::start(&confined_preflight_argv())
+            .unwrap()
+            .finish()
+            .unwrap();
+        assert!(silent.verdict().unwrap_err().contains("no request"));
+
+        let endpoint = ScriptedEndpoint::start(&confined_preflight_argv()).unwrap();
+        post_responses(&endpoint.base_url(), &first_request(false), false);
+        let unpublished = endpoint.finish().unwrap();
+        assert!(
+            unpublished.verdict().unwrap_err().contains("no `run` tool"),
+            "{unpublished:?}"
+        );
+
+        let endpoint = ScriptedEndpoint::start(&confined_preflight_argv()).unwrap();
+        post_responses(&endpoint.base_url(), &first_request(true), false);
+        let unanswered = endpoint.finish().unwrap();
+        assert!(
+            unanswered.verdict().unwrap_err().contains("never returned"),
+            "{unanswered:?}"
+        );
+
+        let endpoint = ScriptedEndpoint::start(&confined_preflight_argv()).unwrap();
+        post_responses(&endpoint.base_url(), &first_request(true), true);
+        post_responses(&endpoint.base_url(), &second_request(), false);
+        let authorized = endpoint.finish().unwrap();
+        assert!(
+            authorized.verdict().unwrap_err().contains("authorization"),
+            "{authorized:?}"
+        );
+
+        let endpoint = ScriptedEndpoint::start(&confined_preflight_argv()).unwrap();
+        post_responses(&endpoint.base_url(), &first_request(true), false);
+        post_responses(&endpoint.base_url(), &second_request(), false);
+        post_responses(&endpoint.base_url(), &second_request(), false);
+        let repeated = endpoint.finish().unwrap();
+        assert!(
+            repeated.verdict().unwrap_err().contains("exactly two"),
+            "{repeated:?}"
+        );
+    }
+
+    /// The confined preflight is `b10x-harness run` with the confinement flags, against the
+    /// scripted endpoint, naming no credential and reading no operator profile.
+    #[test]
+    fn the_confined_probe_is_a_harness_run_with_the_confinement_flags() {
+        let probe = ConfinedProbe {
+            b10x_binary: Path::new("/opt/harness/b10x-harness"),
+            driver: Path::new("/checkout/aep/target/debug/aep"),
+            project: Path::new("/scratch/ws_project"),
+            cgroup_root: Path::new("/sys/fs/cgroup/user.slice/delegated"),
+            record: Path::new("/scratch"),
+        };
+        let command = confined_probe_command(&probe, "http://127.0.0.1:4242/v1");
+        assert_eq!(command.get_program(), "/opt/harness/b10x-harness");
+        let argv: Vec<String> = command
+            .get_args()
+            .map(|argument| argument.to_string_lossy().into_owned())
+            .collect();
+        assert_eq!(argv[0], "run", "{argv:?}");
+        let value_of = |flag: &str| {
+            argv.iter()
+                .position(|argument| argument == flag)
+                .map(|at| argv[at + 1].as_str())
+        };
+        assert_eq!(value_of("--base-url"), Some("http://127.0.0.1:4242/v1"));
+        assert_eq!(value_of("--wire"), Some("openai-responses"));
+        assert_eq!(value_of("--model"), Some(SCRIPTED_MODEL));
+        assert_eq!(value_of("--input"), Some(CONFINED_PREFLIGHT_INPUT));
+        assert_eq!(value_of("--workspace"), Some("/scratch/ws_project"));
+        assert_eq!(
+            value_of("--cgroup-root"),
+            Some("/sys/fs/cgroup/user.slice/delegated")
+        );
+        assert_eq!(value_of("--allow-program"), Some(DRIVER_MOUNTED));
+        assert_eq!(value_of("--driver"), Some("/checkout/aep/target/debug/aep"));
+        assert_eq!(
+            value_of("--process-write-subtree"),
+            Some(PREFLIGHT_PROCESS_WRITE_SUBTREE)
+        );
+        assert_eq!(value_of("--approve-up-to"), Some("high"));
+        for switch in ["--substrate-embedded", "--no-session", "--json"] {
+            assert!(
+                argv.iter().any(|argument| argument == switch),
+                "{switch}: {argv:?}"
+            );
+        }
+        for verb in removed_harness_verb_literals() {
+            assert!(
+                !argv
+                    .iter()
+                    .flat_map(|argument| argument.split_whitespace())
+                    .any(|word| verb.trim_matches('"') == word),
+                "{verb}: {argv:?}"
+            );
+        }
+        assert!(
+            !argv.iter().any(|argument| argument.starts_with("--api-key")
+                || argument.starts_with("--oauth")
+                || argument == "--provider"
+                || argument == "--profile"),
+            "the probe names no credential and no profile: {argv:?}"
+        );
+        let config = command
+            .get_envs()
+            .find(|(name, _)| *name == "XDG_CONFIG_HOME")
+            .and_then(|(_, value)| value)
+            .expect("the probe reads an empty config home");
+        assert_eq!(config, Path::new("/scratch/confined-preflight-config"));
+    }
+
+    /// Outside a Git repository the driver locks its writer fence in the store's parent directory
+    /// (aep `crates/edge/aep-cli/src/planning_writer_fence.rs`, `store_fence_paths`). A store at
+    /// the root of the one writable subtree puts that lock outside it, and substrate refuses the
+    /// write as read-only, so the store sits one level inside.
+    #[test]
+    fn the_preflight_store_and_its_writer_fence_sit_inside_the_writable_subtree() {
+        let argv = confined_preflight_argv();
+        let store = argv
+            .iter()
+            .position(|argument| *argument == "--store")
+            .map(|at| Path::new(argv[at + 1]))
+            .expect("the confined call names a store");
+        let fence_directory = store.parent().expect("the store has a parent");
+        assert!(
+            fence_directory.starts_with(PREFLIGHT_PROCESS_WRITE_SUBTREE),
+            "the writer fence directory {} is outside the writable subtree {PREFLIGHT_PROCESS_WRITE_SUBTREE}",
+            fence_directory.display()
+        );
+    }
+
+    /// The confined preflight against an installed harness, a driver and a prepared project,
+    /// none of which `cargo test` has. It contacts no model: the endpoint is the scripted one.
+    #[test]
+    #[ignore = "needs a b10x-harness, an aep driver, a prepared ws_project and a delegated cgroup; run under systemd-run --user --scope with EVAL_PROBE_B10X_BINARY, EVAL_PROBE_DRIVER, EVAL_PROBE_PROJECT and EVAL_PROBE_RECORD set"]
+    fn the_confined_probe_creates_an_open_blocker_through_an_installed_harness() {
+        let required = |name: &str| {
+            PathBuf::from(env::var_os(name).unwrap_or_else(|| panic!("{name} is unset")))
+        };
+        let b10x_binary = required("EVAL_PROBE_B10X_BINARY");
+        let driver = required("EVAL_PROBE_DRIVER");
+        let project = required("EVAL_PROBE_PROJECT");
+        let record = required("EVAL_PROBE_RECORD");
+        let uid = current_uid().unwrap();
+        let cgroup_root = env::var_os("EVAL_B10X_CGROUP_ROOT").map_or_else(
+            || {
+                PathBuf::from(format!(
+                    "/sys/fs/cgroup/user.slice/user-{uid}.slice/user@{uid}.service"
+                ))
+            },
+            PathBuf::from,
+        );
+        confined_probe(&ConfinedProbe {
+            b10x_binary: &b10x_binary,
+            driver: &driver,
+            project: &project,
+            cgroup_root: &cgroup_root,
+            record: &record,
+        })
+        .unwrap();
     }
 }
