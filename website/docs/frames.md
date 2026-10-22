@@ -11,10 +11,25 @@ sidebar_position: 5
 It carries what has already been established, what must hold here, what the step owes before it
 may end, and — the enforcing part — **strictly the operations admitted here**.
 
-## Presented every turn, not once per session
+## Set once, at launch {#presented-every-turn-not-once-per-session}
 
-The embedder's per-state tool set changes at every transition. A frame that could only be set per
-session would turn a per-step guarantee into a per-session one.
+In this release a frame is set when the run starts, by `--frame <FILE>`, and holds for the whole
+run. `frame.set` is refused on every adapter with `UNSUPPORTED_CONTROL`. It is the command that
+would replace the frame mid-run, and a replaced frame needs its text delivered between turns and
+its operations enforced per call, both or neither; no adapter delivers the first. Read it with
+`metaharness capabilities <kind>`; `crates/metaharness-claude/src/seam.rs`
+(`frame_set_is_refused_because_it_is_not_partially_deliverable`) asserts it on Claude Code, and
+`crates/metaharness-cli/tests/website_claims.rs` on every kind.
+
+A malformed `frame.set` is refused `MALFORMED` before that: a line that does not decode
+(`Run::send_line`), or a frame whose digest no longer describes it. Well-formedness is checked
+before the adapter's support (`apply` in `crates/metaharness/src/run.rs`), so the code sends the
+caller to the input they got wrong; `a_frame_mutated_after_it_was_sealed_is_refused_as_malformed` in
+`crates/metaharness/tests/run_loop.rs` reads it on Claude Code.
+
+The embedder's per-state tool set changes at every transition. An embedder that needs a per-step
+guarantee starts each step as its own run, with its own frame; a frame held across steps turns a
+per-step guarantee into a per-session one.
 
 > A **step** is the *embedder's* unit of work. A **turn** is the *vendor's*. Conflating them is
 > exactly how a per-step guarantee quietly becomes a per-session one.

@@ -743,7 +743,9 @@ Two consequences follow and both are enforced rather than documented:
 * **`observe` is reached by asking for it and by nothing else.** The default is and stays `frame`,
   and an adapter that has not driven the `allow` half of its own decision wire declares the mode
   `unverified` in its capability descriptor and **refuses it at plan time** (§ 8.4 O4) — which is
-  where Codex stands today, since only its `deny` half has been driven (a7).
+  where Codex stands today, since only its `deny` half has been driven (a7). (**Superseded by
+  a49**: Codex declares `observe` `delivered`, and a recorded 0.153.4 fixture run shows the
+  `allow` half.)
 
 ### 4.3 What is deliberately not an event
 
@@ -1144,7 +1146,7 @@ Pinned to **0.145.0**.
 | `dynamicTools` at `thread/start` under `experimentalApi` | registration, **per thread** | verified type and requirement (V16) | metaharness-defined tools, whose list is the step's operations. **Per thread, not per turn** — a per-step change means a new thread |
 | `item/tool/call` (server→client) | call (blocking), for dynamic tools | verified (V15) | metaharness executes the tool; the model cannot reach the implementation or its credentials |
 | `item/commandExecution/requestApproval`, `item/fileChange/requestApproval`, `item/permissions/requestApproval` | **call (blocking)**, for exec, patch and permissions | verified (V15) | this is where Codex's effects are, so this covers most of what matters — but it is **not** every tool |
-| **`PreToolUse` hook, no matcher, calling back into metaharness** | **call (blocking)** | **driven, and the deny is measured (a7).** One live 0.145.0 run: the hook process received the call, metaharness answered `deny` with a reason, and **the vendor's own session record carries `Command blocked by PreToolUse hook: <the reason>` with an empty `Output:`** — the effect did not land. The model's closing message was *"The command was blocked and did not run."* The **`allow` half is undriven** and stays so | **the default seam on this adapter.** It admits or refuses by tool name and by whatever the envelope carries. **`apply_patch`'s input has no `file_path`, `old_string` or `new_string`**, so a Claude-style content rule does not port and must not be claimed to |
+| **`PreToolUse` hook, no matcher, calling back into metaharness** | **call (blocking)** | **driven, and the deny is measured (a7).** One live 0.145.0 run: the hook process received the call, metaharness answered `deny` with a reason, and **the vendor's own session record carries `Command blocked by PreToolUse hook: <the reason>` with an empty `Output:`** — the effect did not land. The model's closing message was *"The command was blocked and did not run."* The **`allow` half is undriven** and stays so (**superseded by a49**: a recorded 0.153.4 fixture run shows the `allow` half) | **the default seam on this adapter.** It admits or refuses by tool name and by whatever the envelope carries. **`apply_patch`'s input has no `file_path`, `old_string` or `new_string`**, so a Claude-style content rule does not port and must not be claimed to |
 | …where the hook is **declared** | — | **a7 correction.** `[hooks]` in **`config.toml`**, `PascalCase` event keys. `$CODEX_HOME/hooks.json` is **not a source this binary reads** — a `hooks.json` is a *plugin manifest's* file — and an unrecognised key under `[hooks]` is **dropped without failing the config load** | so a misconfigured seam is indistinguishable from a run in which nothing was attempted, and § 7.8's rule applies here with no discount: the seam is asserted from a hook request that arrived |
 | …what makes it **fire** in a scratch home | — | **a7, driven.** `--dangerously-bypass-hook-trust` on `exec`: a hook in a fresh `CODEX_HOME` is not *managed* and has no persisted trust, so without the flag it never runs. `codex features list` reports `hooks stable true` | the flag's name says the opposite of what it does here: the danger it warns of is running *somebody else's* hook unvetted, and the only hook in the scratch home is the one metaharness wrote into it |
 | …the hook's **tool vocabulary** | — | **a7, driven, and it is a third vocabulary.** The hook receives `tool_name: "Bash"` for a shell call — Claude Code's word, on this vendor's wire — while the *rollout* records the same call as `custom_tool_call{name:"exec"}` and the binary's model-facing list calls it `shell` | a rendering table built from the record would deny every shell call in frame mode and report it as a frame decision. The adapter renders to the **hook's** word |
@@ -1397,7 +1399,7 @@ approximately.
 | O1 | **Pin the vendor version.** The adapter declares the versions it was written against, and every `session.started` carries the version actually observed. A version outside the pin is a `warning`; under `--strict-version` it is a refusal before the run | the vendor formats are not stable public schemas. `trace-ir` versions its adapters for exactly this reason: *a verdict that changed because the reader changed is visible as such rather than as a change in the agent's behaviour* |
 | O2 | **Total projection.** Every vendor record becomes exactly one metaharness event, or an `opaque` carrying its declared type, subtype and digest. Nothing is dropped, and a record whose envelope was recognised but whose body was not is `opaque` too | D4 |
 | O3 | **Unknown fields tolerated, unknown records preserved.** An unrecognised *field* on a recognised record is ignored in silence; an unrecognised *record* is `opaque` | a reader that refused a transcript for carrying a new key is a reader that stops working on the next patch release, and it fails in the worst available way |
-| O4 | **Declare the capability set honestly.** The adapter publishes which tiers it delivers (§ 7.1), which commands it can honour, which it refuses, and — **a10** — which **decision modes** (§ 4.2) it delivers. A tier or mode it has not driven is declared `unverified`, and an embedder that *requires* an unverified one gets a refusal rather than a silent no-op | § 7.3's `turn/steer` row is the live case. The mode table's live case is `observe` on Codex: the mode is the `allow` half of that vendor's decision wire and only the `deny` half has been driven (a7), so it is `unverified` in the descriptor **and** refused at plan time — one decision, read from one place, so the published capability and the behaviour cannot drift apart |
+| O4 | **Declare the capability set honestly.** The adapter publishes which tiers it delivers (§ 7.1), which commands it can honour, which it refuses, and — **a10** — which **decision modes** (§ 4.2) it delivers. A tier or mode it has not driven is declared `unverified`, and an embedder that *requires* an unverified one gets a refusal rather than a silent no-op | § 7.3's `turn/steer` row is the live case. The mode table's live case is `observe` on Codex: the mode is the `allow` half of that vendor's decision wire and only the `deny` half has been driven (a7), so it is `unverified` in the descriptor **and** refused at plan time — one decision, read from one place, so the published capability and the behaviour cannot drift apart (**superseded by a49**: the Codex `allow` half is read from a recorded 0.153.4 fixture run, and `observe` is `delivered`) |
 | O5 | **No cross-class fallback, and no mid-run degradation.** A harness adapter never becomes a direct API call. An adapter that cannot honour a declared requirement refuses at start | § 11 |
 | O6 | **Publish the operation rendering as a value.** `capabilities <kind> --render` prints the neutral-operation → vendor-tool table without running anything | § 5.2. A rendering that only exists inside a run cannot be asserted on before one |
 | O7 | **Assert the argv, the environment and the hook definition before spawning.** The constructed command line, the constructed child environment, the ancestor walk for memory files (H11) and the emitted hook definition — `type: command`, neither `async` nor `asyncRewake` — are all values the adapter's tests read | `AEP` does exactly this for three flags *"because every one of the failures would be silent"*. The hook-definition clause is review finding **F6**: a hook that matches everything and does not block is a guard that has already stopped guarding |
@@ -1513,6 +1515,9 @@ metaharness project --from <format> <record> --out <f>  # a vendor record throug
 metaharness project [--from <format>] <file> --to trace-ir-summary  # the document's trace-ir-summary/1 (a42)
 metaharness audit --transcript <f> [--events <f>] [--spec <s>] [--auditor <p>]  # judge offline
 metaharness doctor <kind>                      # installed vendor version vs the adapter's pin
+metaharness aep drive <run|resume|status|eval> …  # AEP-governed work through a harness (0.7.0; a49 § 6)
+metaharness mcp-serve [--workspace <dir>] [--writable] [--allow-program <p>]… [--catalogue <f>]
+                                               # the owned tool surface on stdio, started by the harness (a49 § 6)
 ```
 
 `clap` derive throughout. `capabilities` exists so an embedder can refuse early rather than
@@ -4579,6 +4584,62 @@ unmapped.
   have, among them that the attestation half is metaharness's own claim (§ 8.3).
 - A run that wants no audit prints no report, so it prints none of the three lines. Its exit is
   § 9.4's table without `--audit`.
+
+### Amendment a49 — the Codex `allow` half is read from a recorded fixture run (2026-10-22)
+
+Coordinator decision, 2026-10-22, `story:first-user-documents-agree-with-cli` (D8): the published
+pages may say that Codex delivers `observe` only where a recorded run in `docs/research/` shows it,
+and say unverified otherwise.
+
+**1. What the text said.** § 4.2, § 7's Codex table and § 8.4 O4 say the `allow` half of the Codex
+decision wire is undriven and that `observe` on Codex is therefore `unverified` and refused at plan
+time. The descriptor has not said that since commit `748376f` (2026-08-23), which moved Codex
+`observe` from `unverified` to `delivered` on the live run named in § 4 below. Today
+`crates/metaharness-codex/src/seam.rs:101-117` declares `frame`, `ask` and `observe` all
+`delivered`, and `metaharness capabilities codex` prints that. The three passages keep their text
+and carry a marker naming this amendment.
+
+**2. The record.** `docs/research/2026-10-03-native-codex-fixture.md` exercised the installed
+codex-cli **0.153.4** against a loopback fixture provider, with a fresh home and no credential.
+Rows *Command exit0* and *Command exit7*: the real command ran and wrote the fixture marker. Row
+*Hook denial*: the real `PreToolUse` hook was answered `deny` and the otherwise identical command
+wrote no marker. The probe is `crates/metaharness-codex/tests/native_fixture.rs`: the launch asks
+for `DecisionMode::Observe` (`:214`), `answer_hooks` (`:399`) answers every hook request with
+`Decision::Allow` (`:418`) through the production `render_hook_response` unless the case denies,
+and `actual_codex_reports_command_success_failure_and_hook_denial` (`:907`) asserts the marker
+exists exactly when the hook was not denied (`:943`). a25 lists those allow and deny effects among
+the observations that moved the pin.
+
+**3. What it establishes.** On 0.153.4 the vendor honours an `allow` written in metaharness's
+response shape: the command runs and its effect lands. With a7's `deny`, both halves of the hook
+wire are observed, which is what § 4.2 required before `observe` could be declared. The descriptor
+stays as it is; the text now agrees with it.
+
+**4. Limits.**
+
+- A fixture provider, not a hosted model; no paid request was made.
+- The `allow` was written by the probe through the production renderer. The metaharness observe
+  loop answering the hook inside a full binary run is not what the record shows.
+- The probe is `#[ignore]` and needs the operator's native-evidence variables, so no gate runs it.
+  The record is the 2026-10-03 run, and a new pin needs a new one (a25).
+- The 2026-08-23 live run (`crates/metaharness/tests/live_codex.rs`, 0.144.0 resolved against a
+  0.145.0 pin) has no record under `docs/research/`. It stays cited as history, not as the
+  evidence for this declaration.
+
+**5. The pages.** `website/docs/control-seam.md` carries a mode table read from
+`metaharness::capabilities(kind)`; `website/docs/status.md` and `website/docs/harnesses/codex.md`
+cite the fixture record and this amendment. `crates/metaharness-cli/tests/website_claims.rs`
+(`the_control_seam_mode_table_is_each_adapters_declared_mode`) fails when the table and a
+descriptor disagree.
+
+**6. § 9.2 names the shipped verbs (documentation correction).** Coordinator decision D51. The
+binary carries eight verbs (`Cli::command()`, `crates/metaharness-cli/src/lib.rs`, `enum Verb`);
+§ 9.2 named six. `mcp-serve` shipped with the owned tool surface in 0.1.0 (commit `0bb3b39`, § 7.5
+strategy C, flags as `McpServeArgs` declares them) and `aep drive` in 0.7.0 (commit `1fbbd30`,
+ADR 0047). Both lines are added to § 9.2's block as they ship; no verb or flag changes.
+`tests/anti_drift.rs` (`every_verb_the_design_names_is_on_the_surface`) holds the binary to the
+eight, and `tests/adversary_w8u5.rs`
+(`the_design_cli_section_names_every_verb_the_binary_carries`) holds § 9.2 to the binary.
 
 ### Amendment a50 — the b10x kind names its API key by a secret name, over harness 0.18.0 (2026-10-22)
 

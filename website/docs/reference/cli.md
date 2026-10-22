@@ -10,16 +10,20 @@ sidebar_position: 1
 metaharness <VERB> [OPTIONS]
 ```
 
-Six verbs. Three of them need no model, no network and no credential.
+Eight verbs, the subcommands of `Cli` in `crates/metaharness-cli/src/lib.rs`; `tests/anti_drift.rs`
+and `tests/website_claims.rs` fail when this table and the binary disagree. `capabilities`,
+`conformance`, `doctor` and `project` need no model, no network and no credential.
 
 | Verb | What it does |
 |---|---|
+| `aep drive <COMMAND>` | AEP-governed work through a concrete harness: `run`, `resume`, `status` and `eval`. `run`, `resume` and a live `eval run` reach a model; see [the quickstart](../quickstart.md#aep-governed-workflows). |
 | `run <KIND>` | Run a harness session: events as JSON lines on stdout, commands as JSON lines on stdin. |
 | `capabilities <KIND>` | What an adapter says it can do: declared tiers, pinned versions, operation rendering. |
 | `conformance <KIND>` | The free conformance vectors: no model, no network, no credential. |
 | `doctor <KIND>` | The installed vendor version against the adapter's pin. |
 | `project <EVENTS>...` | Project an event stream into `trace-ir/1`, byte-stable, or render one or two runs as one static page (`--html`); `--from <FORMAT>` reads a vendor record through its adapter's production reader instead (design amendment a28); `--to trace-ir-summary` writes the document's summary instead (a42). |
 | `audit --transcript <FILE>` | Judge a transcript offline. **Refuses with exit 2**. |
+| `mcp-serve` | Serve the owned tool surface over MCP on stdio. Not typed by an operator: its client is the harness, which starts it from the `--mcp-config` that `run --tool-surface owned` (or `--catalogue`) writes, naming this binary. |
 
 `<KIND>` is `claude`, `codex` or `b10x`. The first two are vendors metaharness drives; the third is
 the beyond10x loop, which it observes — see [the b10x adapter](../harnesses/b10x.md).
@@ -300,10 +304,15 @@ published here.
 
 | Code | Meaning | An audited run's last line |
 |---|---|---|
-| `0` | Completed; every gating hermetic row is `ok`. | `audit verdict: ok (exit 0)` |
-| `1` | A gating row is `gap`, or the external auditor exited `1`. | `audit verdict: gap (exit 1)` |
-| `2` | Refused — a verb or option that is not built. | None: a refusal prints no report. |
-| `3` | A gating row is `unk`, the external auditor exited `3`, or the run did not complete with a terminal record. Not a softer `gap`. The harness itself may have exited `0`: the report then says `child exit: 0` beside `control verdict: unk`. | `audit verdict: no verdict (exit 3)` |
+| `0` | It ran, and every gating verdict is `ok`. | `audit verdict: ok (exit 0)` |
+| `1` | A gating verdict is `gap`, or the auditor exited `1`, or a conformance vector failed. | `audit verdict: gap (exit 1)` |
+| `2` | Metaharness could not do its job. **Never a verdict about the run**. | None: a refusal prints no report. |
+| `3` | Nobody found out — a gating row is `unk`, or the auditor exited `3`, or the harness died without a record. The harness itself may have exited `0`: the report then says `child exit: 0` beside `control verdict: unk`. | `audit verdict: no verdict (exit 3)` |
+
+The meanings are the crate's own table (`crates/metaharness-cli/src/lib.rs`, § Exit codes, which
+condenses design § 9.4), and `tests/website_claims.rs` holds this table to it. Exit `2` covers a
+verb or option that is not built, and every other refusal before or around a run. `3` is not a
+softer `gap`.
 
 An audited run (`--audit`, or `--hermetic strict`) ends its report on stderr with three lines, each
 a fact of its own (design amendment a48):

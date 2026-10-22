@@ -101,20 +101,25 @@ fn the_verbs_outside_the_rule_carry_flags_run_spec_does_not_have() {
     assert!(!derived.contains("to"));
 }
 
+/// The surface is exactly these verbs: a verb added or removed fails here, and
+/// `tests/website_claims.rs` holds the CLI reference page to the same `Cli::command()` set.
 #[test]
 fn every_verb_the_design_names_is_on_the_surface() {
     let cli = Cli::command();
     let verbs: BTreeSet<&str> = cli.get_subcommands().map(clap::Command::get_name).collect();
-    for expected in [
+    let expected: BTreeSet<&str> = [
+        "aep",
         "run",
         "capabilities",
         "conformance",
         "project",
         "audit",
         "doctor",
-    ] {
-        assert!(verbs.contains(expected), "{expected} is missing");
-    }
+        "mcp-serve",
+    ]
+    .into_iter()
+    .collect();
+    assert_eq!(verbs, expected);
 }
 
 #[test]

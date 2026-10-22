@@ -50,6 +50,20 @@ why `frame` is the default and `ask` is opt-in.
 **A run in `frame` mode is still fully audited.** Every mode emits `tool.decided`, and the decision
 census counts them all.
 
+### Which adapter delivers which mode
+
+| Mode | `claude` | `codex` | `b10x` |
+|---|---|---|---|
+| `frame` | `delivered` | `delivered` | `unverified` |
+| `ask` | `delivered` | `delivered` | `unverified` |
+| `observe` | `delivered` | `delivered` | `delivered` |
+
+Each cell is the adapter's own capability descriptor, `metaharness capabilities <kind>`, and the
+same value decides at plan time: a mode declared `unverified` is refused before anything spawns.
+`crates/metaharness-cli/tests/website_claims.rs` reads every cell against
+`capabilities(kind).decision_mode(mode)`. b10x refuses `frame` and `ask` because it has no
+decision seam; see [the b10x adapter](./harnesses/b10x.md).
+
 ### `observe` — measuring a harness nobody is steering
 
 It is **not** "run without a seam". The hook is installed exactly as it always is, every call
@@ -69,7 +83,11 @@ Three things it says out loud rather than leaving you to find out:
   enforces it tells the model "strictly only these operations" and makes that false.
 - **You have to ask for it.** The default is `frame`, and an adapter that has not driven the
   `allow` half of its own decision wire declares the mode `unverified` and refuses it before the
-  run — which is where Codex stands today.
+  run. Codex declares it `delivered` on 0.153.4: in a recorded run against a fixture provider, every
+  launch planned in `observe`, the real hook was answered `allow` and the real command wrote its
+  marker (`docs/research/2026-10-03-native-codex-fixture.md`; design amendment a49). The probe
+  wrote that `allow` through the production renderer; the record does not show metaharness's own
+  observe loop answering the hook inside a `metaharness run` process (a49 § 4).
 
 ## Whose tools: `--tool-surface`
 
@@ -116,5 +134,10 @@ The seam has been driven against a paid run on both vendors. On Codex, the evide
 
 So `tool.decide` is `Honoured` and the `call` tier is `Delivered`.
 
-The **`allow` half of that wire is not claimed** on Codex: only the deny path has been driven.
-That distinction is the point of `unverified` existing as a status.
+The **`allow` half of that wire** is read from a different record: on 0.153.4, against a fixture
+provider on loopback and with no model spend, the hook was answered `allow` and the real command ran
+and wrote its marker on exit 0 and exit 7, while the otherwise identical denied command wrote none
+(`docs/research/2026-10-03-native-codex-fixture.md`; design amendments a25 and a49). It is
+`delivered` on that record. A hosted model and a paid run are not what it was read from, and the
+`allow` was written by the probe (`crates/metaharness-codex/tests/native_fixture.rs`,
+`answer_hooks`), not by metaharness's observe loop inside a binary run (a49 § 4).

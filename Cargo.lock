@@ -1346,6 +1346,7 @@ dependencies = [
  "clap",
  "metaharness",
  "metaharness-aep",
+ "metaharness-docs",
  "metaharness-tools",
  "serde_json",
  "tempfile",

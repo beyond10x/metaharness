@@ -17,9 +17,10 @@ the migration leaves the pinned frame and transcript wire formats unchanged.
 | | |
 |---|---|
 | **AEP-governed model execution** | `metaharness aep drive` hosts model-backed maps, native execution hooks and live evaluation through AEP's neutral library. AEP retains planning, governance, command/operator execution, run storage and offline stream ingestion. Compatible paused runs keep their recorded spend limits. |
-| **Claude Code, driven end to end** | `metaharness run claude --hermetic -p "…"` spawns 2.1.304 or 2.1.305 into a scratch config home, installs a blocking `PreToolUse` hook, answers it per call, streams protocol events on stdout, takes steering on stdin, retains the raw transcript, and exits on the hermetic floor's verdict. |
+| **Claude Code, driven end to end** | `metaharness run claude --hermetic -p "…"` spawns 2.1.304 or 2.1.305 into a scratch config home, installs a blocking `PreToolUse` hook, answers it per call, streams protocol events on stdout, takes steering on stdin, retains the raw transcript, and exits `0` when the stream closes complete on the vendor's terminal record, `3` otherwise; `--audit` or `--hermetic strict` adds the hermetic floor's verdict ([quickstart](./quickstart.md#4-a-real-run)). |
 | **Codex, driven end to end (CX-M2)** | `metaharness run codex --hermetic -p "…"` starts a real `codex exec` into a scratch `CODEX_HOME`, copies `auth.json` per spawn, declares a blocking `PreToolUse` hook, and tails the **session rollout** for events. |
-| **Free verbs** | `capabilities`, `conformance` and `doctor` work with **no model and no credential**. `conformance claude` runs **30** vectors; `conformance codex` runs **23**, four of which drive a real process and the real hook program; `conformance b10x` runs **8** recorded launch/loop/version/enforcement checks. |
+| **Free verbs** | `capabilities`, `conformance` and `doctor` work with **no model and no credential**. `conformance claude` runs **30** vectors; `conformance codex` runs **24** vectors, **4** of which drive a real process and the real hook program; `conformance b10x` runs **8** vectors, recorded launch, loop, version and enforcement checks. Each count is `conformance_vectors(kind).len()`, checked by `crates/metaharness-cli/tests/website_claims.rs`. |
+| **Trace projection** | `metaharness project <EVENTS>` writes the `trace-ir/1` document (design amendment a15), `--to trace-ir-summary` its summary (a42), and `--html` one or two runs as one static page. `crates/metaharness-cli/tests/website_claims.rs` runs it over `evals/aep/runs/decomposer-clean.events.jsonl` and reads exit `0`. |
 | **Capture mode** | `--decisions observe` allows every call and records every call, through the same hook the enforcing modes use: the same events, the same correlation keys, `decided_by: "observe"`. It exists so an unsteered run and a steered one can be scored by one set of expectations. It is refused beside a `--frame`, and an `allow` on this wire *grants* — the attestation says so on every observe launch. |
 | **Plugin injection** | `--plugin-dir` copies the directory into the run's own scratch tree, digests it before the copy, and points the vendor at the copy. The copy list and the digest are readable off the launch plan before anything is spawned, and `session.started` carries the digest and the source — or an explicit empty list. A directory that is missing or empty is refused with exit `2`. |
 | **The loopback provider — Claude Code, and now the API-key half of Codex** | `--credentials loopback` puts metaharness in front of the vendor: the child holds a per-run placeholder and **no credential file at all**, and one custody attaches the real token on the way out. On Codex the child is pointed at the proxy by a `[model_providers.metaharness_loopback]` entry in the scratch `CODEX_HOME`. A **ChatGPT-plan** Codex login is **refused by name** — whether the vendor routes subscription traffic through a custom provider is unverified, and no run here guesses. |
@@ -39,13 +40,21 @@ vendor's own record says so**.
 
 And the grant half, driven 2026-08-23 (R2.4): the hook held a real `Bash` call, metaharness
 answered `permissionDecision: allow`, the command ran, and the rollout's own
-`custom_tool_call_output` carried its output — census `allowed: 1, denied: 0`. `--decisions
-observe` on Codex plans since that run. Caveat carried with the observation: the child's `PATH`
-resolved codex **0.144.0** while the pin is 0.145.0 (the two-install warning fired), so the grant
-is a driven fact about 0.144.0 and an inference about 0.145.0 until one machine holds one install.
+`custom_tool_call_output` carried its output — census `allowed: 1, denied: 0`. Caveat carried with
+the observation: the child's `PATH` resolved codex **0.144.0** while the pin was 0.145.0, and no
+record of that run is kept in `docs/research/`.
 
 That is the claim the whole design exists to be able to make, and it is the one thing no free test
 tier can reach.
+
+On the current pin, **0.153.4**, the grant half is read from a recorded run that spent nothing: a
+fixture provider on loopback, the real `codex` binary, every launch planned in `--decisions
+observe`, and the real hook was answered `allow` through the production renderer. The real
+command wrote its marker on exit 0 and on exit 7, and the otherwise identical denied command wrote none
+(`docs/research/2026-10-03-native-codex-fixture.md`, rows *Command exit0*, *Command exit7* and
+*Hook denial*). On the current pin, that record is the evidence for `observe` on Codex being
+declared `delivered` (design amendment a49). It is not a hosted model and not a paid run, and the
+`allow` was written by the probe, not by metaharness's observe loop inside a binary run (a49 § 4).
 
 Live runs cost money and are **never** part of `task check`. `METAHARNESS_LIVE=1` is checked by
 `metaharness aep drive run` and `metaharness aep drive resume` for a step map with an `llm` step, by
@@ -58,10 +67,10 @@ holds.
 
 | Verb | Waiting on |
 |---|---|
-| `metaharness project` | **Q9** — `trace-ir/1` has no reader. |
-| `metaharness audit` over a transcript metaharness did not itself launch | named at the refusal. |
+| `metaharness audit` over a transcript metaharness did not itself launch | named at the refusal: the launch facts the hermetic floor compares a record against. |
 
-Both refuse with **exit 2**, naming what they wait for.
+It refuses with **exit 2**, naming what it waits for (`crates/metaharness-cli/src/lib.rs`,
+`execute`; `website_claims.rs` reads the exit).
 
 | Also refused | Why |
 |---|---|
@@ -86,7 +95,7 @@ Both refuse with **exit 2**, naming what they wait for.
 | Q | Question |
 |---|---|
 | **Q1** | Per-step tool re-listing — is it a verifiable vendor behaviour? Gates `--tool-surface owned`. |
-| **Q9** | A reader for `trace-ir/1`. Gates `metaharness project`. |
+| **Q9** | A reader for `trace-ir/1` outside this repository. `metaharness project` writes the document since design amendment a15; what Q9 still gates is a reader, not the writer. |
 | **Q13** | Credential lifetime. Answered in part by the `auth.expired` event and the per-spawn copy. |
 
 Q19 — whether Codex loads a plugin from a directory placed in its `CODEX_HOME` — left this table on
@@ -126,8 +135,5 @@ CX-M2's single paid run surfaced **three real drifts**, and none was a bug in th
 
 ## The gate
 
-```bash
-task check      # cargo fmt --check + clippy -D warnings + cargo test --workspace
-```
-
-Green before any push. A paid run is never part of a gate.
+`task check`, with the steps it runs in order and what it needs installed, is on
+[the quickstart](./quickstart.md#the-gate), read from `Taskfile.yml`. Green before any push. A paid run is never part of a gate.
