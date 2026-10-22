@@ -1,5 +1,7 @@
 //! Synthetic vendor inputs for the ESS production target. Never reaches a provider.
-use metaharness_protocol::{Event, HermeticAttestation, HermeticMode, TranscriptRef};
+use metaharness_protocol::{
+    Event, HarnessSeam, HermeticAttestation, HermeticMode, Seam, TranscriptRef,
+};
 use serde_json::{Value, json};
 
 /// Construct a representative raw completion and read it through the production adapter.
@@ -74,8 +76,14 @@ pub fn observation(evidence: &str) -> Result<Vec<Event>, &'static str> {
             }
             records.push(("turn_context", context));
         }
-        "tool-success" | "tool-failure" | "tool-denied" | "tool-patch-success"
-        | "tool-unmatched" | "tool-contradictory" | "tool-incomplete" => {
+        "tool-success"
+        | "tool-failure"
+        | "tool-denied"
+        | "tool-patch-success"
+        | "tool-unmatched"
+        | "tool-contradictory"
+        | "tool-incomplete"
+        | "tool-exit-placeholder" => {
             if evidence != "tool-unmatched" {
                 records.push(("response_item",json!({"type":"function_call","call_id":"fixture-call","name":if evidence == "tool-patch-success" {"apply_patch"} else {"exec_command"},"arguments":"{}"})));
             }
@@ -85,12 +93,18 @@ pub fn observation(evidence: &str) -> Result<Vec<Event>, &'static str> {
                 "tool-patch-success" => records.push(("event_msg",json!({"type":"patch_apply_end","call_id":"fixture-call","status":"completed","success":true}))),
                 "tool-failure" => records.push(("event_msg",command("failed",json!(7)))),
                 "tool-denied" => records.push(("event_msg",command("declined",Value::Null))),
+                // Amendment a47 § 5: the vendor's -1 for an exit status it lost.
+                "tool-exit-placeholder" => records.push(("event_msg",command("failed",json!(-1)))),
                 _ => {
                     records.push(("event_msg",command("completed",json!(0))));
                     if evidence == "tool-contradictory" { records.push(("event_msg",command("failed",json!(7)))); }
                 }
             }
         }
+        "tool-mediated-success" => return Ok(mediated("completed", 0)),
+        "tool-mediated-failure" => return Ok(mediated("failed", 7)),
+        // Amendment a47 § 5: the vendor's -1 for a command it rejected.
+        "tool-mediated-exit-placeholder" => return Ok(mediated("declined", -1)),
         _ => return Err("unsupported observation evidence"),
     }
     records.push(("event_msg", complete));
@@ -113,4 +127,37 @@ pub fn observation(evidence: &str) -> Result<Vec<Event>, &'static str> {
     }
     events.extend(reader.finish().into_iter().map(|emission| emission.event));
     Ok(events)
+}
+
+/// A command the code-mode `exec` tool ran (amendment a47), read through the seam with the hook
+/// request that carried its id. Its completion is the last `tool.result`.
+fn mediated(status: &str, code: i32) -> Vec<Event> {
+    let mut seam = crate::CodexSeam::new(
+        TranscriptRef {
+            path: None,
+            digest: None,
+            bytes: None,
+        },
+        HermeticAttestation::none(HermeticMode::Off),
+        Seam::Hook,
+    );
+    let hook = json!({"turn_id":"fixture-turn","hook_event_name":"PreToolUse","tool_name":"Bash","tool_input":{"command":"true"},"tool_use_id":"exec-fixture"});
+    let lines = [
+        json!({"type":"event_msg","payload":{"type":"task_started","turn_id":"fixture-turn"}})
+            .to_string(),
+        json!({"type":"response_item","payload":{"type":"custom_tool_call","call_id":"fixture-call","name":"exec","input":"await tools.exec_command({cmd: \"true\"});"}}).to_string(),
+        crate::hook_request_line("fixture-hook", &hook.to_string()),
+        json!({"type":"event_msg","payload":{"type":"item_completed","turn_id":"fixture-turn","item":{"type":"CommandExecution","id":"exec-fixture","status":status,"exit_code":code}}}).to_string(),
+        json!({"type":"event_msg","payload":{"type":"task_complete","error":null}}).to_string(),
+    ];
+    let mut events = Vec::new();
+    for line in lines {
+        events.extend(
+            seam.push_line(&line)
+                .into_iter()
+                .map(|emission| emission.event),
+        );
+    }
+    events.extend(seam.finish().into_iter().map(|emission| emission.event));
+    events
 }

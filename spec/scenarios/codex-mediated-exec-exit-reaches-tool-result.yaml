@@ -1,0 +1,48 @@
+type: ess-scenario/1
+domain: metaharness.observations
+scenario: codex-mediated-exec-exit-reaches-tool-result
+summary: >-
+  A code-mode exec joined to its hook by id and turn reads exit 0 as success and 7 as failure; an
+  unmatched completion stays unverified; the vendor's -1 reads as failure without code.
+
+timeline:
+  - at: 2026-10-22T00:00:00Z
+    command: metaharness.observations.ReadToolOutcome
+    input:
+      evidence: tool-mediated-success
+    outcome: command-success
+    events:
+      - event: metaharness.observations.ToolOutcomeRead
+        payload: {known: true, failed: false, numeric_exit: true}
+  - at: 2026-10-22T00:00:01Z
+    command: metaharness.observations.ReadToolOutcome
+    input:
+      evidence: tool-mediated-failure
+    outcome: command-failure
+    events:
+      - event: metaharness.observations.ToolOutcomeRead
+        payload: {known: true, failed: true, numeric_exit: true}
+  - at: 2026-10-22T00:00:02Z
+    command: metaharness.observations.ReadToolOutcome
+    input:
+      evidence: tool-unmatched
+    outcome: unverified
+    events:
+      - event: metaharness.observations.ToolOutcomeRead
+        payload: {known: false, failed: false, numeric_exit: false}
+  - at: 2026-10-22T00:00:03Z
+    command: metaharness.observations.ReadToolOutcome
+    input:
+      evidence: tool-exit-placeholder
+    outcome: failure-without-code
+    events:
+      - event: metaharness.observations.ToolOutcomeRead
+        payload: {known: true, failed: true, numeric_exit: false}
+  - at: 2026-10-22T00:00:04Z
+    command: metaharness.observations.ReadToolOutcome
+    input:
+      evidence: tool-mediated-exit-placeholder
+    outcome: failure-without-code
+    events:
+      - event: metaharness.observations.ToolOutcomeRead
+        payload: {known: true, failed: true, numeric_exit: false}

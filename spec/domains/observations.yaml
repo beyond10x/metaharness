@@ -42,7 +42,7 @@ types:
     variants: [model-known, model-missing]
   - name: metaharness.observations.ToolEvidence
     kind: enum
-    variants: [tool-success, tool-failure, tool-denied, tool-patch-success, tool-unmatched, tool-contradictory, tool-incomplete]
+    variants: [tool-success, tool-failure, tool-denied, tool-patch-success, tool-unmatched, tool-contradictory, tool-incomplete, tool-mediated-success, tool-mediated-failure, tool-exit-placeholder, tool-mediated-exit-placeholder]
 
 commands:
   - name: metaharness.observations.ReadFinalAnswer
@@ -72,15 +72,18 @@ commands:
       - {name: evidence, type: metaharness.observations.ToolEvidence}
     outcomes:
       - name: command-success
-        when: evidence == tool-success
+        when:
+          any: [evidence == tool-success, evidence == tool-mediated-success]
         emits: [metaharness.observations.ToolOutcomeRead]
         payload: {metaharness.observations.ToolOutcomeRead: {known: true, failed: false, numeric_exit: true}}
       - name: command-failure
-        when: evidence == tool-failure
+        when:
+          any: [evidence == tool-failure, evidence == tool-mediated-failure]
         emits: [metaharness.observations.ToolOutcomeRead]
         payload: {metaharness.observations.ToolOutcomeRead: {known: true, failed: true, numeric_exit: true}}
       - name: failure-without-code
-        when: evidence == tool-denied
+        when:
+          any: [evidence == tool-denied, evidence == tool-exit-placeholder, evidence == tool-mediated-exit-placeholder]
         emits: [metaharness.observations.ToolOutcomeRead]
         payload: {metaharness.observations.ToolOutcomeRead: {known: true, failed: true, numeric_exit: false}}
       - name: success-without-code

@@ -21,10 +21,20 @@
 //! the hook received `tool_use_id: "exec-01ddc1c4-…"` while the rollout's output record for the
 //! same command carried `call_id: "call_YeJLGplD8vsAFctXshaYdCKK"`. Different namespaces, one call.
 //!
-//! So the seam emits both and joins neither. Correlating them would mean matching on arguments and
-//! timing, and a guard that guesses which call it is holding is worse than one that says it does
-//! not know. What is available to a reader that wants the join is `turn_id`, which both sides
-//! carry.
+//! So the seam emits both and does not join them. Correlating them would mean matching on
+//! arguments and timing, and a guard that guesses which call it is holding is worse than one that
+//! says it does not know.
+//!
+//! **The `exec-` id is not the code-mode call's, though: it is the command's, and the command's
+//! completion carries it (amendment a47).** Code mode mints a fresh `exec-<uuid>` for each tool the
+//! script calls (`codex-rs/core/src/tools/code_mode/mod.rs:374` at `rust-v0.153.4`); the hook
+//! receives it as `tool_use_id` and the turn's id as `turn_id` (`core/src/hook_runtime.rs:184-203`);
+//! the command's `item_completed` in the rollout carries the same id as `item.id` and the same turn
+//! id (`core/src/tools/events.rs:563-586`, `core/src/session/mod.rs:2439-2464`). So the seam records
+//! a `Bash` hook request under its `tool_use_id`, and a completion no rollout call record carries is
+//! correlated with it when both name the same turn. That is the vendor's id and the vendor's turn,
+//! never order, text or output. The outer `call_*` record stays unjoined, and a rollout read
+//! without the hook requests, as the viewer reads one, cannot make this join.
 //!
 //! What a **decision** is routed by is a third thing again: the hook process's own rendezvous name,
 //! which is correct even for a payload that arrives with no id at all. The three are kept apart on
@@ -134,6 +144,22 @@ impl CodexSeam {
             || parse_hook_input(&raw.to_string()).ok(),
             |text| parse_hook_input(text).ok(),
         );
+        // Amendment a47: the vendor's own id names the command's completion too. Recorded only
+        // when the payload carried it; the rendezvous name below is metaharness's and no vendor
+        // record can carry it.
+        let invalidated = parsed
+            .as_ref()
+            .and_then(|parsed| {
+                parsed.tool_use_id.as_deref().map(|id| {
+                    self.reader.observe_hook_request(
+                        id,
+                        parsed.tool_name.as_deref().unwrap_or_default(),
+                        parsed.turn_id.as_deref(),
+                        &parsed.tool_input,
+                    )
+                })
+            })
+            .unwrap_or_default();
         // An input metaharness could not read is still a hook that is waiting, and it is still a
         // call. It is presented with **no tool name** — which no frame admits and no operation
         // renders to, so the frame denies it — and under the rendezvous name, because a call id
@@ -149,7 +175,7 @@ impl CodexSeam {
             },
         );
         self.routes.insert(call_id.clone(), key);
-        Some(vec![Emission::untimed(Event::ToolRequested {
+        let mut emissions = vec![Emission::untimed(Event::ToolRequested {
             // Left empty here on purpose, exactly as `operations` is: what a call touches is
             // resolved by whoever holds the run's published rendering, and an adapter that
             // answered for itself would be a second owner of one rule (design § 8.4 O6).
@@ -163,7 +189,9 @@ impl CodexSeam {
             decision_required: true,
             deadline_ms: None,
             seam: self.seam,
-        })])
+        })];
+        emissions.extend(invalidated.into_iter().map(Emission::untimed));
+        Some(emissions)
     }
 }
 
@@ -404,8 +432,8 @@ mod tests {
                 ..
             } => {
                 // The **vendor's** hook id, not the rendezvous name. It does not join to the
-                // rollout's own `call_id` for the same call — driven, they differ — and this
-                // adapter claims no such join.
+                // rollout's own `call_id` for a code-mode call — driven, they differ — and this
+                // adapter claims no such join. The command's completion carries it (a47).
                 assert_eq!(call_id, "call-7");
                 assert_eq!(name, "shell");
                 assert_eq!(input["command"][0], "bash");

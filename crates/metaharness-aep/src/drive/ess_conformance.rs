@@ -2097,7 +2097,7 @@ fn ess_generated_scenarios_drive_production_targets() {
     if external.is_none() {
         assert_eq!(
             scenarios.len(),
-            107,
+            108,
             "review and update coverage deliberately"
         );
         assert_eq!(
