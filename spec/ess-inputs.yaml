@@ -13,3 +13,4 @@ scenarios:
   - scenarios/close-unsteered-explicit-error-outranks-success.yaml
   - scenarios/codex-mediated-exec-exit-reaches-tool-result.yaml
   - scenarios/finite-charge-above-positive-cap.yaml
+  - scenarios/narrowed-cap-below-assumed-charge.yaml

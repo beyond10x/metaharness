@@ -89,8 +89,8 @@ fn every_authored_scenario_is_decided_by_the_specifications_reference_model() {
         .collect();
     assert_eq!(
         authored.len(),
-        4,
-        "the unit selects three authored scenarios, and amendment a47 a fourth"
+        5,
+        "spec/ess-inputs.yaml selects five authored scenarios"
     );
     let (report, text) = reference_model(&["--suite".as_ref(), suite.as_os_str()]);
     let undecided: Vec<String> = authored

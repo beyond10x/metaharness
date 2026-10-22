@@ -9,6 +9,7 @@ was amended and the amendment is named here.
 
 - A Codex command run through the code-mode `exec` tool reaches `tool.result` with `exit_code`, `is_error` and `outcome_source`: its completion is joined to the `PreToolUse` request that carried the same `tool_use_id` and `turn_id`. It was null with `TOOL_OUTCOME_UNVERIFIED` "completion has no matching observed call" (a47).
 - A Codex command completion whose `exit_code` is the vendor's -1 placeholder (not started, rejected, or exit status lost) reaches `tool.result` with `exit_code` null and, when `failed` or `declined`, `is_error` true, on a direct call and a code-mode command alike. a22 passed the -1 through as an exit (a47 § 5).
+- `metaharness aep drive resume --budget-usd` refuses a cap below the run's remembered assumed charge before it writes anything, naming the remembered cap, the charge and the cap asked for; it persisted the cap, and every later resume of the run refused its terms as invalid. A cap equal to the charge is admitted, and `metaharness aep drive resume --help` states the floor for `--budget-usd` (a46).
 
 ## [0.13.0] — 2026-10-22
 

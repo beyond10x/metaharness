@@ -116,7 +116,8 @@ A step map with an `llm` step still requires `METAHARNESS_LIVE=1` on `run` and `
 replace both finite options with `--uncapped-budget --spend-authorization <reference>`, where the
 reference identifies the operator's authorization. Omitting a budget never selects uncapped
 spending. Invocation admission is saved before spawning; an absent observed cost stays unknown.
-Resume preserves the spending mode and authorization reference; a finite cap may only narrow.
+Resume preserves the spending mode and authorization reference; a finite cap may only narrow, down
+to the remembered assumed charge and not below it.
 Engine, tool, retry and cancellation limits still apply.
 
 ## Layout

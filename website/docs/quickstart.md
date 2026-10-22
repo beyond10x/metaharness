@@ -49,7 +49,8 @@ METAHARNESS_LIVE=1 metaharness aep drive run --project . --map development/defau
 ```
 
 Use `metaharness aep drive resume RUN_ID` with the same live opt-in for a compatible paused
-model-backed run. A resume may narrow its recorded budget, never raise it. Use `--aep-binary`
+model-backed run. A resume may narrow its recorded budget down to the remembered assumed charge
+and not below it, and may never raise it. Use `--aep-binary`
 when the planning executable must be selected explicitly. Live evaluation is
 `metaharness aep drive eval run`; `aep drive eval run --stream` reads recorded evidence offline.
 

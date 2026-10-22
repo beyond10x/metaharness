@@ -1769,10 +1769,43 @@ fn resumed_spend_terms_with_live(
                 aep_cli::money::dollars(narrowed)
             );
         }
+        if narrowed < terms.assumed_micro_usd_per_run {
+            return Err(CapBelowAssumedCharge {
+                remembered: terms,
+                narrowed_micro_usd: narrowed,
+            }
+            .into());
+        }
         terms.cap_micro_usd = narrowed;
     }
     Ok(Some(terms))
 }
+
+/// A resumed `--budget-usd` below the run's remembered assumed charge (amendment a46).
+///
+/// Persisted, it is terms every later resume refuses as invalid, so the run could never resume
+/// again. It is refused while the host prepares the resume, before AEP takes the run lock or
+/// rewrites the launch record.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+struct CapBelowAssumedCharge {
+    remembered: SpendTerms,
+    narrowed_micro_usd: u64,
+}
+
+impl std::fmt::Display for CapBelowAssumedCharge {
+    fn fmt(&self, formatter: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(
+            formatter,
+            "a resume may narrow its remembered cap {} down to its assumed charge {} per launch, \
+             not below it to {}; nothing was written and no model session was launched",
+            aep_cli::money::dollars(self.remembered.cap_micro_usd),
+            aep_cli::money::dollars(self.remembered.assumed_micro_usd_per_run),
+            aep_cli::money::dollars(self.narrowed_micro_usd),
+        )
+    }
+}
+
+impl std::error::Error for CapBelowAssumedCharge {}
 
 fn metaharness_preflight(map: &StepMap) -> Option<String> {
     let llm_steps = llm_step_count(map);
@@ -2548,8 +2581,26 @@ pub struct HostedRunArgs {
     #[command(flatten)]
     pub b10x: B10xOptions,
 }
+/// The help a resumed `--budget-usd` shows the operator (amendment a46 § 7).
+///
+/// The argument is the pinned AEP `ResumeArgs::budget_usd`, whose own help says only that a resume
+/// may lower the cap. This host also refuses a cap below the remembered assumed charge
+/// ([`CapBelowAssumedCharge`]), so the help says that too. `mut_arg` names the argument by its id
+/// and panics when the id is gone; `resume_budget_help_states_the_assumed_charge_floor` asserts the
+/// pinned crate still declares it.
+fn resumed_budget_help(argument: clap::Arg) -> clap::Arg {
+    argument
+        .help("Narrow the run's remembered dollar cap, not below its assumed charge per launch")
+        .long_help(
+            "Narrow the run's remembered dollar cap.\n\n\
+             A resume may lower the original cap down to the run's remembered assumed charge per \
+             launch, and may not raise it. A cap below that charge is refused before anything is \
+             written. The per-session assumption is remembered unchanged from the launch.",
+        )
+}
 /// Resume an existing governed run without changing its engine contract.
 #[derive(Debug, Args)]
+#[command(mut_arg("budget_usd", resumed_budget_help))]
 pub struct HostedResumeArgs {
     /// Optional restatement of the original outer USD spending policy.
     #[command(flatten)]

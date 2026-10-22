@@ -4,7 +4,8 @@
       "metaharness.observations/authored/codex-mediated-exec-exit-reaches-tool-result",
       "metaharness.session/authored/close-unsteered-budget-word-outranks-positive-verdict",
       "metaharness.session/authored/close-unsteered-explicit-error-outranks-success",
-      "metaharness.spending/authored/finite-charge-above-positive-cap"
+      "metaharness.spending/authored/finite-charge-above-positive-cap",
+      "metaharness.spending/authored/narrowed-cap-below-assumed-charge"
     ],
     "authored_sources": {
       "scenarios/close-unsteered-budget-word-outranks-positive-verdict.yaml": {
@@ -26,11 +27,16 @@
         "digest": "sha256:332e92c68316fd0ce92c57508642b8d8c62b2a0d1fde7a08bc4aa84c9ce3e4a1",
         "disposition": "accepted",
         "scenario": "metaharness.spending/authored/finite-charge-above-positive-cap"
+      },
+      "scenarios/narrowed-cap-below-assumed-charge.yaml": {
+        "digest": "sha256:e1f8d1d2d2e66436fd7541e94e1a4d95a8130b7fd11e197fd3b40b2c8ec415e4",
+        "disposition": "accepted",
+        "scenario": "metaharness.spending/authored/narrowed-cap-below-assumed-charge"
       }
     },
     "counts": {
-      "authored": 4,
-      "generated": 104,
+      "authored": 5,
+      "generated": 107,
       "outside": 0,
       "refused": 0
     },
@@ -71,6 +77,9 @@
       "metaharness.spending.CheckUncappedAuthorization/outcome/explicitly-authorized",
       "metaharness.spending.CheckUncappedAuthorization/outcome/unauthorized",
       "metaharness.spending.InvocationAdmission/invariant/at/metaharness.spending.RetainedAdmission/admission",
+      "metaharness.spending.NarrowResumedCap/outcome/cap-below-assumed-charge",
+      "metaharness.spending.NarrowResumedCap/outcome/cap-narrowed",
+      "metaharness.spending.NarrowResumedCap/outcome/narrowing-refused",
       "metaharness.spending.RecordFiniteLedger/outcome/recorded",
       "metaharness.spending.RecordInvocationAdmission/outcome/recorded",
       "metaharness.spending.SpendLedger/invariant/at/metaharness.spending.RetainedFiniteLedger/ledger",
@@ -154,9 +163,9 @@
     }
   },
   "provenance": {
-    "contract_digest": "0b39ef4d591a6a1dbcdd1b846cdd7e44f1f173d41a2ec64a38a5e53c01468c19",
+    "contract_digest": "895ff38742a307863f88ec04709e76fb564f7a6ab4b53ffc96d52dc52285b46e",
     "scenario_initial_state": "empty",
-    "spec_digest": "3b642feed51162dca76b5f7554e0918f90dc386180dfe6393a4922331a289987",
+    "spec_digest": "458bc6a9cf52bc739597d63ffd707705e52e395d050f6a59e27d444633946269",
     "specification_version": "v1",
     "suite_version": "ess-conformance/35",
     "system": "metaharness"
@@ -9658,6 +9667,929 @@
         }
       ]
     },
+    "metaharness.spending.NarrowResumedCap/outcome/cap-below-assumed-charge": {
+      "purpose": "`metaharness.spending.NarrowResumedCap` answers `cap-below-assumed-charge` for an input that satisfies that branch's guard",
+      "source": [
+        {
+          "kind": "command",
+          "name": "metaharness.spending.NarrowResumedCap"
+        },
+        {
+          "kind": "outcome",
+          "name": {
+            "command": "metaharness.spending.NarrowResumedCap",
+            "outcome": "cap-below-assumed-charge"
+          }
+        },
+        {
+          "kind": "event",
+          "name": "metaharness.boundaries.CallDecided"
+        },
+        {
+          "kind": "event",
+          "name": "metaharness.boundaries.FileRead"
+        },
+        {
+          "kind": "event",
+          "name": "metaharness.boundaries.FrameRead"
+        },
+        {
+          "kind": "event",
+          "name": "metaharness.observations.NativeStatusClassified"
+        },
+        {
+          "kind": "event",
+          "name": "metaharness.observations.PresenceRead"
+        },
+        {
+          "kind": "event",
+          "name": "metaharness.observations.ToolOutcomeRead"
+        },
+        {
+          "kind": "event",
+          "name": "metaharness.session.ClosureRecorded"
+        },
+        {
+          "kind": "event",
+          "name": "metaharness.session.CompletionClassified"
+        },
+        {
+          "kind": "event",
+          "name": "metaharness.session.PollingObserved"
+        },
+        {
+          "kind": "event",
+          "name": "metaharness.session.StreamClassified"
+        },
+        {
+          "kind": "event",
+          "name": "metaharness.spending.AdmissionRecorded"
+        },
+        {
+          "kind": "event",
+          "name": "metaharness.spending.FiniteLedgerRecorded"
+        },
+        {
+          "kind": "event",
+          "name": "metaharness.trace.CompletenessVerified"
+        },
+        {
+          "kind": "event",
+          "name": "metaharness.trace.DigestNamed"
+        },
+        {
+          "kind": "event",
+          "name": "metaharness.trace.FamilyClassified"
+        },
+        {
+          "kind": "event",
+          "name": "metaharness.trace.ProjectionRecorded"
+        },
+        {
+          "kind": "event",
+          "name": "metaharness.trace.RecordNormalized"
+        },
+        {
+          "kind": "event",
+          "name": "metaharness.trace.SessionSummarized"
+        },
+        {
+          "kind": "event",
+          "name": "metaharness.trace.UnkClassified"
+        },
+        {
+          "kind": "event",
+          "name": "metaharness.trace.VendorRecordProjected"
+        },
+        {
+          "kind": "event",
+          "name": "metaharness.trace.VendorSourceRefused"
+        },
+        {
+          "kind": "event",
+          "name": "metaharness.workspace.ContextFilesRecorded"
+        },
+        {
+          "kind": "event",
+          "name": "metaharness.workspace.ProcessWritePlanned"
+        },
+        {
+          "kind": "event",
+          "name": "metaharness.workspace.ScratchCwdAttested"
+        },
+        {
+          "kind": "error",
+          "name": "metaharness.spending.CapBelowAssumedCharge"
+        }
+      ],
+      "steps": [
+        {
+          "command": "metaharness.spending.NarrowResumedCap",
+          "input": {
+            "assumed_micro_usd_per_run": {
+              "kind": "literal",
+              "value": 100000.0
+            },
+            "narrowed_cap_micro_usd": {
+              "kind": "literal",
+              "value": 50000.0
+            },
+            "remembered_cap_micro_usd": {
+              "kind": "literal",
+              "value": 1000000.0
+            }
+          },
+          "step": "execute_command"
+        },
+        {
+          "outcome": {
+            "command": "metaharness.spending.NarrowResumedCap",
+            "outcome": "cap-below-assumed-charge"
+          },
+          "step": "expect_outcome"
+        },
+        {
+          "error": "metaharness.spending.CapBelowAssumedCharge",
+          "step": "expect_error"
+        },
+        {
+          "event": "metaharness.boundaries.CallDecided",
+          "step": "expect_no_event"
+        },
+        {
+          "event": "metaharness.boundaries.FileRead",
+          "step": "expect_no_event"
+        },
+        {
+          "event": "metaharness.boundaries.FrameRead",
+          "step": "expect_no_event"
+        },
+        {
+          "event": "metaharness.observations.NativeStatusClassified",
+          "step": "expect_no_event"
+        },
+        {
+          "event": "metaharness.observations.PresenceRead",
+          "step": "expect_no_event"
+        },
+        {
+          "event": "metaharness.observations.ToolOutcomeRead",
+          "step": "expect_no_event"
+        },
+        {
+          "event": "metaharness.session.ClosureRecorded",
+          "step": "expect_no_event"
+        },
+        {
+          "event": "metaharness.session.CompletionClassified",
+          "step": "expect_no_event"
+        },
+        {
+          "event": "metaharness.session.PollingObserved",
+          "step": "expect_no_event"
+        },
+        {
+          "event": "metaharness.session.StreamClassified",
+          "step": "expect_no_event"
+        },
+        {
+          "event": "metaharness.spending.AdmissionRecorded",
+          "step": "expect_no_event"
+        },
+        {
+          "event": "metaharness.spending.FiniteLedgerRecorded",
+          "step": "expect_no_event"
+        },
+        {
+          "event": "metaharness.trace.CompletenessVerified",
+          "step": "expect_no_event"
+        },
+        {
+          "event": "metaharness.trace.DigestNamed",
+          "step": "expect_no_event"
+        },
+        {
+          "event": "metaharness.trace.FamilyClassified",
+          "step": "expect_no_event"
+        },
+        {
+          "event": "metaharness.trace.ProjectionRecorded",
+          "step": "expect_no_event"
+        },
+        {
+          "event": "metaharness.trace.RecordNormalized",
+          "step": "expect_no_event"
+        },
+        {
+          "event": "metaharness.trace.SessionSummarized",
+          "step": "expect_no_event"
+        },
+        {
+          "event": "metaharness.trace.UnkClassified",
+          "step": "expect_no_event"
+        },
+        {
+          "event": "metaharness.trace.VendorRecordProjected",
+          "step": "expect_no_event"
+        },
+        {
+          "event": "metaharness.trace.VendorSourceRefused",
+          "step": "expect_no_event"
+        },
+        {
+          "event": "metaharness.workspace.ContextFilesRecorded",
+          "step": "expect_no_event"
+        },
+        {
+          "event": "metaharness.workspace.ProcessWritePlanned",
+          "step": "expect_no_event"
+        },
+        {
+          "event": "metaharness.workspace.ScratchCwdAttested",
+          "step": "expect_no_event"
+        },
+        {
+          "command": "metaharness.spending.NarrowResumedCap",
+          "input": {
+            "assumed_micro_usd_per_run": {
+              "kind": "literal",
+              "value": 100000.0
+            },
+            "narrowed_cap_micro_usd": {
+              "kind": "literal",
+              "value": 1.0
+            },
+            "remembered_cap_micro_usd": {
+              "kind": "literal",
+              "value": 1000000.0
+            }
+          },
+          "step": "execute_command"
+        },
+        {
+          "outcome": {
+            "command": "metaharness.spending.NarrowResumedCap",
+            "outcome": "cap-below-assumed-charge"
+          },
+          "step": "expect_outcome"
+        },
+        {
+          "error": "metaharness.spending.CapBelowAssumedCharge",
+          "step": "expect_error"
+        }
+      ]
+    },
+    "metaharness.spending.NarrowResumedCap/outcome/cap-narrowed": {
+      "purpose": "`metaharness.spending.NarrowResumedCap` answers `cap-narrowed` for an input that satisfies that branch's guard",
+      "source": [
+        {
+          "kind": "command",
+          "name": "metaharness.spending.NarrowResumedCap"
+        },
+        {
+          "kind": "outcome",
+          "name": {
+            "command": "metaharness.spending.NarrowResumedCap",
+            "outcome": "cap-narrowed"
+          }
+        },
+        {
+          "kind": "event",
+          "name": "metaharness.boundaries.CallDecided"
+        },
+        {
+          "kind": "event",
+          "name": "metaharness.boundaries.FileRead"
+        },
+        {
+          "kind": "event",
+          "name": "metaharness.boundaries.FrameRead"
+        },
+        {
+          "kind": "event",
+          "name": "metaharness.observations.NativeStatusClassified"
+        },
+        {
+          "kind": "event",
+          "name": "metaharness.observations.PresenceRead"
+        },
+        {
+          "kind": "event",
+          "name": "metaharness.observations.ToolOutcomeRead"
+        },
+        {
+          "kind": "event",
+          "name": "metaharness.session.ClosureRecorded"
+        },
+        {
+          "kind": "event",
+          "name": "metaharness.session.CompletionClassified"
+        },
+        {
+          "kind": "event",
+          "name": "metaharness.session.PollingObserved"
+        },
+        {
+          "kind": "event",
+          "name": "metaharness.session.StreamClassified"
+        },
+        {
+          "kind": "event",
+          "name": "metaharness.spending.AdmissionRecorded"
+        },
+        {
+          "kind": "event",
+          "name": "metaharness.spending.FiniteLedgerRecorded"
+        },
+        {
+          "kind": "event",
+          "name": "metaharness.trace.CompletenessVerified"
+        },
+        {
+          "kind": "event",
+          "name": "metaharness.trace.DigestNamed"
+        },
+        {
+          "kind": "event",
+          "name": "metaharness.trace.FamilyClassified"
+        },
+        {
+          "kind": "event",
+          "name": "metaharness.trace.ProjectionRecorded"
+        },
+        {
+          "kind": "event",
+          "name": "metaharness.trace.RecordNormalized"
+        },
+        {
+          "kind": "event",
+          "name": "metaharness.trace.SessionSummarized"
+        },
+        {
+          "kind": "event",
+          "name": "metaharness.trace.UnkClassified"
+        },
+        {
+          "kind": "event",
+          "name": "metaharness.trace.VendorRecordProjected"
+        },
+        {
+          "kind": "event",
+          "name": "metaharness.trace.VendorSourceRefused"
+        },
+        {
+          "kind": "event",
+          "name": "metaharness.workspace.ContextFilesRecorded"
+        },
+        {
+          "kind": "event",
+          "name": "metaharness.workspace.ProcessWritePlanned"
+        },
+        {
+          "kind": "event",
+          "name": "metaharness.workspace.ScratchCwdAttested"
+        },
+        {
+          "kind": "view",
+          "name": "metaharness.session.RetainedClosure"
+        },
+        {
+          "kind": "view",
+          "name": "metaharness.spending.RetainedAdmission"
+        },
+        {
+          "kind": "view",
+          "name": "metaharness.spending.RetainedFiniteLedger"
+        },
+        {
+          "kind": "view",
+          "name": "metaharness.trace.RetainedProjection"
+        }
+      ],
+      "steps": [
+        {
+          "step": "query_view",
+          "view": "metaharness.session.RetainedClosure"
+        },
+        {
+          "step": "snapshot_view",
+          "view": "metaharness.session.RetainedClosure"
+        },
+        {
+          "step": "query_view",
+          "view": "metaharness.spending.RetainedAdmission"
+        },
+        {
+          "step": "snapshot_view",
+          "view": "metaharness.spending.RetainedAdmission"
+        },
+        {
+          "step": "query_view",
+          "view": "metaharness.spending.RetainedFiniteLedger"
+        },
+        {
+          "step": "snapshot_view",
+          "view": "metaharness.spending.RetainedFiniteLedger"
+        },
+        {
+          "step": "query_view",
+          "view": "metaharness.trace.RetainedProjection"
+        },
+        {
+          "step": "snapshot_view",
+          "view": "metaharness.trace.RetainedProjection"
+        },
+        {
+          "command": "metaharness.spending.NarrowResumedCap",
+          "input": {
+            "assumed_micro_usd_per_run": {
+              "kind": "literal",
+              "value": 1.0
+            },
+            "narrowed_cap_micro_usd": {
+              "kind": "literal",
+              "value": 50000.0
+            },
+            "remembered_cap_micro_usd": {
+              "kind": "literal",
+              "value": 1000000.0
+            }
+          },
+          "step": "execute_command"
+        },
+        {
+          "outcome": {
+            "command": "metaharness.spending.NarrowResumedCap",
+            "outcome": "cap-narrowed"
+          },
+          "step": "expect_outcome"
+        },
+        {
+          "step": "expect_no_error"
+        },
+        {
+          "step": "expect_no_events"
+        },
+        {
+          "event": "metaharness.boundaries.CallDecided",
+          "step": "expect_no_event"
+        },
+        {
+          "event": "metaharness.boundaries.FileRead",
+          "step": "expect_no_event"
+        },
+        {
+          "event": "metaharness.boundaries.FrameRead",
+          "step": "expect_no_event"
+        },
+        {
+          "event": "metaharness.observations.NativeStatusClassified",
+          "step": "expect_no_event"
+        },
+        {
+          "event": "metaharness.observations.PresenceRead",
+          "step": "expect_no_event"
+        },
+        {
+          "event": "metaharness.observations.ToolOutcomeRead",
+          "step": "expect_no_event"
+        },
+        {
+          "event": "metaharness.session.ClosureRecorded",
+          "step": "expect_no_event"
+        },
+        {
+          "event": "metaharness.session.CompletionClassified",
+          "step": "expect_no_event"
+        },
+        {
+          "event": "metaharness.session.PollingObserved",
+          "step": "expect_no_event"
+        },
+        {
+          "event": "metaharness.session.StreamClassified",
+          "step": "expect_no_event"
+        },
+        {
+          "event": "metaharness.spending.AdmissionRecorded",
+          "step": "expect_no_event"
+        },
+        {
+          "event": "metaharness.spending.FiniteLedgerRecorded",
+          "step": "expect_no_event"
+        },
+        {
+          "event": "metaharness.trace.CompletenessVerified",
+          "step": "expect_no_event"
+        },
+        {
+          "event": "metaharness.trace.DigestNamed",
+          "step": "expect_no_event"
+        },
+        {
+          "event": "metaharness.trace.FamilyClassified",
+          "step": "expect_no_event"
+        },
+        {
+          "event": "metaharness.trace.ProjectionRecorded",
+          "step": "expect_no_event"
+        },
+        {
+          "event": "metaharness.trace.RecordNormalized",
+          "step": "expect_no_event"
+        },
+        {
+          "event": "metaharness.trace.SessionSummarized",
+          "step": "expect_no_event"
+        },
+        {
+          "event": "metaharness.trace.UnkClassified",
+          "step": "expect_no_event"
+        },
+        {
+          "event": "metaharness.trace.VendorRecordProjected",
+          "step": "expect_no_event"
+        },
+        {
+          "event": "metaharness.trace.VendorSourceRefused",
+          "step": "expect_no_event"
+        },
+        {
+          "event": "metaharness.workspace.ContextFilesRecorded",
+          "step": "expect_no_event"
+        },
+        {
+          "event": "metaharness.workspace.ProcessWritePlanned",
+          "step": "expect_no_event"
+        },
+        {
+          "event": "metaharness.workspace.ScratchCwdAttested",
+          "step": "expect_no_event"
+        },
+        {
+          "step": "query_view",
+          "view": "metaharness.session.RetainedClosure"
+        },
+        {
+          "step": "expect_view_unchanged",
+          "view": "metaharness.session.RetainedClosure"
+        },
+        {
+          "step": "query_view",
+          "view": "metaharness.spending.RetainedAdmission"
+        },
+        {
+          "step": "expect_view_unchanged",
+          "view": "metaharness.spending.RetainedAdmission"
+        },
+        {
+          "step": "query_view",
+          "view": "metaharness.spending.RetainedFiniteLedger"
+        },
+        {
+          "step": "expect_view_unchanged",
+          "view": "metaharness.spending.RetainedFiniteLedger"
+        },
+        {
+          "step": "query_view",
+          "view": "metaharness.trace.RetainedProjection"
+        },
+        {
+          "step": "expect_view_unchanged",
+          "view": "metaharness.trace.RetainedProjection"
+        }
+      ]
+    },
+    "metaharness.spending.NarrowResumedCap/outcome/narrowing-refused": {
+      "purpose": "`metaharness.spending.NarrowResumedCap` answers `narrowing-refused` for an input no other branch's guard claims",
+      "source": [
+        {
+          "kind": "command",
+          "name": "metaharness.spending.NarrowResumedCap"
+        },
+        {
+          "kind": "outcome",
+          "name": {
+            "command": "metaharness.spending.NarrowResumedCap",
+            "outcome": "narrowing-refused"
+          }
+        },
+        {
+          "kind": "event",
+          "name": "metaharness.boundaries.CallDecided"
+        },
+        {
+          "kind": "event",
+          "name": "metaharness.boundaries.FileRead"
+        },
+        {
+          "kind": "event",
+          "name": "metaharness.boundaries.FrameRead"
+        },
+        {
+          "kind": "event",
+          "name": "metaharness.observations.NativeStatusClassified"
+        },
+        {
+          "kind": "event",
+          "name": "metaharness.observations.PresenceRead"
+        },
+        {
+          "kind": "event",
+          "name": "metaharness.observations.ToolOutcomeRead"
+        },
+        {
+          "kind": "event",
+          "name": "metaharness.session.ClosureRecorded"
+        },
+        {
+          "kind": "event",
+          "name": "metaharness.session.CompletionClassified"
+        },
+        {
+          "kind": "event",
+          "name": "metaharness.session.PollingObserved"
+        },
+        {
+          "kind": "event",
+          "name": "metaharness.session.StreamClassified"
+        },
+        {
+          "kind": "event",
+          "name": "metaharness.spending.AdmissionRecorded"
+        },
+        {
+          "kind": "event",
+          "name": "metaharness.spending.FiniteLedgerRecorded"
+        },
+        {
+          "kind": "event",
+          "name": "metaharness.trace.CompletenessVerified"
+        },
+        {
+          "kind": "event",
+          "name": "metaharness.trace.DigestNamed"
+        },
+        {
+          "kind": "event",
+          "name": "metaharness.trace.FamilyClassified"
+        },
+        {
+          "kind": "event",
+          "name": "metaharness.trace.ProjectionRecorded"
+        },
+        {
+          "kind": "event",
+          "name": "metaharness.trace.RecordNormalized"
+        },
+        {
+          "kind": "event",
+          "name": "metaharness.trace.SessionSummarized"
+        },
+        {
+          "kind": "event",
+          "name": "metaharness.trace.UnkClassified"
+        },
+        {
+          "kind": "event",
+          "name": "metaharness.trace.VendorRecordProjected"
+        },
+        {
+          "kind": "event",
+          "name": "metaharness.trace.VendorSourceRefused"
+        },
+        {
+          "kind": "event",
+          "name": "metaharness.workspace.ContextFilesRecorded"
+        },
+        {
+          "kind": "event",
+          "name": "metaharness.workspace.ProcessWritePlanned"
+        },
+        {
+          "kind": "event",
+          "name": "metaharness.workspace.ScratchCwdAttested"
+        },
+        {
+          "kind": "error",
+          "name": "metaharness.spending.NarrowingRefused"
+        }
+      ],
+      "steps": [
+        {
+          "command": "metaharness.spending.NarrowResumedCap",
+          "input": {
+            "assumed_micro_usd_per_run": {
+              "kind": "literal",
+              "value": 0.0
+            },
+            "narrowed_cap_micro_usd": {
+              "kind": "literal",
+              "value": 50000.0
+            },
+            "remembered_cap_micro_usd": {
+              "kind": "literal",
+              "value": 1000000.0
+            }
+          },
+          "step": "execute_command"
+        },
+        {
+          "outcome": {
+            "command": "metaharness.spending.NarrowResumedCap",
+            "outcome": "narrowing-refused"
+          },
+          "step": "expect_outcome"
+        },
+        {
+          "error": "metaharness.spending.NarrowingRefused",
+          "step": "expect_error"
+        },
+        {
+          "event": "metaharness.boundaries.CallDecided",
+          "step": "expect_no_event"
+        },
+        {
+          "event": "metaharness.boundaries.FileRead",
+          "step": "expect_no_event"
+        },
+        {
+          "event": "metaharness.boundaries.FrameRead",
+          "step": "expect_no_event"
+        },
+        {
+          "event": "metaharness.observations.NativeStatusClassified",
+          "step": "expect_no_event"
+        },
+        {
+          "event": "metaharness.observations.PresenceRead",
+          "step": "expect_no_event"
+        },
+        {
+          "event": "metaharness.observations.ToolOutcomeRead",
+          "step": "expect_no_event"
+        },
+        {
+          "event": "metaharness.session.ClosureRecorded",
+          "step": "expect_no_event"
+        },
+        {
+          "event": "metaharness.session.CompletionClassified",
+          "step": "expect_no_event"
+        },
+        {
+          "event": "metaharness.session.PollingObserved",
+          "step": "expect_no_event"
+        },
+        {
+          "event": "metaharness.session.StreamClassified",
+          "step": "expect_no_event"
+        },
+        {
+          "event": "metaharness.spending.AdmissionRecorded",
+          "step": "expect_no_event"
+        },
+        {
+          "event": "metaharness.spending.FiniteLedgerRecorded",
+          "step": "expect_no_event"
+        },
+        {
+          "event": "metaharness.trace.CompletenessVerified",
+          "step": "expect_no_event"
+        },
+        {
+          "event": "metaharness.trace.DigestNamed",
+          "step": "expect_no_event"
+        },
+        {
+          "event": "metaharness.trace.FamilyClassified",
+          "step": "expect_no_event"
+        },
+        {
+          "event": "metaharness.trace.ProjectionRecorded",
+          "step": "expect_no_event"
+        },
+        {
+          "event": "metaharness.trace.RecordNormalized",
+          "step": "expect_no_event"
+        },
+        {
+          "event": "metaharness.trace.SessionSummarized",
+          "step": "expect_no_event"
+        },
+        {
+          "event": "metaharness.trace.UnkClassified",
+          "step": "expect_no_event"
+        },
+        {
+          "event": "metaharness.trace.VendorRecordProjected",
+          "step": "expect_no_event"
+        },
+        {
+          "event": "metaharness.trace.VendorSourceRefused",
+          "step": "expect_no_event"
+        },
+        {
+          "event": "metaharness.workspace.ContextFilesRecorded",
+          "step": "expect_no_event"
+        },
+        {
+          "event": "metaharness.workspace.ProcessWritePlanned",
+          "step": "expect_no_event"
+        },
+        {
+          "event": "metaharness.workspace.ScratchCwdAttested",
+          "step": "expect_no_event"
+        },
+        {
+          "command": "metaharness.spending.NarrowResumedCap",
+          "input": {
+            "assumed_micro_usd_per_run": {
+              "kind": "literal",
+              "value": 100000.0
+            },
+            "narrowed_cap_micro_usd": {
+              "kind": "literal",
+              "value": 0.0
+            },
+            "remembered_cap_micro_usd": {
+              "kind": "literal",
+              "value": 1000000.0
+            }
+          },
+          "step": "execute_command"
+        },
+        {
+          "outcome": {
+            "command": "metaharness.spending.NarrowResumedCap",
+            "outcome": "narrowing-refused"
+          },
+          "step": "expect_outcome"
+        },
+        {
+          "error": "metaharness.spending.NarrowingRefused",
+          "step": "expect_error"
+        },
+        {
+          "command": "metaharness.spending.NarrowResumedCap",
+          "input": {
+            "assumed_micro_usd_per_run": {
+              "kind": "literal",
+              "value": 100000.0
+            },
+            "narrowed_cap_micro_usd": {
+              "kind": "literal",
+              "value": 50000.0
+            },
+            "remembered_cap_micro_usd": {
+              "kind": "literal",
+              "value": 0.0
+            }
+          },
+          "step": "execute_command"
+        },
+        {
+          "outcome": {
+            "command": "metaharness.spending.NarrowResumedCap",
+            "outcome": "narrowing-refused"
+          },
+          "step": "expect_outcome"
+        },
+        {
+          "error": "metaharness.spending.NarrowingRefused",
+          "step": "expect_error"
+        },
+        {
+          "command": "metaharness.spending.NarrowResumedCap",
+          "input": {
+            "assumed_micro_usd_per_run": {
+              "kind": "literal",
+              "value": 1.0
+            },
+            "narrowed_cap_micro_usd": {
+              "kind": "literal",
+              "value": 50000.0
+            },
+            "remembered_cap_micro_usd": {
+              "kind": "literal",
+              "value": 0.0
+            }
+          },
+          "step": "execute_command"
+        },
+        {
+          "outcome": {
+            "command": "metaharness.spending.NarrowResumedCap",
+            "outcome": "narrowing-refused"
+          },
+          "step": "expect_outcome"
+        },
+        {
+          "error": "metaharness.spending.NarrowingRefused",
+          "step": "expect_error"
+        }
+      ]
+    },
     "metaharness.spending.RecordFiniteLedger/outcome/recorded": {
       "purpose": "`metaharness.spending.RecordFiniteLedger` answers `recorded` for an input no other branch's guard claims",
       "source": [
@@ -10267,6 +11199,147 @@
         },
         {
           "error": "metaharness.spending.InvalidFiniteTerms",
+          "step": "expect_error"
+        }
+      ]
+    },
+    "metaharness.spending/authored/narrowed-cap-below-assumed-charge": {
+      "purpose": "A resume narrowing a $1 cap to $0.05 under an assumed charge of $0.10 per launch is refused before anything is persisted; narrowing it to exactly the charge is admitted.",
+      "source": [
+        {
+          "kind": "domain",
+          "name": "metaharness.spending"
+        },
+        {
+          "kind": "command",
+          "name": "metaharness.spending.NarrowResumedCap"
+        },
+        {
+          "kind": "outcome",
+          "name": {
+            "command": "metaharness.spending.NarrowResumedCap",
+            "outcome": "cap-below-assumed-charge"
+          }
+        },
+        {
+          "kind": "outcome",
+          "name": {
+            "command": "metaharness.spending.NarrowResumedCap",
+            "outcome": "cap-narrowed"
+          }
+        },
+        {
+          "kind": "error",
+          "name": "metaharness.spending.CapBelowAssumedCharge"
+        }
+      ],
+      "steps": [
+        {
+          "command": "metaharness.spending.NarrowResumedCap",
+          "input": {
+            "assumed_micro_usd_per_run": {
+              "kind": "literal",
+              "value": 100000.0
+            },
+            "narrowed_cap_micro_usd": {
+              "kind": "literal",
+              "value": 50000.0
+            },
+            "remembered_cap_micro_usd": {
+              "kind": "literal",
+              "value": 1000000.0
+            }
+          },
+          "step": "execute_command"
+        },
+        {
+          "outcome": {
+            "command": "metaharness.spending.NarrowResumedCap",
+            "outcome": "cap-below-assumed-charge"
+          },
+          "step": "expect_outcome"
+        },
+        {
+          "error": "metaharness.spending.CapBelowAssumedCharge",
+          "step": "expect_error"
+        },
+        {
+          "command": "metaharness.spending.NarrowResumedCap",
+          "input": {
+            "assumed_micro_usd_per_run": {
+              "kind": "literal",
+              "value": 100000.0
+            },
+            "narrowed_cap_micro_usd": {
+              "kind": "literal",
+              "value": 100000.0
+            },
+            "remembered_cap_micro_usd": {
+              "kind": "literal",
+              "value": 1000000.0
+            }
+          },
+          "step": "execute_command"
+        },
+        {
+          "outcome": {
+            "command": "metaharness.spending.NarrowResumedCap",
+            "outcome": "cap-narrowed"
+          },
+          "step": "expect_outcome"
+        },
+        {
+          "command": "metaharness.spending.NarrowResumedCap",
+          "input": {
+            "assumed_micro_usd_per_run": {
+              "kind": "literal",
+              "value": 100000.0
+            },
+            "narrowed_cap_micro_usd": {
+              "kind": "literal",
+              "value": 1000000.0
+            },
+            "remembered_cap_micro_usd": {
+              "kind": "literal",
+              "value": 1000000.0
+            }
+          },
+          "step": "execute_command"
+        },
+        {
+          "outcome": {
+            "command": "metaharness.spending.NarrowResumedCap",
+            "outcome": "cap-narrowed"
+          },
+          "step": "expect_outcome"
+        },
+        {
+          "command": "metaharness.spending.NarrowResumedCap",
+          "input": {
+            "assumed_micro_usd_per_run": {
+              "kind": "literal",
+              "value": 100000.0
+            },
+            "narrowed_cap_micro_usd": {
+              "kind": "literal",
+              "value": 50000.0
+            },
+            "remembered_cap_micro_usd": {
+              "kind": "literal",
+              "value": 100000.0
+            }
+          },
+          "step": "execute_command"
+        },
+        {
+          "outcome": {
+            "command": "metaharness.spending.NarrowResumedCap",
+            "outcome": "cap-below-assumed-charge"
+          },
+          "step": "expect_outcome"
+        },
+        {
+          "error": "metaharness.spending.CapBelowAssumedCharge",
           "step": "expect_error"
         }
       ]
