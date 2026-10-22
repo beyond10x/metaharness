@@ -1,0 +1,14 @@
+{
+  "at": "2026-10-22T00:01:18Z",
+  "actor": "human:timo",
+  "artifact": "story:malformed-steering-line-answered-by-id",
+  "kind": "story",
+  "revision": 9,
+  "change": {
+    "change": "evidence",
+    "kind": "review_outcome",
+    "source": "review-result:adr0096-w7u3-review",
+    "review": "review-result:adr0096-w7u3-review",
+    "outcome": "fixed"
+  }
+}

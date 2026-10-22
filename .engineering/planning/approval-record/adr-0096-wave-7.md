@@ -6,7 +6,7 @@ status: draft
 title: 'Wave 7 of 2026-10-21: the trace formats beside trace-ir/1, decided per row'
 relations:
 - decides: story:retire-trace-formats-beside-trace-ir
-revision: 2
+revision: 3
 ---
 ## Status
 
@@ -19,10 +19,10 @@ release. Skill: aep:implementing 0.23.2, wave mode. Tree `mh-w7-trace-projection
 
 | unit | story | commit | review passes |
 |---|---|---|---|
-| 1 | `story:retire-trace-formats-beside-trace-ir` | pending | pending |
-| 2 | `story:spec-auditor-pairing-checked-before-spawn` | pending | pending |
-| 3 | `story:malformed-steering-line-answered-by-id` | pending | pending |
-| 4 | `story:metaharness-live-scope-documented` | pending | pending |
+| 1 | `story:retire-trace-formats-beside-trace-ir` | `d54df1d` | adversary pass 1 (10 findings), revision 1; `review-result:adr0096-w7u1-review`, outcome fixed |
+| 2 | `story:spec-auditor-pairing-checked-before-spawn` | `79567eb`, merged `1976f88` | adversary pass 1 (4 findings), revision 1; `review-result:adr0096-w7u2-review`, outcome fixed |
+| 3 | `story:malformed-steering-line-answered-by-id` | `bddd79c` | adversary pass 1 (5 findings), revision 1; `review-result:adr0096-w7u3-review`, outcome fixed |
+| 4 | `story:metaharness-live-scope-documented` | `f8756da`, merged `19f7e64` | none: documentation and one test |
 
 Unit 1: the per-row decision in the story body; then `trace-ir-summary/1` declared in
 `spec/domains/trace.yaml`, produced in `metaharness-protocol`, exposed as `metaharness project --to
@@ -55,3 +55,6 @@ Sequencing from `b10x-chef-orchestrator` (2026-10-21):
 - 2026-10-21: unit 1 implemented; adversary pass 1: 10 findings, revision 1 dispatched.
 - 2026-10-21: units 2–4 stories created and moved to `active`; wave 8 drafts filed; units 2 and 3
   dispatched.
+- 2026-10-22: units 1, 2 and 4 merged into the integration branch; unit 3 committed at `bddd79c` with
+  the ESS conformance probe polling on `EventPoll::Progress`; `metaharness-aep` 93 passed, 0 failed.
+- 2026-10-22: wave 8 approved (`approval-record:adr-0096-wave-8`).
