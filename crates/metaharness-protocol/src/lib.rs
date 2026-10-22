@@ -44,7 +44,9 @@ pub use capability::{
     AdapterClass, AdapterId, Capabilities, CommandSupport, Tier, TierStatus, decision_modes_all,
     required_commands,
 };
-pub use command::{Command, CommandOutcome, Decision, RefusalCode, Refused};
+pub use command::{
+    Command, CommandOutcome, Decision, RefusalCode, Refused, UNREAD_COMMAND_ID, command_line_id,
+};
 pub use conformance::{ConformanceTier, ContractObligations, Obligation, VectorOutcome};
 pub use envelope::{
     CredentialChannel, EnvelopeAssessment, EnvelopeMismatch, MountAccess, NetworkPolicy,
@@ -63,7 +65,7 @@ pub use frame::{
 };
 pub use framing::{
     COMMAND_FORMAT, COMMAND_NAMES, CommandLine, EVENT_FORMAT, EVENT_NAMES, EventLine, EventStream,
-    FramingError, RunId, parse_command_line, parse_event_line,
+    FramingError, RunId, parse_command_bytes, parse_command_line, parse_event_line,
 };
 pub use hermetic::{
     Assertion, DeclaredControl, HermeticAttestation, HermeticMode, HermeticRow, ImposedControl,

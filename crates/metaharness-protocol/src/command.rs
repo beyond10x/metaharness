@@ -201,6 +201,25 @@ pub enum Command {
     },
 }
 
+/// The id a `command.result` carries when the command line it answers had no id that could be
+/// read (amendment a44).
+pub const UNREAD_COMMAND_ID: &str = "-";
+
+/// The id to answer a command line under when the line did not parse: its `id` field when the
+/// line is a JSON object and that field is a string, and [`UNREAD_COMMAND_ID`] otherwise. A line
+/// that is not UTF-8 is not JSON, so its id is never read.
+///
+/// A line that does not parse is still answered, because silence is not a legal outcome
+/// (design D9), and a controller correlates the answer by the id it sent (amendment a44).
+#[must_use]
+pub fn command_line_id(line: impl AsRef<[u8]>) -> String {
+    std::str::from_utf8(line.as_ref())
+        .ok()
+        .and_then(|line| serde_json::from_str::<Value>(line).ok())
+        .and_then(|value| value.get("id")?.as_str().map(ToString::to_string))
+        .unwrap_or_else(|| UNREAD_COMMAND_ID.to_string())
+}
+
 impl Command {
     /// The command's wire name.
     #[must_use]

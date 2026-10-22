@@ -92,8 +92,14 @@ A vendor binary that is absent or unrunnable arrives as `Refusal::Io`, which is 
 | Method | Returns |
 |---|---|
 | `run.next_event()` | `io::Result<Option<EventLine>>` |
+| `run.poll_event()` | `io::Result<EventPoll>`: one event, or `Progress`, `Idle`, `DecisionPending` or `Ended`, without waiting out a decision budget. The poll that sees the child's stream end never returns `stream.closed`; it comes on a later poll |
+| `run.drain()` | `io::Result<Vec<EventLine>>`: every event to the end, deciding nothing |
 | `run.send(Command)` | `io::Result<CommandOutcome>` |
 | `run.send_as(id, Command)` | the same, with your own command id |
+| `run.send_line(line)` | `io::Result<Option<CommandOutcome>>` for one raw `metaharness.command/1` line, text or bytes: the binary's answer to a steering line, `None` for a blank one |
+
+A line that does not parse, or is not UTF-8, is answered `MALFORMED` under its string `id` or
+`-`. Once `stream.closed` is out, all three still return the outcome and put no event after it.
 
 ## Why the two vendors need different runners
 

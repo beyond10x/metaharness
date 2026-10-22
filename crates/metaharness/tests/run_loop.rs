@@ -13,12 +13,13 @@
 //! `METAHARNESS_LIVE=1`.
 
 use metaharness::protocol::{
-    Command, CommandOutcome, CredentialSource, DecidedBy, Decision, DecisionMode, Digest, Event,
-    EvidenceLine, Frame, Handoff, HermeticMode, Kind, NodeRef, Operation, OperationSet,
-    RefusalCode, RunSpec, Seam, StepRef, SubjectScope, ToolSurface, WorkflowRef,
+    CloseReason, Command, CommandLine, CommandOutcome, CredentialSource, DecidedBy, Decision,
+    DecisionMode, Digest, Event, EvidenceLine, Frame, Handoff, HermeticMode, Kind, NodeRef,
+    Operation, OperationSet, RefusalCode, Refused, RunSpec, Seam, StepRef, SubjectScope,
+    ToolSurface, WorkflowRef, parse_command_bytes, parse_command_line, stream_completeness,
 };
 use metaharness::{
-    ClaudeSeams, Input, ManualClock, Metaharness, Refusal, Run, ScriptStep, ScriptedLog,
+    ClaudeSeams, EventPoll, Input, ManualClock, Metaharness, Refusal, Run, ScriptStep, ScriptedLog,
     ScriptedRunner, ScriptedSeams, capabilities, metaharness_deadline_ms, request_digest,
     start_refusals, vendor_hook_timeout_ms, warning,
 };
@@ -939,6 +940,251 @@ fn a_command_always_produces_exactly_one_result_even_when_it_is_refused() {
             ..
         }
     ));
+}
+
+/// Amendment a44, design D11: an embedder holding a raw command line gets the answer the binary
+/// gives, in the same words. A line that does not parse is refused `MALFORMED` under its string
+/// `id` or under `-`; a blank line is no command and gets nothing; a line that parses takes the
+/// road `send_as` takes.
+#[test]
+fn a_raw_command_line_that_does_not_parse_is_answered_malformed_under_its_id_or_a_dash() {
+    let started = start(
+        Metaharness::new(Kind::Claude).with_decisions(DecisionMode::Ask),
+        vec![ScriptStep::line(INIT), ScriptStep::line(END)],
+    );
+    let mut run = started.run;
+    let flat = r#"{"format":"metaharness.command/1","id":"c1","command":"tool.decide","call_id":"t1","decision":"allow"}"#;
+    let ghost = r#"{"format":"metaharness.command/1","id":"c2","command":"tool.decide","call_id":"ghost","decision":{"decision":"allow"}}"#;
+    let malformed = |line: &str| CommandOutcome::Refused {
+        refused: Refused::new(
+            RefusalCode::Malformed,
+            parse_command_line(line)
+                .expect_err("the line does not parse")
+                .to_string(),
+        ),
+    };
+
+    assert_eq!(run.send_line(flat).unwrap(), Some(malformed(flat)));
+    assert_eq!(
+        run.send_line("not json").unwrap(),
+        Some(malformed("not json"))
+    );
+    assert_eq!(run.send_line("").unwrap(), None);
+    assert_eq!(run.send_line("   ").unwrap(), None);
+    let parsed = run
+        .send_line(ghost)
+        .unwrap()
+        .expect("a line that parses is answered");
+    assert!(matches!(
+        &parsed,
+        CommandOutcome::Refused { refused } if refused.code == RefusalCode::UnknownCall
+    ));
+    run.drain().unwrap();
+
+    let answered: Vec<(String, CommandOutcome)> = run
+        .events()
+        .iter()
+        .filter_map(|event| match event {
+            Event::CommandResult { id, outcome } => Some((id.clone(), outcome.clone())),
+            _ => None,
+        })
+        .collect();
+    assert_eq!(
+        answered,
+        vec![
+            ("c1".to_string(), malformed(flat)),
+            ("-".to_string(), malformed("not json")),
+            ("c2".to_string(), parsed),
+        ]
+    );
+}
+
+/// Amendment a44: a raw line that is not UTF-8 is answered once, refused `MALFORMED` under `-`,
+/// with the bytes decoder's reason, which says it is not UTF-8 and carries none of the line. A
+/// line after it is read and applied as usual; a blank line in bytes gets nothing.
+#[test]
+fn a_raw_line_that_is_not_utf8_is_answered_malformed_under_a_dash_quoting_none_of_it() {
+    let started = start(
+        Metaharness::new(Kind::Claude).with_decisions(DecisionMode::Ask),
+        vec![ScriptStep::line(INIT), ScriptStep::line(END)],
+    );
+    let mut run = started.run;
+    let line: &[u8] =
+        b"{\"format\":\"metaharness.command/1\",\"id\":\"c1\",\"command\":\"halt\",\"reason\":\"SECRET-\xf6-SECRET\"}";
+    let reason = parse_command_bytes(line)
+        .expect_err("not UTF-8")
+        .to_string();
+    assert!(reason.starts_with("not UTF-8"), "{reason}");
+    let malformed = CommandOutcome::Refused {
+        refused: Refused::new(RefusalCode::Malformed, reason),
+    };
+
+    assert_eq!(run.send_line(line).unwrap(), Some(malformed.clone()));
+    assert_eq!(run.send_line(b" \t\r".as_slice()).unwrap(), None);
+    let halt = br#"{"format":"metaharness.command/1","id":"h1","command":"halt","reason":"stop"}"#;
+    assert_eq!(
+        run.send_line(halt.as_slice()).unwrap(),
+        Some(CommandOutcome::Ok { applies_at: None })
+    );
+    let delivered = run.drain().unwrap();
+
+    for line in &delivered {
+        let wire = serde_json::to_string(line).unwrap();
+        assert!(!wire.contains("SECRET"), "{wire}");
+    }
+    let answered: Vec<(String, CommandOutcome)> = run
+        .events()
+        .iter()
+        .filter_map(|event| match event {
+            Event::CommandResult { id, outcome } => Some((id.clone(), outcome.clone())),
+            _ => None,
+        })
+        .collect();
+    assert_eq!(
+        answered,
+        vec![
+            ("-".to_string(), malformed),
+            ("h1".to_string(), CommandOutcome::Ok { applies_at: None }),
+        ]
+    );
+    assert!(matches!(
+        run.events().last(),
+        Some(Event::StreamClosed {
+            reason: CloseReason::SteerHalt,
+            ..
+        })
+    ));
+}
+
+/// One of every command the vocabulary has, each well formed.
+fn one_of_every_command() -> Vec<Command> {
+    vec![
+        Command::ToolDecide {
+            call_id: "t1".into(),
+            decision: Decision::Allow,
+        },
+        Command::FrameSet {
+            frame: Box::new(frame_admitting(OperationSet::of([Operation::FileRead])).seal()),
+        },
+        Command::MessageInject {
+            text: "late".into(),
+        },
+        Command::Steer {
+            text: "late".into(),
+        },
+        Command::PermissionSet {
+            posture: "default".into(),
+        },
+        Command::Interrupt {
+            reason: "late".into(),
+        },
+        Command::Halt {
+            reason: "late".into(),
+        },
+    ]
+}
+
+/// Amendment a44 on a17 rule 1: `stream.closed` is the last line. A command sent once it is out
+/// still returns its outcome to the caller, by every road a command takes into a run (`send`,
+/// `send_as`, and `send_line` with a line that parses and one that does not), and none of them
+/// puts an event after the marker.
+#[test]
+fn no_command_sent_after_the_marker_puts_an_event_after_it() {
+    let started = start(
+        Metaharness::new(Kind::Claude).with_decisions(DecisionMode::Ask),
+        vec![ScriptStep::line(INIT), ScriptStep::line(END)],
+    );
+    let mut run = started.run;
+    let delivered = run.drain().unwrap();
+    assert_eq!(
+        delivered.last().map(|line| line.event.name()),
+        Some("stream.closed")
+    );
+    let before = run.events().to_vec();
+
+    for command in one_of_every_command() {
+        let name = command.name();
+        run.send(command)
+            .unwrap_or_else(|error| panic!("send {name}: {error}"));
+    }
+    for command in one_of_every_command() {
+        let name = command.name();
+        run.send_as("late", command)
+            .unwrap_or_else(|error| panic!("send_as {name}: {error}"));
+    }
+    for command in one_of_every_command() {
+        let line = serde_json::to_string(&CommandLine::new("late-line", command)).unwrap();
+        assert!(
+            run.send_line(&line).unwrap().is_some(),
+            "a line that parses returns its outcome: {line}"
+        );
+    }
+    assert!(matches!(
+        run.send_line("not json").unwrap(),
+        Some(CommandOutcome::Refused { refused }) if refused.code == RefusalCode::Malformed
+    ));
+
+    assert_eq!(
+        run.next_event().unwrap().map(|line| line.event.name()),
+        None,
+        "an event was delivered after the marker"
+    );
+    assert_eq!(run.events(), before.as_slice());
+    assert!(
+        stream_completeness(run.events()).is_complete(),
+        "{:?}",
+        stream_completeness(run.events())
+    );
+}
+
+/// Amendment a44 § 4: the marker is not written in the poll that sees the child's stream end. A
+/// caller that hands over the commands it holds before each poll, as the binary does with its
+/// steering lines, therefore has them answered before the marker, and the marker stays last.
+#[test]
+fn a_command_handed_over_after_the_stream_ends_is_answered_before_the_marker() {
+    let started = start(
+        Metaharness::new(Kind::Claude).with_decisions(DecisionMode::Ask),
+        vec![ScriptStep::line(INIT), ScriptStep::line(END)],
+    );
+    let mut run = started.run;
+    while !run
+        .events()
+        .iter()
+        .any(|event| matches!(event, Event::SessionEnded { .. }))
+    {
+        assert!(
+            !matches!(run.poll_event().unwrap(), EventPoll::Ended),
+            "the record ends with a terminal record"
+        );
+    }
+
+    let the_end = run.poll_event().unwrap();
+    assert!(
+        !matches!(
+            &the_end,
+            EventPoll::Event(line) if matches!(line.event, Event::StreamClosed { .. })
+        ),
+        "the marker went out in the poll that saw the stream end, before the caller could hand \
+         over what it held"
+    );
+    let ghost = r#"{"format":"metaharness.command/1","id":"g1","command":"tool.decide","call_id":"ghost","decision":{"decision":"allow"}}"#;
+    assert!(run.send_line(ghost).unwrap().is_some());
+
+    let rest: Vec<&'static str> = run
+        .drain()
+        .unwrap()
+        .iter()
+        .map(|line| line.event.name())
+        .collect();
+    assert_eq!(rest.last(), Some(&"stream.closed"));
+    assert_eq!(
+        rest.iter()
+            .filter(|name| **name == "command.result")
+            .count(),
+        1,
+        "the command is answered once, before the marker: {rest:?}"
+    );
+    assert!(stream_completeness(run.events()).is_complete());
 }
 
 #[test]

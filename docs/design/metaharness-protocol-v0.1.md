@@ -690,6 +690,15 @@ when it ended, so it says so in a line of its own.
    carry — *and then the file stopped, on purpose*. Turning that into a verdict about
    `nothing-was-moved` belongs to the consumer that owns the checker.
 
+> **Amendment a44, 2026-10-22, on rule 1.** A command sent after the marker does not move it.
+> `Run::send`, `Run::send_as` and `Run::send_line` still apply the command and return its outcome.
+> Once the marker is out they queue no event, so nothing follows it. Before this, such a command's
+> `command.result` was delivered after the marker. The binary reached that with a steering line
+> read while the run waited for its child to exit. The marker is also no longer written in the poll
+> that saw the child's stream end. That poll returns `Progress` or a queued event instead, so a
+> caller that hands over its commands before every poll has the commands it held answered before
+> the marker (a44 § 4).
+
 **Additive on D3's rule, and the vocabulary moves from nineteen to twenty.** A reader of an older
 stream finds no marker and is told `truncated`, which is the correct answer about a file whose
 producer never promised to close it — and is why the absence is *named* rather than defaulted to
@@ -987,6 +996,11 @@ re-sealing it answers by deleting the evidence.
 `metaharness.command/1`. Every command carries an `id` and produces exactly one `command.result`
 event. **Decision D9 — a command that can be silently ignored is a control surface that cannot be
 tested**, so silence is not a legal outcome; refusal is.
+
+> **Amendment a44, 2026-10-21.** That includes a line that does not parse as a command, and a
+> line that is not UTF-8. It is answered `MALFORMED`, under the `id` it carried or under `-`. One
+> case gets no event: a command sent after `stream.closed`. Its outcome goes back to the caller
+> only, because the marker is the last line (a17).
 
 | command | payload | tier it needs | refusal when unavailable |
 |---|---|---|---|
@@ -3737,3 +3751,90 @@ vendor's handling of it is unknown (`codex-0.153.4-hook-failure.txt`).
 sorted order, so `"onFailure": "block"` sits between `command` and `timeout`. No C1 fixture and no
 spawn vector carries the settings document, and none of them moved. The hook program's text moved
 (§ 5). Its output for every reply metaharness writes did not.
+
+### Amendment a44 — a command line that does not parse is answered `MALFORMED` (2026-10-21)
+
+**1. The defect.** § 6 says every command produces exactly one `command.result` and that silence
+is not a legal outcome (D9). § 6.1 gives `MALFORMED` to a command that "did not parse". The binary
+did neither for a line that failed to parse. `steer` in `metaharness-cli` handed a parsed line to
+`Run::send_as`. For a line that did not parse it wrote one line on stderr and emitted no event,
+although its doc comment said the refusal "goes out as an event under the id the caller used, or
+under `-`". A controller that reads only stdout waited for an id that never came back.
+
+The public commands page made that likely. Its only example wrote `"decision":"allow"`, a string.
+`Decision` is an internally tagged enum, so the decoder takes `"decision":{"decision":"allow"}`.
+The page's line was refused as `malformed tool.decide: invalid type: string "allow", expected
+internally tagged enum Decision`, and nothing answered it.
+
+Review of the first fix found two older roads to the same silence. The binary read stdin with
+`read_line`, which refuses a line that is not UTF-8, and its reader took that refusal for the end of
+input. That line and every line after it went unread, a `halt` among them. And a command sent after
+`stream.closed` had its `command.result` delivered after the marker, against a17 rule 1.
+
+**2. The decision.** Every non-blank command line gets exactly one `command.result`. A line that
+does not parse as a `metaharness.command/1` command is answered `result: refused` with code
+`MALFORMED`, and the `reason` is the framing error's text, word for word. That covers a line that
+is not JSON or not an object, a missing or unknown format tag, an unknown command name, and a
+payload that does not fit its name. The answer's `id` is the line's `id` when the line is a JSON
+object whose `id` is a string. Otherwise it is `-`. A blank or whitespace-only line is not a
+command and gets no answer, as before.
+
+A line that is not UTF-8 is answered the same way, under `-`. Its reason says the line is not UTF-8
+and at which byte offset the first invalid sequence starts. It carries no byte of the line: a line
+that is not text may hold anything, and the event stream is not the place to copy it to. Reading
+goes on after it.
+
+```json
+{"format":"metaharness.event/1","seq":4,"run":"…","event":"command.result","id":"c1","outcome":{"result":"refused","refused":{"code":"MALFORMED","reason":"malformed tool.decide: invalid type: string \"allow\", expected internally tagged enum Decision"}}}
+```
+
+**3. One road for both faces (D11).** The answer is the library's: `Run::send_line` takes one raw
+line, as text or as bytes, and answers it. The binary reads stdin as bytes and calls it with each
+line, so a line that is not UTF-8 reaches it like any other. The binary no longer parses a command
+itself. An embedder that reads lines gets the same refusal in the same words. `Run::send` and
+`Run::send_as` take a typed `Command`, which cannot fail to parse. The rules are stated once, in
+`metaharness-protocol`: `command_line_id` and `UNREAD_COMMAND_ID` for the id, `parse_command_bytes`
+and `FramingError::NotUtf8` for a line that is not UTF-8.
+
+**4. After the marker (a17).** `stream.closed` stays the last line. Once it is written, `send`,
+`send_as` and `send_line` apply the command and return its outcome to the caller, and queue no
+event. The marker is not written in the poll that sees the child's stream end. That poll returns
+`Progress`, or the first event wind-up queued, and the marker comes on a later poll once nothing is
+queued. The binary hands every line in its steering channel to `send_line` before every poll.
+This widens `Progress` as a23 defines it: it also means the poll consumed the end of the stream.
+
+Lines already in the binary's steering channel when the child exits are answered before the
+marker. Measured against the alternative: with the guard alone and the marker written in the poll
+that saw the end, two lines written to the binary's stdin while its child was exiting got no answer
+at all, and the marker was the last line
+(`adversary_w7u3_a_line_read_while_the_run_winds_up_is_not_answered_after_the_marker` in
+`metaharness-cli`). With the marker on a later poll, both are answered before it.
+
+**5. What does not change.** The event, the outcome shape and the five codes are as § 4 and § 6.1
+define them. `-` is a value of the existing `id` string, not a new field. A refused line touches no
+pending call, and its answer is queued and delivered with the next poll like every other
+`command.result`. The stderr line is gone: the event carries the same words, and no other
+`command.result` is echoed to stderr.
+
+**6. The pages.** `website/docs/protocol/commands.md` shows the nested form for `allow` and
+`deny`, and the answer to a line that does not parse. `website/docs/protocol/events.md` shows a
+`tool.requested` line the decoder takes. Its example lacked `seq`, `run`, `input`,
+`decision_required` and `seam`, and did not decode. A test in `metaharness-protocol` (`tests/commands_page.rs`) reads both pages. It takes
+every fenced block whose info string starts with `json`, backtick or tilde, of any fence length,
+and fails on a page with none. It decodes every line with `parse_command_line` or
+`parse_event_line`, chosen by the line's format tag. On the commands page it also compares the
+quoted `MALFORMED` answer, id and reason, with what the decoder says about the page's first allow
+written flat.
+
+**7. Limits.**
+
+- A caller that uses `-` as its own id cannot tell its answer from the answer to a line with no
+  readable id. The page says not to use it.
+- An `id` that is a number or any other non-string is answered under `-`, because an id on this
+  wire is a string.
+- Two lines with no readable id get two answers under `-`. Only their order tells them apart.
+- A command sent after `stream.closed` gets no event. A library caller has its outcome as the
+  return value. The binary has nowhere to put it, so a steering line that reaches the binary's
+  channel after its last hand-over before the marker is answered by nothing (§ 4).
+- The specification models no steering line (`spec/domains/session.yaml` leaves steering
+  precedence unmapped), and this amendment adds no scenario to it.

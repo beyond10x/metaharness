@@ -3,6 +3,19 @@
 What changed. The design document carries *why*; where code and design disagreed, the design
 was amended and the amendment is named here.
 
+## [Unreleased]
+
+### Changed
+
+- **Breaking** for a library caller that matches `FramingError` exhaustively: it gains `NotUtf8 { valid_up_to }`, which `parse_command_bytes` returns for a command line that is not UTF-8 (a44).
+- `Run::poll_event` no longer writes `stream.closed` in the poll that sees the child's stream end. That poll returns `Progress` or the first event wind-up queued, and the marker comes on a later poll, so commands handed over before each poll are answered before it (a44 § 4).
+
+### Fixed
+
+- `metaharness run` answers a steering line that does not parse with one `command.result`, refused `MALFORMED` in the decoder's words, under the line's string `id` or `-`; it wrote one stderr line and no event. A line that is not UTF-8 is answered under `-`, quoting none of its bytes; it ended the stdin reader, so no later line was read. `Run::send_line` gives an embedder the same answer for text or bytes (a44).
+- A command sent after `stream.closed` returns its outcome and queues no event; its `command.result` came after the marker (a17 rule 1, a44).
+- The commands page shows the nested `decision` object its flat example lacked, and the events page's `tool.requested` example decodes; it lacked `seq`, `run`, `input`, `decision_required` and `seam` (a44).
+
 ## [0.12.0] — 2026-10-21
 
 ### Changed

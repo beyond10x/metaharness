@@ -243,6 +243,14 @@ pub enum FramingError {
         /// What the parser said.
         detail: String,
     },
+    /// The line was not UTF-8, so it was no JSON at all. Only the offset is kept: a line that is
+    /// not text may hold anything, and a refusal that quoted it would copy that wherever the
+    /// refusal goes (amendment a44).
+    NotUtf8 {
+        /// How many bytes from the start of the line are valid UTF-8. The first invalid sequence
+        /// starts here.
+        valid_up_to: usize,
+    },
 }
 
 impl fmt::Display for FramingError {
@@ -260,6 +268,12 @@ impl fmt::Display for FramingError {
             }
             FramingError::Malformed { name, detail } => {
                 write!(f, "malformed {name}: {detail}")
+            }
+            FramingError::NotUtf8 { valid_up_to } => {
+                write!(
+                    f,
+                    "not UTF-8: the first invalid byte sequence starts at byte {valid_up_to}"
+                )
             }
         }
     }
@@ -329,4 +343,17 @@ pub fn parse_command_line(line: &str) -> Result<CommandLine, FramingError> {
         name,
         detail: error.to_string(),
     })
+}
+
+/// Read one command line as raw bytes, the way it comes off a pipe.
+///
+/// # Errors
+///
+/// [`FramingError::NotUtf8`] for a line that is not UTF-8, which is refused before its JSON is
+/// read. A line that is UTF-8 is read exactly as [`parse_command_line`] reads it.
+pub fn parse_command_bytes(line: &[u8]) -> Result<CommandLine, FramingError> {
+    let line = std::str::from_utf8(line).map_err(|error| FramingError::NotUtf8 {
+        valid_up_to: error.valid_up_to(),
+    })?;
+    parse_command_line(line)
 }

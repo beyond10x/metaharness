@@ -14,8 +14,9 @@ use metaharness_protocol::{
     Frame, FramingError, Handoff, HermeticAttestation, HermeticMode, ImposedControl, Kind, Line,
     McpServerRef, NodeRef, Operation, OperationSet, PermissionDenial, PluginRef, RateLimitInfo,
     RefusalCode, Refused, RunId, RunSpec, Seam, StepOutcome, StepRef, SubjectScope, ToolSurface,
-    TranscriptRef, Usage, WithheldTool, WorkflowRef, ir_family, parse_command_line,
-    parse_event_line, project, required_commands, warning_code,
+    TranscriptRef, UNREAD_COMMAND_ID, Usage, WithheldTool, WorkflowRef, command_line_id, ir_family,
+    parse_command_bytes, parse_command_line, parse_event_line, project, required_commands,
+    warning_code,
 };
 use serde_json::json;
 
@@ -838,4 +839,71 @@ fn a_stream_with_no_marker_is_truncated_and_not_complete() {
         metaharness_protocol::StreamCompleteness::Truncated
     );
     assert!(metaharness_protocol::stream_completeness(&every_event()).is_complete());
+}
+
+/// Amendment a44: a command line that does not parse is still answered, and its answer carries
+/// the id the line carried when one can be read: the `id` field, when the line is a JSON object
+/// and that field is a string. Anything else is answered under `-`.
+#[test]
+fn an_unparsed_command_line_is_answered_under_its_string_id_or_a_dash() {
+    assert_eq!(UNREAD_COMMAND_ID, "-");
+    for (line, id) in [
+        (
+            r#"{"format":"metaharness.command/1","id":"c1","command":"tool.decide","call_id":"t1","decision":"allow"}"#,
+            "c1",
+        ),
+        (
+            r#"{"format":"metaharness.command/2","id":"c3","command":"halt","reason":"x"}"#,
+            "c3",
+        ),
+        (r#"{"id":"","command":"halt"}"#, ""),
+        (r#"{"id":7,"command":"halt"}"#, "-"),
+        (r#"{"id":null,"command":"halt"}"#, "-"),
+        (r#"{"command":"halt"}"#, "-"),
+        (r#"["id","c1"]"#, "-"),
+        (r#"{"id":"c1""#, "-"),
+        ("not json", "-"),
+    ] {
+        assert_eq!(command_line_id(line), id, "{line}");
+        assert_eq!(command_line_id(line.as_bytes()), id, "{line}");
+    }
+}
+
+/// Amendment a44: a command line read as bytes that is not UTF-8 is refused by the offset of its
+/// first invalid sequence, and the refusal carries no byte of the line: a line that is not text
+/// may hold anything. Its id is not read, because its JSON is not read. A line that is UTF-8 reads
+/// as bytes exactly as it reads as text.
+#[test]
+fn a_command_line_that_is_not_utf8_is_refused_by_offset_and_quotes_none_of_it() {
+    let line: &[u8] =
+        b"{\"format\":\"metaharness.command/1\",\"id\":\"c1\",\"command\":\"halt\",\"reason\":\"SECRET-\xf6-SECRET\"}";
+    let offset = line
+        .iter()
+        .position(|byte| *byte == 0xf6)
+        .expect("the invalid byte");
+    let error = parse_command_bytes(line).expect_err("not UTF-8");
+    assert_eq!(
+        error,
+        FramingError::NotUtf8 {
+            valid_up_to: offset
+        }
+    );
+    let reason = error.to_string();
+    assert!(reason.starts_with("not UTF-8"), "{reason}");
+    assert!(reason.contains(&offset.to_string()), "{reason}");
+    assert!(!reason.contains("SECRET"), "{reason}");
+    assert_eq!(command_line_id(line), UNREAD_COMMAND_ID);
+
+    for text in [
+        r#"{"format":"metaharness.command/1","id":"h1","command":"halt","reason":"stop"}"#,
+        r#"{"format":"metaharness.command/1","id":"c1","command":"tool.decide","call_id":"t1","decision":"allow"}"#,
+        "not json",
+        "",
+    ] {
+        assert_eq!(
+            parse_command_bytes(text.as_bytes()),
+            parse_command_line(text),
+            "{text}"
+        );
+    }
 }
