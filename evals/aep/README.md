@@ -13,7 +13,13 @@
 
 ## The native walk (2026-08-29)
 
-`aep-eval native` walks the same task without `aep drive`: `b10x-harness workflow run` over the
+> **The native arm was removed after 0.13.0.** `aep-eval native` walked with
+> `b10x-harness workflow run`, which harness 0.18.0 removes, and `driven --arm b10x` already
+> compares harness with Claude Code on the same work under the same governor. The arm's description and its walk
+> results below are kept as history; its commands no longer run. The free preflight further down
+> is current.
+
+`aep-eval native` walked the same task without `aep drive`: `b10x-harness workflow run` over the
 projected flow, `aep drive transition` as the governor at each section boundary,
 `aep drive hook` for store integrity at `before-call`. The free path assembles everything and
 consults the governor once before stopping; on the empty scratch store the engine proceeds on
@@ -24,23 +30,37 @@ a cent is spent.
 
 `opus-5-prices.json` pins the dated global standard list rates used to estimate and bound a native
 walk: $5/MTok input, $0.50/MTok cache reads, $6.25/MTok default five-minute cache writes and
-$25/MTok output, read from Anthropic's Opus and pricing pages on 2026-08-31. The Rust runner
-selects this card by default. A paid run also requires an exact `--budget-usd`, so
-the walk cannot begin without an enforceable cost ceiling.
+$25/MTok output, read from Anthropic's Opus and pricing pages on 2026-08-31. The native arm
+selected this card by default and required an exact `--budget-usd`, so a walk could not begin
+without an enforceable cost ceiling. The card stays: walk 10 and the pin observation below were
+priced from it.
 
-The shared free preflight is the entry point for all three shapes:
+The shared free preflight is the entry point for both remaining shapes:
 
 ```console
 cargo run -p metaharness-aep-eval -- preflight
-cargo run -p metaharness-aep-eval -- native
 cargo run -p metaharness-aep-eval -- driven --arm b10x
 cargo run -p metaharness-aep-eval -- driven --arm claude
 ```
 
 Each command builds a retained scratch fixture whose copied protocol tree is
-`ws_project/.engineering/protocols`, then asks the staged driver inside substrate to create a
-`decision-blocker`. The preflight is green only when that artifact starts at `open`; the permissive
-fallback's `draft` is therefore caught before a model is contacted.
+`ws_project/.engineering/protocols` and reads the `decision-blocker` lifecycle through the driver
+on the host. `preflight` and `driven --arm b10x` then have the staged driver create a
+`decision-blocker` inside substrate: `b10x-harness run`, with the arm's confinement flags, talks to
+a scripted Responses endpoint that `aep-eval` serves on `127.0.0.1`. The endpoint answers with one
+`run` call of the driver and then a final message, so no model is contacted. The preflight is
+green only when that artifact starts at `open`; the permissive fallback's `draft` is therefore
+caught before a model is contacted. The store is `.engineering/preflight-planning/store`, one level
+inside the one writable subtree, because the driver locks its writer fence in the store's parent.
+
+### Free confined observation — Harness 0.18.0 and 0.15.1, 2026-10-22
+
+The confined preflight, run on its own against the harness `0.18.0` and `0.15.1` release binaries
+with `aep` `0.74.0` as the staged driver, created `decision-blocker:confined-preflight` at `open`:
+two requests to the scripted endpoint, no authorization header, the run finished `completed` after
+two turns, on both. Two earlier attempts on `0.18.0` were refused inside substrate: first
+`exec.workspace-subtree-absent`, because the writable subtree did not exist yet, then, with the
+store at the subtree's root, `opening planning writer fence …: Read-only file system`.
 
 ### Free native observation — Harness 0.10.2, 2026-09-01
 
@@ -87,9 +107,10 @@ Walk 11 is therefore not evidence that the intended eval needed more turns or bu
 `specify`. Its declared terminus was already `decompose`'s operator handoff; the old harness ran
 past it. No paid walk 12 was needed to close that causal finding. Harness 0.8.0's deterministic
 integration test holds exit 0, one terminal `flow-paused`, zero endpoint requests, zero sessions
-and no tool, approval or call-hook event for that step. This runner pins that released commit and
-repeats the boundary in its free confined preflight against a deliberately closed endpoint: the
-preflight can exit 0 only by pausing before a model request.
+and no tool, approval or call-hook event for that step. Until the native arm's removal this runner
+repeated that boundary in a free operator-boundary preflight against a deliberately closed
+endpoint, which could exit 0 only by pausing before a model request. That preflight checked the
+harness workflow's `operator` step kind, which no remaining arm uses, and went with the arm.
 
 Walk 8's finding is not about the answer at all. The deliberate-denial step's map entry denies
 writes to `.engineering/**` so that a refusal can be observed, and **the native runner does not

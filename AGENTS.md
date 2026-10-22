@@ -190,32 +190,22 @@ cargo run -p metaharness-aep-eval -- driven --arm b10x
 cargo run -p metaharness-aep-eval -- driven --arm claude
 ```
 
-`aep-eval native` is the third shape: the same work walked **natively** —
-`b10x-harness workflow run` over the flow `aep govern workflow flow` projects from `adp/default/2`
-with the eval's step map, governed at every section boundary by `metaharness aep drive transition`
-through the loop's `transition` hook, and answering before-call on `file_write`/`file_edit` with
-`metaharness aep drive hook` (atlas ADR 0004; both commands are written into the hooks file by
-`write_hooks`). Without `--spend` it does everything free —
-assembles the scratch project, proves the subject lifecycle is visible through a command executed
-inside substrate, projects the flow, writes the hooks file, consults the governor by hand at the
-first boundary, prints the plan — and stops at the one command that spends. It is a
-different experiment from the driven arm (the loop moves the sequencer) and is measured against it
-as tokens, turns, wall-time and cost — never as a conformance claim. It
-is constrained by default — Opus, 30 minutes wall clock, 2 attempts per section, 12 turns per
-step — and it is a **test**: the task is the eval's synthetic one in a scratch project, and nothing
-it produces ships anywhere. A paid run additionally requires `--spend`, `METAHARNESS_LIVE=1`, an
-exact `--budget-usd`, and the checked-in rate card (or an explicit replacement).
+Before the b10x arm spends, its confined preflight runs `b10x-harness run` with the arm's
+confinement flags against a scripted Responses endpoint that `aep-eval` serves on `127.0.0.1`.
+The endpoint answers with one `run` call of the staged driver, then a final message, so the
+staged driver creating `decision-blocker:confined-preflight` at `open` inside substrate is
+proven with no model contacted.
 
-```console
-cargo run -p metaharness-aep-eval -- native
-METAHARNESS_LIVE=1 cargo run -p metaharness-aep-eval -- \
-  native --spend --budget-usd 5.00
-```
+`aep-eval native`, the third shape, was removed after 0.13.0. It walked the same work through
+`b10x-harness workflow run`, which harness 0.18.0 removes, and `driven --arm b10x` already compares
+harness with Claude Code on the same work under the same governor. The hidden `hook` and
+`transition` verbs stay. `evals/aep/README.md` keeps the arm's record as history.
 
-**This spends real money on a real model.** It is not part of `task check` and must never be put
-there. Do not run two at once — they are isolated by scratch directory, but both build in the same
-target directories and both consume the same budget, and two sessions ran it concurrently on
-2026-08-29 for one answer.
+**A driven run with `--spend` spends real money on a real model.** It also requires
+`METAHARNESS_LIVE=1`, an exact `--budget-usd` and `--assume-usd-per-run`. It is not part of
+`task check` and must never be put there. Do not run two at once — they are isolated by scratch
+directory, but both build in the same target directories and both consume the same budget, and
+two sessions ran paid walks concurrently on 2026-08-29 for one answer.
 
 ### Before a b10x run, use the pinned release
 
@@ -260,21 +250,22 @@ long and the interesting lines are in the middle. Redirect to a file and grep it
   does not arrive, check **every** link before suspecting the one you changed.
 - **The b10x adapter writes `content: null` on every `tool.result`.** Any census keyed on
   `.content` reads 0 on that arm whatever happened. Refusals cross as `warning` with a `code`.
-- **A row that names only vendor tool names decides nothing on the native arm.** Expectation rows
-  union `tools:` with `operations:`; the native arm spells the entry `run` and the operation
+- **A row that names only vendor tool names decides nothing on the b10x arm.** Expectation rows
+  union `tools:` with `operations:`; harness spells the entry `run` and the operation
   `shell`, never `command.execute`.
-- **The native walk is headless, and the loop's default approver refuses when nobody is there.**
-  `--approve auto` denied every write and `run` on the second paid native walk; the Rust runner
-  passes `--approve-up-to high`. The fences are the hooks and the confinement, not the approver.
+- **A harness run is headless, and the loop's default approver refuses when nobody is there.**
+  `--approve auto` denied every write and `run` on the second paid walk of the native arm (removed
+  after 0.13.0); the b10x adapter passes `--approve-up-to high`. The fences are the hooks and the
+  confinement, not the approver.
 - **`--allow-program` admits a name, not bytes.** The sandbox reaches `/usr`, `/bin`, `/lib`,
   `/lib64` and the workspace; `~/.local/bin/aep` is not there and every `run` died at exit
-  127 on the third paid native walk, which the model read as *the command is wrong*. `--driver`
-  stages the binary at `/toolchain/driver/aep`, and the prompts have to say that path.
-- **The `transition` hook fires at group boundaries only.** Until AEP
-  `870894d`, `aep govern workflow flow` grouped a multi-step state and a retreat span and nothing
-  else, so a bare-workflow walk was governed at `root` and nowhere else (fifth paid walk). Every
-  state is a section since; still, count `hook-ran` at `transition` — the runner's census
-  prints them per boundary — before believing a walk was governed at every state.
+  127 on the third paid walk of the native arm, which the model read as *the command is wrong*.
+  `--driver` stages the binary at `/toolchain/driver/aep`, and the prompts have to say that path.
+- **The `transition` hook fires at group boundaries only.** History from the native arm, removed
+  after 0.13.0: until AEP `870894d`, `aep govern workflow flow` grouped a multi-step state and a
+  retreat span and nothing else, so a bare-workflow walk was governed at `root` and nowhere else
+  (fifth paid walk). A loop that calls `metaharness aep drive transition` is governed only where
+  its `hook-ran` events at `transition` say so; count them per boundary before believing it.
 - **A mechanism row and an outcome row cannot both pass once the mechanism lands.**
   `the-planning-guidance-was-loaded` asks whether the model ran the CLI's own `skill load`; a
   harness that *offers* skills hands it over and the call never happens, so the row went `ok`
@@ -289,7 +280,7 @@ long and the interesting lines are in the middle. Redirect to a file and grep it
 - **A pin move is a paid run, and the cheapest one is not a walk.** Moving
   `metaharness-b10x`'s `HARNESS_REVISION`/`PINNED_VERSIONS` to harness `0.12.1` cost **$0.017481** —
   one `metaharness run b10x --strict-version --decisions observe`, two turns, one `file_read` — not
-  a native walk. `--strict-version` refuses before the spawn when the resolved binary is off the
+  an eval walk. `--strict-version` refuses before the spawn when the resolved binary is off the
   pin, so the run's own exit code is the provenance. Build the binary at the pinned revision and
   put it on the child's `PATH` — which is `$HOME/.local/bin:/usr/local/bin:/usr/bin:/bin`,
   constructed from the *process's* `HOME` and never inherited, so an install elsewhere plus a
@@ -304,7 +295,7 @@ long and the interesting lines are in the middle. Redirect to a file and grep it
 
 ### What the four enforcement tiers are, as flags
 
-The native arm is only comparable when all four are declared; three of them were declared nowhere
+The b10x arm is only comparable when all four are declared; three of them were declared nowhere
 the loop could see until 2026-08-29, and the column measured one tier while reading like four.
 
 | tier | how it reaches the loop |

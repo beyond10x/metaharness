@@ -449,8 +449,30 @@ impl B10xLaunch {
 /// producer never bumps proves nothing about the interface; the flags do.
 #[must_use]
 pub fn emitted_flags() -> Vec<(String, bool)> {
-    // Values chosen so none of them can be mistaken for a flag by the walk below.
-    let mut launch = B10xLaunch::new("https://endpoint.invalid/v1", "a-model", "/w", "a request")
+    let mut flags: Vec<(String, bool)> = Vec::new();
+    for launch in launches_with_every_option() {
+        let argv = argv(&launch);
+        let mut it = argv.iter().peekable();
+        while let Some(word) = it.next() {
+            let Some(name) = word.strip_prefix("--").filter(|rest| !rest.is_empty()) else {
+                continue;
+            };
+            let takes_value = it.peek().is_some_and(|next| !next.starts_with("--"));
+            let name = format!("--{name}");
+            if !flags.iter().any(|(seen, _)| seen == &name) {
+                flags.push((name, takes_value));
+            }
+        }
+    }
+    flags.sort();
+    flags
+}
+
+/// Launches that between them set every option [`argv`] can render, so the argvs they render are
+/// every argv shape the adapter can spawn.
+fn launches_with_every_option() -> [B10xLaunch; 3] {
+    // Values chosen so none of them can be mistaken for a flag by the walk in `emitted_flags`.
+    let launch = B10xLaunch::new("https://endpoint.invalid/v1", "a-model", "/w", "a request")
         .with_subscription_file("/a/token.json", Some("/at/a/pointer".to_owned()))
         .speaking(Wire::AnthropicMessages)
         .with_toolchain("a-toolchain")
@@ -469,25 +491,8 @@ pub fn emitted_flags() -> Vec<(String, bool)> {
     let other = B10xLaunch::new("https://endpoint.invalid/v1", "a-model", "/w", "a request")
         .from_environment("A_VARIABLE")
         .confined("/a/socket", ["a-program".to_owned()]);
-    let mut flags: Vec<(String, bool)> = Vec::new();
-    for argv in [argv(&launch), argv(&other), {
-        launch = launch.authenticated("/a/key");
-        argv(&launch)
-    }] {
-        let mut it = argv.iter().peekable();
-        while let Some(word) = it.next() {
-            let Some(name) = word.strip_prefix("--").filter(|rest| !rest.is_empty()) else {
-                continue;
-            };
-            let takes_value = it.peek().is_some_and(|next| !next.starts_with("--"));
-            let name = format!("--{name}");
-            if !flags.iter().any(|(seen, _)| seen == &name) {
-                flags.push((name, takes_value));
-            }
-        }
-    }
-    flags.sort();
-    flags
+    let authenticated = launch.clone().authenticated("/a/key");
+    [launch, other, authenticated]
 }
 
 /// The pointer flag, which the loop accepts only alongside a subscription source.
@@ -680,6 +685,33 @@ mod tests {
             .position(|word| word == flag)
             .and_then(|at| argv.get(at + 1))
             .cloned()
+    }
+
+    /// Every argv this adapter renders spawns the harness's `run`, and no word of it is a verb
+    /// harness 0.18.0 removed (`workflow plan|run`, `events`). The launches between them set
+    /// every option `argv` renders; the removed verbs are assembled so this file names none.
+    #[test]
+    fn every_rendered_argv_runs_the_harness_and_names_no_removed_verb() {
+        let removed = [["work", "flow"].concat(), ["eve", "nts"].concat()];
+        let mut launches = launches_with_every_option().to_vec();
+        launches.push(
+            launch()
+                .with_subscription_env("A_TOKEN", None)
+                .with_hooks("a/hooks.toml")
+                .with_driver("/a/driver")
+                .with_plugin_dir("a/plugins"),
+        );
+        for launch in &launches {
+            let argv = argv(launch);
+            assert_eq!(argv.get(1).map(String::as_str), Some("run"), "{argv:?}");
+            assert!(
+                !argv
+                    .iter()
+                    .flat_map(|argument| argument.split_whitespace())
+                    .any(|word| removed.iter().any(|verb| word == verb)),
+                "{argv:?}"
+            );
+        }
     }
 
     #[test]

@@ -72,7 +72,7 @@ and that document disagree, the document is amended rather than the disagreement
 
 The live runs cost money and are never part of `task check`. `METAHARNESS_LIVE=1` is checked by
 `metaharness aep drive run` and `metaharness aep drive resume` for a step map with an `llm` step, by
-`metaharness aep drive eval run` without `--stream`, by `aep-eval native --spend` and
+`metaharness aep drive eval run` without `--stream`, by
 `aep-eval driven --spend`, and by the ignored live tests in `crates/metaharness/tests/`. A plain
 `metaharness run` does not check `METAHARNESS_LIVE`: it spawns the harness with the operator's
 credentials whatever the variable holds. The per-change record of what was verified and what it cost to learn is in
@@ -132,7 +132,7 @@ Engine, tool, retry and cancellation limits still apply.
 | `crates/metaharness-pi` | the Pi adapter, contract-first: recorded launch and version pair, not yet a `Kind` |
 | `crates/metaharness-opencode` | the OpenCode adapter, contract-first: recorded launch and version pair, not yet a `Kind` |
 | `crates/metaharness-aep` | `metaharness aep drive` — concrete model execution, native hooks and live evaluation above the pinned AEP library |
-| `crates/metaharness-aep-eval` | the `aep-eval` runner: the native and driven arms of the AEP comparison, and their census |
+| `crates/metaharness-aep-eval` | the `aep-eval` runner: the free preflight and the two driven arms of the AEP comparison, and their census |
 | `crates/metaharness-tools` | the owned tool surface, served to a vendor harness over MCP |
 | `crates/metaharness-cli` | the `metaharness` binary |
 | `docs/design/` | the binding design documents and their amendments |
