@@ -599,7 +599,10 @@ fn polling(input: &Value) -> Observed {
             CommandOutcome::Ok { .. }
         ));
         for _ in 0..32 {
-            if !matches!(run.poll_event().unwrap(), EventPoll::Event(_)) {
+            if !matches!(
+                run.poll_event().unwrap(),
+                EventPoll::Event(_) | EventPoll::Progress
+            ) {
                 break;
             }
         }
@@ -655,7 +658,10 @@ fn wireless_interrupt() -> Observed {
         CommandOutcome::Ok { .. }
     ));
     for _ in 0..32 {
-        if !matches!(run.poll_event().unwrap(), EventPoll::Event(_)) {
+        if !matches!(
+            run.poll_event().unwrap(),
+            EventPoll::Event(_) | EventPoll::Progress
+        ) {
             break;
         }
     }

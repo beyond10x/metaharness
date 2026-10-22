@@ -25,7 +25,7 @@ use std::sync::mpsc::{Receiver, RecvTimeoutError};
 use std::time::Duration;
 
 use clap::{Args, Parser, Subcommand};
-use metaharness::protocol::{Kind, RunSpec, VectorOutcome, parse_command_line};
+use metaharness::protocol::{Kind, RunSpec, VectorOutcome};
 use metaharness::{
     Input, Metaharness, ProcessAuditor, ProjectionForm, Refusal, Run, RunExit, VendorSource,
 };
@@ -426,16 +426,25 @@ fn run(spec: RunSpec) -> i32 {
 /// A thread because the loop cannot block on stdin and on the child at the same time, and the
 /// child is the one that must not be kept waiting: **the run clock keeps elapsing while a
 /// decision is pending** (design § 7.6).
-fn steering() -> Receiver<String> {
+///
+/// Lines are read as bytes, so a line that is not UTF-8 is handed on like any other and answered
+/// (amendment a44). Reading stops at the end of input or on an I/O error, and nowhere else.
+fn steering() -> Receiver<Vec<u8>> {
+    steering_from(std::io::stdin())
+}
+
+/// [`steering`] over any input, so a test can hand it bytes stdin would carry.
+fn steering_from(input: impl std::io::Read + Send + 'static) -> Receiver<Vec<u8>> {
     let (sender, receiver) = std::sync::mpsc::channel();
     std::thread::spawn(move || {
-        let mut line = String::new();
+        let mut input = std::io::BufReader::new(input);
+        let mut line = Vec::new();
         loop {
             line.clear();
-            match std::io::BufRead::read_line(&mut std::io::stdin().lock(), &mut line) {
+            match std::io::BufRead::read_until(&mut input, b'\n', &mut line) {
                 Ok(0) | Err(_) => break,
                 Ok(_) => {
-                    if sender.send(line.trim_end().to_string()).is_err() {
+                    if sender.send(trim_line_end(&line)).is_err() {
                         break;
                     }
                 }
@@ -445,8 +454,21 @@ fn steering() -> Receiver<String> {
     receiver
 }
 
+/// One steering line without its line ending and trailing blanks: what `str::trim_end` leaves of
+/// a line that is UTF-8, and the line without trailing ASCII whitespace when it is not.
+fn trim_line_end(line: &[u8]) -> Vec<u8> {
+    match std::str::from_utf8(line) {
+        Ok(text) => text.trim_end().as_bytes().to_vec(),
+        Err(_) => line.trim_ascii_end().to_vec(),
+    }
+}
+
 /// Events out, commands in, until the run ends.
-fn drive(run: &mut Run, commands: &Receiver<String>) -> std::io::Result<()> {
+///
+/// Every line already read is handed to the run before every poll. That is what gets a line read
+/// while the run waits for its child to exit answered before `stream.closed`: the run writes the
+/// marker on a later poll than the one that saw the stream end (amendment a44 § 4).
+fn drive(run: &mut Run, commands: &Receiver<Vec<u8>>) -> std::io::Result<()> {
     loop {
         while let Ok(line) = commands.try_recv() {
             steer(run, &line)?;
@@ -474,20 +496,11 @@ fn drive(run: &mut Run, commands: &Receiver<String>) -> std::io::Result<()> {
 ///
 /// A line that will not parse is **not** silently dropped: design D9 says a command that can be
 /// ignored is a control surface that cannot be tested, so the refusal goes out as an event under
-/// the id the caller used, or under `-` when the line was too broken to carry one.
-fn steer(run: &mut Run, line: &str) -> std::io::Result<()> {
-    if line.trim().is_empty() {
-        return Ok(());
-    }
-    match parse_command_line(line) {
-        Ok(parsed) => {
-            run.send_as(parsed.id, parsed.command)?;
-        }
-        Err(error) => {
-            eprintln!("metaharness: the steering line was refused: {error}");
-        }
-    }
-    Ok(())
+/// the id the caller used, or under `-` when the line was too broken to carry one (amendment
+/// a44). The answer is [`Run::send_line`]'s, the one an embedder gets for the same line: the
+/// binary holds no protocol logic of its own (design D11).
+fn steer(run: &mut Run, line: &[u8]) -> std::io::Result<()> {
+    run.send_line(line).map(drop)
 }
 
 /// One event line on stdout.
@@ -660,7 +673,8 @@ fn refuse(refusal: &Refusal) -> i32 {
 mod steering_tests {
     use super::*;
     use metaharness::protocol::{
-        Command, CommandLine, CredentialSource, DecidedBy, DecisionMode, Event,
+        Command, CommandLine, CommandOutcome, CredentialSource, DecidedBy, DecisionMode, Event,
+        RefusalCode, Refused, parse_command_bytes, parse_command_line,
     };
     use metaharness::{
         HarnessProcess, LaunchPlanView, ManualClock, ProcessRunner, ScriptStep, ScriptedLog,
@@ -668,10 +682,15 @@ mod steering_tests {
     };
     use std::sync::mpsc::{Sender, channel};
 
+    /// One line on the channel `drive` reads steering from.
+    type Steered = Vec<u8>;
+
+    /// The child, which puts these steering lines on the channel `drive` reads stdin from the
+    /// first time it goes quiet, as a controller does once it has seen what it must answer.
     struct AtDecision {
         process: Box<dyn HarnessProcess>,
-        sender: Option<Sender<String>>,
-        command: Command,
+        sender: Option<Sender<Steered>>,
+        lines: Vec<Steered>,
     }
 
     impl HarnessProcess for AtDecision {
@@ -686,15 +705,9 @@ mod steering_tests {
                     .is_err_and(|error| error.kind() == std::io::ErrorKind::WouldBlock))
                 && let Some(sender) = self.sender.take()
             {
-                sender
-                    .send(
-                        serde_json::to_string(&CommandLine::new(
-                            "late-steer",
-                            self.command.clone(),
-                        ))
-                        .unwrap(),
-                    )
-                    .unwrap();
+                for line in &self.lines {
+                    sender.send(line.clone()).unwrap();
+                }
             }
             result
         }
@@ -711,8 +724,8 @@ mod steering_tests {
 
     struct AtDecisionRunner {
         script: ScriptedRunner,
-        command: Command,
-        sender: Option<Sender<String>>,
+        lines: Vec<Steered>,
+        sender: Option<Sender<Steered>>,
     }
 
     impl ProcessRunner for AtDecisionRunner {
@@ -723,9 +736,14 @@ mod steering_tests {
             Ok(Box::new(AtDecision {
                 process: self.script.start(plan)?,
                 sender: self.sender.take(),
-                command: self.command.clone(),
+                lines: self.lines.clone(),
             }))
         }
+    }
+
+    /// The one line a late-steer case sends: this command, framed under the id `late-steer`.
+    fn late_steer(command: Command) -> Vec<Steered> {
+        vec![serde_json::to_vec(&CommandLine::new("late-steer", command)).unwrap()]
     }
 
     #[test]
@@ -745,9 +763,9 @@ mod steering_tests {
                 log,
             ),
             sender: Some(sender),
-            command: Command::Halt {
+            lines: late_steer(Command::Halt {
                 reason: "fixture".into(),
-            },
+            }),
         };
         let mut run = Metaharness::new(Kind::Claude)
             .with_credentials(CredentialSource::None)
@@ -798,7 +816,7 @@ mod steering_tests {
                     log.clone(),
                 ),
                 sender: Some(sender),
-                command,
+                lines: late_steer(command),
             };
             let mut run = Metaharness::new(Kind::Claude)
                 .with_credentials(CredentialSource::None)
@@ -832,5 +850,250 @@ mod steering_tests {
                 Some(Event::StreamClosed { .. })
             ));
         }
+    }
+
+    /// Amendment a44: a steering line that does not parse is answered on the event stream with a
+    /// `MALFORMED` refusal in the parser's own words, under the id it carried or under `-`. A
+    /// blank line is no command and gets no answer. Silence would leave a controller waiting on
+    /// an id that never comes back (design D9).
+    #[test]
+    fn a_steering_line_that_does_not_parse_is_answered_malformed_under_its_id_or_a_dash() {
+        // The flat decision the commands page once showed. `Decision` is internally tagged, so
+        // the decoder takes `"decision":{"decision":"allow"}` and refuses this.
+        let flat = r#"{"format":"metaharness.command/1","id":"c1","command":"tool.decide","call_id":"t1","decision":"allow"}"#;
+        let no_id = r#"{"format":"metaharness.command/1","command":"halt","reason":"no id"}"#;
+        let number_id =
+            r#"{"format":"metaharness.command/1","id":7,"command":"halt","reason":"a number"}"#;
+        let other_format =
+            r#"{"format":"metaharness.command/2","id":"c3","command":"halt","reason":"x"}"#;
+        let nested = r#"{"format":"metaharness.command/1","id":"c2","command":"tool.decide","call_id":"t1","decision":{"decision":"allow"}}"#;
+        // `ö` as one Latin-1 byte, which is not UTF-8: answered under `-`, whatever id it holds.
+        let latin1: &[u8] =
+            b"{\"format\":\"metaharness.command/1\",\"id\":\"c4\",\"command\":\"steer\",\"text\":\"L\xf6sung\"}";
+        let mut lines: Vec<Steered> = [flat, "", "   ", "not json", no_id, number_id, other_format]
+            .map(|line| line.as_bytes().to_vec())
+            .to_vec();
+        lines.push(latin1.to_vec());
+        lines.push(nested.as_bytes().to_vec());
+        let (sender, commands) = channel();
+        let mut runner = AtDecisionRunner {
+            script: ScriptedRunner::new(
+                vec![
+                    ScriptStep::line(r#"{"emit":"session.started"}"#),
+                    ScriptStep::line(
+                        r#"{"emit":"tool.requested","call_id":"t1","name":"Bash","input":{"command":"ls"}}"#,
+                    ),
+                    ScriptStep::awaiting("t1"),
+                    ScriptStep::line(r#"{"emit":"session.ended","is_error":false}"#),
+                ],
+                ScriptedLog::new(),
+            ),
+            sender: Some(sender),
+            lines,
+        };
+        let mut run = Metaharness::new(Kind::Claude)
+            .with_credentials(CredentialSource::None)
+            .with_decisions(DecisionMode::Ask)
+            .start_with_clock(
+                Input::Prompt("fixture".into()),
+                &mut runner,
+                &mut ScriptedSeams,
+                Box::new(ManualClock::new()),
+            )
+            .unwrap();
+        drive(&mut run, &commands).unwrap();
+
+        let answered: Vec<(String, CommandOutcome)> = run
+            .events()
+            .iter()
+            .filter_map(|event| match event {
+                Event::CommandResult { id, outcome } => Some((id.clone(), outcome.clone())),
+                _ => None,
+            })
+            .collect();
+        let malformed = |line: &str| CommandOutcome::Refused {
+            refused: Refused::new(
+                RefusalCode::Malformed,
+                parse_command_line(line)
+                    .expect_err("the line does not parse")
+                    .to_string(),
+            ),
+        };
+        assert_eq!(
+            answered,
+            vec![
+                ("c1".to_string(), malformed(flat)),
+                ("-".to_string(), malformed("not json")),
+                ("-".to_string(), malformed(no_id)),
+                ("-".to_string(), malformed(number_id)),
+                ("c3".to_string(), malformed(other_format)),
+                (
+                    "-".to_string(),
+                    CommandOutcome::Refused {
+                        refused: Refused::new(
+                            RefusalCode::Malformed,
+                            parse_command_bytes(latin1)
+                                .expect_err("not UTF-8")
+                                .to_string(),
+                        ),
+                    }
+                ),
+                ("c2".to_string(), CommandOutcome::Ok { applies_at: None }),
+            ],
+            "one answer per non-blank line, in the order read, and none for the two blank lines"
+        );
+        let decided: Vec<&DecidedBy> = run
+            .events()
+            .iter()
+            .filter_map(|event| match event {
+                Event::ToolDecided { decided_by, .. } => Some(decided_by),
+                _ => None,
+            })
+            .collect();
+        assert_eq!(
+            decided,
+            vec![&DecidedBy::Embedder],
+            "the refused flat line decided nothing; the nested one decided the call"
+        );
+    }
+
+    /// Amendment a44: the stdin reader reads on past a line that is not UTF-8. It ends at the end
+    /// of input and nowhere else, so a `halt` written after such a line is still read. Line
+    /// endings and trailing blanks are trimmed as before; a blank line is passed on, and
+    /// `send_line` answers it with nothing. A line that is not UTF-8 is passed on byte for byte:
+    /// a reader that repaired it would turn the run's "not UTF-8" answer into a JSON error.
+    #[test]
+    fn the_stdin_reader_reads_on_past_a_line_that_is_not_utf8() {
+        let input = b"{\"id\":\"a\"}\r\nL\xf6sung \nsecond\n\n  \t\nlast".to_vec();
+        let lines: Vec<Steered> = steering_from(std::io::Cursor::new(input)).iter().collect();
+        let expected: [&[u8]; 6] = [
+            b"{\"id\":\"a\"}",
+            b"L\xf6sung",
+            b"second",
+            b"",
+            b"",
+            b"last",
+        ];
+        assert_eq!(
+            lines,
+            expected.map(<[u8]>::to_vec),
+            "every line is read, in order, to the end of input, and none is rewritten"
+        );
+    }
+
+    /// The child, which puts these steering lines on the channel `drive` reads stdin from while
+    /// the run waits for it to exit: lines a controller wrote as the child went away.
+    struct AtWindUp {
+        process: Box<dyn HarnessProcess>,
+        sender: Option<Sender<Steered>>,
+        lines: Vec<Steered>,
+    }
+
+    impl HarnessProcess for AtWindUp {
+        fn next_line(&mut self) -> std::io::Result<Option<String>> {
+            self.process.next_line()
+        }
+        fn poll_line(&mut self) -> std::io::Result<metaharness::ProcessPoll> {
+            self.process.poll_line()
+        }
+        fn write_line(&mut self, line: &str) -> std::io::Result<()> {
+            self.process.write_line(line)
+        }
+        fn kill(&mut self) -> std::io::Result<()> {
+            self.process.kill()
+        }
+        fn wait(&mut self) -> std::io::Result<Option<i32>> {
+            if let Some(sender) = self.sender.take() {
+                for line in &self.lines {
+                    sender.send(line.clone()).unwrap();
+                }
+            }
+            self.process.wait()
+        }
+    }
+
+    struct AtWindUpRunner {
+        script: ScriptedRunner,
+        lines: Vec<Steered>,
+        sender: Option<Sender<Steered>>,
+    }
+
+    impl ProcessRunner for AtWindUpRunner {
+        fn requires_executable(&self) -> bool {
+            false
+        }
+        fn start(&mut self, plan: &LaunchPlanView) -> std::io::Result<Box<dyn HarnessProcess>> {
+            Ok(Box::new(AtWindUp {
+                process: self.script.start(plan)?,
+                sender: self.sender.take(),
+                lines: self.lines.clone(),
+            }))
+        }
+    }
+
+    /// Amendment a44 § 4 and a17 rule 1: steering lines that reach the channel while the run
+    /// waits for its child to exit are answered, once each, **before** `stream.closed`, and the
+    /// marker is the last line.
+    #[test]
+    fn a_steering_line_read_while_the_run_winds_up_is_answered_before_the_marker() {
+        let flat = r#"{"format":"metaharness.command/1","id":"b1","command":"tool.decide","call_id":"ghost","decision":"allow"}"#;
+        let ghost = r#"{"format":"metaharness.command/1","id":"g1","command":"tool.decide","call_id":"ghost","decision":{"decision":"allow"}}"#;
+        let (sender, commands) = channel();
+        let mut runner = AtWindUpRunner {
+            script: ScriptedRunner::new(
+                vec![
+                    ScriptStep::line(r#"{"emit":"session.started"}"#),
+                    ScriptStep::line(r#"{"emit":"session.ended","is_error":false}"#),
+                ],
+                ScriptedLog::new(),
+            ),
+            lines: [flat, ghost].map(|line| line.as_bytes().to_vec()).to_vec(),
+            sender: Some(sender),
+        };
+        let mut run = Metaharness::new(Kind::Claude)
+            .with_credentials(CredentialSource::None)
+            .with_decisions(DecisionMode::Ask)
+            .start_with_clock(
+                Input::Prompt("fixture".into()),
+                &mut runner,
+                &mut ScriptedSeams,
+                Box::new(ManualClock::new()),
+            )
+            .unwrap();
+        drive(&mut run, &commands).unwrap();
+
+        let names: Vec<&str> = run.events().iter().map(Event::name).collect();
+        assert_eq!(
+            names.last(),
+            Some(&"stream.closed"),
+            "the marker is the last line: {names:?}"
+        );
+        let answered: Vec<(String, Option<RefusalCode>)> = run
+            .events()
+            .iter()
+            .filter_map(|event| match event {
+                Event::CommandResult { id, outcome } => Some((
+                    id.clone(),
+                    match outcome {
+                        CommandOutcome::Refused { refused } => Some(refused.code),
+                        CommandOutcome::Ok { .. } => None,
+                    },
+                )),
+                _ => None,
+            })
+            .collect();
+        assert_eq!(
+            answered,
+            vec![
+                ("b1".to_string(), Some(RefusalCode::Malformed)),
+                ("g1".to_string(), Some(RefusalCode::UnknownCall)),
+            ],
+            "both lines are answered, once each: {names:?}"
+        );
+        assert!(
+            metaharness::protocol::stream_completeness(run.events()).is_complete(),
+            "{:?}",
+            metaharness::protocol::stream_completeness(run.events())
+        );
     }
 }

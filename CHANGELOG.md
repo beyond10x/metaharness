@@ -11,11 +11,16 @@ was amended and the amendment is named here.
 
 ### Changed
 
+- **Breaking** for a library caller that matches `FramingError` exhaustively: it gains `NotUtf8 { valid_up_to }`, which `parse_command_bytes` returns for a command line that is not UTF-8 (a44).
+- `Run::poll_event` no longer writes `stream.closed` in the poll that sees the child's stream end. That poll returns `Progress` or the first event wind-up queued, and the marker comes on a later poll, so commands handed over before each poll are answered before it (a44 § 4).
 - `README.md`, the status page and the quickstart scope `METAHARNESS_LIVE=1` to the commands that check it (`metaharness aep drive run`, `resume` and `eval run`, the `aep-eval` runner with `--spend`, the ignored live tests) and say that a plain `metaharness run` does not check it; `crates/metaharness-cli/tests/live_scope_documented.rs` holds every page that names the variable to that.
 
 ### Fixed
 
 - `run` checks the `--spec`/`--auditor` pairing before the spawn on every kind and exits 2 with no harness process started for `--spec` without `--auditor` (`SpecWithoutAuditor`), `--auditor` without `--spec` (`AuditorWithoutSpec`), auditor arguments after `--` without `--auditor` (new `AuditorArgsWithoutAuditor`), both on a run with no `--audit` and not `--hermetic strict` (`Launch`), a document that is missing, not a regular file, unreadable or whose path is not UTF-8 (`SpecUnreadable`), and an auditor prefix that is empty, starts with `-` or names no executable regular file by path or on `PATH` (`AuditorNotInvokable`); the audit-time checks stay and now refuse a directory and an empty prefix too (a43).
+- `metaharness run` answers a steering line that does not parse with one `command.result`, refused `MALFORMED` in the decoder's words, under the line's string `id` or `-`; it wrote one stderr line and no event. A line that is not UTF-8 is answered under `-`, quoting none of its bytes; it ended the stdin reader, so no later line was read. `Run::send_line` gives an embedder the same answer for text or bytes (a44).
+- A command sent after `stream.closed` returns its outcome and queues no event; its `command.result` came after the marker (a17 rule 1, a44).
+- The commands page shows the nested `decision` object its flat example lacked, and the events page's `tool.requested` example decodes; it lacked `seq`, `run`, `input`, `decision_required` and `seam` (a44).
 
 ## [0.12.0] — 2026-10-21
 

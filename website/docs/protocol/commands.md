@@ -6,16 +6,30 @@ sidebar_position: 2
 
 # Commands
 
-One JSON object per line on stdin, each tagged `metaharness.command/1`.
+One JSON object per line on stdin, each tagged `metaharness.command/1`. A decision is an object
+tagged by its own `decision` field, so an allow and a deny read:
 
 ```json
-{"format":"metaharness.command/1","id":"c1","command":"tool.decide","call_id":"…","decision":"allow"}
+{"format":"metaharness.command/1","id":"c1","command":"tool.decide","call_id":"…","decision":{"decision":"allow"}}
+{"format":"metaharness.command/1","id":"c2","command":"tool.decide","call_id":"…","decision":{"decision":"deny","reason":"this step only reads; propose the change instead"}}
 ```
 
 ## Silence is not a legal outcome
 
 **Every command carries an `id` and produces exactly one `command.result`.** A command that can be
 silently ignored is a control surface that cannot be tested.
+
+That includes a line that does not parse. It is refused `MALFORMED`, with the decoder's own words
+as the reason, under the line's `id` when the line is a JSON object whose `id` is a string, and
+under `-` otherwise, so `-` is not an id to send. A line that is not UTF-8 is answered under `-`,
+and its reason gives the byte offset of the first invalid sequence and quotes none of the line.
+A blank line is no command and gets no answer. `stream.closed` is the last line of a run, so a line
+read after it has gone out gets no answer. The first line above with its decision written flat,
+`"decision":"allow"`, is answered:
+
+```json
+{"format":"metaharness.event/1","seq":4,"run":"…","event":"command.result","id":"c1","outcome":{"result":"refused","refused":{"code":"MALFORMED","reason":"malformed tool.decide: invalid type: string \"allow\", expected internally tagged enum Decision"}}}
+```
 
 A control this adapter cannot honour is refused **by name, at run start** rather than at the call
 — so a run that will fail on control fails *before it spends money*.

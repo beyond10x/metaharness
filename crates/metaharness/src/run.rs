@@ -22,7 +22,8 @@ use std::io::ErrorKind;
 use metaharness_protocol::{
     Capabilities, CloseReason, Command, CommandOutcome, CommandSupport, DecidedBy, Decision,
     DecisionCensus, DecisionMode, Digest, Emission, Event, EventLine, EventStream, Frame, Kind,
-    Operation, RefusalCode, Refused, RunSpec, Seam, ToolSurface, TranscriptRef,
+    Operation, RefusalCode, Refused, RunSpec, Seam, ToolSurface, TranscriptRef, command_line_id,
+    parse_command_bytes,
 };
 use serde_json::Value;
 
@@ -35,7 +36,10 @@ use metaharness_protocol::HarnessSeam;
 pub enum EventPoll {
     /// One normalized event, including the final closure.
     Event(Box<EventLine>),
-    /// One raw record was consumed without a normalized event; poll again after servicing input.
+    /// One raw record, or the end of the child's stream, was consumed without a normalized event;
+    /// poll again after servicing input. The poll that sees the stream end returns this rather
+    /// than the closure, so a command handed over before the next poll is answered before it
+    /// (amendment a44 § 4).
     Progress,
     /// The process remains open without a normalized event this time.
     Idle,
@@ -518,11 +522,9 @@ impl Run {
         if let Some(emission) = self.outbox.pop_front() {
             return Ok(EventPoll::Event(Box::new(self.deliver(emission))));
         }
-        if self.finished {
-            return Ok(self
-                .close_stream()
-                .map_or(EventPoll::Ended, |line| EventPoll::Event(Box::new(line))));
-        }
+        // Not the marker, even when this poll wound the run up: a caller that holds a command,
+        // such as a line the binary read while the child was exiting, hands it over before its
+        // next poll, and that poll answers it before `stream.closed` (amendment a44 § 4).
         Ok(EventPoll::Progress)
     }
 
@@ -568,12 +570,50 @@ impl Run {
     ) -> std::io::Result<CommandOutcome> {
         self.expire_deadlines()?;
         let outcome = self.apply(command)?;
-        self.outbox
-            .push_back(Emission::untimed(Event::CommandResult {
-                id: id.into(),
-                outcome: outcome.clone(),
-            }));
+        self.answer(id.into(), outcome.clone());
         Ok(outcome)
+    }
+
+    /// Send one raw `metaharness.command/1` line, as it came off the wire, as text or as bytes —
+    /// the binary's stdin is one caller, an embedder holding a line is another, and both get the
+    /// same answer (design D11).
+    ///
+    /// A line that parses goes through [`Run::send_as`] under its own id. A line that does not
+    /// is still answered, because silence is not a legal outcome (design D9): one
+    /// `command.result`, refused `MALFORMED` with the decoder's own words as the reason, under
+    /// the line's string `id` or under [`metaharness_protocol::UNREAD_COMMAND_ID`] (amendment
+    /// a44). A line that is not UTF-8 is answered so too, under `-`, and its reason quotes none
+    /// of its bytes. A blank line is no command: it is answered by nothing and returns `None`.
+    ///
+    /// # Errors
+    ///
+    /// As [`Run::send`]. A line that does not parse is a refused outcome, not an error.
+    pub fn send_line(&mut self, line: impl AsRef<[u8]>) -> std::io::Result<Option<CommandOutcome>> {
+        let line = line.as_ref();
+        if std::str::from_utf8(line).is_ok_and(|text| text.trim().is_empty()) {
+            return Ok(None);
+        }
+        match parse_command_bytes(line) {
+            Ok(parsed) => self.send_as(parsed.id, parsed.command).map(Some),
+            Err(error) => {
+                let outcome = refused(RefusalCode::Malformed, error.to_string());
+                self.answer(command_line_id(line), outcome.clone());
+                Ok(Some(outcome))
+            }
+        }
+    }
+
+    /// Queue the `command.result` for one command, unless the stream is closed.
+    ///
+    /// `stream.closed` is the last line (amendment a17 rule 1), so a command sent after it has
+    /// its outcome returned to the caller and puts nothing on the stream (amendment a44 § 4).
+    /// Every road a command takes into a run answers through here.
+    fn answer(&mut self, id: String, outcome: CommandOutcome) {
+        if self.stream.is_closed() {
+            return;
+        }
+        self.outbox
+            .push_back(Emission::untimed(Event::CommandResult { id, outcome }));
     }
 
     fn deliver(&mut self, emission: Emission) -> EventLine {

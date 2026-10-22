@@ -10,7 +10,7 @@ One JSON object per line on stdout. Every line carries its own format tag,
 `metaharness.event/1`.
 
 ```json
-{"format":"metaharness.event/1","event":"tool.requested","call_id":"…","name":"Bash", "…":"…"}
+{"format":"metaharness.event/1","seq":3,"run":"…","event":"tool.requested","call_id":"…","name":"Bash","input":{"command":"ls"},"operations":["shell"],"decision_required":true,"deadline_ms":30000,"seam":"hook"}
 ```
 
 ## Two rules about the tag, and one asymmetry
