@@ -23,8 +23,8 @@ use std::path::{Component, Path, PathBuf};
 
 use metaharness_protocol::{
     Assertion, CloseReason, CredentialSource, DecidedBy, Decision, DecisionCensus, Event,
-    HermeticAttestation, HermeticRow, InstalledPlugin, PluginRef, RowVerdict, RunSpec, Severity,
-    StreamCompleteness, Verdict, WithheldTool, stream_completeness,
+    HermeticAttestation, HermeticRow, InstalledPlugin, PluginRef, ProcessTermination, RowVerdict,
+    RunSpec, Severity, StreamCompleteness, Verdict, WithheldTool, stream_completeness,
 };
 
 use crate::auditor::AuditorVerdict;
@@ -188,6 +188,17 @@ pub struct AuditReport {
     /// run is a defect in this build rather than a verdict about the run. The reader who needs it
     /// is the offline one, reading a file this process did not produce.
     pub stream: StreamCompleteness,
+    /// The harness child's own exit, as the last `stream.closed` records it (amendment a21).
+    ///
+    /// **Always printed, on a line of its own, and `unknown` when nothing measured it**
+    /// (amendment a48). [`ProcessTermination::Unknown`] is a runner that measures nothing, a wait
+    /// that failed or a stream with no marker, and is never printed as `0` (invariant 3).
+    ///
+    /// **It decides no verdict.** A child that exited `0` beside a gating `unk` row still exits
+    /// `3`, and one that exited nonzero after a terminal record, under a floor that held, still
+    /// exits `0`: a21 keeps the native exit out of the close reason. It is printed so that a reader
+    /// holding the exit code does not have to infer it from the vendor's record.
+    pub child_exit: ProcessTermination,
 }
 
 impl AuditReport {
@@ -207,6 +218,23 @@ impl AuditReport {
             .iter()
             .filter(|row| row.severity == Severity::Gating && row.verdict == Verdict::Unk)
             .count()
+    }
+
+    /// The control verdict: the gating rows folded `gap` over `unk` over `ok` (amendment a48).
+    ///
+    /// The floor's alone. Advisory rows do not enter it, because they move no exit code, and the
+    /// external auditor does not either: its exit moves [`AuditReport::exit`] and nothing else.
+    /// With no gating row it is `ok`, because [`AuditReport::exit`] reads the same rows the same
+    /// way, so the two never disagree about them.
+    #[must_use]
+    pub fn control(&self) -> Verdict {
+        if self.gating_gaps() > 0 {
+            Verdict::Gap
+        } else if self.gating_unknowns() > 0 {
+            Verdict::Unk
+        } else {
+            Verdict::Ok
+        }
     }
 
     /// The exit code, exactly § 9.4.
@@ -343,6 +371,18 @@ impl AuditReport {
                 auditor.argv, auditor.exit_code, auditor.verdict_rows
             );
         }
+        // The three facts the exit code folds, last, each on a line of its own and in this order
+        // (amendment a48). Without them a `3` beside a child that exited `0` could be told apart
+        // from a harness that failed only by reading the vendor's record.
+        let _ = writeln!(out, "child exit: {}", child_exit_word(self.child_exit));
+        let _ = writeln!(out, "control verdict: {}", verdict_word(self.control()));
+        let exit = self.exit();
+        let _ = writeln!(
+            out,
+            "audit verdict: {} (exit {})",
+            audit_word(exit),
+            exit.code()
+        );
         out
     }
 }
@@ -353,6 +393,38 @@ fn verdict_word(verdict: Verdict) -> &'static str {
         Verdict::Gap => "gap",
         Verdict::Unk => "unk",
     }
+}
+
+/// The child's exit as the report prints it. Never `0` for a child nothing measured.
+fn child_exit_word(termination: ProcessTermination) -> String {
+    match termination {
+        ProcessTermination::Exited { code } => code.to_string(),
+        ProcessTermination::Signaled { signal } => format!("signal {signal}"),
+        ProcessTermination::Unknown => "unknown".to_owned(),
+    }
+}
+
+/// The audit verdict as the report prints it: the exit code's own word.
+fn audit_word(exit: RunExit) -> &'static str {
+    match exit {
+        RunExit::Ok => "ok",
+        RunExit::Gap => "gap",
+        RunExit::Broken => "broken",
+        RunExit::NoVerdict => "no verdict",
+    }
+}
+
+/// The child's exit as the last `stream.closed` records it, and [`ProcessTermination::Unknown`]
+/// for a stream with no marker: a measurement that is absent is never an exit `0` (amendment a48).
+fn child_exit(events: &[Event]) -> ProcessTermination {
+    events
+        .iter()
+        .rev()
+        .find_map(|event| match event {
+            Event::StreamClosed { process, .. } => Some(*process),
+            _ => None,
+        })
+        .unwrap_or_default()
 }
 
 /// An `unk` row's detail, with the adapter's statement of why its record is silent on the row
@@ -1275,6 +1347,7 @@ impl crate::run::Run {
             auditor,
             saw_terminal_record: self.saw_terminal_record(),
             stream: stream_completeness(self.events()),
+            child_exit: child_exit(self.events()),
         })
     }
 

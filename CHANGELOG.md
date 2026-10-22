@@ -5,6 +5,10 @@ was amended and the amendment is named here.
 
 ## [Unreleased]
 
+### Changed
+
+- **Breaking:** an audited run's report ends with `child exit:` (the harness process's exit from `stream.closed.process`, `unknown` when nothing measured it, never `0`), `control verdict:` (the gating rows folded `gap` > `unk` > `ok`) and `audit verdict:` (the exit code as a word and a number); no exit code changes, so a child that exited `0` beside a gating `unk` row still exits `3`. `AuditReport` gains the field `child_exit` and the method `control()`, so a library caller that builds an `AuditReport` literal needs the new field; the CLI reference's exit table and the events page's `stream.closed` row say the same, and `metaharness.session.ExitAuditedRun` specifies it (a48).
+
 ## [0.13.0] — 2026-10-22
 
 ### Added

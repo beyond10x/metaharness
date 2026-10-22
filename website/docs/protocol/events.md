@@ -44,7 +44,7 @@ One JSON object per line on stdout. Every line carries its own format tag,
 | `warning` | **metaharness** has something to say. |
 | `opaque` | **The vendor** said something the adapter could not read. |
 | `auth.expired` | The credential the run launched with stopped working mid-flight. |
-| `stream.closed` | **The last line.** How many lines preceded it, why the run ended (`completed` · `budget` · `killed` · `error` · `steer-halt`), and which run. Without it, a stream with no `Bash` call and a stream that was **cut off** before the first one are the same bytes — so every *negative* expectation about a run is undecidable. |
+| `stream.closed` | **The last line.** How many lines preceded it, why the run ended (`completed` · `budget` · `killed` · `error` · `steer-halt`), and which run. `process` is the harness process's own exit as the spawn runner measured it, an object whose `kind` key names the shape: `{"kind": "exited", "code": N}`, `{"kind": "signaled", "signal": N}`, or `{"kind": "unknown"}` when nothing measured it — `exited` with its `code`, `signaled` with its `signal`, `unknown` with nothing else. It is never folded into the reason, and an audit prints it as `child exit:`. Without this last line, a stream with no `Bash` call and a stream that was **cut off** before the first one are the same bytes — so every *negative* expectation about a run is undecidable. |
 
 ## Why three tool events and not two
 

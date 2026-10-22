@@ -48,6 +48,22 @@ types:
       - {name: events, type: Integer}
       - {name: reason, type: metaharness.session.CloseReason}
     invariants: [events >= 0]
+  - name: metaharness.session.ChildExit
+    kind: enum
+    variants: [exited-zero, exited-nonzero, signaled, unknown]
+    # The harness child's own exit as the audit's `child exit:` line names it
+    # (amendment a48). unknown is a runner that measured nothing, never exit 0.
+  - name: metaharness.session.OpeningRecord
+    kind: enum
+    variants: [complete, silent-on-plugins-and-mcp, off-the-pin]
+    # complete: every field the floor reads, on the adapter's pin. silent: no
+    # plugin and no MCP server list, so H1a and H5 are unk. off-the-pin: H9 gap.
+  - name: metaharness.session.ControlVerdict
+    kind: enum
+    variants: [ok, unk, gap]
+  - name: metaharness.session.AuditVerdict
+    kind: enum
+    variants: [ok, gap, no-verdict]
 
 commands:
   - name: metaharness.session.PollSteering
@@ -165,9 +181,39 @@ commands:
     # otherwise unknown/error. coalesce (ess/29) states what an absent optional field
     # compares as, so every terminal record, any optional field absent, is decided.
     # The unknown branch is the a18 repair, not a claim baseline code conforms.
-    # UNMAPPED: steering precedence, final-line order/count, process exit status
-    # and CLI audited/unaudited agreement need real Run/CLI scenarios. The entity
-    # vocabulary is not expanded to invent a second process/session lifecycle.
+    # UNMAPPED: steering precedence, final-line order/count and CLI
+    # audited/unaudited agreement need real Run/CLI scenarios. The process exit
+    # status is ExitAuditedRun below. The entity vocabulary is not expanded to
+    # invent a second process/session lifecycle.
+
+  - name: metaharness.session.ExitAuditedRun
+    # Amendment a48: a real --hermetic strict Claude run over a declared scratch
+    # copy, audited. The three verdict lines are read off AuditReport::render and
+    # the exit code off Run::exit. A measured child is /bin/sh under the
+    # production SpawnRunner; unknown is a runner that measures nothing. The
+    # child decides no verdict, so every outcome holds for every child.
+    input:
+      - {name: child, type: metaharness.session.ChildExit}
+      - {name: opening, type: metaharness.session.OpeningRecord}
+    outcomes:
+      - name: a-gating-row-failed
+        when: opening == off-the-pin
+        emits: [metaharness.session.AuditedRunExited]
+        payload:
+          metaharness.session.AuditedRunExited: {child_exit: input.child, control: gap, audit: gap, exit_code: 1}
+      - name: nobody-found-out
+        when: opening == silent-on-plugins-and-mcp
+        emits: [metaharness.session.AuditedRunExited]
+        payload:
+          metaharness.session.AuditedRunExited: {child_exit: input.child, control: unk, audit: no-verdict, exit_code: 3}
+      - name: every-control-held
+        emits: [metaharness.session.AuditedRunExited]
+        payload:
+          metaharness.session.AuditedRunExited: {child_exit: input.child, control: ok, audit: ok, exit_code: 0}
+    # UNMAPPED: an auditor's own exit, which moves the audit verdict and never
+    # the control verdict, and a run with no terminal record, which exits 3
+    # beside a control verdict of ok. Both are held by
+    # crates/metaharness/tests/audit.rs, not by a scenario.
 
 # These are conformance observations, not newly published runtime wire events.
 events:
@@ -184,6 +230,12 @@ events:
     fields: [{name: verdict, type: metaharness.session.CompletionVerdict}]
   - name: metaharness.session.StreamClassified
     fields: [{name: reason, type: metaharness.session.CloseReason}]
+  - name: metaharness.session.AuditedRunExited
+    fields:
+      - {name: child_exit, type: metaharness.session.ChildExit}
+      - {name: control, type: metaharness.session.ControlVerdict}
+      - {name: audit, type: metaharness.session.AuditVerdict}
+      - {name: exit_code, type: Integer}
 
 # Immutable retained stream closure, not a second running-session lifecycle.
 entities:

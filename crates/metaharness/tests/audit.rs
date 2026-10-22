@@ -1577,11 +1577,17 @@ fn the_two_advisory_rows_are_evaluated_and_do_not_move_the_exit_code() {
             events: 1,
             reason: metaharness::protocol::CloseReason::Completed,
         },
+        child_exit: metaharness::protocol::ProcessTermination::Unknown,
     };
     assert_eq!(
         report.exit(),
         RunExit::Ok,
         "if any unk failed a strict run then every strict run would fail forever (F3)"
+    );
+    let rendered = report.render();
+    assert!(
+        rendered.lines().any(|line| line == "control verdict: ok"),
+        "an advisory unk does not enter the control verdict (amendment a48): {rendered}"
     );
 }
 
@@ -1607,6 +1613,8 @@ fn report_withholding(
             events: 1,
             reason: metaharness::protocol::CloseReason::Completed,
         },
+        // Nothing measured a child here, and the report says `unknown` rather than `0` (a48).
+        child_exit: metaharness::protocol::ProcessTermination::Unknown,
     }
 }
 
@@ -1713,6 +1721,125 @@ fn an_auditor_that_exited_one_exits_one_and_one_that_exited_three_exits_three() 
         });
         assert_eq!(report.exit(), expected, "auditor exit {auditor_code}");
     }
+}
+
+// ---------------------------------------------------------------- the three verdict lines (a48)
+
+/// The last three lines of the report: the child's exit, the control verdict and the audit
+/// verdict, each on a line of its own (amendment a48).
+fn verdict_lines(report: &AuditReport) -> Vec<String> {
+    let rendered = report.render();
+    let lines: Vec<&str> = rendered.lines().collect();
+    lines[lines.len().saturating_sub(3)..]
+        .iter()
+        .map(|line| (*line).to_owned())
+        .collect()
+}
+
+#[test]
+fn a_gating_unknown_still_exits_three_and_the_report_names_each_verdict_apart() {
+    let record = with_record(good_record(), |record| {
+        if let Event::SessionStarted {
+            harness_version, ..
+        } = record
+        {
+            *harness_version = None;
+        }
+    });
+    let report = report_with(floor_for(record));
+    assert_eq!(report.exit(), RunExit::NoVerdict);
+    assert_eq!(
+        verdict_lines(&report),
+        [
+            "child exit: unknown",
+            "control verdict: unk",
+            "audit verdict: no verdict (exit 3)"
+        ]
+    );
+}
+
+#[test]
+fn a_child_nothing_measured_prints_unknown_and_never_zero() {
+    let report = report_with(floor_for(good_record()));
+    assert_eq!(report.exit(), RunExit::Ok);
+    let rendered = report.render();
+    assert!(
+        rendered.lines().any(|line| line == "child exit: unknown"),
+        "{rendered}"
+    );
+    assert!(!rendered.contains("child exit: 0"), "{rendered}");
+}
+
+#[test]
+fn the_control_verdict_folds_the_gating_rows_gap_over_unk_over_ok() {
+    let version = |value: Option<&str>| {
+        with_record(good_record(), |record| {
+            if let Event::SessionStarted {
+                harness_version, ..
+            } = record
+            {
+                *harness_version = value.map(str::to_owned);
+            }
+        })
+    };
+    let both = with_record(version(None), |record| {
+        if let Event::SessionStarted { output_style, .. } = record {
+            *output_style = Some("Explanatory".to_string());
+        }
+    });
+    for (record, control, audit) in [
+        (good_record(), "ok", "ok (exit 0)"),
+        (version(None), "unk", "no verdict (exit 3)"),
+        (version(Some("9.9.9")), "gap", "gap (exit 1)"),
+        (both, "gap", "gap (exit 1)"),
+    ] {
+        let lines = verdict_lines(&report_with(floor_for(record)));
+        assert_eq!(
+            lines[1..],
+            [
+                format!("control verdict: {control}"),
+                format!("audit verdict: {audit}")
+            ]
+        );
+    }
+}
+
+#[test]
+fn an_auditors_exit_moves_the_audit_verdict_and_never_the_control_verdict() {
+    for (auditor_code, audit) in [
+        (1, "audit verdict: gap (exit 1)"),
+        (3, "audit verdict: no verdict (exit 3)"),
+        (0, "audit verdict: ok (exit 0)"),
+    ] {
+        let mut report = report_with(floor_for(good_record()));
+        report.auditor = Some(metaharness::AuditorVerdict {
+            argv: vec!["protocol".to_string()],
+            exit_code: Some(auditor_code),
+            verdict_rows: 7,
+        });
+        assert_eq!(
+            verdict_lines(&report),
+            ["child exit: unknown", "control verdict: ok", audit],
+            "auditor exit {auditor_code}"
+        );
+    }
+}
+
+/// A stream that never carried a terminal record exits `3` while every control held: the two
+/// verdicts are different facts, and the report says both.
+#[test]
+fn a_run_with_no_terminal_record_exits_three_beside_a_control_verdict_of_ok() {
+    let mut report = report_with(floor_for(good_record()));
+    report.saw_terminal_record = false;
+    assert_eq!(report.exit(), RunExit::NoVerdict);
+    assert_eq!(
+        verdict_lines(&report),
+        [
+            "child exit: unknown",
+            "control verdict: ok",
+            "audit verdict: no verdict (exit 3)"
+        ]
+    );
 }
 
 #[test]

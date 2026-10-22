@@ -288,9 +288,30 @@ published here.
 
 ## Exit codes
 
-| Code | Meaning |
-|---|---|
-| `0` | Completed; every gating hermetic row is `ok`. |
-| `1` | A gating row is `gap`. |
-| `2` | Refused — a verb or option that is not built. |
-| `3` | A gating row is `unk`. Not a softer `gap`. |
+| Code | Meaning | An audited run's last line |
+|---|---|---|
+| `0` | Completed; every gating hermetic row is `ok`. | `audit verdict: ok (exit 0)` |
+| `1` | A gating row is `gap`, or the external auditor exited `1`. | `audit verdict: gap (exit 1)` |
+| `2` | Refused — a verb or option that is not built. | None: a refusal prints no report. |
+| `3` | A gating row is `unk`, the external auditor exited `3`, or the run did not complete with a terminal record. Not a softer `gap`. The harness itself may have exited `0`: the report then says `child exit: 0` beside `control verdict: unk`. | `audit verdict: no verdict (exit 3)` |
+
+An audited run (`--audit`, or `--hermetic strict`) ends its report on stderr with three lines, each
+a fact of its own (design amendment a48):
+
+| Line | What it says | Printed as |
+|---|---|---|
+| `child exit:` | The harness process's own exit, as `stream.closed` records it in `process`. It decides no verdict. | `child exit: <N>`, `child exit: signal <N>`, or `child exit: unknown` when nothing measured it, never `0` |
+| `control verdict:` | The gating hermetic rows folded `gap` over `unk` over `ok`. Advisory rows and the external auditor do not enter it. | `control verdict: ok`, `control verdict: unk`, `control verdict: gap` |
+| `audit verdict:` | The exit code above, as a word and a number. | `audit verdict: ok (exit 0)`, `audit verdict: gap (exit 1)`, `audit verdict: no verdict (exit 3)` |
+
+A harness that exited `0` under an opening record silent on its plugins and MCP servers prints:
+
+```text
+child exit: 0
+control verdict: unk
+audit verdict: no verdict (exit 3)
+```
+
+The harness finished, and the floor could not tell whether every control held. That is exit `3`,
+and the three lines say which fact it rests on. A run that wants no audit prints no report, so it
+prints none of these lines.

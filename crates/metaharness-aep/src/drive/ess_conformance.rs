@@ -147,6 +147,221 @@ fn scratch_cwd_plan(input: &Value) -> Observed {
     )
 }
 
+/// `/bin/sh` in place of the vendor binary, under the production spawn runner: it prints the two
+/// records it was handed and then runs its ending, so the child's exit is the runner's measurement.
+struct ShellChild {
+    ending: &'static str,
+    records: [String; 2],
+}
+
+impl metaharness::ProcessRunner for ShellChild {
+    fn requires_executable(&self) -> bool {
+        false
+    }
+
+    fn start(
+        &mut self,
+        plan: &metaharness::LaunchPlanView<'_>,
+    ) -> std::io::Result<Box<dyn metaharness::HarnessProcess>> {
+        let [opening, closing] = &self.records;
+        let args = vec![
+            "-c".to_owned(),
+            format!("printf '%s\\n' \"$1\" \"$2\"; {}", self.ending),
+            "sh".to_owned(),
+            opening.clone(),
+            closing.clone(),
+        ];
+        metaharness::ProcessRunner::start(
+            &mut metaharness::SpawnRunner::new(),
+            &metaharness::LaunchPlanView {
+                program: "/bin/sh",
+                args: &args,
+                ..*plan
+            },
+        )
+    }
+}
+
+/// The opening and terminal records a Claude child prints for the declared opening: every field the
+/// floor reads on the adapter's pin, no plugin and no MCP server list, or a version off the pin.
+fn audited_records(opening: &str, cwd: &Path) -> [String; 2] {
+    let pinned = metaharness::capabilities(metaharness::protocol::Kind::Claude)
+        .unwrap()
+        .versions_pinned;
+    let mut record = json!({
+        "emit": "session.started",
+        "harness_version": pinned[0],
+        "output_style": "default",
+        "plugins": [],
+        "mcp_servers": [],
+        "credential_source": "none",
+        "cwd": cwd.display().to_string(),
+    });
+    match opening {
+        "complete" => {}
+        "silent-on-plugins-and-mcp" => {
+            let fields = record.as_object_mut().unwrap();
+            fields.remove("plugins");
+            fields.remove("mcp_servers");
+        }
+        "off-the-pin" => record["harness_version"] = json!("0.0.0-off-the-pin"),
+        other => panic!("unsupported opening record {other}"),
+    }
+    [
+        record.to_string(),
+        r#"{"emit":"session.ended","is_error":false,"subtype":"success"}"#.to_owned(),
+    ]
+}
+
+/// The domain word for the report line that starts with `prefix`, mapped only from the exact
+/// printed words listed: anything else is `unnamed:<line>`, which no declared variant matches.
+fn printed_word(rendered: &str, prefix: &str, words: &[(&str, &str)]) -> String {
+    let line = rendered
+        .lines()
+        .find_map(|line| line.strip_prefix(prefix))
+        .unwrap_or("<absent>");
+    words
+        .iter()
+        .find(|(printed, _)| *printed == line)
+        .map_or_else(|| format!("unnamed:{line}"), |(_, word)| (*word).to_owned())
+}
+
+/// Amendment a48: a real `--hermetic strict` Claude run over a declared scratch copy, audited. A
+/// measured child is [`ShellChild`], which exits `0`, exits `7` or kills itself; an unknown child
+/// is the scripted runner, which measures nothing. The three verdict lines are read off the
+/// rendered report and the exit code off the production floor, and each is mapped back only from
+/// the exact words this fixture can produce, so a line the domain does not declare fails by
+/// scenario name instead of being read as the nearest variant.
+fn audited_run_exit(input: &Value) -> Observed {
+    use metaharness::protocol::{CredentialSource, HermeticMode, Kind};
+    use metaharness::{
+        FakeAuditor, Input, Metaharness, ScriptedLog, ScriptedRunner, ScriptedSeams,
+    };
+    let root = tempfile::tempdir().unwrap();
+    let copy = root.path().join("copy");
+    fs::create_dir(&copy).unwrap();
+    let records = audited_records(
+        input["opening"].as_str().unwrap(),
+        &fs::canonicalize(&copy).unwrap(),
+    );
+    let shell = |ending| -> Box<dyn metaharness::ProcessRunner> {
+        Box::new(ShellChild {
+            ending,
+            records: records.clone(),
+        })
+    };
+    let mut runner: Box<dyn metaharness::ProcessRunner> = match input["child"].as_str().unwrap() {
+        "exited-zero" => shell("exit 0"),
+        "exited-nonzero" => shell("exit 7"),
+        "signaled" => shell("kill -KILL $$"),
+        "unknown" => Box::new(ScriptedRunner::of_lines(
+            records.clone(),
+            ScriptedLog::new(),
+        )),
+        other => panic!("unsupported child exit {other}"),
+    };
+    let mut run = Metaharness::new(Kind::Claude)
+        .with_hermetic(HermeticMode::Strict)
+        .with_credentials(CredentialSource::None)
+        .with_cwd(&copy)
+        .with_scratch_cwd()
+        .start_with(
+            Input::Prompt("fixture".to_owned()),
+            &mut *runner,
+            &mut ScriptedSeams,
+        )
+        .unwrap();
+    run.drain().unwrap();
+    let report = run.audit(&mut FakeAuditor::missing()).unwrap();
+    let exit_code = run.exit(Some(&report)).code();
+    let rendered = report.render();
+    let named = |prefix: &str, words: &[(&str, &str)]| printed_word(&rendered, prefix, words);
+    let child_exit = named(
+        "child exit: ",
+        &[
+            ("0", "exited-zero"),
+            ("7", "exited-nonzero"),
+            ("signal 9", "signaled"),
+            ("unknown", "unknown"),
+        ],
+    );
+    let control = named(
+        "control verdict: ",
+        &[("ok", "ok"), ("unk", "unk"), ("gap", "gap")],
+    );
+    let audit = named(
+        "audit verdict: ",
+        &[
+            ("ok (exit 0)", "ok"),
+            ("gap (exit 1)", "gap"),
+            ("no verdict (exit 3)", "no-verdict"),
+        ],
+    );
+    let outcome = match (control.as_str(), audit.as_str(), exit_code) {
+        ("gap", "gap", 1) => "a-gating-row-failed".to_owned(),
+        ("unk", "no-verdict", 3) => "nobody-found-out".to_owned(),
+        ("ok", "ok", 0) => "every-control-held".to_owned(),
+        other => format!("undeclared-shape:{other:?}"),
+    };
+    event(
+        &outcome,
+        "metaharness.session.AuditedRunExited",
+        json!({
+            "child_exit": child_exit,
+            "control": control,
+            "audit": audit,
+            "exit_code": exit_code,
+        }),
+    )
+}
+
+/// The generated `ExitAuditedRun` scenarios fix the child at the enum's first variant: no guard
+/// reads it, and the payload echoes it. Each is run again with every child the event's own shape
+/// declares, through the same production arm, so the measured and unmeasured children are driven
+/// by the specification's expectations rather than by a table spelled here (amendment a48).
+#[test]
+fn every_declared_child_exit_drives_the_audited_run_scenarios() {
+    let suite = suite();
+    let mut driven = Vec::new();
+    for (id, scenario) in suite["scenarios"].as_object().unwrap() {
+        if !id.starts_with("metaharness.session.ExitAuditedRun/") {
+            continue;
+        }
+        let steps = scenario["steps"].as_array().unwrap();
+        let children = steps
+            .iter()
+            .find(|step| {
+                step["step"] == "expect_event"
+                    && step["event"] == "metaharness.session.AuditedRunExited"
+            })
+            .and_then(|step| step["shape"]["child_exit"]["variants"].as_array())
+            .unwrap()
+            .clone();
+        for child in children {
+            let mut varied = scenario.clone();
+            for step in varied["steps"].as_array_mut().unwrap() {
+                if step["step"] == "execute_command" {
+                    step["input"]["child"]["value"] = child.clone();
+                }
+                if step["step"] == "expect_event"
+                    && step["event"] == "metaharness.session.AuditedRunExited"
+                {
+                    step["payload"]["child_exit"] = child.clone();
+                }
+            }
+            if let Err(reason) = run_scenario(&varied) {
+                panic!("{id} with child {child}: {reason}");
+            }
+            driven.push(format!("{id} {child}"));
+        }
+    }
+    assert_eq!(
+        driven.len(),
+        12,
+        "three outcomes, four children: {driven:#?}"
+    );
+}
+
 /// Run git for the fixture tree with no operator configuration.
 fn fixture_git(directory: &Path, args: &[&str]) {
     let status = Process::new("git")
@@ -1787,6 +2002,7 @@ fn execute(command: &str, input: &Value) -> Observed {
         | "metaharness.spending.RecordInvocationAdmission" => retained(command),
         "metaharness.session.FinishCodexCompletion" => completion(input),
         "metaharness.session.CloseUnsteeredStream" => closure(input),
+        "metaharness.session.ExitAuditedRun" => audited_run_exit(input),
         "metaharness.workspace.DeclareProcessWrites" => process_write_plan(input),
         "metaharness.workspace.DeclareScratchWorkingDirectory" => scratch_cwd_plan(input),
         "metaharness.workspace.DeclareContextFiles" => context_files_plan(input),
@@ -2097,7 +2313,7 @@ fn ess_generated_scenarios_drive_production_targets() {
     if external.is_none() {
         assert_eq!(
             scenarios.len(),
-            107,
+            111,
             "review and update coverage deliberately"
         );
         assert_eq!(
@@ -2108,6 +2324,7 @@ fn ess_generated_scenarios_drive_production_targets() {
             "PollSteering",
             "FinishCodexCompletion",
             "CloseUnsteeredStream",
+            "ExitAuditedRun",
             "CheckSelectedName",
             "DeclareProcessWrites",
             "DeclareScratchWorkingDirectory",
