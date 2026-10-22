@@ -11,7 +11,7 @@ relations:
 - decides: story:mcp-arguments-checked-against-declared-types
 - decides: story:first-user-documents-agree-with-cli
 - decides: story:b10x-api-key-from-keychain
-revision: 5
+revision: 6
 transitions:
 - {from: "draft", to: "approved", at: "2026-10-21T22:46:16Z", actor: "human:timo", revision: 2}
 ---
@@ -42,3 +42,26 @@ release. Skill: aep:implementing 0.23.2, wave mode.
 | `story:b10x-api-key-from-keychain` | orchestrator, 2026-10-22, for a takt trial; replaces `story:b10x-api-key-from-file` (archived), operator decision: the key is named by a secret name, `--api-key-secret` |
 
 Commits, review passes and the merge are recorded here as they happen.
+
+## Opening (2026-10-22)
+
+Tree `mh-w8-int`, base `a34551e` (release 0.13.0), branch `integration/adr-0096-wave-8`. Each story was
+scoped by one `aep:story-scoper` at that base and moved draft → proposed → active; its `## Scope` section
+carries the scoper result and the coordinator decisions D1–D13. `story:b10x-api-key-from-keychain` waits
+for harness 0.17.1, which carries `--api-key-secret`.
+
+`aep plan artifact waves` orders the five one per wave, because every scope names `CHANGELOG.md` and most
+name the design document and `spec/conformance.json`. Those three are merged by the coordinator: the
+CHANGELOG under `[Unreleased]`, the amendments numbered in advance, `spec/conformance.json` regenerated
+after each merge. Code surfaces are disjoint except `website/docs/reference/cli.md`, so the units run
+in two batches:
+
+| batch | unit | story | amendment |
+|---|---|---|---|
+| 1 | u1 | `story:mcp-arguments-checked-against-declared-types` | a45 |
+| 1 | u2 | `story:narrowed-cap-refused-before-persist` | a46 |
+| 1 | u3 | `story:codex-command-outcomes-reach-tool-result` | a47 |
+| 2 | u4 | `story:exit-status-separates-task-control-audit` | a48 |
+| 2 | u5 | `story:first-user-documents-agree-with-cli`, after u4 merges | a49 if needed |
+
+Units 1–4: `aep:implementor` at xhigh, then `aep:adversary`. Unit 5: documentation and count tests.
