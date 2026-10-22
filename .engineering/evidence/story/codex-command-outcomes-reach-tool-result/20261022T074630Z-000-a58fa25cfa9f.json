@@ -1,0 +1,13 @@
+{
+  "at": "2026-10-22T07:46:30Z",
+  "actor": "human:timo",
+  "artifact": "story:codex-command-outcomes-reach-tool-result",
+  "kind": "story",
+  "revision": 5,
+  "change": {
+    "change": "evidence",
+    "kind": "test_result",
+    "source": "task check, one step at a time, on integration/adr-0096-wave-8 at 9595d5d (gated as its working tree before the commit): 6 steps exit 0, 120 test binaries, 1354 passed, 0 failed, 50 ignored, conformance 116/116",
+    "reference": "w8int-final-5-test.log in the wave's cache directory metaharness-wave-adr0096/w8/int-scratch"
+  }
+}

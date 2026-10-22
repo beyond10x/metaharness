@@ -2,7 +2,7 @@
 format: aep.planning-md/3
 id: story:first-user-documents-agree-with-cli
 kind: story
-status: active
+status: implemented
 title: The first-user documents agree with the released CLI
 scope:
 - confidence: cited
@@ -25,10 +25,11 @@ scope:
   path: website/docs/reference/cli.md
 - confidence: cited
   path: website/docs/status.md
-revision: 5
+revision: 6
 transitions:
 - {from: "draft", to: "proposed", at: "2026-10-22T00:51:01Z", actor: "human:timo", revision: 4}
 - {from: "proposed", to: "active", at: "2026-10-22T00:51:01Z", actor: "human:timo", revision: 5}
+- {from: "active", to: "implemented", at: "2026-10-22T07:46:31Z", actor: "human:timo", revision: 6, decided_on: {"recorded":{"test_result":1,"review_outcome":1}}}
 ---
 # Story: the first-user documents agree with the released CLI
 

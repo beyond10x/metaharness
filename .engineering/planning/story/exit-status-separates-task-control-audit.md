@@ -2,7 +2,7 @@
 format: aep.planning-md/3
 id: story:exit-status-separates-task-control-audit
 kind: story
-status: active
+status: implemented
 title: The run's exit status documents the task, control and audit verdicts separately
 scope:
 - confidence: cited
@@ -25,10 +25,11 @@ scope:
   path: website/docs/protocol/events.md
 - confidence: cited
   path: website/docs/reference/cli.md
-revision: 5
+revision: 6
 transitions:
 - {from: "draft", to: "proposed", at: "2026-10-22T00:51:00Z", actor: "human:timo", revision: 4}
 - {from: "proposed", to: "active", at: "2026-10-22T00:51:00Z", actor: "human:timo", revision: 5}
+- {from: "active", to: "implemented", at: "2026-10-22T07:46:31Z", actor: "human:timo", revision: 6, decided_on: {"recorded":{"test_result":1,"review_outcome":1}}}
 ---
 # Story: The run's exit status documents the task, control and audit verdicts separately
 

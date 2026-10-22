@@ -1,0 +1,14 @@
+{
+  "at": "2026-10-22T03:03:42Z",
+  "actor": "human:timo",
+  "artifact": "story:mcp-arguments-checked-against-declared-types",
+  "kind": "story",
+  "revision": 5,
+  "change": {
+    "change": "evidence",
+    "kind": "review_outcome",
+    "source": "review-result:adr0096-w8u1-review",
+    "review": "review-result:adr0096-w8u1-review",
+    "outcome": "fixed"
+  }
+}

@@ -30,7 +30,7 @@ scope:
   path: crates/metaharness-b10x/src/vectors.rs
 - confidence: inferred
   path: docs/design/metaharness-protocol-v0.1.md
-revision: 9
+revision: 10
 ---
 # Story: a call seam for the in-house harness
 
@@ -54,8 +54,8 @@ decides nothing.
   driven arm's treatment back on top".
 - The loop already consults hook programs before each call: `--hooks <FILE>` is passed when set
   (`crates/metaharness-b10x/src/launch.rs:558-560`); `RunSpec.hooks` is "the only content-level
-  refusal this arm has" (`spec.rs:225-229`). `aep-eval native` writes `metaharness aep drive hook`
-  into that file (AGENTS.md § Live-evaluating).
+  refusal this arm has" (`spec.rs:225-229`). The native walk that wrote `metaharness aep drive hook`
+  into that file was removed with harness 0.18.0 (story:aep-eval-native-arm-removed).
 - harness is kept and builds on llm (ADR 0097); its hook and approval ports (`HookPort`, `ApprovalPort`
   among the eight ports ADR 0098 Context lists) are the seam a per-call decision can cross.
 - `--decisions` defaults to `frame` and b10x refuses it by name today (AGENTS.md § Live-evaluating).

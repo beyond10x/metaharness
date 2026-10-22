@@ -2,7 +2,7 @@
 format: aep.planning-md/3
 id: story:mcp-arguments-checked-against-declared-types
 kind: story
-status: active
+status: implemented
 title: MCP tool arguments are checked against the declared types
 scope:
 - confidence: cited
@@ -15,10 +15,11 @@ scope:
   path: crates/metaharness-tools/tests/caller_catalogue.rs
 - confidence: cited
   path: docs/design/metaharness-protocol-v0.1.md
-revision: 5
+revision: 6
 transitions:
 - {from: "draft", to: "proposed", at: "2026-10-22T00:51:00Z", actor: "human:timo", revision: 4}
 - {from: "proposed", to: "active", at: "2026-10-22T00:51:00Z", actor: "human:timo", revision: 5}
+- {from: "active", to: "implemented", at: "2026-10-22T07:46:31Z", actor: "human:timo", revision: 6, decided_on: {"recorded":{"test_result":1,"review_outcome":1}}}
 ---
 # Story: MCP tool arguments are checked against the declared types
 
