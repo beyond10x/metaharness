@@ -5,6 +5,11 @@ was amended and the amendment is named here.
 
 ## [Unreleased]
 
+### Fixed
+
+- On the catalogue road, `tools/call` answers `isError` and performs nothing when a value in its arguments, at any depth, is not of the type the entry's input schema declares, naming the value's path and that type; `fs_read` with `offset` `"second"`, `1.5` or `false` read from line 1. An `integer` is a JSON number held as an `i64` or a `u64` (`-0.0` is refused and named as negative zero; the `metaharness` binary holds `-0` as the integer 0 and admits it), an enum is one of its strings, null on a field that is not required reads as absent, a required field left out or given as null is named with its declared type at every depth, and `CatalogueEntry::argument_problems` is public (a45).
+- `code.write` and `code.edit` giving `expected_sha256: null`, on the catalogue road or as a contract name through `tool_invoke`, are performed as the call without the field; they were refused as asking for a digest check nothing here runs (a45 § 2, amending a32 § 5).
+
 ## [0.13.0] — 2026-10-22
 
 ### Added

@@ -52,12 +52,15 @@ impl Server {
     ///
     /// `tools/list` answers one tool per entry, by its `mcp` rendering. A call to an entry harness
     /// maps is performed through `verbs` as that entry, on the road a contract name takes through
-    /// `tool_invoke`, so the `expected_sha256` refusal holds on it too. A call to an entry nothing
-    /// here performs, or to any name outside the catalogue (the three verbs included), answers
-    /// `isError` and does nothing. So does a call whose arguments the entry's published input
-    /// schema does not admit: not an object, a key outside its input fields, or a required field
-    /// left out or null. The field and the entry are named, so a call is never performed with a
-    /// field the operation would drop.
+    /// `tool_invoke`, so the `expected_sha256` refusal holds on it too; `expected_sha256: null`
+    /// asks for no check and is performed, as on that road (amendment a45 § 2). A call to an
+    /// entry nothing here performs, or to any name outside the catalogue (the three verbs
+    /// included), answers `isError` and does nothing. So does a call whose arguments the entry's
+    /// published input schema does not admit: not an object, a key outside its input fields, a
+    /// required field left out or null, or a value at any depth that is not of its declared type
+    /// (amendment a45).
+    /// The value, its declared type and the entry are named, so a call is never performed with a
+    /// field the operation would drop or read as absent.
     #[must_use]
     pub fn with_catalogue(verbs: Verbs, catalogue: CallerCatalogue) -> Self {
         Self {
@@ -211,12 +214,13 @@ impl Server {
                 // The contract's digest guard, which the entry it maps to does not run: harness
                 // performs `file_write` and `file_edit` without reading `expected_sha256`.
                 // Performing the call would drop the guard and change a file the contract says
-                // stays as it was, so it is refused here, before anything runs.
+                // stays as it was, so it is refused here, before anything runs. Null asks for no
+                // check: on a field that is not required it reads as absent (a45 § 2).
                 if name.as_str() == INVOKE_VERB
                     && object
                         .get("arguments")
                         .and_then(|inner| inner.get("expected_sha256"))
-                        .is_some()
+                        .is_some_and(|digest| !digest.is_null())
                 {
                     return failed(&format!(
                         "`{named}` was called with `expected_sha256`. Under tool-contract/1 a \

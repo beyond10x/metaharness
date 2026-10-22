@@ -4,8 +4,8 @@ use std::path::{Path, PathBuf};
 
 use metaharness_tools::{
     CATALOGUE_BYTES_MAX, CATALOGUE_MALFORMED, CATALOGUE_NOT_TOOL_CONTRACT, CATALOGUE_UNREADABLE,
-    CallerCatalogue, Catalogue, CatalogueError, LocalOperations, Resolved, SERVER_NAME, Server,
-    Verbs, render_scratch_copy,
+    CallerCatalogue, Catalogue, CatalogueEntry, CatalogueError, LocalOperations, Resolved,
+    SERVER_NAME, Server, Verbs, render_scratch_copy,
 };
 use serde_json::{Value, json};
 
@@ -116,9 +116,9 @@ fn an_entry_carries_its_summary_guidance_and_a_schema_derived_from_its_fields() 
     assert_eq!(catalogue.entries()[1].description, "Say what one entry is.");
 }
 
-#[test]
-fn every_shape_in_the_grammar_has_a_schema() {
-    let text = FIXTURE
+/// The fixture with one input field of every shape the grammar has on `fs.read`.
+fn every_shape_text() -> String {
+    FIXTURE
         .replace(
             "errors:\n",
             "types:\n  - {name: fs.Kind, kind: enum, summary: A kind., variants: [file, directory]}\n  - name: fs.Window\n    kind: struct\n    summary: A window.\n    fields: [{name: from, type: Integer}, {name: to, type: Optional<Integer>}]\nerrors:\n",
@@ -126,7 +126,12 @@ fn every_shape_in_the_grammar_has_a_schema() {
         .replace(
             "        description: The first line to read, numbered from 1.\n",
             "        description: The first line to read, numbered from 1.\n      - name: blob\n        type: Bytes\n      - name: lines\n        type: List<Optional<Integer>>\n      - name: env\n        type: Map<String, Boolean>\n      - name: kind\n        type: fs.Kind\n      - name: window\n        type: Optional<fs.Window>\n",
-        );
+        )
+}
+
+#[test]
+fn every_shape_in_the_grammar_has_a_schema() {
+    let text = every_shape_text();
     let catalogue =
         CallerCatalogue::from_text(Path::new("catalogue.yaml"), &text).expect("still a catalogue");
     let properties = &catalogue.entries()[0].input_schema["properties"];
@@ -590,6 +595,480 @@ fn a_call_lacking_a_required_field_or_an_object_is_refused_and_nothing_is_read()
     );
     assert!(!failed, "{text}");
     assert!(text.contains("hello catalogue"), "{text}");
+}
+
+/// `fs_read.offset` is declared `integer`. A string, a boolean, or a number written with a fraction
+/// or an exponent is refused, naming `offset` and `integer`, and nothing is read; each was read from
+/// line 1. `2` still reads from line 2, and null on the optional field reads as absent (a45, D2, D3).
+#[test]
+fn an_offset_that_is_not_an_integer_is_refused_naming_offset_and_integer() {
+    let dir = tree();
+    std::fs::write(dir.path().join("lines.txt"), "alpha\nbeta\ngamma\n").expect("a file");
+    let mut server = server(dir.path(), caller());
+    let mut answered = Vec::new();
+    for offset in ["\"second\"", "1.5", "false", "1.0", "\"2\"", "1e0"] {
+        let arguments: Value =
+            serde_json::from_str(&format!(r#"{{"path": "lines.txt", "offset": {offset}}}"#))
+                .expect("JSON");
+        let (failed, text) = call(&mut server, "fs_read", &arguments);
+        let refused = failed
+            && text.contains("`fs_read`")
+            && text.contains("`offset`")
+            && text.contains("`integer`")
+            && text.contains("nothing was done")
+            && !text.contains("alpha");
+        if !refused {
+            answered.push(format!("offset {offset}: isError {failed}: {text}"));
+        }
+    }
+    assert!(
+        answered.is_empty(),
+        "not refused naming `offset` and `integer`:\n{}",
+        answered.join("\n")
+    );
+
+    let (failed, text) = call(
+        &mut server,
+        "fs_read",
+        &json!({"path": "lines.txt", "offset": 2}),
+    );
+    assert!(!failed, "{text}");
+    assert!(text.contains("beta"), "{text}");
+    assert!(!text.contains("alpha"), "{text}");
+
+    let (failed, text) = call(
+        &mut server,
+        "fs_read",
+        &json!({"path": "lines.txt", "offset": null}),
+    );
+    assert!(!failed, "{text}");
+    assert!(text.contains("alpha"), "{text}");
+}
+
+/// One step from a value to a value the published schema declares inside it.
+#[derive(Debug, Clone)]
+enum Step {
+    /// A field of an object with `properties`.
+    Field(String),
+    /// The first item of an array.
+    Item,
+    /// The value under the key `key` of an object with `additionalProperties`.
+    Entry,
+}
+
+/// How a refusal names the value at `steps`: `window.from`, `lines[0]`, `env["key"]`.
+fn shown(steps: &[Step]) -> String {
+    let mut text = String::new();
+    for step in steps {
+        match step {
+            Step::Field(name) => {
+                if !text.is_empty() {
+                    text.push('.');
+                }
+                text.push_str(name);
+            }
+            Step::Item => text.push_str("[0]"),
+            Step::Entry => text.push_str("[\"key\"]"),
+        }
+    }
+    text
+}
+
+/// The JSON pointer of the value at `steps` in a value [`admitted`] built.
+fn pointer(steps: &[Step]) -> String {
+    steps
+        .iter()
+        .map(|step| match step {
+            Step::Field(name) => format!("/{name}"),
+            Step::Item => "/0".to_owned(),
+            Step::Entry => "/key".to_owned(),
+        })
+        .collect()
+}
+
+/// The schema an `anyOf` with `null` (an `Optional` that is not a field) stands for, and the
+/// schema itself otherwise.
+fn inner(schema: &Value) -> &Value {
+    schema["anyOf"].as_array().map_or(schema, |choices| {
+        choices
+            .iter()
+            .find(|choice| choice["type"] != "null")
+            .expect("a choice besides null")
+    })
+}
+
+/// A value the published schema admits, with every declared field given, the optional ones too.
+fn admitted(schema: &Value) -> Value {
+    let schema = inner(schema);
+    match schema["type"].as_str() {
+        Some("string") => schema["enum"]
+            .get(0)
+            .cloned()
+            .unwrap_or_else(|| json!("text")),
+        Some("integer") => json!(3),
+        Some("boolean") => json!(true),
+        Some("array") => json!([admitted(&schema["items"])]),
+        Some("object") => match schema["properties"].as_object() {
+            Some(properties) => properties
+                .iter()
+                .map(|(name, property)| (name.clone(), admitted(property)))
+                .collect(),
+            None => json!({"key": admitted(&schema["additionalProperties"])}),
+        },
+        other => panic!("a published schema type the walk does not know: {other:?}: {schema}"),
+    }
+}
+
+/// One declared value the walk sends wrong kinds to.
+#[derive(Debug)]
+struct Declared {
+    steps: Vec<Step>,
+    schema: Value,
+    /// A field of an object that is not in its `required`: null reads as absent (D2).
+    optional_field: bool,
+}
+
+/// Every value `schema` declares at and below `steps`.
+fn declared(schema: &Value, steps: &[Step], optional_field: bool, into: &mut Vec<Declared>) {
+    into.push(Declared {
+        steps: steps.to_vec(),
+        schema: schema.clone(),
+        optional_field,
+    });
+    let schema = inner(schema);
+    let deeper = |step: Step| {
+        let mut steps = steps.to_vec();
+        steps.push(step);
+        steps
+    };
+    match schema["type"].as_str() {
+        Some("array") => declared(&schema["items"], &deeper(Step::Item), false, into),
+        Some("object") => match schema["properties"].as_object() {
+            Some(properties) => {
+                let required = schema["required"].as_array().expect("a required list");
+                for (name, property) in properties {
+                    let optional = !required.contains(&Value::from(name.as_str()));
+                    declared(property, &deeper(Step::Field(name.clone())), optional, into);
+                }
+            }
+            None => declared(
+                &schema["additionalProperties"],
+                &deeper(Step::Entry),
+                false,
+                into,
+            ),
+        },
+        _ => {}
+    }
+}
+
+/// Whether `value` is of the JSON kind the schema declares; a string must also be one of an
+/// enum's values. Null is the caller's to decide.
+fn of_the_declared_kind(schema: &Value, value: &Value) -> bool {
+    let schema = inner(schema);
+    match schema["type"].as_str() {
+        Some("string") => value.as_str().is_some_and(|text| {
+            schema["enum"]
+                .as_array()
+                .is_none_or(|values| values.contains(&Value::from(text)))
+        }),
+        Some("integer") => value.is_i64() || value.is_u64(),
+        Some("boolean") => value.is_boolean(),
+        Some("array") => value.is_array(),
+        Some("object") => value.is_object(),
+        other => panic!("a published schema type the walk does not know: {other:?}"),
+    }
+}
+
+/// Every catalogue the walk reads: the synthetic fixture, the fixture with every shape of the
+/// grammar, and every document `b10x-tool-contract` releases.
+fn every_catalogue() -> Vec<(String, CallerCatalogue)> {
+    let mut catalogues = vec![
+        ("the fixture".to_owned(), caller()),
+        (
+            "every shape".to_owned(),
+            CallerCatalogue::from_text(Path::new("every-shape.yaml"), &every_shape_text())
+                .expect("a catalogue"),
+        ),
+    ];
+    for document in tool_contract::documents::all() {
+        catalogues.push((
+            format!("{}/{}", document.toolset, document.version),
+            CallerCatalogue::from_text(Path::new("released.yaml"), document.yaml)
+                .expect("a released document is a catalogue"),
+        ));
+    }
+    catalogues
+}
+
+/// Every value an entry's input schema declares: each top-level field, and everything inside one.
+fn declared_values(schema: &Value) -> Vec<Declared> {
+    let required = schema["required"].as_array().expect("a required list");
+    let mut values = Vec::new();
+    for (name, property) in schema["properties"].as_object().expect("properties") {
+        let optional = !required.contains(&Value::from(name.as_str()));
+        declared(
+            property,
+            &[Step::Field(name.clone())],
+            optional,
+            &mut values,
+        );
+    }
+    values
+}
+
+/// The words the walk records a declared value's shape under, for the check that it reached
+/// every shape the published schemas use.
+fn shapes(value: &Declared) -> Vec<String> {
+    let mut words = vec![
+        inner(&value.schema)["type"]
+            .as_str()
+            .expect("a type")
+            .to_owned(),
+    ];
+    if value.schema.get("anyOf").is_some() {
+        words.push("anyOf".to_owned());
+    }
+    if inner(&value.schema).get("enum").is_some() {
+        words.push("enum".to_owned());
+    }
+    words.push(
+        match value.steps.as_slice() {
+            [_] => "an argument",
+            [.., Step::Field(_)] => "a field inside one",
+            [.., Step::Item] => "a list item",
+            [.., Step::Entry] => "a map value",
+            [] => unreachable!("every value is under an argument"),
+        }
+        .to_owned(),
+    );
+    words
+}
+
+/// Each value the walk sends, written as JSON, and what a refusal must say it is; `-0` is added by
+/// [`minus_zero`].
+const KINDS: [(&str, &str); 9] = [
+    ("null", "null"),
+    ("true", "a boolean"),
+    ("7", "a number"),
+    (
+        "1.0",
+        "a number written with a fraction or an exponent, or outside 64 bits",
+    ),
+    (
+        "1.5",
+        "a number written with a fraction or an exponent, or outside 64 bits",
+    ),
+    (
+        "18446744073709551616",
+        "a number written with a fraction or an exponent, or outside 64 bits",
+    ),
+    ("\"text\"", "a string"),
+    ("[]", "an array"),
+    ("{}", "an object"),
+];
+
+/// JSON `-0` as this build holds it, and what a refusal must say it is. `serde_json` without
+/// `arbitrary_precision` (this crate built alone) holds it as the float `-0.0`, the one number
+/// written as an integer inside 64 bits that is not held as an `i64` or a `u64`, so it is refused
+/// and named for what it is and not as a fraction (a45 § 3, D23). With that feature (the workspace
+/// and the `metaharness` binary) it is held as the integer 0, so it is a number like `7` and is
+/// admitted where an integer is declared (a45 § 2).
+fn minus_zero() -> (Value, &'static str) {
+    let value: Value = serde_json::from_str("-0").expect("JSON");
+    if value.is_i64() {
+        assert_eq!(value, json!(0), "`-0` held as an integer is 0");
+        (value, "a number")
+    } else {
+        assert_eq!(
+            value.as_f64().map(f64::to_bits),
+            Some((-0.0_f64).to_bits()),
+            "`-0` not held as an integer is the float -0.0"
+        );
+        (
+            value,
+            "negative zero, a number not held as a 64-bit integer",
+        )
+    }
+}
+
+/// Whether `problem` says the value sent at `value` is `said`: null on a required field as the
+/// call giving it as null, a string outside an enum as a string that is not one of its values.
+fn describes(problem: &str, value: &Declared, said: &str) -> bool {
+    if said == "null" && matches!(value.steps.last(), Some(Step::Field(_))) {
+        return problem.contains("is required and the call gives it as null,");
+    }
+    problem.contains(&format!("is {said},"))
+        || problem.contains(&format!("is {said} that is not one of its values,"))
+}
+
+/// The declared type a refusal must name for `value`, as the schema's `type` in backticks after
+/// the words that introduce it.
+fn its_declared_type(value: &Declared) -> String {
+    format!(
+        "its declared type is `{}`",
+        inner(&value.schema)["type"].as_str().expect("a type")
+    )
+}
+
+/// `whole` with the value at `value` replaced by `kind`, and the one problem the entry names it
+/// with, which must say it is `said` and name its declared type; `None` when `kind` is of the
+/// declared kind, or is null where D2 reads it as absent (which is asserted to raise nothing).
+fn refusal_of(
+    entry: &CatalogueEntry,
+    whole: &Value,
+    value: &Declared,
+    (kind, said): (&Value, &str),
+    context: &str,
+) -> Option<(Value, String)> {
+    if !kind.is_null() && of_the_declared_kind(&value.schema, kind) {
+        return None;
+    }
+    let mut arguments = whole.clone();
+    *arguments
+        .pointer_mut(&pointer(&value.steps))
+        .expect("the walk's value is in the arguments") = kind.clone();
+    let problems = entry.argument_problems(&arguments);
+    if kind.is_null() && (value.optional_field || value.schema.get("anyOf").is_some()) {
+        assert_eq!(problems, Vec::<String>::new(), "{context}");
+        return None;
+    }
+    assert_eq!(problems.len(), 1, "{context}: {problems:?}");
+    let path = shown(&value.steps);
+    assert!(
+        problems[0].contains(&format!("`{path}`")),
+        "{context}: {problems:?}"
+    );
+    assert!(
+        describes(&problems[0], value, said),
+        "{context}: {problems:?}"
+    );
+    assert!(
+        problems[0].contains(&its_declared_type(value)),
+        "{context}: {problems:?}"
+    );
+    let problem = problems.into_iter().next().expect("one problem");
+    Some((arguments, problem))
+}
+
+/// `whole` with the field at `value` left out, and the one problem the entry names it with, which
+/// must name the field and its declared type; `None` when `value` is not a required field.
+fn left_out_refusal(
+    entry: &CatalogueEntry,
+    whole: &Value,
+    value: &Declared,
+    context: &str,
+) -> Option<(Value, String)> {
+    let (Some(Step::Field(name)), false) = (value.steps.last(), value.optional_field) else {
+        return None;
+    };
+    let mut arguments = whole.clone();
+    arguments
+        .pointer_mut(&pointer(&value.steps[..value.steps.len() - 1]))
+        .and_then(Value::as_object_mut)
+        .expect("the field's object is in the arguments")
+        .remove(name)
+        .expect("the field was given");
+    let problems = entry.argument_problems(&arguments);
+    assert_eq!(problems.len(), 1, "{context}: {problems:?}");
+    let path = shown(&value.steps);
+    assert!(
+        problems[0].contains(&format!(
+            "`{path}` is required and the call leaves it out, and {}",
+            its_declared_type(value)
+        )),
+        "{context}: {problems:?}"
+    );
+    let problem = problems.into_iter().next().expect("one problem");
+    Some((arguments, problem))
+}
+
+/// Every declared argument of every entry of every catalogue, and every value declared inside one
+/// (a struct's field, a list's item, a map's value), is sent a value of each JSON kind it is not.
+/// Each is refused with one problem naming the argument, what was sent and its declared type,
+/// except null where D2 reads it as absent. Every required field is also left out, and refused
+/// naming it and its declared type. Every entry is asked directly, since an entry nothing performs
+/// is refused before its arguments are read; every entry that is performed is also called through
+/// the server, which answers with the same refusal and performs nothing.
+#[test]
+fn every_declared_argument_of_every_catalogue_entry_refuses_a_value_of_each_wrong_kind() {
+    let kinds: Vec<(Value, &str)> = KINDS
+        .iter()
+        .map(|(text, said)| (serde_json::from_str(text).expect("JSON"), *said))
+        .chain([minus_zero()])
+        .collect();
+    let mut shapes_seen = std::collections::BTreeSet::new();
+    let mut refused_count = 0_usize;
+    let mut left_out_count = 0_usize;
+    let mut served_count = 0_usize;
+    for (label, catalogue) in every_catalogue() {
+        let dir = tree();
+        let mut server = server(dir.path(), catalogue.clone());
+        for entry in catalogue.entries() {
+            let whole = admitted(&entry.input_schema);
+            assert_eq!(
+                entry.argument_problems(&whole),
+                Vec::<String>::new(),
+                "{label} {}: every field admitted: {whole}",
+                entry.published
+            );
+            let performed = catalogue.resolve(&format!("mcp__{SERVER_NAME}__{}", entry.published))
+                != Resolved::Unknown;
+            for value in declared_values(&entry.input_schema) {
+                shapes_seen.extend(shapes(&value));
+                let path = shown(&value.steps);
+                let mut refusals = Vec::new();
+                for (kind, said) in &kinds {
+                    let context = format!("{label} {} `{path}` = {kind}", entry.published);
+                    if let Some(refusal) =
+                        refusal_of(entry, &whole, &value, (kind, *said), &context)
+                    {
+                        refusals.push((context, refusal));
+                    }
+                }
+                let context = format!("{label} {} `{path}` left out", entry.published);
+                if let Some(refusal) = left_out_refusal(entry, &whole, &value, &context) {
+                    left_out_count += 1;
+                    refusals.push((context, refusal));
+                }
+                for (context, (arguments, problem)) in refusals {
+                    refused_count += 1;
+                    if performed {
+                        let (failed, text) = call(&mut server, &entry.published, &arguments);
+                        assert!(failed, "{context}: {text}");
+                        assert!(
+                            text.contains("its input schema does not admit"),
+                            "{context}: {text}"
+                        );
+                        assert!(text.contains(&problem), "{context}: {text}");
+                        served_count += 1;
+                    }
+                }
+            }
+        }
+    }
+    let shapes_seen: Vec<&str> = shapes_seen.iter().map(String::as_str).collect();
+    assert_eq!(
+        shapes_seen,
+        [
+            "a field inside one",
+            "a list item",
+            "a map value",
+            "an argument",
+            "anyOf",
+            "array",
+            "boolean",
+            "enum",
+            "integer",
+            "object",
+            "string"
+        ],
+        "the walk reaches every shape the published schemas use"
+    );
+    assert!(
+        refused_count > 0 && left_out_count > 0 && served_count > 0,
+        "{refused_count} {left_out_count} {served_count}"
+    );
 }
 
 #[test]
