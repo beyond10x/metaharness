@@ -423,18 +423,21 @@ fn a_shell_command_is_left_alone_rather_than_guessed_at() {
 
 // --- `tool-contract/1` names: harness's mapping, read and never copied --------------------------
 
-/// The contract names harness `0.15.1` maps, with the entry each one maps to.
+/// The contract names harness `0.18.0` maps, with the entry each one maps to.
 ///
 /// A pin of the mapping as it stands at the revision this workspace locks, not the mapping
 /// itself: production code reads `harness_catalogue::harness_operation` and holds no table. A
 /// re-pin that adds, drops or moves a name turns `the_names_harness_maps_are_the_ones_this_suite_pins`
-/// red, and the changelog says which.
-const MAPPED: [(&str, &str); 5] = [
+/// red, and the changelog says which. 0.16.0 added `search.grep` and `process.run`
+/// (`crates/harness-catalogue/src/local.rs:61-69` at `330e2cde`, amendment a50 § 2).
+const MAPPED: [(&str, &str); 7] = [
     ("fs.read", "file_read"),
     ("fs.list", "dir_list"),
+    ("search.grep", "search"),
     ("fs.glob", "find"),
     ("code.write", "file_write"),
     ("code.edit", "file_edit"),
+    ("process.run", "run"),
 ];
 
 /// What `contract` resolves to on the served surface, asserted equal to what its harness `entry`
@@ -588,13 +591,22 @@ fn a_contract_name_reaching_outside_the_workspace_names_where_it_reaches() {
     // The safety half. `Run::out_of_scope` admits a call that names no subject — silence is not a
     // violation — so a contract name that resolved to an operation and touched nothing would pass a
     // frame's subject scope whatever path it carried. It has to name the path as the caller wrote
-    // it, exactly as its entry does, for the scope to refuse it.
+    // it, exactly as its entry does, for the scope to refuse it. `process.run` is performed as `run`
+    // (harness 0.16.0 on, a50 § 2), whose subject is the program it starts, as written, and not a
+    // path.
     for (contract, entry) in MAPPED {
-        let arguments =
-            json!({"path": "../../etc/passwd", "glob": "*", "text": "x", "old": "a", "new": "b"});
+        let arguments = json!({
+            "path": "../../etc/passwd", "glob": "*", "text": "x", "old": "a", "new": "b",
+            "argv": ["../../usr/bin/env"],
+        });
+        let expected = if entry == "run" {
+            "proc:../../usr/bin/env"
+        } else {
+            "file:../../etc/passwd"
+        };
         assert_eq!(
             touching_what_its_entry_touches(contract, entry, &arguments),
-            vec!["file:../../etc/passwd".to_owned()],
+            vec![expected.to_owned()],
             "{contract}"
         );
     }
@@ -602,11 +614,11 @@ fn a_contract_name_reaching_outside_the_workspace_names_where_it_reaches() {
 
 #[test]
 fn a_dotted_name_harness_does_not_map_stays_unknown() {
-    // `code.delete` and `process.run` are `tool-contract/1` commands harness `0.15.1` does not
-    // route; `file.read` is the neutral operation, which is not an entry. None reached a tool, on
-    // either surface.
+    // `code.delete` is a `tool-contract/1` command harness `0.18.0` does not route (`process.run`
+    // was one until 0.16.0 mapped it to `run`, a50 § 2); `file.read` is the neutral operation,
+    // which is not an entry. Neither reached a tool, on either surface.
     for surface in [Served, HarnessLoop] {
-        for name in ["code.delete", "process.run", "file.read"] {
+        for name in ["code.delete", "file.read"] {
             let call = json!({"name": name, "arguments": {"path": "src/lib.rs"}});
             assert_eq!(
                 resolve_verb(INVOKE_VERB, &call, surface),
@@ -694,7 +706,9 @@ fn the_names_harness_maps_are_the_ones_this_suite_pins() {
     pinned.sort_unstable();
     assert_eq!(mapped, pinned, "the mapping moved with the pin");
 
-    let arguments = json!({"path": "src/lib.rs", "glob": "*", "text": "x", "old": "a", "new": "b"});
+    let arguments = json!({
+        "path": "src/lib.rs", "glob": "*", "text": "x", "old": "a", "new": "b", "argv": ["cargo"],
+    });
     for (contract, entry) in mapped {
         assert!(
             matches!(
@@ -775,8 +789,9 @@ fn a_describe_naming_a_contract_name_describes_its_harness_entry() {
 #[test]
 fn a_contract_write_asking_for_a_digest_check_is_refused_because_the_served_one_runs_none() {
     // tool-contract/1 gives `code.write` and `code.edit` an `expected_sha256` precondition whose
-    // failure is `precondition-failed`, nothing changed. Harness `0.15.1` performs both entries
-    // without reading the field, so a contract name carrying it is refused rather than performed
+    // failure is `precondition-failed`, nothing changed. Harness `0.18.0` performs both entries
+    // without reading the field (`crates/harness-catalogue/src/local.rs:245,268` at `330e2cde`),
+    // so a contract name carrying it is refused rather than performed
     // with the guard dropped, whatever digest it holds, the file's own included. Null asks for no
     // check (a45 § 2), which the next case holds.
     const DIGEST_OF_README: &str =

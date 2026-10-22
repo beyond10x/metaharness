@@ -77,6 +77,7 @@ the argument, its size and each context file with its size — before the spawn.
 |---|---|---|
 | `--hermetic [off\|on\|strict]` | `off`; bare `--hermetic` means `on` | See [the hermetic contract](../hermetic.md). |
 | `--credentials <SOURCE>` | `operator-login` | `operator-login`, `api-key`, `loopback`, or `none`. |
+| `--api-key-secret <NAMESPACE/NAME>` | *(none)* | **`b10x` only**, beside `--credentials api-key`: the key's name in the operator's secret store. A name and never a value; the loop reads the key itself. Refused before the spawn on `claude` and `codex`, beside any other `--credentials` source, beside a subscription token, and when the name is not `<namespace>/<name>`. |
 | `--plugin-dir <DIR>` | *(none)* | Plugin directories to load, **and only these**. Repeatable. Copied into the scratch tree and digested before the child starts; on `b10x`, handed to the loop as its own `--plugin-dir`. |
 | `--strict-version` | off | Refuse before the run when the installed vendor version is outside the adapter's pin, instead of warning. |
 
@@ -95,7 +96,12 @@ sometimes exactly what a test wants.
 | `--retain-dir <DIR>` | Copy the raw vendor wire out of the scratch root before it is deleted. |
 
 **`--credentials api-key`** is a declaration: without it, `ANTHROPIC_API_KEY` is not in the child
-environment at all.
+environment at all. On `b10x` it reads `OPENAI_API_KEY` by name from the caller's environment and
+refuses the run when it is absent, unless `--api-key-secret` names the key instead. Then no key
+variable is read or forwarded: the loop opens the store over the session bus and reads the key
+itself, so only `DBUS_SESSION_BUS_ADDRESS` and `XDG_RUNTIME_DIR` are added to the child's
+environment, each when the caller has it. Whether the store opens under the hermetic floor has not
+been run, and is unverified (design amendment a50).
 
 **`--credentials loopback`** puts metaharness in front of the vendor: the child holds a per-run
 placeholder and **no credential file**, and one custody attaches the real token on the way out. On
@@ -130,7 +136,11 @@ pins it is synthetic (design amendment a40).
 
 A `tools/call` to an entry answers `isError` and performs nothing when its arguments are not an
 object, carry a key that is not one of the entry's input fields, or leave out (or give as null) a
-field the entry requires. The answer names the entry and the field.
+field the entry requires. The answer names the entry and the field. A field the entry does not
+require, given as null, reads as absent and is taken out before the call is performed. A field
+given a value that the performing `b10x-harness` entry does not declare, such as `process.run`'s
+`timeout_ms` at 0.18.0, is refused by the harness by name, and nothing is done (design amendment
+a50 § 2).
 
 Refused before the spawn with exit 2, by name: `catalogue-not-carried` on `codex` and `b10x`;
 `catalogue-needs-owned-surface` beside `--tool-surface native`; `catalogue-with-allow-program`
@@ -254,7 +264,7 @@ same sandbox grant — and the attestation changes:
   exits 1 after the run. A memory file at the copy's root is the copy's own and is listed in the
   attestation's `ambient_inputs`.
 - `--hermetic strict` **passes** on a declared copy with nothing above it, when the record's cwd
-  is the copy. On b10x the record's cwd is the directory the pinned loop (0.15.1) reports, compared
+  is the copy. On b10x the record's cwd is the directory the loop reports (since 0.15.1), compared
   as a directory and not as a spelling; where the loop reports none (under `--substrate <socket>`)
   H7 is `unk` and strict exits 3.
 - Without `--cwd` the flag is refused by name on every kind.

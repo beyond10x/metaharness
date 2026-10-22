@@ -50,6 +50,10 @@ pub struct FloorInputs<'a> {
     /// launch's own placeholder for a declared endpoint, for H4's comparison (amendment a33).
     /// `None` for a kind whose launch never does that.
     pub endpoint_key_posture: Option<&'a str>,
+    /// The `credential_source` this kind's loop records when its key is named by a secret, for
+    /// H4 on a run that names one (amendment a50 § 7). `None` for a kind with no secret route, and
+    /// such a run's H4 is then `unk`: there is no exact string to hold the record to.
+    pub secret_key_source: Option<&'a str>,
     /// The MCP servers this launch configured, for H5's comparison. Empty on every surface but
     /// `owned`, where it is metaharness's own tool server.
     pub planned_mcp_servers: &'a [String],
@@ -689,6 +693,38 @@ pub fn hermetic_floor(events: &[Event], inputs: &FloorInputs<'_>) -> Vec<RowVerd
                 inputs.record_silences,
             ),
         ),
+        // A key named by a secret (amendment a50 § 7) is held to the exact string the kind's loop
+        // records for that route, and not to the looser "names a key" reading below: a run that
+        // declared the store and whose loop says `api-key:environment` got its key by a road it
+        // did not declare, and that is the question this row exists for.
+        Some(observed) if inputs.spec.api_key_secret.is_some() => match inputs.secret_key_source {
+            None => row(
+                HermeticRow::H4,
+                Verdict::Unk,
+                format!(
+                    "the run named its key with --api-key-secret, and this kind states no \
+                     credential_source its loop records for that route, so {observed:?} cannot \
+                     be held to one"
+                ),
+            ),
+            Some(expected) if observed == expected => row(
+                HermeticRow::H4,
+                Verdict::Ok,
+                format!(
+                    "the run named its key with --api-key-secret and the loop recorded \
+                     credential_source {observed:?}, exactly the string it records for that route"
+                ),
+            ),
+            Some(expected) => row(
+                HermeticRow::H4,
+                Verdict::Gap,
+                format!(
+                    "the run named its key with --api-key-secret, so the loop records \
+                     credential_source {expected:?}; it recorded {observed:?}, a road the run did \
+                     not declare"
+                ),
+            ),
+        },
         // H4 asks one question — **was an API key in use, and was one declared?** — and it is
         // deliberately not "does the record name the credential source the spec named".
         //
@@ -1307,6 +1343,7 @@ impl crate::run::Run {
                 declared_plugins: &launch.declared_plugins,
                 builtin_plugins: &launch.builtin_plugins,
                 endpoint_key_posture: launch.endpoint_key_posture,
+                secret_key_source: launch.secret_key_source,
                 planned_mcp_servers: &launch.planned_mcp_servers,
                 planned_output_style: launch.planned_output_style,
                 record_silences: launch.record_silences,

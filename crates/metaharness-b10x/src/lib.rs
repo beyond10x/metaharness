@@ -41,12 +41,13 @@
 //! rather than being guessed empty.
 //!
 //! **MCP has stopped being one of those absences.** Since 0.12.1 the loop publishes
-//! `--mcp-profile` and `--mcp-registry` and writes an `mcp` field in its opening record; the 0.15.1
+//! `--mcp-profile` and `--mcp-registry` and writes an `mcp` field in its opening record; the 0.18.0
 //! capture in `fixtures/golden/` carries it as `"mcp":[]`. `mcp_servers` is still the hardcoded
 //! `[]` the old standing fact justified, because every observation so far — 2026-09-15 on 0.12.1,
-//! 2026-10-20 on 0.15.0 and 0.15.1 — saw that field only as `[]` and the shape of an element is
-//! unestablished — see `B10xSeam`'s own note and
-//! `docs/research/2026-10-20-b10x-harness-0.15.1-adapter-surface.md`.
+//! 2026-10-20 on 0.15.0 and 0.15.1, 2026-10-22 on 0.18.0 — saw that field only as `[]` and the
+//! shape of an element is unestablished — see `B10xSeam`'s own note,
+//! `docs/research/2026-10-20-b10x-harness-0.15.1-adapter-surface.md` and
+//! `docs/research/2026-10-22-b10x-harness-0.18.0-adapter-surface.md`.
 //!
 //! **The working directory is the loop's own word since 0.15.1.** The opening record's `cwd` is
 //! the `started` line's `cwd` — the canonical root the loop's file tools act in — and `null` when
@@ -93,14 +94,54 @@ pub const ADAPTER_CLASS: &str = "direct_provider";
 /// Pinned for the reason the other adapters pin: every version-specific claim in here — the field
 /// names of the loop record, the shape of its terminal event — was observed against these, and a
 /// run against another is unverified rather than wrong.
-pub const PINNED_VERSIONS: [&str; 1] = ["0.15.1"];
+pub const PINNED_VERSIONS: [&str; 1] = ["0.18.0"];
 
 /// The immutable harness source revision this adapter is built against.
 ///
 /// The version identifies the released CLI; the revision identifies the Rust crates Cargo
 /// resolves. Both are checked by the AEP eval before it trusts an installed
 /// binary, so a filesystem timestamp is never mistaken for provenance.
-pub const HARNESS_REVISION: &str = "f0870131e58df3e1119860d0a255f46589026d62";
+pub const HARNESS_REVISION: &str = "330e2cde6299e4e55b05664001e73903959a076f";
+
+/// The `credential_source` the pinned loop records when its key is named by `--api-key-secret`
+/// (design amendment a50 § 7).
+///
+/// Read from the loop's own `credential_source`, which returns this string for that flag and no
+/// other. The hermetic floor's H4 compares a secret-named run's opening record with exactly this,
+/// so a key that reached the loop by any other road reads as a gap.
+pub const SECRET_KEY_SOURCE: &str = "api-key:secrets";
+
+/// The variables a secret-named run forwards to the loop, by name, when metaharness has them
+/// (design amendment a50 § 6).
+///
+/// The loop opens the operator's secret store over the D-Bus session bus, and its client finds
+/// that bus by these two and by nothing else: the address itself, or the runtime directory the
+/// default socket sits in. Neither holds a credential. Every other variable stays outside the
+/// constructed environment, as on every other route.
+pub const SECRET_SERVICE_SESSION_BUS_VARIABLES: [&str; 2] =
+    ["DBUS_SESSION_BUS_ADDRESS", "XDG_RUNTIME_DIR"];
+
+/// Check that a secret name has the shape `<namespace>/<name>`: a first `/` with something on
+/// each side of it (design amendment a50 § 5).
+///
+/// Only the shape. Each half's grammar is the loop's to check, before it opens the store; a copy
+/// of that grammar here would be a second answer to the loop's question. So `llm/team/openai`
+/// passes, as it does in the loop.
+///
+/// # Errors
+///
+/// Names the value as given, escaped as the loop escapes it, so a control character typed into
+/// the name cannot rewrite the line that refuses it.
+pub fn validate_api_key_secret(name: &str) -> Result<(), String> {
+    match name.split_once('/') {
+        Some((namespace, rest)) if !namespace.is_empty() && !rest.is_empty() => Ok(()),
+        _ => Err(format!(
+            "--api-key-secret `{}` is not <namespace>/<name>: the secret store names a key by a \
+             namespace, a `/` and a name, each present",
+            name.escape_debug()
+        )),
+    }
+}
 
 /// Whether a directory component satisfies the pinned substrate adoption syntax.
 ///
@@ -117,7 +158,7 @@ pub fn workspace_component_is_adoptable(name: &str) -> bool {
 
 /// Validate exact workspace-relative process write directories before native launch.
 ///
-/// Harness 0.15.1 (`f0870131`, `crates/harness-substrate` unchanged from 0.15.0)
+/// Harness 0.18.0 (`330e2cde`, `crates/harness-substrate/src/lib.rs` unchanged from 0.15.0)
 /// canonicalizes the set before Substrate 0.7.17 (`00fa634c`) validates workspace
 /// access. This adapter mirrors those syntax bounds
 /// without importing a different native dependency. Glob spelling is additionally
@@ -164,7 +205,10 @@ pub fn validate_process_write_subtrees(paths: &[String]) -> Result<(), String> {
 
 #[cfg(test)]
 mod tests {
-    use super::{HARNESS_REVISION, PINNED_VERSIONS};
+    use super::{
+        HARNESS_REVISION, PINNED_VERSIONS, SECRET_KEY_SOURCE, SECRET_SERVICE_SESSION_BUS_VARIABLES,
+        validate_api_key_secret,
+    };
 
     const HARNESS: &str = "beyond10x/harness";
     const TOOLS: &str = "beyond10x/tools";
@@ -297,13 +341,66 @@ mod tests {
 
     /// **The one deliberate literal pair.** Every other reader of the pin goes through these two
     /// constants, so a move that forgot one of them would agree with itself everywhere else. Moved
-    /// 0.13.3 / `798325f0` → 0.15.0 / `dd5c2a66` and then → 0.15.1 / `f0870131` on 2026-10-20:
-    /// the commit the annotated tag `0.15.1` (tag object `a0a2dfda`) points at, never the tag
-    /// object, because the eval compares this with `git rev-parse HEAD` in the harness checkout.
+    /// 0.13.3 / `798325f0` → 0.15.0 / `dd5c2a66` → 0.15.1 / `f0870131` on 2026-10-20, and then →
+    /// 0.18.0 / `330e2cde` on 2026-10-22 (amendment a50): the commit the annotated tag `0.18.0`
+    /// (tag object `9245ab57`) points at, never the tag object, because the eval compares this
+    /// with `git rev-parse HEAD` in the harness checkout.
     #[test]
-    fn the_pin_names_the_harness_0_15_1_release_commit() {
-        assert_eq!(PINNED_VERSIONS, ["0.15.1"]);
-        assert_eq!(HARNESS_REVISION, "f0870131e58df3e1119860d0a255f46589026d62");
+    fn the_pin_names_the_harness_0_18_0_release_commit() {
+        assert_eq!(PINNED_VERSIONS, ["0.18.0"]);
+        assert_eq!(HARNESS_REVISION, "330e2cde6299e4e55b05664001e73903959a076f");
+    }
+
+    /// D30: the string the pinned loop records for `--api-key-secret`, read from
+    /// `crates/harness-cli/src/lib.rs:1226-1227` at `330e2cde` (`credential_source`). H4 compares
+    /// the opening record with this and nothing looser.
+    #[test]
+    fn the_secret_route_records_the_loops_own_source_string() {
+        assert_eq!(SECRET_KEY_SOURCE, "api-key:secrets");
+    }
+
+    /// D29: exactly the two variables zbus 5.19.0 finds the session bus by
+    /// (`src/address/mod.rs:68`, `:76-78`), and nothing that could carry a credential.
+    #[test]
+    fn the_session_bus_variables_are_the_two_the_store_client_reads() {
+        assert_eq!(
+            SECRET_SERVICE_SESSION_BUS_VARIABLES,
+            ["DBUS_SESSION_BUS_ADDRESS", "XDG_RUNTIME_DIR"]
+        );
+    }
+
+    #[test]
+    fn a_secret_name_is_namespace_slash_name_with_both_halves_present() {
+        for good in [
+            "llm/opencode-go-api-key",
+            "llm/team/openai",
+            "a/b",
+            "-llm/opencode-go-api-key",
+        ] {
+            assert_eq!(validate_api_key_secret(good), Ok(()), "{good}");
+        }
+        for bad in [
+            "",
+            "opencode-go-api-key",
+            "llm/",
+            "/opencode-go-api-key",
+            "/",
+        ] {
+            let refusal = validate_api_key_secret(bad).expect_err(bad);
+            assert!(refusal.contains(&format!("`{bad}`")), "{refusal}");
+            assert!(refusal.contains("<namespace>/<name>"), "{refusal}");
+            assert!(refusal.contains("--api-key-secret"), "{refusal}");
+        }
+    }
+
+    #[test]
+    fn a_refused_secret_name_is_escaped_as_the_loop_escapes_it() {
+        // `harness-llm/src/lib.rs:173-178` at `330e2cde` names the reference with `escape_debug`,
+        // so a control character in a name reaches the operator's terminal as its escape, never
+        // as itself.
+        let refusal = validate_api_key_secret("bad\u{1b}[2Jname").expect_err("no slash");
+        assert!(refusal.contains("`bad\\u{1b}[2Jname`"), "{refusal:?}");
+        assert!(!refusal.contains('\u{1b}'), "{refusal:?}");
     }
 
     /// The constants, both manifests and the lock name one harness: one revision, the released

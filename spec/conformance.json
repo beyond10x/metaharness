@@ -172,9 +172,9 @@
     }
   },
   "provenance": {
-    "contract_digest": "2a7ba327ce381b909a1ea9d20865262bb04fa1605bd142d55f28ed16ee9b1e1c",
+    "contract_digest": "b1ea6250eb10b10b1d890c2287307febb677879e090f6b009296efc5c5a3a191",
     "scenario_initial_state": "empty",
-    "spec_digest": "fe87e431007cccbde80fb512db15ec3cb5d75159b88774bd4ca5b40a37d61b57",
+    "spec_digest": "a09a0ac702491b2722a97ff00a892f807ae5633314b2e6d287fa99227c4f582f",
     "specification_version": "v1",
     "suite_version": "ess-conformance/35",
     "system": "metaharness"
@@ -22649,7 +22649,7 @@
             "stop_reason": "null",
             "tokens_basis": "\"sum-of-requests\"",
             "tool_calls": "[{\"answered\":true,\"call_id\":\"call_b10x_001\",\"error\":false,\"name\":\"file_read\"}]",
-            "transcript_digest": "\"eae41809f984ea2bf6b0a6e548263889a1fa8dcf640ad1e7ff5089b8ff45f15f\"",
+            "transcript_digest": "\"ecc198eec308492465591db0b58eaf2b2d2dbd75c28ce6c9742eed325884b7be\"",
             "turns": "2",
             "unk": "2"
           },

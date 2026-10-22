@@ -137,10 +137,11 @@ impl Wire {
 
 /// Where the loop is told to read its bearer.
 ///
-/// Four variants and no fifth: the loop refuses to pick a credential up from anywhere it was not
-/// pointed at, so there is nothing to express beyond *this file* and *this variable* — twice, once
-/// for a key issued to a program and once for a subscription token, because the two travel under
-/// **different header names** and the loop cannot tell them apart from the value.
+/// The loop refuses to pick a credential up from anywhere it was not pointed at, so there is
+/// nothing to express beyond *this file* and *this variable*, twice: once for a key issued to a
+/// program and once for a subscription token, because the two travel under **different header
+/// names** and the loop cannot tell them apart from the value. The fifth variant is a key named in
+/// the operator's secret store (design amendment a50), which the loop reads itself.
 ///
 /// A pointer accompanies the subscription variants and not the key ones for the same reason: a
 /// subscription store is a JSON document with a token somewhere inside it, and which field is that
@@ -167,6 +168,10 @@ pub enum Credential {
         /// A JSON pointer to the token inside it. [`None`] means the variable *is* the token.
         pointer: Option<String>,
     },
+    /// `--api-key-secret <namespace>/<name>`. A name in the operator's secret store, never the
+    /// value: the loop opens the store and reads the key on each call, and the key never enters
+    /// this process or the child's environment.
+    Secret(String),
 }
 
 /// One launch of `b10x-harness run`.
@@ -285,6 +290,16 @@ impl B10xLaunch {
     #[must_use]
     pub fn from_environment(mut self, variable: impl Into<String>) -> Self {
         self.credential = Some(Credential::Environment(variable.into()));
+        self
+    }
+
+    /// The same launch, reading its bearer from the operator's secret store under this name.
+    ///
+    /// The shape is the caller's to check first (`validate_api_key_secret`); the loop checks each
+    /// half's grammar before it opens the store.
+    #[must_use]
+    pub fn from_secret(mut self, name: impl Into<String>) -> Self {
+        self.credential = Some(Credential::Secret(name.into()));
         self
     }
 
@@ -469,8 +484,10 @@ pub fn emitted_flags() -> Vec<(String, bool)> {
     let other = B10xLaunch::new("https://endpoint.invalid/v1", "a-model", "/w", "a request")
         .from_environment("A_VARIABLE")
         .confined("/a/socket", ["a-program".to_owned()]);
+    let secret = B10xLaunch::new("https://endpoint.invalid/v1", "a-model", "/w", "a request")
+        .from_secret("a-namespace/a-name");
     let mut flags: Vec<(String, bool)> = Vec::new();
-    for argv in [argv(&launch), argv(&other), {
+    for argv in [argv(&launch), argv(&other), argv(&secret), {
         launch = launch.authenticated("/a/key");
         argv(&launch)
     }] {
@@ -495,6 +512,41 @@ fn push_pointer(argv: &mut Vec<String>, pointer: Option<&String>) {
     if let Some(pointer) = pointer {
         argv.push("--oauth-token-pointer".to_owned());
         argv.push(pointer.clone());
+    }
+}
+
+/// The one credential flag the launch carries, if any: the loop's five credential flags conflict
+/// with each other, so a launch never carries two.
+fn push_credential(argv: &mut Vec<String>, credential: Option<&Credential>) {
+    match credential {
+        Some(Credential::File(path)) => {
+            argv.push("--api-key-file".to_owned());
+            argv.push(path.clone());
+        }
+        Some(Credential::Environment(variable)) => {
+            argv.push("--api-key-env".to_owned());
+            argv.push(variable.clone());
+        }
+        Some(Credential::SubscriptionFile { path, pointer }) => {
+            argv.push("--oauth-token-file".to_owned());
+            argv.push(path.clone());
+            push_pointer(argv, pointer.as_ref());
+        }
+        Some(Credential::SubscriptionEnvironment { name, pointer }) => {
+            argv.push("--oauth-token-env".to_owned());
+            argv.push(name.clone());
+            push_pointer(argv, pointer.as_ref());
+        }
+        Some(Credential::Secret(name)) => {
+            if name.starts_with('-') {
+                // Attached, so a name that begins with `-` is never read as a new option.
+                argv.push(format!("--api-key-secret={name}"));
+            } else {
+                argv.push("--api-key-secret".to_owned());
+                argv.push(name.clone());
+            }
+        }
+        None => {}
     }
 }
 
@@ -559,27 +611,7 @@ pub fn argv(launch: &B10xLaunch) -> Vec<String> {
         argv.push("--hooks".to_owned());
         argv.push(hooks.clone());
     }
-    match &launch.credential {
-        Some(Credential::File(path)) => {
-            argv.push("--api-key-file".to_owned());
-            argv.push(path.clone());
-        }
-        Some(Credential::Environment(variable)) => {
-            argv.push("--api-key-env".to_owned());
-            argv.push(variable.clone());
-        }
-        Some(Credential::SubscriptionFile { path, pointer }) => {
-            argv.push("--oauth-token-file".to_owned());
-            argv.push(path.clone());
-            push_pointer(&mut argv, pointer.as_ref());
-        }
-        Some(Credential::SubscriptionEnvironment { name, pointer }) => {
-            argv.push("--oauth-token-env".to_owned());
-            argv.push(name.clone());
-            push_pointer(&mut argv, pointer.as_ref());
-        }
-        None => {}
-    }
+    push_credential(&mut argv, launch.credential.as_ref());
     if let Some(wire) = launch.wire {
         argv.push("--wire".to_owned());
         argv.push(wire.as_str().to_owned());
@@ -705,6 +737,51 @@ mod tests {
             !argv.iter().any(|word| word == "--api-key-env"),
             "a launch that could fall back to the environment is one whose credential depends on \
              where it was started: {argv:?}"
+        );
+    }
+
+    /// a50 § 4: the third key route names a secret, and the launch then carries that one flag and
+    /// neither of the other two key flags.
+    #[test]
+    fn a_secret_named_launch_carries_the_name_and_no_other_key_route() {
+        let argv = argv(&launch().from_secret("llm/opencode-go-api-key"));
+        assert_eq!(
+            value_after(&argv, "--api-key-secret").as_deref(),
+            Some("llm/opencode-go-api-key")
+        );
+        assert!(
+            !argv.iter().any(|word| word.starts_with("--api-key-file")
+                || word.starts_with("--api-key-env")
+                || word.starts_with("--oauth-token")),
+            "one credential flag, the loop's flags conflict with each other: {argv:?}"
+        );
+        assert_eq!(
+            argv.iter()
+                .filter(|word| word.starts_with("--api-key-secret"))
+                .count(),
+            1,
+            "{argv:?}"
+        );
+    }
+
+    /// A name beginning with `-` travels attached, as `--process-write-subtree` does (a24), so
+    /// clap never reads it as a flag of its own.
+    #[test]
+    fn a_secret_name_beginning_with_a_dash_travels_attached() {
+        let argv = argv(&launch().from_secret("-llm/key"));
+        assert!(
+            argv.contains(&"--api-key-secret=-llm/key".to_owned()),
+            "{argv:?}"
+        );
+        assert!(!argv.contains(&"--api-key-secret".to_owned()), "{argv:?}");
+    }
+
+    #[test]
+    fn the_secret_flag_is_in_the_emitted_surface_with_a_value() {
+        assert!(
+            emitted_flags().contains(&("--api-key-secret".to_owned(), true)),
+            "{:?}",
+            emitted_flags()
         );
     }
 

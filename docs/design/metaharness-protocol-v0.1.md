@@ -4579,3 +4579,169 @@ unmapped.
   have, among them that the attestation half is metaharness's own claim (§ 8.3).
 - A run that wants no audit prints no report, so it prints none of the three lines. Its exit is
   § 9.4's table without `--audit`.
+
+### Amendment a50 — the b10x kind names its API key by a secret name, over harness 0.18.0 (2026-10-22)
+
+Coordinator decision, 2026-10-22, `story:b10x-api-key-from-keychain` (D24-D31), with D41 moving the
+pin from 0.17.1 to 0.18.0. Harness lines are read at `330e2cde6299e4e55b05664001e73903959a076f`,
+the commit the annotated tag `0.18.0` points at.
+
+**1. The defect.** `--credentials api-key` on b10x read `OPENAI_API_KEY` from metaharness's own
+environment, put the value into the child's environment (`start_b10x`) and passed
+`--api-key-env OPENAI_API_KEY`. The key sat in two processes' environments and in every process
+either of them spawned. Since 0.17.1 harness can read a bearer from the local secret store by name,
+so the key no longer has to pass through metaharness at all.
+
+**2. The pair moves to harness 0.18.0.** On a25's rule, from 0.15.1
+(`f0870131e58df3e1119860d0a255f46589026d62`) to **0.18.0**: both manifests, the lock,
+`PINNED_VERSIONS` and `HARNESS_REVISION` move in one change. Harness 0.18.0 takes the `tools`
+crates at tag `0.4.0` (`Cargo.toml:33-38`), so `metaharness-tools` takes `b10x-tool-contract` at
+`0.4.0` as well (D26), and the lock still holds one harness revision and one tools revision.
+
+- **The catalogue mapping gains two entries** (`crates/harness-catalogue/src/local.rs:61-69`,
+  since 0.16.0): `search` is performed as `search.grep` and `run` as `process.run`. a32 § 1's
+  rule takes them unchanged, because the input is harness's mapping and never a copy:
+  `search.grep` and `process.run` now resolve to `search` and `run`. a32 § 1's example of a dotted
+  name harness does not map loses `process.run`; `code.delete` is still one. `metaharness-tools`'
+  suite pins the seven and follows the harness (D24). For `run`, harness names the subject
+  `proc:<argv[0]>` rather than a path (`crates/harness-catalogue/src/catalogue.rs:1018-1042`).
+- **a24's process-write contract moves unchanged.** `crates/harness-substrate/src/lib.rs` is
+  byte-identical from 0.15.1 to 0.18.0 (`process_workspace_access`, `:99`), and harness still
+  pins Substrate 0.7.17 (`crates/harness-substrate/Cargo.toml:29-30`).
+- **a32 § 5's refusal stays.** Harness 0.18.0 still builds `WriteInput` and `EditInput` with
+  `expected_sha256: None` (`local.rs:245,268`), so nothing runs the digest guard yet.
+- **Harness refuses a field the entry does not declare** (since 0.16.1, commit `877022b`): a call
+  carrying a key outside the performed entry's closed input schema is refused by name and nothing
+  runs (`crates/harness-wire/src/undeclared.rs:66`, asked at
+  `crates/harness-catalogue/src/catalogue.rs:414` and `verbs.rs:166`). Two things a45 says meet it,
+  and this amendment settles one (D42, widened by D45).
+
+  **The server removes every null that reads as absent before the call.** a45 § 2 says null on a
+  field that is not required reads as absent. Passed as given, such a null reaches harness, and
+  where the performed entry does not declare the field, harness refuses the call by naming it
+  (`crates/harness-wire/src/undeclared.rs:66` at `330e2cde`). Two cases showed this:
+  `expected_sha256: null` on `code.write` and `code.edit`, which `file_write` and `file_edit` do
+  not declare, and `timeout_ms: null` on `process.run`, which harness's `run` does not declare (its
+  schema declares only `argv`, `crates/harness-catalogue/src/catalogue.rs:973-982`). So on the
+  caller-catalogue road, once a45's checks have passed, `metaharness-tools`' server takes out every
+  struct field given as null that the caller's catalogue does not mark required, at every depth
+  where the published schema declares a struct (`CatalogueEntry::without_absent_nulls`). A null
+  list item or map value is a value, not a field, and is passed as given. The call is then
+  performed as though the field had been left out, which keeps a45 § 2 true at the 0.18.0 pin.
+  On the `tool_invoke` road, where a call names its entry by contract name and no caller catalogue
+  says which fields are required, only `expected_sha256: null` is taken out (D42). A non-null
+  digest is still refused before harness is reached on both roads, as a32 § 5 says.
+
+  The second stays open and is held by the coordinator. A caller's field with a value other than
+  null that the performed harness entry does not declare passes a45's checks, and harness then
+  refuses the call by naming the field, with nothing done. `process.run` `timeout_ms` is one: the
+  caller's catalogue admits an integer there and harness's `run` declares only `argv`
+  (`catalogue.rs:973-982` at `330e2cde`). The positive control in `tests/adversary_w8u1.rs` checks
+  a45's struct rule against the caller's catalogue, and through the server it expects harness's
+  refusal.
+- **`b10x-tool-contract` 0.4.0 releases `build-test/v1alpha1`**, whose commands carry no
+  `renderings`. a40's reader refuses it as `catalogue-malformed`, each entry named with *no `mcp`
+  rendering, so it has no name a tool can carry*. Nothing here serves it; a caller who names it
+  gets that refusal.
+- **What 0.18.0 removes** (commit `090baf2`): `b10x-harness events`, `workflow plan|run`, the
+  `b10x-harness-flow` and `b10x-harness-workflow` crates, and `HookPoint::Transition`. The b10x
+  adapter reads the `--json` record and uses none of them. The `aep-eval native` walk uses
+  `workflow run` and the `transition` hook point and is not moved by this amendment; the hidden
+  `metaharness aep drive transition` receiver has no caller on 0.18.0.
+- **Qualification (D31, D43).** The `provider` of `fixtures/golden/contract-result-b10x.json` is
+  the pin's and moves with it. The released 0.18.0 Linux archive passed its `SHA256SUMS` check and
+  its `--version` banner is `b10x-harness 0.18.0`. CT-3 pairs `version.txt` with `loop.jsonl` as
+  the identity of the binary that wrote the record, so the two are replaced together: the golden
+  is recorded again with that archive's executable against harness's deterministic emulator at
+  `330e2cde`, by the procedure in the fixture's README (no model, no provider, no credential, no
+  secret store). The new record differs from 0.15.1's only in the opening line's two
+  `captured_at` stamps and the `environment.workspace` digest, the replay's expected stream only in
+  `harness_version`, and `golden-version-pair` passes without a warning.
+
+**3. The secret name on `RunSpec`.** `RunSpec` gains `api_key_secret: Option<String>`. On
+`metaharness run` it is `--api-key-secret <NAMESPACE/NAME>`; on the builder it is
+`with_api_key_secret`. It holds a name and never a value, the same shape as
+`subscription_token_env`. It means something only beside `--credentials api-key` on b10x. Without
+it, `--credentials api-key` still reads `OPENAI_API_KEY` by name, as before.
+
+**4. The argv.** `Credential` gains a fifth variant, `Secret(name)`, built by
+`B10xLaunch::from_secret`. It renders as `--api-key-secret <namespace>/<name>`, or as
+`--api-key-secret=<namespace>/<name>` when the name begins with `-` (a24's spelling for a value
+clap would otherwise read as a flag). The argv then carries no `--api-key-env` and no
+`--api-key-file`.
+
+The loop declares the flag on `run` (`crates/harness-cli/src/lib.rs:591-602`) in conflict with
+the other four credential flags, so it takes exactly one and metaharness renders exactly one. It
+records `credential_source: "api-key:secrets"` for that flag (`lib.rs:1226-1227`). It resolves the
+name through the store (`lib.rs:1566-1567`, `crates/harness-llm/src/lib.rs:150-196`), and its own
+help says the store is read again on every call (`lib.rs:591-596`). The flag, the string and the
+resolution are unchanged from 0.17.1, where the scoping read them at other line numbers.
+
+**5. Refusals, all before the spawn.**
+
+| given | refused with |
+|---|---|
+| a name that is not `<namespace>/<name>` with both parts non-empty at the first `/` | `Refusal::Launch` naming the value as given, escaped with `escape_debug` as the loop escapes it (`harness-llm/src/lib.rs:173-178`) |
+| a name beside `--credentials` other than `api-key` | `Refusal::Launch`: *--api-key-secret and --credentials `<source>` are two credentials for one request*, the existing two-credentials refusal's words |
+| a name beside `--subscription-token-file` or `--subscription-token-env` | with `--credentials api-key`, the existing refusal word for word (*a subscription token and --credentials api-key are two credentials for one request*); with any other source, the row above |
+| a name on `claude` or `codex` | `Refusal::Launch` naming `--api-key-secret` and the kind, until each kind is designed |
+
+Only the shape is checked here. The loop checks each half's grammar before it opens the store
+(`harness-llm/src/lib.rs:179-184`). The namespace is one `[a-z0-9][a-z0-9._-]*` segment, and the
+name is `/`-separated segments of that grammar (secrets-core `v0.5.0`, `8c4eabb1`,
+`crates/secrets-core/src/storage.rs:144-167,170-196,236-242`). A copy of that grammar here would be a
+second answer to the loop's question, so `llm/team/openai` passes this check as it passes the
+loop's.
+
+**6. The child environment on the secret route (D29).** `base_environment` is unchanged: `PATH`
+and a scratch `XDG_CONFIG_HOME`. On the secret route metaharness neither reads nor sets
+`OPENAI_API_KEY`. It forwards two variables by name when its own environment has them, and nothing
+else:
+
+| variable | what the store's client does with it | read at |
+|---|---|---|
+| `DBUS_SESSION_BUS_ADDRESS` | the session bus address, used as given | zbus 5.19.0 `src/address/mod.rs:68` |
+| `XDG_RUNTIME_DIR` | the fallback `$XDG_RUNTIME_DIR/bus` when the address is unset, else `/run/user/<euid>/bus` | zbus 5.19.0 `src/address/mod.rs:76-78` |
+
+The chain from the flag to those two reads, at the versions harness 0.18.0's lock resolves (the
+same as 0.17.1's):
+`Source::secret` (`harness-llm/src/lib.rs:150-152`), then llm-credentials `0.8.1` (`3eb94989`)
+`native_store` (`crates/llm-credentials/src/keychain.rs:87-90`), then
+zbus-secret-service-keyring-store 1.0.1 `Store::new` (`src/store.rs:31,48,60`) and `Service::new`
+(`src/service.rs:24-26`), then secret-service 5.2.0 `SecretService::connect`
+(`src/blocking/mod.rs:43-44`), then zbus 5.19.0 `Connection::session` (`src/connection/mod.rs:1141-1142`)
+and `Builder::session` (`src/connection/builder.rs:107-108`), and `Address::session`. No other
+environment read in that chain looks for a bus. zbus also reads `FLATPAK_ID` (`src/utils.rs:57`),
+which names none.
+
+Neither variable holds a credential: one is a socket address and the other a directory. The child
+still has no `HOME`. On this route H3's imposed sentence is built from what the child environment
+was actually given (D46): it names each of the two variables that was forwarded, or says that none
+was, and names each the caller lacked. It never carries a value. Whether the store
+resolves under this floor (a cleared environment, no `HOME`, an unlocked collection on the
+operator's bus) is **unverified** until the live run.
+
+**7. H4 reads the exact source string (D30).** `FloorInputs` gains `secret_key_source`, the
+`credential_source` the kind's loop records for a key named by a secret. The b10x launch hands
+`metaharness_b10x::SECRET_KEY_SOURCE`, `"api-key:secrets"` (`lib.rs:1226-1227`), and every other
+kind hands `None`. On a run that names a secret, H4 reads `ok` only when the opening record's
+`credential_source` is exactly that string. Any other value is a `gap`, `api-key:environment`
+included, because the key then reached the loop by another road than the declared one. A kind
+that hands no string reads `unk`. A run that names no secret reads H4 as before.
+
+**8. What metaharness never does.** It never opens the secret store and never reads a secret's
+value. No event, refusal or record carries one: the only string metaharness holds is the name. The
+tests use the fixture name `llm/opencode-go-api-key` and never spawn a loop against a store.
+
+**9. Limits.**
+
+- Store resolution under the floor is unverified (§ 6).
+- The `--strict-version` one-turn run on 0.18.0, a25's runtime proof of the pin, waits for the
+  orchestrator's word.
+- A caller's field given a value other than null that the performed harness entry does not
+  declare, such as `process.run` `timeout_ms`, is refused by harness after a45's checks pass; that
+  meeting with a45 is open (§ 2). A null there reads as absent and is taken out (§ 2, D45).
+- Claude and Codex have no secret route until each is designed.
+
+Per-claim evidence: `docs/research/2026-10-22-b10x-harness-0.18.0-adapter-surface.md`. No event or
+frame wire changes: `credential_source` is a string the opening record already carried.

@@ -599,7 +599,7 @@ commands:
           metaharness.trace.SessionSummarized:
             format: '"trace-ir-summary/1"'
             source: '"harness-json"'
-            transcript_digest: '"eae41809f984ea2bf6b0a6e548263889a1fa8dcf640ad1e7ff5089b8ff45f15f"'
+            transcript_digest: '"ecc198eec308492465591db0b58eaf2b2d2dbd75c28ce6c9742eed325884b7be"'
             adapter: '"b10x"'
             model: '"b10x-emulated"'
             models: '[{"cache_creation_input_tokens":null,"cache_read_input_tokens":null,"cost_usd":null,"input_tokens":null,"name":"b10x-emulated","output_tokens":null}]'

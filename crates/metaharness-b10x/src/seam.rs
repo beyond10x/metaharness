@@ -232,13 +232,14 @@ impl HarnessSeam for B10xSeam {
                     // standing claim behind the hardcoded `[]` was that `b10x-harness` has no MCP
                     // client at all; 0.12.1 has one — `--mcp-profile` and `--mcp-registry`
                     // (`b10x-harness run --help`, read 2026-09-15) — and its `started` record
-                    // carries an `mcp` field, which the 0.15.1 capture in `fixtures/golden/` holds
+                    // carries an `mcp` field, which the 0.18.0 capture in `fixtures/golden/` holds
                     // as `[]`. So the harness can now report servers and this asserts it reported
                     // none.
                     //
                     // It is deliberately **not** read here yet: the 2026-09-15 run on 0.12.1 and
-                    // the 2026-10-20 runs on 0.15.0 and 0.15.1 observed the field only as `[]`, so
-                    // the shape of an element is unestablished, and
+                    // the 2026-10-20 runs on 0.15.0 and 0.15.1 and the 2026-10-22 emulator run on
+                    // 0.18.0 observed the field only as `[]`, so the shape of an element is
+                    // unestablished, and
                     // inventing one would be the guess this adapter refuses to make elsewhere.
                     // What closes it is a run that publishes a profile, recorded the way the
                     // `skills` move was — `docs/research/2026-09-15-b10x-harness-0.12.1-adapter-surface.md`.
@@ -334,7 +335,7 @@ impl HarnessSeam for B10xSeam {
                     cache_read_input_tokens: number("cached_input_tokens"),
                     // **Read from the record since the 0.12.1 observation.** It was a hardcoded
                     // `None` because the golden fixture, then a 0.9.1 recording, carried no such
-                    // field — and the 0.15.1 capture there carries none either, because harness's
+                    // field — and the 0.18.0 capture there carries none either, because harness's
                     // Responses emulator reports no cache-write counter. The paid run on
                     // 2026-09-15 saw `cache_creation_input_tokens` 2183 and
                     // 132 on the two `usage` lines of a two-turn run, so `None` here stopped being

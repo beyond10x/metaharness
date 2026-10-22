@@ -343,6 +343,17 @@ pub struct RunSpec {
     #[cfg_attr(feature = "clap", arg(long, value_name = "POINTER"))]
     pub subscription_token_pointer: Option<String>,
 
+    /// The API key's name in the operator's secret store, as `<namespace>/<name>` (design
+    /// amendment a50).
+    ///
+    /// A name and never a value: the loop opens the store and reads the key itself, so the key
+    /// never enters this process or the child's environment. Only the b10x loop has the route,
+    /// and only beside `--credentials api-key`; without it that source reads `OPENAI_API_KEY` by
+    /// name, as before. Every other pairing is refused before the spawn.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    #[cfg_attr(feature = "clap", arg(long, value_name = "NAMESPACE/NAME"))]
+    pub api_key_secret: Option<String>,
+
     /// The reasoning effort to ask of the model, in the vendor's own vocabulary.
     ///
     /// Claude Code takes it as `--effort`; codex reads `model_reasoning_effort` from the
@@ -611,6 +622,7 @@ impl RunSpec {
             subscription_token_file: None,
             subscription_token_env: None,
             subscription_token_pointer: None,
+            api_key_secret: None,
             effort: None,
             max_turns: None,
             max_budget_usd: None,
@@ -1193,5 +1205,30 @@ mod execution_context_tests {
         );
         assert!(prompt.contains("decision_mode=ask"), "{prompt}");
         assert!(prompt.ends_with("do the work"), "{prompt}");
+    }
+}
+
+#[cfg(test)]
+mod api_key_secret_tests {
+    use super::*;
+
+    /// a50 § 3: the field is a name, absent from a spec that did not name one, so a spec written
+    /// before a50 reads back unchanged and one written without it carries no new key.
+    #[test]
+    fn a_secret_name_round_trips_and_an_absent_one_is_not_written() {
+        let plain = RunSpec::new(Kind::B10x);
+        assert_eq!(plain.api_key_secret, None);
+        let written = serde_json::to_value(&plain).expect("serializes");
+        assert!(written.get("api_key_secret").is_none(), "{written}");
+
+        let mut named = RunSpec::new(Kind::B10x);
+        named.api_key_secret = Some("llm/opencode-go-api-key".to_owned());
+        let text = serde_json::to_string(&named).expect("serializes");
+        assert!(
+            text.contains(r#""api_key_secret":"llm/opencode-go-api-key""#),
+            "{text}"
+        );
+        let back: RunSpec = serde_json::from_str(&text).expect("reads back");
+        assert_eq!(back, named);
     }
 }

@@ -417,6 +417,8 @@ Options:
         assert_eq!(arity("--substrate"), Some(true), "{flags:?}");
         assert_eq!(arity("--api-key-file"), Some(true), "{flags:?}");
         assert_eq!(arity("--api-key-env"), Some(true), "{flags:?}");
+        // The third key route (a50 § 4), so doctor checks the pinned binary still declares it.
+        assert_eq!(arity("--api-key-secret"), Some(true), "{flags:?}");
         assert!(
             flags.len() >= 15,
             "the maximal launch emits the whole surface: {flags:?}"

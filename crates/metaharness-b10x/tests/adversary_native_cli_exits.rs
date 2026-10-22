@@ -355,7 +355,10 @@ fn opening<'a>(events: &'a [Value], root: &Path, named_cwd: bool) -> &'a Value {
     assert_eq!(found.len(), 1, "{events:?}");
     let start = found[0];
     assert_eq!(start["adapter_class"], "direct_provider");
-    assert_eq!(start["harness_version"], "0.15.1");
+    assert_eq!(
+        start["harness_version"],
+        metaharness_b10x::PINNED_VERSIONS[0]
+    );
     let expected = if named_cwd {
         fs::canonicalize(root.join("work")).unwrap()
     } else {
