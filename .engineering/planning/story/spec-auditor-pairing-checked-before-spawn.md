@@ -2,7 +2,7 @@
 format: aep.planning-md/3
 id: story:spec-auditor-pairing-checked-before-spawn
 kind: story
-status: active
+status: implemented
 title: The expectation-document and auditor pairing is checked before the spawn
 scope:
 - confidence: cited
@@ -19,10 +19,11 @@ scope:
   path: docs/design/metaharness-protocol-v0.1.md
 - confidence: cited
   path: website/docs/reference/cli.md
-revision: 10
+revision: 11
 transitions:
 - {from: "draft", to: "proposed", at: "2026-10-21T20:32:26Z", actor: "human:timo", revision: 2}
 - {from: "proposed", to: "active", at: "2026-10-21T20:32:26Z", actor: "human:timo", revision: 3}
+- {from: "active", to: "implemented", at: "2026-10-22T00:04:37Z", actor: "human:timo", revision: 11, decided_on: {"recorded":{"test_result":1,"review_outcome":1}}}
 ---
 # Story: the expectation-document and auditor pairing is checked before the spawn
 

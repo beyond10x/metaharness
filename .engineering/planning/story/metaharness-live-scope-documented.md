@@ -2,7 +2,7 @@
 format: aep.planning-md/3
 id: story:metaharness-live-scope-documented
 kind: story
-status: active
+status: implemented
 title: METAHARNESS_LIVE is documented as the guard of the paths that check it
 scope:
 - confidence: cited
@@ -13,10 +13,11 @@ scope:
   path: website/docs/quickstart.md
 - confidence: cited
   path: website/docs/status.md
-revision: 7
+revision: 8
 transitions:
 - {from: "draft", to: "proposed", at: "2026-10-21T20:32:26Z", actor: "human:timo", revision: 2}
 - {from: "proposed", to: "active", at: "2026-10-21T20:32:26Z", actor: "human:timo", revision: 3}
+- {from: "active", to: "implemented", at: "2026-10-22T00:04:37Z", actor: "human:timo", revision: 8, decided_on: {"recorded":{"test_result":1}}}
 ---
 # Story: METAHARNESS_LIVE is documented as the guard of the paths that check it
 

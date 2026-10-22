@@ -2,7 +2,7 @@
 format: aep.planning-md/3
 id: story:retire-trace-formats-beside-trace-ir
 kind: story
-status: active
+status: implemented
 title: The trace formats beside trace-ir/1 are projected or retired
 summary: Each trace format ADR 0096 lists besides trace-ir/1 becomes a projection of it or stops being written, one story per repository.
 owner: metaharness
@@ -32,10 +32,11 @@ scope:
   path: spec/monetary/observations.yaml
 - confidence: cited
   path: website/docs/reference/cli.md
-revision: 14
+revision: 15
 transitions:
 - {from: "draft", to: "proposed", at: "2026-10-21T19:41:36Z", actor: "human:timo", revision: 3}
 - {from: "proposed", to: "active", at: "2026-10-21T19:41:36Z", actor: "human:timo", revision: 4}
+- {from: "active", to: "implemented", at: "2026-10-22T00:04:36Z", actor: "human:timo", revision: 15, decided_on: {"recorded":{"test_result":1,"review_outcome":1}}}
 ---
 # Story: the trace formats beside trace-ir/1 are projected or retired
 

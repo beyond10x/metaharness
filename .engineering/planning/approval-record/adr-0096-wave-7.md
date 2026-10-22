@@ -6,7 +6,7 @@ status: draft
 title: 'Wave 7 of 2026-10-21: the trace formats beside trace-ir/1, decided per row'
 relations:
 - decides: story:retire-trace-formats-beside-trace-ir
-revision: 3
+revision: 4
 ---
 ## Status
 
@@ -57,4 +57,5 @@ Sequencing from `b10x-chef-orchestrator` (2026-10-21):
   dispatched.
 - 2026-10-22: units 1, 2 and 4 merged into the integration branch; unit 3 committed at `bddd79c` with
   the ESS conformance probe polling on `EventPoll::Progress`; `metaharness-aep` 93 passed, 0 failed.
+- 2026-10-22: unit 3 merged at `ff8892c`; integration gate on that tree: 6 steps exit 0, 105 test binaries, 1210 passed, 0 failed, 49 ignored, conformance 107/107.
 - 2026-10-22: wave 8 approved (`approval-record:adr-0096-wave-8`).

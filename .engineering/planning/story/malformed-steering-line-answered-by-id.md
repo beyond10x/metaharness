@@ -2,7 +2,7 @@
 format: aep.planning-md/3
 id: story:malformed-steering-line-answered-by-id
 kind: story
-status: active
+status: implemented
 title: A steering line that does not parse is answered with a MALFORMED command result
 scope:
 - confidence: cited
@@ -17,10 +17,11 @@ scope:
   path: docs/design/metaharness-protocol-v0.1.md
 - confidence: cited
   path: website/docs/protocol/commands.md
-revision: 9
+revision: 10
 transitions:
 - {from: "draft", to: "proposed", at: "2026-10-21T20:32:26Z", actor: "human:timo", revision: 2}
 - {from: "proposed", to: "active", at: "2026-10-21T20:32:26Z", actor: "human:timo", revision: 3}
+- {from: "active", to: "implemented", at: "2026-10-22T00:04:37Z", actor: "human:timo", revision: 10, decided_on: {"recorded":{"test_result":1,"review_outcome":1}}}
 ---
 # Story: a steering line that does not parse is answered with a MALFORMED command result
 

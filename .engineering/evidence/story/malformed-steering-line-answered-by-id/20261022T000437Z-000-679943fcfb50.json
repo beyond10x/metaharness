@@ -1,0 +1,13 @@
+{
+  "at": "2026-10-22T00:04:37Z",
+  "actor": "human:timo",
+  "artifact": "story:malformed-steering-line-answered-by-id",
+  "kind": "story",
+  "revision": 9,
+  "change": {
+    "change": "evidence",
+    "kind": "test_result",
+    "source": "task check, one step at a time, on integration/adr-0096-wave-7 at ff8892c (gated as the merge's working tree before its commit): 6 steps exit 0, 105 test binaries, 1210 passed, 0 failed, 49 ignored, conformance 107/107",
+    "reference": "merged-u3-5-test.log in the wave's cache directory metaharness-wave-adr0096/w7/gate"
+  }
+}
