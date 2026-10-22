@@ -440,6 +440,8 @@ fn preflight_listing(label: &str, behaviour: &Behaviour, listed: &str) -> Run {
         .arg("/sys/fs/cgroup")
         .output()
         .expect("start aep-eval");
+    // A `.git` directory left under the target directory holds the worktree back from removal.
+    fs::remove_dir_all(harness_repo.join(".git")).expect("remove the stand-in harness checkout");
     Run {
         case,
         code: output.status.code(),

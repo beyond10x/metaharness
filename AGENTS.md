@@ -354,6 +354,10 @@ overwritten incidentally when resuming an interrupted upload.
 - Task runner is `Taskfile.yml` (go-task). Do not add a Makefile.
 - A claim on the public site obeys the same rule as a claim in the code: pinned to a version and
   verified against it, or labelled unverified.
+- A test that creates a `.git` directory does it in a `tempfile` directory, or removes it before it
+  returns. One left under `target/tmp` makes `worktree gc` retain the tree as hidden state, and
+  nothing may delete it by hand (2026-10-22: two wave-8 trees retained by an empty stand-in `.git`
+  from `adversary_w8u7.rs`).
 
 ## Source publication
 
