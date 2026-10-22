@@ -5,6 +5,10 @@ was amended and the amendment is named here.
 
 ## [Unreleased]
 
+### Changed
+
+- **Breaking:** an audited run's report ends with `child exit:` (the harness process's exit from `stream.closed.process`, `unknown` when nothing measured it, never `0`), `control verdict:` (the gating rows folded `gap` > `unk` > `ok`) and `audit verdict:` (the exit code as a word and a number); no exit code changes, so a child that exited `0` beside a gating `unk` row still exits `3`. `AuditReport` gains the field `child_exit` and the method `control()`, so a library caller that builds an `AuditReport` literal needs the new field; the CLI reference's exit table and the events page's `stream.closed` row say the same, and `metaharness.session.ExitAuditedRun` specifies it (a48).
+
 ### Fixed
 
 - A Codex command run through the code-mode `exec` tool reaches `tool.result` with `exit_code`, `is_error` and `outcome_source`: its completion is joined to the `PreToolUse` request that carried the same `tool_use_id` and `turn_id`. It was null with `TOOL_OUTCOME_UNVERIFIED` "completion has no matching observed call" (a47).

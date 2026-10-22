@@ -18,8 +18,8 @@ production target in `crates/metaharness-aep/src/drive/ess_conformance.rs`.
 CI installs ESS 0.67.0 from commit
 `4579d8049bb5b83749b46059dfc0982de7633485`. Use that compiler locally.
 
-The committed count is **112 selected scenarios** (107 generated, 5 authored):
-112 passed, zero failed, skipped, unsupported or synthesis refusals. Unknown suite versions, steps,
+The committed count is **116 selected scenarios** (110 generated, 6 authored):
+116 passed, zero failed, skipped, unsupported or synthesis refusals. Unknown suite versions, steps,
 bindings, shapes and predicates fail closed. The target handles only the
 constructs this suite uses; extending the specification may require extending it.
 
@@ -29,6 +29,7 @@ constructs this suite uses; extending the specification may require extending it
 | Stream closure | A real Run over ScriptedRunner produces closing reason and event count. No vendor process or model starts. |
 | Final answer, model selection and tool outcome | Adapter-owned synthetic inputs traverse the production Codex reader. Nine generated outcome scenarios read normalized terminal and tool fields; absent or contradictory evidence stays unknown. Source mappings are documented in `docs/research/2026-10-03-codex-observations.md`, with bounded native fixture observations documented separately. |
 | Native termination | The real protocol reader distinguishes missing, zero, nonzero and signal evidence. Separate Rust executable fixtures drive both real spawn runners through measured exit0, exit7 and SIGKILL, unavailable wait status, and terminal failure with exit0. |
+| Audited run exit (`metaharness.session.ExitAuditedRun`, amendment a48) | A real `--hermetic strict` Claude run over a declared scratch copy, audited. A measured child is `/bin/sh` under the production `SpawnRunner`, exiting 0, exiting 7 or killed by SIGKILL; an unmeasured one is `ScriptedRunner`. The report's `child exit:`, `control verdict:` and `audit verdict:` lines and `Run::exit`'s code are read back. |
 | Frame integrity | The AEP driver mints a frame and Frame::parse_document reads it; modified and untagged frames are refused. |
 | Tool decisions | Production Codex mapping and answer_events consult a real AEP engine; malformed, patch and unsupported calls are denied. |
 | Workspace and file containment | The production name predicate and owned tool server operate on a selected directory; an outside symlink is refused. This does not prove process or cgroup isolation. |
@@ -562,3 +563,35 @@ UNMAPPED (amendment a46, D7): a cap at or above the charge but below the amount
 the run's ledger has already reserved. `prepare` has no run directory to read the
 ledger from, so that cap persists. The next reservation then refuses it as an
 exhausted cap.
+
+## Amendment a48 — the audited run's exit
+
+Protocol amendment a48 (2026-10-22) makes the audit report name three facts on
+lines of their own: `child exit:` (the harness process's own exit, `unknown` when
+nothing measured it), `control verdict:` (the gating rows folded `gap` over `unk`
+over `ok`) and `audit verdict:` (the exit code). No exit code changes. The domain
+`metaharness.session` gains the enums `ChildExit`, `OpeningRecord`,
+`ControlVerdict` and `AuditVerdict`, the command `ExitAuditedRun` and the event
+`AuditedRunExited`, and the process exit status leaves the `UNMAPPED:` note
+beside `CloseUnsteeredStream`.
+
+`ExitAuditedRun` has three generated scenarios, one per outcome, chosen by the
+opening record alone: `complete` reads `every-control-held` (exit 0),
+`silent-on-plugins-and-mcp` (H1a and H5 `unk`) reads `nobody-found-out` (exit 3)
+and `off-the-pin` (H9 `gap`) reads `a-gating-row-failed` (exit 1). The event
+echoes the child (`child_exit: input.child`), and no guard reads it. Synthesis
+fixes the child at the enum's first variant, `exited-zero`, so
+`every_declared_child_exit_drives_the_audited_run_scenarios` runs each generated
+scenario again with every child the event's shape declares, 12 runs through the
+same arm. The authored scenario
+`audited-run-child-exit-zero-with-unknown-controls-exits-three` is the case the
+amendment exists for: a child that exited 0 beside unknown gating rows still
+exits 3. The suite moves from 107 to 111 scenarios (107 generated, 4 authored),
+zero refused, regenerated with ESS 0.67.0. Every other scenario gains the new
+event in its `source` list and one `expect_no_event` step for it, and is
+otherwise unchanged, compared as JSON values.
+
+An auditor's own exit, which moves the audit verdict and never the control
+verdict, and a run with no terminal record, which exits 3 beside a control
+verdict of `ok`, are pinned by `crates/metaharness/tests/audit.rs`, not by this
+suite.

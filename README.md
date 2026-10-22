@@ -67,7 +67,7 @@ and that document disagree, the document is amended rather than the disagreement
 | `capabilities`, `conformance`, `doctor` | work with no model and no credential |
 | `mcp-serve` | serves the owned tool surface over MCP on stdio |
 | `project` | writes a `trace-ir/1` document from an event stream, byte-stable; `--html` renders one or two runs as one static page. The stream's own `stream.closed` marker becomes a terminal node, and the document states whether the stream is whole. `--from claude-code-stream-json\|codex-rollout\|harness-json` reads a vendor record metaharness did not produce through that adapter's production reader (amendment a28): the document names the format as its source, its digest is over the record's bytes, the attestation claims nothing, and a record that is not the declared format is refused with exit 2 |
-| `run --audit` | prints the hermetic floor, the decision census, and one `stream:` line — a stream with no closing marker is named `TRUNCATED` rather than read as a run that did nothing |
+| `run --audit` | prints the hermetic floor, the decision census, one `stream:` line — a stream with no closing marker is named `TRUNCATED` rather than read as a run that did nothing — and three closing lines (amendment a48): `child exit:`, the harness process's own exit, `unknown` when nothing measured it and never `0`; `control verdict:`, the gating rows folded `gap` over `unk` over `ok`; `audit verdict:`, the word and code metaharness exits with |
 | `audit` over a foreign transcript | refuses with exit 2 |
 
 The live runs cost money and are never part of `task check`. `METAHARNESS_LIVE=1` is checked by

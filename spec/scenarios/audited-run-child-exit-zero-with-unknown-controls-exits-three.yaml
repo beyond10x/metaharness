@@ -1,0 +1,17 @@
+type: ess-scenario/1
+domain: metaharness.session
+scenario: audited-run-child-exit-zero-with-unknown-controls-exits-three
+summary: >-
+  A child that exited 0 beside unknown gating rows exits 3, and the report names its exit 0, the
+  control unk and the audit no-verdict apart.
+
+timeline:
+  - at: 2026-10-22T00:00:00Z
+    command: metaharness.session.ExitAuditedRun
+    input:
+      child: exited-zero
+      opening: silent-on-plugins-and-mcp
+    outcome: nobody-found-out
+    events:
+      - event: metaharness.session.AuditedRunExited
+        payload: {child_exit: exited-zero, control: unk, audit: no-verdict, exit_code: 3}

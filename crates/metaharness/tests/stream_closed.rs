@@ -278,6 +278,136 @@ fn a_marker_whose_count_disagrees_with_the_stream_decides_nothing() {
     assert!(seen.render().contains("INCONSISTENT"), "{}", seen.render());
 }
 
+/// A scripted child whose runner says what it measured, or measures nothing at all (a48).
+mod measured {
+    use metaharness::protocol::ProcessTermination;
+    use metaharness::{
+        HarnessProcess, LaunchPlanView, ProcessPoll, ProcessRunner, ScriptStep, ScriptedLog,
+        ScriptedProcess,
+    };
+
+    /// The runner: it starts the opening and terminal records and hands over its measurement.
+    pub(super) struct Measured(pub(super) Option<ProcessTermination>);
+
+    /// The scripted process, every call forwarded, with the measurement the runner was given.
+    struct MeasuredProcess(ScriptedProcess, Option<ProcessTermination>);
+
+    impl HarnessProcess for MeasuredProcess {
+        fn next_line(&mut self) -> std::io::Result<Option<String>> {
+            self.0.next_line()
+        }
+        fn poll_line(&mut self) -> std::io::Result<ProcessPoll> {
+            self.0.poll_line()
+        }
+        fn write_line(&mut self, line: &str) -> std::io::Result<()> {
+            self.0.write_line(line)
+        }
+        fn kill(&mut self) -> std::io::Result<()> {
+            self.0.kill()
+        }
+        fn wait(&mut self) -> std::io::Result<Option<i32>> {
+            self.0.wait()
+        }
+        fn termination(&self) -> ProcessTermination {
+            self.1.unwrap_or_else(|| self.0.termination())
+        }
+        fn stderr(&self) -> String {
+            self.0.stderr()
+        }
+    }
+
+    impl ProcessRunner for Measured {
+        fn requires_executable(&self) -> bool {
+            false
+        }
+        fn start(&mut self, _: &LaunchPlanView<'_>) -> std::io::Result<Box<dyn HarnessProcess>> {
+            Ok(Box::new(MeasuredProcess(
+                ScriptedProcess::new(
+                    vec![ScriptStep::line(super::INIT), ScriptStep::line(super::END)],
+                    ScriptedLog::new(),
+                ),
+                self.0,
+            )))
+        }
+    }
+}
+
+/// Amendment a48: the audit reads the child's exit off the last `stream.closed` and prints it on a
+/// line of its own, followed by the control verdict and the audit verdict. The child's exit decides
+/// neither of them, and a process that measured nothing prints `unknown`, never `0`.
+#[test]
+fn the_audit_prints_the_childs_exit_from_the_last_marker_beside_both_verdicts() {
+    use metaharness::RunExit;
+    use metaharness::protocol::ProcessTermination;
+
+    let mut verdicts = Vec::new();
+    for (measured, child_line) in [
+        (
+            Some(ProcessTermination::Exited { code: 0 }),
+            "child exit: 0",
+        ),
+        (
+            Some(ProcessTermination::Exited { code: 7 }),
+            "child exit: 7",
+        ),
+        (
+            Some(ProcessTermination::Signaled { signal: 9 }),
+            "child exit: signal 9",
+        ),
+        (None, "child exit: unknown"),
+    ] {
+        let mut run = Metaharness::new(Kind::Claude)
+            .with_decisions(DecisionMode::Frame)
+            .start_with_clock(
+                Input::Prompt("a measured child".to_string()),
+                &mut measured::Measured(measured),
+                &mut ScriptedSeams,
+                Box::new(ManualClock::new()),
+            )
+            .expect("the run starts");
+        run.drain().expect("the run drains");
+        let marked = run.events().iter().rev().find_map(|event| match event {
+            Event::StreamClosed { process, .. } => Some(*process),
+            _ => None,
+        });
+        assert_eq!(
+            marked,
+            Some(measured.unwrap_or_default()),
+            "the marker carries what the runner measured, and `unknown` when it measured nothing"
+        );
+
+        let report = run
+            .audit(&mut FakeAuditor::default())
+            .expect("the floor always runs");
+        let rendered = report.render();
+        let lines: Vec<&str> = rendered.lines().collect();
+        let tail = &lines[lines.len().saturating_sub(3)..];
+        assert_eq!(tail.first(), Some(&child_line), "{rendered}");
+        assert!(
+            tail.get(1)
+                .is_some_and(|line| line.starts_with("control verdict: ")),
+            "{rendered}"
+        );
+        let exit = run.exit(Some(&report));
+        let word = match exit {
+            RunExit::Ok => "ok",
+            RunExit::Gap => "gap",
+            RunExit::NoVerdict => "no verdict",
+            RunExit::Broken => unreachable!("an audit that produced a report is a verdict"),
+        };
+        assert_eq!(
+            tail.get(2).copied(),
+            Some(format!("audit verdict: {word} (exit {})", exit.code()).as_str()),
+            "{rendered}"
+        );
+        verdicts.push((tail[1].to_owned(), tail[2].to_owned(), exit));
+    }
+    assert!(
+        verdicts.windows(2).all(|pair| pair[0] == pair[1]),
+        "the child's exit moved a verdict: {verdicts:?}"
+    );
+}
+
 /// Real adapter → core stream closure → the exit value used by the CLI with no
 /// audit. The scripted child starts no process and reads no credentials.
 mod codex_terminal_regression {
@@ -354,6 +484,7 @@ mod codex_terminal_regression {
                 auditor: None,
                 saw_terminal_record: run.saw_terminal_record(),
                 stream: stream_completeness(run.events()),
+                child_exit: metaharness::protocol::ProcessTermination::Unknown,
             };
             assert_eq!(
                 run.exit(Some(&report)).code() == 0,
@@ -461,6 +592,7 @@ mod codex_terminal_regression {
                 auditor: None,
                 saw_terminal_record: run.saw_terminal_record(),
                 stream: stream_completeness(run.events()),
+                child_exit: metaharness::protocol::ProcessTermination::Unknown,
             };
             assert_ne!(run.exit(Some(&report)).code(), 0);
             assert_ne!(report.exit().code(), 0);

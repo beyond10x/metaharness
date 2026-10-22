@@ -9,6 +9,7 @@ specification:
   - domains/observations.yaml
   - domains/trace.yaml
 scenarios:
+  - scenarios/audited-run-child-exit-zero-with-unknown-controls-exits-three.yaml
   - scenarios/close-unsteered-budget-word-outranks-positive-verdict.yaml
   - scenarios/close-unsteered-explicit-error-outranks-success.yaml
   - scenarios/codex-mediated-exec-exit-reaches-tool-result.yaml

@@ -1615,6 +1615,12 @@ for.
 | `2` | metaharness itself could not do its job: the adapter refused, the vendor binary is off its pin, the auditor is missing or not invokable, the spec is unreadable, **or the auditor produced no verdict rows** — a table with nothing in it is a setup failure, never a verdict |
 | `3` | **nobody found out** — a gating hermetic row is `unk`, or the auditor exited `3`, or the harness died without producing a record |
 
+**Since amendment a48 the report names, on three lines of their own, the three facts this table
+folds into one code**: `child exit:` (the harness process's own exit, `unknown` when nothing
+measured it), `control verdict:` (the gating rows folded `gap` > `unk` > `ok`) and `audit verdict:`
+(the code above). No code changes. A `3` beside `child exit: 0` is a harness that exited cleanly
+and a floor that could not tell whether every control held.
+
 **Without `--audit`, `metaharness run` exits `0` when the session ran to a terminal record, `2`
 when metaharness could not do its job, and `3` when the harness died without producing one. It
 never exits `1`, because without an audit there is no verdict to contradict.** Stated because two
@@ -4496,3 +4502,80 @@ specification adds the evidence classes `tool-mediated-success`, `tool-mediated-
 scenario `codex-mediated-exec-exit-reaches-tool-result` reads the last two as
 `failure-without-code`. `spec/conformance.json` is regenerated with ESS 0.67.0 and holds 108
 scenarios.
+
+### Amendment a48 — the audit names the child's exit, the control verdict and the audit verdict apart (2026-10-22)
+
+Coordinator decision, 2026-10-22, `story:exit-status-separates-task-control-audit`.
+
+**1. The defect.** Audited sessions exited `3` while their harness child had exited `0`. H1a, H4
+and H5 read `unk`, and a gating `unk` is § 9.4's *nobody found out*. On Codex those three rows stay
+`unk` by a34. The exit code was right, and the rows said which controls were unknown. Nothing in
+the report named the child's exit or folded the rows: it printed the twelve rows, the census, the
+stream line, the plugins, the withheld line and the auditor's line. The CLI reference said `3` means "a gating row is `unk`" and did not
+say the child may have exited `0`. A caller holding a `3` could not tell from documented output
+whether the harness failed, a control failed or the floor could not decide. The child's exit had
+been on the wire since a21, as `stream.closed.process`, and was printed nowhere.
+
+**2. The decision.** The report ends with three lines, each its own field, in this order:
+
+```text
+child exit: 0
+control verdict: unk
+audit verdict: no verdict (exit 3)
+```
+
+| line | what it says | values |
+|---|---|---|
+| `child exit:` | `process` of the last `stream.closed`, as a21 records it | the code (`0`, `7`); `signal <N>`; `unknown` |
+| `control verdict:` | the gating rows folded `gap` > `unk` > `ok` | `ok`, `unk`, `gap` |
+| `audit verdict:` | `AuditReport::exit`, with the code the process exits with | `ok (exit 0)`, `gap (exit 1)`, `no verdict (exit 3)` |
+
+- **An unmeasured child is `unknown`, never `0`** (invariant 3). The scripted runner, an embedder's
+  process that does not override `HarnessProcess::termination`, a failed wait and a stream with no
+  `stream.closed` all print `unknown`. Only the two spawn runners measure a child.
+- **The control verdict is the floor's, and the floor's alone.** Advisory rows (H2, H6) do not
+  enter it, because they move no exit code. The external auditor does not enter it either. Its
+  exit moves the audit verdict, so `control verdict: ok` beside `audit verdict: gap (exit 1)` is an
+  auditor that found a contradiction in a run whose controls held. A report with no gating rows
+  folds to `ok`, the same as `AuditReport::exit`, so the two lines never disagree about the rows.
+- **The audit verdict is the exit code.** It is what `metaharness run` exits with, word and code.
+
+**3. What does not change.** `AuditReport::exit` and every exit code. An audit with a gating `unk`
+row exits `3`, whatever the child did, and a child that exited `0` beside such a row still exits
+`3`. A child that exited `7` after a terminal record, under a floor that is all `ok`, still exits
+`0`: a21 keeps native termination out of the close reason, and the child's exit decides no
+verdict. It is printed so that a reader does not have to infer it. The wire is unchanged:
+`stream.closed.process` is a21's field, and no event or command gains one.
+
+**4. One road for both faces (D11).** The library carries the three facts. `AuditReport` gains
+`child_exit: ProcessTermination`, which `Run::audit` fills from the last `stream.closed`. It gains
+`control()`, the fold. `render` prints the three lines. The binary prints `render` on stderr, as
+before, so an embedder that renders a report prints the same lines.
+
+**5. The pages.** `website/docs/reference/cli.md` names the three lines under § *Exit codes*
+and says that `3` may come with `child exit: 0`. `website/docs/protocol/events.md` says what
+`stream.closed` carries in `process`. A test in `metaharness-cli`
+(`tests/exit_verdicts_documented.rs`) renders reports for every child shape, every control verdict
+and every audit verdict, and holds the page to the rendered lines.
+
+**6. The specification.** `spec/domains/session.yaml` mapped no process exit status. It now has
+`metaharness.session.ExitAuditedRun`: a real `--hermetic strict` Claude run over a declared
+scratch copy. A measured child is a `/bin/sh` launched and reaped by the production `SpawnRunner`,
+which exits `0`, exits `7` or kills itself with `SIGKILL`. The unknown child is the scripted
+runner. The opening record selects the gating rows: complete, silent on plugins and MCP servers
+(H1a and H5 `unk`), or off the pin (H9 `gap`). The target reads the three fields off the report's
+own lines and the code off `Run::exit`. Only the opening record selects an outcome; the event echoes
+the child. Synthesis fixes the child at the enum's first variant, so the target runs each generated
+scenario again with every child the event declares. The authored scenario
+`audited-run-child-exit-zero-with-unknown-controls-exits-three` is the case in § 1. Steering
+precedence, final-line order and count, and audited and unaudited agreement in the CLI stay
+unmapped.
+
+**7. Limits.**
+
+- The child exit is metaharness's measurement of the process it spawned. A vendor binary that
+  hands its work to another process reports that launcher's exit.
+- `control verdict: ok` means every gating row read `ok`. It inherits every limit those rows
+  have, among them that the attestation half is metaharness's own claim (§ 8.3).
+- A run that wants no audit prints no report, so it prints none of the three lines. Its exit is
+  § 9.4's table without `--audit`.

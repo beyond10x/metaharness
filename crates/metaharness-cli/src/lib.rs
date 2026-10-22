@@ -19,7 +19,7 @@
 //! | `0` | it ran, and every gating verdict is `ok` |
 //! | `1` | a gating verdict is `gap`, or the auditor exited `1`, or a conformance vector failed |
 //! | `2` | metaharness could not do its job. **Never a verdict about the run** |
-//! | `3` | nobody found out — a gating row is `unk`, or the harness died without a record |
+//! | `3` | nobody found out — a gating row is `unk`, or the auditor exited `3`, or the harness died without a record. The harness itself may have exited `0`: the report then says `child exit: 0` beside `control verdict: unk` |
 
 use std::sync::mpsc::{Receiver, RecvTimeoutError};
 use std::time::Duration;
