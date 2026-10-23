@@ -1,0 +1,12 @@
+{
+  "at": "2026-10-23T20:02:14Z",
+  "actor": "human:timo",
+  "artifact": "story:aep-pin-0-77-0",
+  "kind": "story",
+  "revision": 5,
+  "change": {
+    "change": "evidence",
+    "kind": "verification",
+    "source": "Shipped in 0.17.0: tag 0.17.0 at cee03c1, Release run 40009051316 success, https://github.com/beyond10x/metaharness/releases/tag/0.17.0 by b10x-bot[bot] with 4 archives + SHA256SUMS, verify-release.sh metaharness 0.17.0 exit 0"
+  }
+}
