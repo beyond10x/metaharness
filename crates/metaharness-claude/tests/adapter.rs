@@ -47,11 +47,12 @@ fn spec() -> RunSpec {
 fn the_adapter_names_itself_and_its_pin() {
     // **The one deliberate literal.** Every other assertion about the pin reads `PINNED_VERSIONS`,
     // so a move shows up here — in a diff a reviewer reads — and nowhere else. Moved
-    // 2.1.240 → 2.1.241 on 2026-08-24, 2.1.241 → 2.1.259 on 2026-09-03 and 2.1.259 → 2.1.304
-    // and 2.1.305 on 2026-10-21; see `PINNED_VERSIONS`' own note for what was re-read on each new
-    // binary and what was carried over unverified.
+    // 2.1.240 → 2.1.241 on 2026-08-24, 2.1.241 → 2.1.259 on 2026-09-03, 2.1.259 → 2.1.304
+    // and 2.1.305 on 2026-10-21, and 2.1.309 added beside them on 2026-10-23 (2.1.306 to 2.1.308
+    // stay off); see `PINNED_VERSIONS`' own note for what was re-read on each new binary and what
+    // was carried over unverified.
     assert_eq!(ADAPTER_ID, "claude");
-    assert_eq!(PINNED_VERSIONS, ["2.1.304", "2.1.305"]);
+    assert_eq!(PINNED_VERSIONS, ["2.1.304", "2.1.305", "2.1.309"]);
     assert_eq!(
         capabilities().versions_pinned,
         PINNED_VERSIONS.map(ToString::to_string).to_vec(),
@@ -209,8 +210,17 @@ fn each_pinned_binarys_compiled_in_plugins_are_declared_by_name_with_their_built
         "cc-plugin-claude-test",
     ];
     let read_from_2_1_305 = read_from_2_1_304;
+    // `docs/research/2026-10-23-claude-code-2.1.309-adapter-surface.md`: the same twelve, in the
+    // same order, under the same entrypoint guards.
+    let read_from_2_1_309 = read_from_2_1_304;
     assert_eq!(builtin_plugins("2.1.304"), Some(&read_from_2_1_304[..]));
     assert_eq!(builtin_plugins("2.1.305"), Some(&read_from_2_1_305[..]));
+    assert_eq!(builtin_plugins("2.1.309"), Some(&read_from_2_1_309[..]));
+    assert_eq!(
+        builtin_plugins("2.1.308"),
+        None,
+        "2.1.308 is on this machine and stays off the pin"
+    );
     assert_eq!(
         builtin_plugin_source("cc-plugin-telemetry"),
         "cc-plugin-telemetry@builtin"

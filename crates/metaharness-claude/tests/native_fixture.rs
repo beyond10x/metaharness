@@ -24,8 +24,8 @@ const ANSWER: &str = "native-claude-fixture-final";
 const CUSTODY_TOKEN: &str = "native-fixture-custody-token-issued-by-no-account";
 /// The placeholder `credentials: none` hands the child for a declared endpoint.
 const ENDPOINT_PLACEHOLDER: &str = "metaharness-model-endpoint";
-/// The built-ins a 2.1.304 session opens with under either credential-free mode, observed: the
-/// launch sets `CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC` in both, which keeps
+/// The built-ins a 2.1.304, 2.1.305 or 2.1.309 session opens with under either credential-free
+/// mode, observed: the launch sets `CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC` in both, which keeps
 /// `cc-plugin-telemetry` out (design amendment a33).
 const BUILTINS_SEEN: [&str; 2] = ["cc-plugin-agents-md", "cc-plugin-plugin-authoring"];
 static NATIVE_RUN: Mutex<()> = Mutex::new(());
@@ -869,7 +869,8 @@ fn native_audit_reads_the_pin_and_names_each_builtin_it_admitted() {
 /// `--strict-version` refuses a binary off the pin before anything is spawned (design amendment
 /// a33): the driver asks the binary on the child's `PATH` for its `--version`, no model request
 /// reaches the stub, no session opens, and the refusal names the version it read. Run against
-/// `METAHARNESS_NATIVE_CLAUDE_OFF_PIN` — 2.1.303 on this machine, kept off the pin.
+/// `METAHARNESS_NATIVE_CLAUDE_OFF_PIN`, a binary kept off the pin: 2.1.303 when the lane first ran
+/// (a33), 2.1.308 at the 2.1.309 qualification.
 #[test]
 #[ignore = "actual Claude and production driver; explicit binaries/evidence and isolated loopback network namespace required"]
 fn native_strict_version_refuses_an_off_pin_binary_before_the_spawn() {
@@ -1046,8 +1047,8 @@ fn vendor_with_project_and_local_sources(shapes: &[&str]) -> Vec<String> {
 ///   with an empty directory bound over `$HOME/.claude`.
 ///
 /// What it measured is compared with the binary's row in [`metaharness_claude::MEMORY_CANARIES`]
-/// (amendment a36): at 2.1.304 and 2.1.305 that row records none reaching a request. A binary whose
-/// canary leaks needs a row saying so, which the floor reads as H11 `gap`.
+/// (amendment a36): at 2.1.304, 2.1.305 and 2.1.309 that row records none reaching a request. A
+/// binary whose canary leaks needs a row saying so, which the floor reads as H11 `gap`.
 #[test]
 #[ignore = "actual Claude and production driver; explicit binaries/evidence and isolated loopback network namespace required"]
 fn native_memory_canaries_in_the_cwd_and_an_ancestor_match_the_recorded_row() {

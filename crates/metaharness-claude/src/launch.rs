@@ -210,7 +210,7 @@ pub struct LaunchContext {
     /// recorded for the record's version ([`crate::MEMORY_CANARIES`]). Before a36 a non-empty
     /// walk refused the launch and looked for `CLAUDE.md` and `AGENTS.md` only.
     ///
-    /// What a memory file does is observed per pin, not assumed. At 2.1.304 and 2.1.305
+    /// What a memory file does is observed per pin, not assumed. At 2.1.304, 2.1.305 and 2.1.309
     /// project-memory discovery is gated on the `projectSettings` source (`CLAUDE.local.md` on
     /// `localSettings`), which `--setting-sources ""` (H2) switches off: in the native fixture a
     /// canary of each shape in the cwd and in an ancestor reached no request the model was sent,
@@ -597,9 +597,9 @@ pub enum LaunchRefusal {
 /// amendment a37 § 6). The core re-exports it as the code of its own refusal.
 pub const SCRATCH_PATH_NAMES_PLUGIN_VARIABLE: &str = "scratch-path-names-plugin-variable";
 
-/// The literals Claude Code 2.1.304 and 2.1.305 refuse in the `command` of a settings hook that is
-/// not a plugin's (design amendment a37 § 6), read from each binary's hook runner. The runner
-/// checks the raw string, so a literal inside single quotes is refused all the same.
+/// The literals Claude Code 2.1.304, 2.1.305 and 2.1.309 refuse in the `command` of a settings hook
+/// that is not a plugin's (design amendment a37 § 6), read from each binary's hook runner. The
+/// runner checks the raw string, so a literal inside single quotes is refused all the same.
 pub const HOOK_COMMAND_PLUGIN_VARIABLES: [&str; 2] =
     ["${CLAUDE_PLUGIN_ROOT}", "${CLAUDE_PLUGIN_DATA}"];
 
@@ -1487,11 +1487,11 @@ fn build_env(
 /// reasons that hold only here. The child's model traffic goes where metaharness pointed it — a
 /// declared endpoint, the loopback proxy, or nowhere — so first-party analytics to
 /// `api.anthropic.com` would be the one request that bypasses it; and it is the switch that keeps
-/// the `cc-plugin-telemetry` built-in out of the session, observed at 2.1.304 and 2.1.305. Under
-/// an operator login or an API key the switch is **not** set: it also gates server-side behaviour
-/// keyed on the account (the served model catalog's published path, claude.ai downloads), none of
-/// which a credential-free probe can observe, so the built-in is admitted by name and `@builtin`
-/// source there instead.
+/// the `cc-plugin-telemetry` built-in out of the session, observed at 2.1.304, 2.1.305 and 2.1.309.
+/// Under an operator login or an API key the switch is **not** set: it also gates server-side
+/// behaviour keyed on the account (the served model catalog's published path, claude.ai
+/// downloads), none of which a credential-free probe can observe, so the built-in is admitted by
+/// name and `@builtin` source there instead.
 fn credential_free(spec: &RunSpec) -> bool {
     matches!(
         spec.credentials,
@@ -1893,7 +1893,7 @@ fn attest(
                 "the ancestor walk from the operator's directory found {} memory file(s) above \
                  it, and the tree is the operator's, so metaharness claims nothing about it; \
                  the launch still passes --setting-sources \"\", which kept memory files in and \
-                 above the cwd out of every request at 2.1.304 and 2.1.305 (a33, a36)",
+                 above the cwd out of every request at 2.1.304, 2.1.305 and 2.1.309 (a33, a36)",
                 context.memory_ancestors.len()
             ),
         ));
@@ -2031,10 +2031,11 @@ const LOOPBACK_POSTURE: &str = "no operator credential in the child; a placehold
 /// H4's attested `how` when the child's `ANTHROPIC_API_KEY` is this plan's own endpoint
 /// placeholder, written once so the floor can recognise it (design amendment a33).
 ///
-/// The record of such a run names the variable — 2.1.304 and 2.1.305 report `apiKeySource:
-/// "ANTHROPIC_API_KEY"` — and a floor reading the name alone would call the plan's placeholder an
-/// operator key. The floor reads this exact sentence in the run's own attestation instead: the
-/// launch's statement of what it put there, never an inference from the variable's name.
+/// The record of such a run names the variable — 2.1.304, 2.1.305 and 2.1.309 report
+/// `apiKeySource: "ANTHROPIC_API_KEY"` — and a floor reading the name alone would call the plan's
+/// placeholder an operator key. The floor reads this exact sentence in the run's own attestation
+/// instead: the launch's statement of what it put there, never an inference from the variable's
+/// name.
 pub const ENDPOINT_KEY_POSTURE: &str = "ANTHROPIC_API_KEY carries this plan's own placeholder for \
                                         the declared model endpoint; no operator credential is in \
                                         the child at all";
@@ -3290,12 +3291,17 @@ mod tests {
         spawn_failed: &'static str,
         /// A hook that ran past its timeout.
         timed_out: &'static str,
+        /// The binding `timed_out`'s `timedOut` flag negates, where the flag is not
+        /// `!y?.aborted` itself: `None` at 2.1.304 and 2.1.305. At 2.1.309 it is "the action was
+        /// aborted and the hook had not already run past its own timeout"; the binding and the
+        /// flag each occur once in that binary, 1,675 bytes apart.
+        aborted_binding: Option<&'static str>,
         /// Stdout the parser could not read as a hook decision, with an exit other than `2`.
         invalid_output: &'static str,
     }
 
     /// One row per pinned version; a pin that moves without a new row fails the tests below.
-    const ON_FAILURE_READINGS: [OnFailureReading; 2] = [
+    const ON_FAILURE_READINGS: [OnFailureReading; 3] = [
         OnFailureReading {
             version: "2.1.304",
             key: r#"At=p(()=>N(["continue","block"]).optional().describe("What a failure of this hook does: it could not start (a missing script or plugin directory), timed out, exited with a code other than 0 or 2, or printed JSON that is invalid or fails validation. 'continue' (default): the failure is reported and the action goes ahead. 'block': the failure counts as exit code 2, so the action the event guards (a tool call, a permission request, a prompt) is blocked. Ignored for async hooks and on Stop, SubagentStop, TaskCompleted and TeammateIdle.")"#,
@@ -3304,6 +3310,7 @@ mod tests {
             exempt: r#"l1e=new Set(["Stop","SubagentStop","TaskCompleted","TeammateIdle"])"#,
             spawn_failed: r#"wr.spawnFailed&&!iEn(rt,Da)){yield{outcome:"non_blocking_error",hook:Co};return}"#,
             timed_out: r#"yield{message:en({type:"hook_cancelled",hookName:st,toolUseID:s,hookEvent:rt,command:ma,durationMs:vs,timedOut:!y?.aborted,timeoutMs:Ks}),outcome:"cancelled""#,
+            aborted_binding: None,
             invalid_output: r#"else if(Hf){Qo=!0;let $a=rct(Hf,wr.status,wr.stderr);tf({hookId:Fr,hookName:st,hookEvent:rt,output:wr.output,stdout:wr.stdout,stderr:$a,exitCode:wr.status,outcome:"error"}),yield{message:en({type:"hook_non_blocking_error",hookName:st,toolUseID:s,hookEvent:rt,stderr:$a,stdout:wr.stdout,exitCode:wr.status,command:ma,durationMs:vs}),outcome:"non_blocking_error",hook:Co};return}"#,
         },
         OnFailureReading {
@@ -3314,7 +3321,19 @@ mod tests {
             exempt: r#"S1e=new Set(["Stop","SubagentStop","TaskCompleted","TeammateIdle"])"#,
             spawn_failed: r#"Sr.spawnFailed&&!NEn(ot,Na)){yield{outcome:"non_blocking_error",hook:Lo};return}"#,
             timed_out: r#"yield{message:rn({type:"hook_cancelled",hookName:it,toolUseID:s,hookEvent:ot,command:ha,durationMs:Us,timedOut:!y?.aborted,timeoutMs:Vr}),outcome:"cancelled""#,
+            aborted_binding: None,
             invalid_output: r#"else if(Sf){Ao=!0;let za=Yct(Sf,Sr.status,Sr.stderr);Wc({hookId:$r,hookName:it,hookEvent:ot,output:Sr.output,stdout:Sr.stdout,stderr:za,exitCode:Sr.status,outcome:"error"}),yield{message:rn({type:"hook_non_blocking_error",hookName:it,toolUseID:s,hookEvent:ot,stderr:za,stdout:Sr.stdout,exitCode:Sr.status,command:ha,durationMs:Us}),outcome:"non_blocking_error",hook:Lo};return}"#,
+        },
+        OnFailureReading {
+            version: "2.1.309",
+            key: r#"At=p(()=>B(["continue","block"]).optional().describe("What a failure of this hook does: it could not start (a missing script or plugin directory), timed out, exited with a code other than 0 or 2, or printed JSON that is invalid or fails validation. 'continue' (default): the failure is reported and the action goes ahead. 'block': the failure counts as exit code 2, so the action the event guards (a tool call, a permission request, a prompt) is blocked. Ignored for async hooks and on Stop, SubagentStop, TaskCompleted and TeammateIdle.")"#,
+            applies: r#"function MGe(e){switch(e.type){case"command":return e.onFailure==="block"&&e.async!==!0&&e.asyncRewake!==!0;case"http":return e.onFailure==="block";default:return!1}"#,
+            converts: r#"let S=e.outcome==="cancelled"&&(r?.aborted!==!0||e.stoppedAfterItsTimeout===!0)?"timed out":e.outcome==="non_blocking_error"?"failed":void 0;"#,
+            exempt: r#"OGe=new Set(["Stop","SubagentStop","TaskCompleted","TeammateIdle"])"#,
+            spawn_failed: r#"os.spawnFailed&&!lPn(at,Sl)){yield{outcome:"non_blocking_error",hook:Zo};return}"#,
+            timed_out: r#"yield{message:nn({type:"hook_cancelled",hookName:ft,toolUseID:s,hookEvent:at,command:ml,durationMs:eu,timedOut:!$l,timeoutMs:Ta}),outcome:"cancelled""#,
+            aborted_binding: Some("$l=y?.aborted===!0&&os.stoppedAfterItsTimeout!==!0"),
+            invalid_output: r#"else if(Ar){Ko=!0;let Ba=qpt(Ar,os.status,os.stderr);tf({hookId:Yr,hookName:ft,hookEvent:at,output:os.output,stdout:os.stdout,stderr:Ba,exitCode:os.status,outcome:"error"}),yield{message:nn({type:"hook_non_blocking_error",hookName:ft,toolUseID:s,hookEvent:at,stderr:Ba,stdout:os.stdout,exitCode:os.status,command:ml,durationMs:eu}),outcome:"non_blocking_error",hook:Zo};return}"#,
         },
     ];
 
@@ -3356,7 +3375,14 @@ mod tests {
             assert_ne!(entry.get("asyncRewake"), Some(&json!(true)), "{version}");
             assert!(!reading.exempt.contains(r#""PreToolUse""#), "{version}");
             let outcome = if route(reading).ends_with(r#"outcome:"cancelled""#) {
-                r#"e.outcome==="cancelled"&&r?.aborted!==!0?"timed out""#
+                // 2.1.309 also converts a hook the action aborted after it had run past its own
+                // timeout: the case its `aborted_binding` reports as timed out.
+                match reading.aborted_binding {
+                    None => r#"e.outcome==="cancelled"&&r?.aborted!==!0?"timed out""#,
+                    Some(_) => {
+                        r#"e.outcome==="cancelled"&&(r?.aborted!==!0||e.stoppedAfterItsTimeout===!0)?"timed out""#
+                    }
+                }
             } else {
                 assert!(
                     route(reading).contains(r#"outcome:"non_blocking_error""#),
@@ -3375,13 +3401,26 @@ mod tests {
     }
 
     /// Design amendment a41 § 6, the second row: a seam hook that runs past the vendor's timeout.
+    /// The cancelled message reports a timeout unless the action was aborted: at 2.1.304 and
+    /// 2.1.305 `!y?.aborted` itself, at 2.1.309 a binding that also counts an abort arriving after
+    /// the hook's own timeout as the timeout. A binding this test does not name fails it.
     #[test]
     fn the_vendor_blocks_the_call_when_the_seam_hook_times_out() {
-        assert!(
-            ON_FAILURE_READINGS
-                .iter()
-                .all(|reading| reading.timed_out.contains("timedOut:!y?.aborted"))
-        );
+        for reading in &ON_FAILURE_READINGS {
+            let version = reading.version;
+            let flag = match reading.aborted_binding {
+                None => "timedOut:!y?.aborted".to_owned(),
+                Some(binding) => {
+                    let (name, test) = binding.split_once('=').expect("a binding");
+                    assert_eq!(
+                        test, "y?.aborted===!0&&os.stoppedAfterItsTimeout!==!0",
+                        "{version}"
+                    );
+                    format!("timedOut:!{name}")
+                }
+            };
+            assert!(reading.timed_out.contains(&flag), "{version}: {flag}");
+        }
         the_vendor_blocks("timed out", |reading| reading.timed_out);
     }
 
