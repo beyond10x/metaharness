@@ -4,7 +4,7 @@ This is a bounded retrofit of Metaharness's observable boundaries. It preserves
 frame/1 and adapter ownership. It does not claim to specify every event,
 credential rule, process-isolation mechanism or vendor version.
 
-ESS 0.67.0 validates both manifests. The core model uses ess/29;
+ESS 0.68.0 validates both manifests. The core model uses ess/29;
 conformance.json is a declared-coverage ess-conformance/35 suite. Regenerate it:
 
 ```console
@@ -15,8 +15,8 @@ ess verify conform synthesize --path spec --scenarios spec --suite-format 5 --st
 without it ESS selects none and writes the 107 generated ones only.
 `task check` validates both manifests, checks suite drift, and executes the
 production target in `crates/metaharness-aep/src/drive/ess_conformance.rs`.
-CI installs ESS 0.67.0 from commit
-`4579d8049bb5b83749b46059dfc0982de7633485`. Use that compiler locally.
+CI installs ESS 0.68.0 from commit
+`ae9d3604ec001b3f0f318e8d961748c388082f60`. Use that compiler locally.
 
 The committed count is **116 selected scenarios** (110 generated, 6 authored):
 116 passed, zero failed, skipped, unsupported or synthesis refusals. Unknown suite versions, steps,
