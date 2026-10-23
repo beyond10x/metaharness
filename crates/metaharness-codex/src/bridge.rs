@@ -30,9 +30,12 @@
 //! script calls (`codex-rs/core/src/tools/code_mode/mod.rs:374` at `rust-v0.153.4`); the hook
 //! receives it as `tool_use_id` and the turn's id as `turn_id` (`core/src/hook_runtime.rs:184-203`);
 //! the command's `item_completed` in the rollout carries the same id as `item.id` and the same turn
-//! id (`core/src/tools/events.rs:563-586`, `core/src/session/mod.rs:2439-2464`). So the seam records
-//! a `Bash` hook request under its `tool_use_id`, and a completion no rollout call record carries is
-//! correlated with it when both name the same turn. That is the vendor's id and the vendor's turn,
+//! id (`core/src/tools/events.rs:563-586`, `core/src/session/mod.rs:2439-2464`). The same code at
+//! `rust-v0.160.0` is `core/src/tools/code_mode/delegate.rs:323`, `hook_runtime.rs:188-208`,
+//! `events.rs:581-612` and `session/mod.rs:2606-2645`; the hook's `cwd` there comes from the
+//! step's local environment, falling back to the turn's (`hook_runtime.rs:248-252`). So the seam
+//! records a `Bash` hook request under its `tool_use_id`, and a completion no rollout call record
+//! carries is correlated with it when both name the same turn. That is the vendor's id and the vendor's turn,
 //! never order, text or output. The outer `call_*` record stays unjoined, and a rollout read
 //! without the hook requests, as the viewer reads one, cannot make this join.
 //!
@@ -44,8 +47,9 @@
 //! **The two sources are merged in one order, and the opening record is first in it — except for
 //! a hook request read before the rollout's `session_meta`, which comes out ahead of it.** 0.153.4
 //! does not produce one: it writes `session_meta` before any provider request, so before any call a
-//! hook could hold, and in every driven session here the opening record came out first. The
-//! exception predates amendment a34. The reader
+//! hook could hold. In every driven session here the opening record came out first, on 0.160.0 as
+//! on 0.153.4 (six driver runs each, `docs/research/2026-10-23-codex-0.160.0-record-surface.md`).
+//! The exception predates amendment a34. The reader
 //! holds `session.started` until the first `turn_context` completes it (amendment a34), and a hook
 //! can publish before the tail has read that record: the hook channel is read before the rollout.
 //! A blocked hook never waits behind the hold. Its request releases the opening record at once,

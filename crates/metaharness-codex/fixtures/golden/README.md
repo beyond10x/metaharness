@@ -53,3 +53,7 @@ opening record's `output_style` reads `"pragmatic"`, the personality this record
 `turn_context` (line 8) names, where it read `null`. The reader now holds the opening record until
 that record and completes it from it; the input, the event order, every timestamp and every other
 line are unchanged.
+
+On 2026-10-23 it was regenerated when 0.160.0 joined the pin, and one line moved: the
+`version_outside_pin` warning (line 2) names the pin as `0.153.4, 0.160.0`, where it named
+`0.153.4`. The input is unchanged, and the sample's 0.144.0 is still outside the pin.

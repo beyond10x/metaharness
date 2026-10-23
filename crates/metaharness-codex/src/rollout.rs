@@ -38,7 +38,7 @@
 //! | `session.started` field | this vendor |
 //! |---|---|
 //! | `output_style` | **carried, one record late** — the personality the first `turn_context` records, which is the session's record of the setting and not proof of what the model was told. A hook request that arrives first releases the opening record without it. The reader holds the opening record from `session_meta` until that record and completes it; the hold covers only the preamble records the pinned binary writes in between, so the stream order and every timestamp are unchanged |
-//! | `plugins`, `mcp_servers`, `credential_source` | **absent** — no record of 0.153.4 carries them; [`RECORD_SILENCES`] says so in the floor's own rows |
+//! | `plugins`, `mcp_servers`, `credential_source` | **absent** — no record of 0.153.4 or 0.160.0 carries them; [`RECORD_SILENCES`] says so in the floor's own rows |
 
 use metaharness_protocol::{
     Digest, Emission, Event, HermeticAttestation, HermeticRow, RateLimitInfo, TranscriptRef, Usage,
@@ -50,27 +50,32 @@ use crate::{ADAPTER_ID, PINNED_VERSIONS};
 /// Why the opening record this reader produces is silent on three gating rows, for the floor to
 /// print beside each `unk` (amendment a34).
 ///
-/// Each is a statement about the pinned binary's record, observed on a credential-free 0.153.4 run
-/// (`docs/research/2026-10-21-codex-0.153.4-record-surface.md`): `session_meta`, `turn_context`
-/// and `world_state` carry no plugin list, no credential source and no MCP server list. Each row
-/// stays `unk`, because what the launch imposed is metaharness's own claim and deciding a record
-/// row from it is open under invariant 3 (decision D1 = B keeps amendment a13 as written).
+/// Each is a statement about the pinned binaries' records, observed on credential-free runs of
+/// 0.153.4 (`docs/research/2026-10-21-codex-0.153.4-record-surface.md`) and 0.160.0
+/// (`docs/research/2026-10-23-codex-0.160.0-record-surface.md`): `session_meta`, `turn_context`
+/// and `world_state` carry no plugin list, no credential source and no MCP server list. 0.160.0's
+/// `turn_context` adds `disabled_plugin_ids`, which names plugins switched off rather than the
+/// ones loaded, so it decides nothing for H1a. Each row stays `unk`, because what the launch
+/// imposed is metaharness's own claim and deciding a record row from it is open under invariant 3
+/// (decision D1 = B keeps amendment a13 as written).
 pub const RECORD_SILENCES: [(HermeticRow, &str); 3] = [
     (
         HermeticRow::H1a,
-        "codex-cli 0.153.4's rollout lists no plugins, and the scratch CODEX_HOME is not shown to \
-         be the whole plugin surface (the apps and remote_plugin features are on by default); \
-         deciding H1a from what the launch imposed is open under invariant 3",
+        "the rollouts of codex-cli 0.153.4 and 0.160.0 list no plugins, and the scratch \
+         CODEX_HOME is not shown to be the whole plugin surface (the apps and remote_plugin \
+         features are on by default); deciding H1a from what the launch imposed is open under \
+         invariant 3",
     ),
     (
         HermeticRow::H4,
-        "codex-cli 0.153.4's rollout does not record which credential the session used; deciding \
-         H4 from the environment the launch built is open under invariant 3",
+        "the rollouts of codex-cli 0.153.4 and 0.160.0 do not record which credential the \
+         session used; deciding H4 from the environment the launch built is open under \
+         invariant 3",
     ),
     (
         HermeticRow::H5,
-        "codex-cli 0.153.4's rollout lists no MCP servers; deciding H5 from the empty \
-         [mcp_servers] the launch wrote is open under invariant 3",
+        "the rollouts of codex-cli 0.153.4 and 0.160.0 list no MCP servers; deciding H5 from the \
+         empty [mcp_servers] the launch wrote is open under invariant 3",
     ),
 ];
 
@@ -104,10 +109,10 @@ pub struct RolloutReader {
     ///
     /// The recorded output style is a per-turn fact in a rollout — `turn_context.personality` —
     /// and the first `turn_context` arrives after `session_meta`, so the opening record is held
-    /// until it and completed from it. The hold covers only the records 0.153.4 writes between
-    /// the two (see [`is_preamble`]); any other record releases it with the field still absent,
-    /// so a record that drifted cannot hold the stream open, and [`RolloutReader::finish`]
-    /// releases whatever is still held.
+    /// until it and completed from it. The hold covers only the records 0.153.4 and 0.160.0 write
+    /// between the two (see [`is_preamble`]); any other record releases it with the field still
+    /// absent, so a record that drifted cannot hold the stream open, and
+    /// [`RolloutReader::finish`] releases whatever is still held.
     held: Option<Vec<(u64, Emission)>>,
 }
 
@@ -592,9 +597,10 @@ enum Opening {
 /// Whether a record is one the pinned binary writes between `session_meta` and the first
 /// `turn_context`, which the hold may keep behind the opening record (amendment a34).
 ///
-/// 0.153.4 writes `task_started`, the developer and user context messages and `world_state`
-/// there, observed on a credential-free native run; the 0.144.0 golden record writes the same
-/// kinds. Nothing that is the model's — an assistant message, a call, its output, usage — is a
+/// 0.153.4 and 0.160.0 write `task_started`, the developer and user context messages and
+/// `world_state` there, in that order, observed on credential-free native runs
+/// (`docs/research/2026-10-23-codex-0.160.0-record-surface.md`, every rollout of both lanes); the
+/// 0.144.0 golden record writes the same kinds. Nothing that is the model's — an assistant message, a call, its output, usage — is a
 /// preamble record, so a record without a `turn_context` releases the opening record at the first
 /// such line rather than holding the stream behind it.
 fn is_preamble(record_type: &str, payload: &Value) -> bool {

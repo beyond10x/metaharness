@@ -4912,17 +4912,18 @@ mod codex_record_rows_tests {
 
     /// The guard unit 2 built for Claude, reused for Codex: `codex` is resolved on the child's
     /// `PATH`, its `--version` read with the launch's environment, and a binary off the pin is
-    /// refused by name; the pinned one is admitted; a `PATH` with no `codex` is refused too.
+    /// refused by name; each pinned one is admitted; a `PATH` with no `codex` is refused too.
+    /// The off-pin release is the one the native fixture refuses (`METAHARNESS_NATIVE_CODEX_OFF_PIN`).
     #[test]
     fn strict_version_resolves_codex_on_the_childs_path_and_refuses_one_off_the_pin() {
         let off_pin = tempfile::tempdir().unwrap();
-        fake_codex(off_pin.path(), "0.160.0");
+        fake_codex(off_pin.path(), "0.143.0");
         let refused = guard(
             off_pin.path(),
-            |result| matches!(result, Err(Refusal::Launch { detail }) if detail.contains("0.160.0")),
+            |result| matches!(result, Err(Refusal::Launch { detail }) if detail.contains("0.143.0")),
         );
         let Err(Refusal::Launch { detail }) = refused else {
-            panic!("0.160.0 was admitted");
+            panic!("0.143.0 was admitted");
         };
         assert!(detail.contains("--strict-version"), "{detail}");
         assert!(
@@ -4930,9 +4931,14 @@ mod codex_record_rows_tests {
             "{detail}"
         );
 
-        let pinned = tempfile::tempdir().unwrap();
-        fake_codex(pinned.path(), metaharness_codex::PINNED_VERSIONS[0]);
-        assert!(guard(pinned.path(), Result::is_ok).is_ok());
+        for version in metaharness_codex::PINNED_VERSIONS {
+            let pinned = tempfile::tempdir().unwrap();
+            fake_codex(pinned.path(), version);
+            assert!(
+                guard(pinned.path(), Result::is_ok).is_ok(),
+                "{version} was refused"
+            );
+        }
 
         let empty = tempfile::tempdir().unwrap();
         let Err(Refusal::Launch { detail }) = guard(empty.path(), |_| true) else {

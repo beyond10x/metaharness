@@ -3,8 +3,8 @@
 #![cfg(unix)]
 
 use metaharness_codex::{
-    HookChannelPaths, LaunchContext, LaunchPlan, PERSONALITY, RolloutReader, config_path,
-    hook_program, hook_program_path, plan_launch, render_hook_response,
+    HookChannelPaths, LaunchContext, LaunchPlan, PERSONALITY, PINNED_VERSIONS, RolloutReader,
+    config_path, hook_program, hook_program_path, plan_launch, render_hook_response,
 };
 use metaharness_protocol::{
     CredentialSource, Decision, DecisionMode, Event, Kind, RunSpec, TranscriptRef,
@@ -20,13 +20,60 @@ use std::os::unix::process::CommandExt;
 use std::path::{Path, PathBuf};
 use std::process::{Child, Command, Stdio};
 use std::sync::atomic::{AtomicBool, Ordering};
-use std::sync::{Arc, Mutex};
+use std::sync::{Arc, Mutex, OnceLock};
 use std::thread;
 use std::time::{Duration, Instant};
 
-const MODEL: &str = "gpt-5.2-codex";
+/// A slug both pinned binaries' bundled catalogs carry (`codex-rs/models-manager/models.json`).
+/// The tool list follows the catalog entry: an unlisted slug falls back to metadata with no
+/// `apply_patch_tool_type`, so no `apply_patch` is offered. `gpt-5.2-codex` matched 0.153.4's
+/// `gpt-5.2` entry by prefix; 0.160.0 dropped that entry and the patch case lost its tool.
+const MODEL: &str = "gpt-5.5";
 const ANSWER: &str = "native-fixture-final";
 static NATIVE_RUN: Mutex<()> = Mutex::new(());
+
+/// The release `METAHARNESS_NATIVE_CODEX` reports, which every case checks the native record
+/// against. It must be one of the adapter's pins: a qualification names the binary it drove, and a
+/// lane run against an unpinned binary is a different experiment from the one this file states.
+fn vendor_version() -> &'static str {
+    static VERSION: OnceLock<String> = OnceLock::new();
+    VERSION.get_or_init(|| {
+        let vendor = PathBuf::from(
+            std::env::var_os("METAHARNESS_NATIVE_CODEX").expect("explicit vendor binary"),
+        );
+        let evidence = PathBuf::from(
+            std::env::var_os("METAHARNESS_NATIVE_EVIDENCE").expect("private evidence directory"),
+        );
+        assert!(vendor.is_absolute() && evidence.is_absolute());
+        fs::create_dir_all(&evidence).unwrap();
+        let scratch = tempfile::Builder::new()
+            .prefix("version-")
+            .tempdir_in(&evidence)
+            .unwrap();
+        let output = Command::new(&vendor)
+            .arg("--version")
+            .env_clear()
+            .env("HOME", scratch.path())
+            .env("CODEX_HOME", scratch.path())
+            .env("PATH", "/usr/bin:/bin")
+            .stdin(Stdio::null())
+            .output()
+            .unwrap();
+        assert!(output.status.success(), "{output:?}");
+        let banner = String::from_utf8(output.stdout).unwrap();
+        let version = banner
+            .trim()
+            .strip_prefix("codex-cli ")
+            .unwrap_or_else(|| panic!("unexpected --version banner {banner:?}"))
+            .to_owned();
+        assert!(
+            PINNED_VERSIONS.contains(&version.as_str()),
+            "{} reports {version}, outside the pin {PINNED_VERSIONS:?}",
+            vendor.display()
+        );
+        version
+    })
+}
 
 #[derive(Clone, Copy)]
 enum Mode {
@@ -353,7 +400,7 @@ fn steering_message(provider: &Provider, name: &str, root: &Path) -> Option<Valu
             .lines()
             .filter_map(|line| serde_json::from_str::<Value>(line).ok())
             .any(|event| {
-                event["event"] == "session.started" && event["harness_version"] == "0.153.4"
+                event["event"] == "session.started" && event["harness_version"] == vendor_version()
             })
     {
         None
@@ -566,7 +613,7 @@ fn actual_binary_strict_run_reads_h1b_from_the_record_and_still_exits_three() {
         .map(|line| serde_json::from_str(line).unwrap())
         .collect();
     assert_eq!(events[0]["event"], "session.started");
-    assert_eq!(events[0]["harness_version"], "0.153.4");
+    assert_eq!(events[0]["harness_version"], vendor_version());
     assert_eq!(events[0]["output_style"], PERSONALITY);
     let h1b = verdict_line(&root, "H1b");
     assert!(h1b.contains(" ok ") && h1b.contains(PERSONALITY), "{h1b}");
@@ -574,7 +621,7 @@ fn actual_binary_strict_run_reads_h1b_from_the_record_and_still_exits_three() {
         let line = verdict_line(&root, row);
         assert!(line.contains(" unk "), "{line}");
         assert!(
-            line.contains("0.153.4") && line.contains("invariant 3"),
+            line.contains(vendor_version()) && line.contains("invariant 3"),
             "{row} does not say why it is unk: {line}"
         );
     }
@@ -606,7 +653,7 @@ fn actual_binary_strict_version_refuses_an_off_pin_codex_before_the_spawn() {
     let stderr = fs::read_to_string(root.join("stderr.log")).unwrap();
     assert!(
         stderr.contains("--strict-version")
-            && stderr.contains("0.153.4")
+            && PINNED_VERSIONS.iter().all(|pin| stderr.contains(pin))
             && stderr.contains("refused before the spawn")
             && stderr.contains(&root.join("home/.local/bin/codex").display().to_string()),
         "{stderr}"
@@ -623,7 +670,7 @@ fn assert_driver_events(root: &Path, failed: bool, exit: i32) {
         events
             .iter()
             .any(|event| event["event"] == "session.started"
-                && event["harness_version"] == "0.153.4")
+                && event["harness_version"] == vendor_version())
     );
     let terminal = events
         .iter()
@@ -683,9 +730,9 @@ fn actual_binary_delivers_native_halt_and_interrupt() {
             .map(|line| serde_json::from_str(line).unwrap())
             .collect();
         assert!(
-            events
-                .iter()
-                .any(|e| e["event"] == "session.started" && e["harness_version"] == "0.153.4")
+            events.iter().any(
+                |e| e["event"] == "session.started" && e["harness_version"] == vendor_version()
+            )
         );
         assert!(events.iter().any(|e| e["event"] == "command.result"
             && e["id"] == "fixture-stop"
@@ -787,7 +834,7 @@ fn observe(root: &Path, plan: &LaunchPlan) -> Vec<Event> {
         .iter()
         .find(|record| record["type"] == "session_meta")
         .unwrap();
-    assert_eq!(meta["payload"]["cli_version"], "0.153.4");
+    assert_eq!(meta["payload"]["cli_version"], vendor_version());
     assert_eq!(meta["payload"]["history_mode"], "paginated");
     let mut reader = RolloutReader::new(
         TranscriptRef {

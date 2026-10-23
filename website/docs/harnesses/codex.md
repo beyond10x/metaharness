@@ -6,7 +6,7 @@ sidebar_position: 2
 
 # The `codex` adapter
 
-Pinned to **0.153.4**. Adapter class: `harness`.
+Pinned to **0.153.4** and **0.160.0**. Adapter class: `harness`.
 
 ```bash
 metaharness run codex --hermetic -p "…"
@@ -34,16 +34,17 @@ a34; a run without the flag warns, and H9 reads the version the rollout records)
 inside a tag whose closing line the file does not contain (design amendment a35; the checks are on
 [the CLI reference](../reference/cli.md#--context-files-the-run-is-handed)). Inline because
 `codex exec` 0.153.4 does not expand an `@path` mention: a relayed probe on 2026-10-20 saw no
-mention grow the input or reach the model.
+mention grow the input or reach the model. That probe has not been repeated on 0.160.0; the files
+are inlined either way.
 
 ## The hermetic floor on Codex
 
 `--hermetic strict` on a clean Codex run exits **3**: nobody found out. The rows that read the
-opening record stand like this at 0.153.4 (design amendment a34):
+opening record stand like this at 0.153.4 and at 0.160.0 (design amendment a34):
 
 | Row | Verdict | Why |
 |---|---|---|
-| H1b, output style | **`ok`**, when no config layer outside the scratch home exists | The scratch `config.toml` sets `personality = "pragmatic"`, the binary's own default, and the rollout's first `turn_context` records a personality. The row compares the two: another value is `gap`, none is `unk`. The recorded value is the session's record of the setting, not proof of what the model was told — with a managed `features.personality = false` the session still recorded `"pragmatic"` — so when `/etc/codex/config.toml`, `/etc/codex/managed_config.toml`, `/etc/codex/requirements.toml` or, under `--cwd`, a project `.codex/config.toml` exists, the row reads `unk` and names them, and H2 is attested unavailable. |
+| H1b, output style | **`ok`**, when no config layer outside the scratch home exists | The scratch `config.toml` sets `personality = "pragmatic"`, and the rollout's first `turn_context` records a personality. The row compares the two: another value is `gap`, none is `unk`. On 0.153.4 `pragmatic` is the binary's own default; 0.160.0 has no default, records the key as written, and sends the same instructions for `pragmatic` as for no key, so only `none` changes what the model is told there. The recorded value is the session's record of the setting, not proof of what the model was told — with a managed `features.personality = false` both releases still recorded `"pragmatic"` — so when `/etc/codex/config.toml`, `/etc/codex/managed_config.toml`, `/etc/codex/requirements.toml` or, under `--cwd`, a project `.codex/config.toml` exists, the row reads `unk` and names them, and H2 is attested unavailable. |
 | H1a, plugins | `unk` | The rollout lists no plugins, and the scratch home is not shown to be the whole plugin surface: `apps` and `remote_plugin` are on by default. |
 | H4, credential source | `unk` | The rollout does not record which credential the session used. |
 | H5, MCP servers | `unk` | The rollout lists no MCP servers. |
@@ -106,8 +107,9 @@ pin is 0.145.0 (the two-install warning fired, as it must). The grant is a drive
 0.144.0 and an inference about 0.145.0 until one machine holds one install. No record of that run
 is kept under `docs/research/`.
 
-On the current pin, **0.153.4**, the grant is read from a recorded run that spent nothing:
-`docs/research/2026-10-03-native-codex-fixture.md`, the installed binary against a fixture
+On the pinned releases, **0.153.4** and **0.160.0**, the grant is read from recorded runs that
+spent nothing: `docs/research/2026-10-03-native-codex-fixture.md` and
+`docs/research/2026-10-23-codex-0.160.0-record-surface.md`, each binary against a fixture
 provider. The real hook was answered `allow` through the production renderer and the command
 wrote its marker (rows *Command exit0* and *Command exit7*); answered `deny`, the same command
 wrote none (row *Hook denial*). `crates/metaharness-codex/tests/native_fixture.rs` is the probe.
@@ -218,14 +220,17 @@ frame decision.
 `codex --version` says **0.145.0**. The `session_meta.cli_version` written by the run that same
 binary starts says **0.144.0**.
 
-The adapter keeps one pin, the reader **warns rather than widening it**, and the split is tracked
-as open question **Q18**.
+The reader **warns rather than widening the pin**, and the split is tracked as open question
+**Q18**. On both pinned releases the two sources agree: the 0.153.4 and 0.160.0 rollouts each
+record the binary's own `--version` as `cli_version`.
 
 ## The rollout format has no stability guarantee
 
 It drifts within a single install. That is why the version gate is a warning and **never a refusal
-mid-read** — and why the pin is a single entry: a verdict that changed because the *reader*
-changed must be visible as such, not as a change in the agent's behaviour.
+mid-read** — and why each pinned release is one the native fixture drove: a verdict that changed
+because the *reader* changed must be visible as such, not as a change in the agent's behaviour.
+0.160.0 joined 0.153.4 only after both ran the same cases and their records were compared; one
+reader serves both because the newer rollouts add fields it does not map and move none it does.
 
 ## Evidence labels
 

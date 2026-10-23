@@ -59,13 +59,24 @@ pub const HOOK_TIMEOUT_SECONDS: u64 = 60;
 /// The `personality` the scratch `config.toml` sets, and the value H1b expects the rollout's first
 /// `turn_context.personality` to record (amendment a34).
 ///
-/// It is the 0.153.4 binary's own default: a scratch home whose config names none records
-/// `"pragmatic"`, so writing it changes no recorded setting and makes the row comparable with the
-/// record. **The recorded value is the session's record of the setting, not proof of what the
-/// model was told**: a managed `features.personality = false` still recorded `"pragmatic"`, and
-/// the fixture provider's requests carried none of the binary's pragmatic template. Observed
-/// credential-free in `docs/research/2026-10-21-codex-0.153.4-record-surface.md`, with the layers
-/// that change the recorded value: an explicit key here wins over `/etc/codex/config.toml`, and
+/// What the key does differs between the two pinned releases, and the row holds on both because it
+/// compares the record with this value and nothing else:
+///
+/// * **0.153.4:** it is the binary's own default. A scratch home whose config names none records
+///   `"pragmatic"`, so writing it changes no recorded setting. Whether the request carries the
+///   binary's pragmatic template follows the model's catalog entry: none under `gpt-5.2-codex`
+///   (`docs/research/2026-10-21-codex-0.153.4-record-surface.md`), the template under `gpt-5.5`.
+/// * **0.160.0:** there is no default. A config that names none records no `personality`, and an
+///   explicit key is recorded as written. The request's instructions were byte-identical with no
+///   key, `pragmatic` and `friendly`; only `none` removed their `# Personality` section
+///   (`docs/research/2026-10-23-codex-0.160.0-record-surface.md`; at `rust-v0.160.0`,
+///   `codex-rs/protocol/src/openai_models.rs:542` says personality selection was removed and
+///   `codex-rs/models-manager/src/model_info.rs:50-56` strips the section for `none` only).
+///
+/// **The recorded value is the session's record of the setting, not proof of what the model was
+/// told**: on both releases a managed `features.personality = false` still recorded `"pragmatic"`.
+/// The layers that change the recorded value were driven credential-free on both releases with the
+/// same results: an explicit key here wins over `/etc/codex/config.toml`, and
 /// `/etc/codex/managed_config.toml` or a project's `.codex/config.toml` wins over it — a trusted
 /// project's under `read-only`, and under the `workspace-write` sandbox every `--cwd` launch uses,
 /// an untrusted one's too, with no trust entry. Because a layer can change the instructions without
@@ -191,13 +202,16 @@ const BASE_PATH: &str = "/usr/local/bin:/usr/bin:/bin";
 /// * `--dangerously-bypass-approvals-and-sandbox` — *"Skip all confirmation prompts and execute
 ///   commands without sandboxing"*. It removes the vendor's own floor beneath the seam.
 /// * `--add-dir` — widens the working directory H7 says is ours.
+/// * `--worktree` — *"Run the session in a new managed Git worktree"*: the session would run
+///   somewhere other than the cwd H7 attests. New in 0.160.0; 0.153.4 has no such flag.
 ///
-/// All four strings are `codex exec --help` on 0.145.0.
-const DENIED_ARGUMENTS: [&str; 4] = [
+/// The first four strings are `codex exec --help` on 0.145.0, and all five are on 0.160.0.
+const DENIED_ARGUMENTS: [&str; 5] = [
     "--ephemeral",
     "--ignore-user-config",
     "--dangerously-bypass-approvals-and-sandbox",
     "--add-dir",
+    "--worktree",
 ];
 
 /// Environment variables that must never reach the child, named by H8 rather than by H3's prefix
@@ -256,15 +270,18 @@ pub struct LaunchContext {
     ///
     /// Rendered inline ahead of the task, verbatim inside a delimiter each file does not contain
     /// ([`metaharness_protocol::render_context_files`]): `codex exec` 0.153.4 does not expand an
-    /// `@path` mention (measured 2026-10-20: no mention grew the input or reached the model). A
-    /// list that is not exactly the declared one is [`LaunchRefusal::ContextFilesUnread`].
+    /// `@path` mention (measured 2026-10-20: no mention grew the input or reached the model; not
+    /// driven on 0.160.0). A list that is not exactly the declared one is
+    /// [`LaunchRefusal::ContextFilesUnread`].
     pub context_files: Vec<DeclaredContextFile>,
 }
 
-/// The machine-level config layers codex-cli 0.153.4 names on Linux, read from the binary's
-/// strings (amendment a34). The scratch `CODEX_HOME` reaches none of them: the first is read
-/// beneath the scratch `config.toml`, the second above it — both observed for `personality` — and
-/// the third constrains what the others may set (not driven here).
+/// The machine-level config layers codex-cli 0.153.4 and 0.160.0 name on Linux, read from each
+/// binary's strings (amendment a34); the 0.160.0 binary names the same three and no other
+/// `/etc/codex` file, and its `ConfigLayerSource` variants are 0.153.4's. The scratch `CODEX_HOME`
+/// reaches none of them: the first is read beneath the scratch `config.toml`, the second above it
+/// — both observed for `personality` on both releases — and the third constrains what the others
+/// may set (not driven here).
 pub const CONFIG_LAYER_PATHS: [&str; 3] = [
     "/etc/codex/config.toml",
     "/etc/codex/managed_config.toml",
@@ -927,7 +944,9 @@ fn unsupported_options(spec: &RunSpec) -> Result<(), LaunchRefusal> {
     // Ahead of the owned surface, because a catalogue implies that surface and the sentence must
     // name what the caller declared (design amendment a40). The switches that take the built-in
     // tools away exist at rust-v0.153.4 (`codex-rs/features/src/lib.rs:899-902`,
-    // `codex-rs/core/src/tools/spec_plan.rs:1078-1080`); a40 § 2 cites them. None has been driven.
+    // `codex-rs/core/src/tools/spec_plan.rs:1078-1080`); a40 § 2 cites them. They are unchanged at
+    // rust-v0.160.0 (`codex-rs/features/src/lib.rs:967-970`, `spec_plan.rs:1083-1085`). None has
+    // been driven.
     if spec.catalogue.is_some() {
         return Err(LaunchRefusal::UnsupportedOption {
             option: "--catalogue",
@@ -1518,7 +1537,7 @@ fn attest(
 /// neither is: H2 was not excluded, and H1b cannot be read from the record, because such a layer
 /// can change what the model is told while the recorded personality stays the one the launch
 /// wrote — a managed `features.personality = false` still recorded `"pragmatic"` (observed,
-/// 0.153.4). The binary also names the layer sources `cloud_requirements` and
+/// 0.153.4 and 0.160.0). The binary also names the layer sources `cloud_requirements` and
 /// `cloud_managed_config`, which are no file: no check here sees them, and what they set under a
 /// ChatGPT-plan login is unverified. Both claims say so.
 fn attest_config_sources(
@@ -2031,6 +2050,19 @@ mod tests {
             guard_arguments(&["--add-dir=/elsewhere".to_string()]),
             Err(LaunchRefusal::DeniedArgument {
                 argument: "--add-dir=/elsewhere".to_string()
+            })
+        );
+    }
+
+    /// 0.160.0's `codex exec --help` adds `--worktree`, "Run the session in a new managed Git
+    /// worktree": the session would run somewhere other than the cwd H7 attests.
+    #[test]
+    fn the_worktree_flag_0_160_0_added_is_refused_with_the_others() {
+        let args = vec!["exec".to_string(), "--worktree".to_string()];
+        assert_eq!(
+            guard_arguments(&args),
+            Err(LaunchRefusal::DeniedArgument {
+                argument: "--worktree".to_string()
             })
         );
     }

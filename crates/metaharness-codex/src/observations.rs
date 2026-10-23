@@ -4,9 +4,10 @@ use serde_json::Value;
 use std::collections::BTreeMap;
 
 /// The `exit_code` Codex writes when it has no exit to report (amendment a47 § 5): a command it
-/// could not start or rejected (`codex-rs/core/src/tools/events.rs:534-559` at `rust-v0.153.4`), or
-/// one whose exit status it lost (`core/src/unified_exec/process_manager.rs:752`,
-/// `core/src/unified_exec/async_watcher.rs:215`). It is never published as an exit.
+/// could not start or rejected (`codex-rs/core/src/tools/events.rs:534-559` at `rust-v0.153.4`,
+/// `:552-577` at `rust-v0.160.0`), or one whose exit status it lost
+/// (`core/src/unified_exec/process_manager.rs:752` and `core/src/unified_exec/async_watcher.rs:215`
+/// at `rust-v0.153.4`, `:794` and `:213` at `rust-v0.160.0`). It is never published as an exit.
 const PLACEHOLDER_EXIT: i32 = -1;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -148,7 +149,12 @@ impl Observations {
     /// (`core/src/hook_runtime.rs:184-203`), and the command's `item_completed` carries it as
     /// `item.id`, with the same turn id (`core/src/tools/events.rs:563-586`,
     /// `core/src/session/mod.rs:2439-2464`). Only `Bash` is recorded: it is the one hook name a
-    /// shell command takes (`core/src/tools/handlers/unified_exec/exec_command.rs:504-515`).
+    /// shell command takes (`core/src/tools/handlers/unified_exec/exec_command.rs:504-515`). At
+    /// `rust-v0.160.0` the same code is `core/src/tools/code_mode/delegate.rs:323`,
+    /// `hook_runtime.rs:188-208`, `events.rs:581-612`, `session/mod.rs:2606-2645` and
+    /// `exec_command.rs:520-531`. The native fixture calls `exec_command` directly, not through
+    /// code mode; on both releases its hook `tool_use_id` and the completion's `item.id` agreed,
+    /// and the code-mode mint is read from source only.
     pub(super) fn hooked(
         &mut self,
         id: &str,

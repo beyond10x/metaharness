@@ -83,9 +83,10 @@ Three things it says out loud rather than leaving you to find out:
   enforces it tells the model "strictly only these operations" and makes that false.
 - **You have to ask for it.** The default is `frame`, and an adapter that has not driven the
   `allow` half of its own decision wire declares the mode `unverified` and refuses it before the
-  run. Codex declares it `delivered` on 0.153.4: in a recorded run against a fixture provider, every
-  launch planned in `observe`, the real hook was answered `allow` and the real command wrote its
-  marker (`docs/research/2026-10-03-native-codex-fixture.md`; design amendment a49). The probe
+  run. Codex declares it `delivered` on 0.153.4 and 0.160.0: in recorded runs against a fixture
+  provider, every launch planned in `observe`, the real hook was answered `allow` and the real
+  command wrote its marker (`docs/research/2026-10-03-native-codex-fixture.md`,
+  `docs/research/2026-10-23-codex-0.160.0-record-surface.md`; design amendment a49). The probe
   wrote that `allow` through the production renderer; the record does not show metaharness's own
   observe loop answering the hook inside a `metaharness run` process (a49 § 4).
 
@@ -134,10 +135,11 @@ The seam has been driven against a paid run on both vendors. On Codex, the evide
 
 So `tool.decide` is `Honoured` and the `call` tier is `Delivered`.
 
-The **`allow` half of that wire** is read from a different record: on 0.153.4, against a fixture
-provider on loopback and with no model spend, the hook was answered `allow` and the real command ran
-and wrote its marker on exit 0 and exit 7, while the otherwise identical denied command wrote none
-(`docs/research/2026-10-03-native-codex-fixture.md`; design amendments a25 and a49). It is
-`delivered` on that record. A hosted model and a paid run are not what it was read from, and the
+The **`allow` half of that wire** is read from a different record: on 0.153.4 and again on
+0.160.0, against a fixture provider on loopback and with no model spend, the hook was answered
+`allow` and the real command ran and wrote its marker on exit 0 and exit 7, while the otherwise
+identical denied command wrote none (`docs/research/2026-10-03-native-codex-fixture.md`,
+`docs/research/2026-10-23-codex-0.160.0-record-surface.md`; design amendments a25 and a49). It is
+`delivered` on those records. A hosted model and a paid run are not what it was read from, and the
 `allow` was written by the probe (`crates/metaharness-codex/tests/native_fixture.rs`,
 `answer_hooks`), not by metaharness's observe loop inside a binary run (a49 § 4).

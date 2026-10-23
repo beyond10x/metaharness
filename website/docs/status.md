@@ -47,14 +47,16 @@ record of that run is kept in `docs/research/`.
 That is the claim the whole design exists to be able to make, and it is the one thing no free test
 tier can reach.
 
-On the current pin, **0.153.4**, the grant half is read from a recorded run that spent nothing: a
-fixture provider on loopback, the real `codex` binary, every launch planned in `--decisions
-observe`, and the real hook was answered `allow` through the production renderer. The real
-command wrote its marker on exit 0 and on exit 7, and the otherwise identical denied command wrote none
-(`docs/research/2026-10-03-native-codex-fixture.md`, rows *Command exit0*, *Command exit7* and
-*Hook denial*). On the current pin, that record is the evidence for `observe` on Codex being
-declared `delivered` (design amendment a49). It is not a hosted model and not a paid run, and the
-`allow` was written by the probe, not by metaharness's observe loop inside a binary run (a49 § 4).
+On the pinned releases, **0.153.4** and **0.160.0**, the grant half is read from recorded runs
+that spent nothing: a fixture provider on loopback, the real `codex` binary, every launch planned
+in `--decisions observe`, and the real hook was answered `allow` through the production renderer.
+The real command wrote its marker on exit 0 and on exit 7, and the otherwise identical denied
+command wrote none (`docs/research/2026-10-03-native-codex-fixture.md`, rows *Command exit0*,
+*Command exit7* and *Hook denial*; the same cases on 0.160.0 in
+`docs/research/2026-10-23-codex-0.160.0-record-surface.md`). Those records are the evidence for
+`observe` on Codex being declared `delivered` (design amendment a49). They are not a hosted model
+and not a paid run, and the `allow` was written by the probe, not by metaharness's observe loop
+inside a binary run (a49 § 4).
 
 Live runs cost money and are **never** part of `task check`. `METAHARNESS_LIVE=1` is checked by
 `metaharness aep drive run` and `metaharness aep drive resume` for a step map with an `llm` step, by
@@ -77,7 +79,7 @@ It refuses with **exit 2**, naming what it waits for (`crates/metaharness-cli/sr
 | `--tool-surface owned` on `codex` and `b10x` | Strategy C means metaharness implements the tools itself, and per-step re-listing is unverified vendor behaviour (**Q1**). |
 | `steer` on Claude Code | Claude Code headless has no mid-turn tier. |
 | Claiming Codex's opening record confirms an injected plugin | It does not: `session.started.plugins` is `null` on this vendor, so **H1a reads `unk`**. One live run *did* observe the plugin's skills reaching the model's context (**Q19**) — that is the treatment arriving, not the vendor enumerating what it loaded, and the attestation says which of the two it is. |
-| Passing `--hermetic strict` on Codex | A clean run still exits **3**. H1b reads `ok` from the record since 2026-10-21 when no `/etc/codex` or project config layer exists (the personality the launch wrote is the one the session recorded; that is the session's record of the setting, not proof of what the model was told), while H1a, H4 and H5 stay `unk`: the 0.153.4 rollout carries no plugin list, credential source or MCP server list, and a row is never decided from what the launch imposed (design amendment a34). Use `--hermetic on` for Codex trials. |
+| Passing `--hermetic strict` on Codex | A clean run still exits **3**. H1b reads `ok` from the record since 2026-10-21 when no `/etc/codex` or project config layer exists (the personality the launch wrote is the one the session recorded; that is the session's record of the setting, not proof of what the model was told), while H1a, H4 and H5 stay `unk`: the 0.153.4 and 0.160.0 rollouts carry no plugin list, credential source or MCP server list, and a row is never decided from what the launch imposed (design amendment a34). Use `--hermetic on` for Codex trials. |
 | `--credentials loopback` on a **ChatGPT-plan** Codex login | Whether subscription traffic can be routed through a `model_providers` entry at all is unverified (**V-LP6**). Refused by name, never degraded to the credential-copy path. |
 | `--write-scope`, `--scope-announce`, `--toolchain`, `--prices` and the substrate flags on `claude` or `codex` | A vendor arm's scope travels sealed in `Frame.subjects`; a flag would be a second, unsealed copy that disagrees the first time one moves (`ScopeUnsupported`). The others declare things a vendor's own sandbox and price catalogue already own. `--context` left this row on 2026-10-21 (design amendment a35): it reaches every kind — the appended system prompt on Claude Code, inline on codex. |
 | A `--context` file without `--cwd`, absolute or with `..`, through a symbolic link, not a regular file, not UTF-8 text, untracked by git in the tree, or past 16 files or 65,536 bytes; a vendor argument past 131,072 bytes | Refused before the spawn, naming the path, or the argument with its size and the files with theirs (design amendment a35). |
