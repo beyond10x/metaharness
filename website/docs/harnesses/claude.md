@@ -6,9 +6,9 @@ sidebar_position: 1
 
 # The `claude` adapter
 
-Pinned to **2.1.304** and **2.1.305**. Adapter class: `harness` — the vendor keeps its loop, its sessions, its
-tools, its authentication and its credential custody; metaharness drives its documented outside
-surface.
+Pinned to **2.1.304**, **2.1.305** and **2.1.309**. Adapter class: `harness` — the vendor keeps
+its loop, its sessions, its tools, its authentication and its credential custody; metaharness
+drives its documented outside surface.
 
 ```bash
 metaharness run claude --hermetic -p "…"
@@ -26,30 +26,31 @@ metaharness doctor claude
    `3` otherwise. `--audit` or `--hermetic strict` adds the [hermetic floor's](../hermetic.md)
    verdict to that exit and prints the floor's rows on stderr.
 
-:::warning 2.1.304 and 2.1.305 read the files a prompt mentions, and nothing records it
+:::warning Every pinned binary reads the files a prompt mentions, and nothing records it
 Claude Code expands an `@path` in prompt text — the `-p` argument, stdin, a stream-json user
 message — into a synthesised Read result in the request it sends: no tool call, no `PreToolUse`
-hook, no `tool.requested`, no line in the transcript. Paths outside the working tree, through
-symbolic links, untracked files and directories expand alike, under every hermetic mode. Measured
-against the native fixture's stub endpoint (design amendment a35). **This holds for the task you
-pass with `-p`**: an `@path` in it is read with nothing to show for it.
+hook, no `tool.requested`, no line in the transcript. On 2.1.304 and 2.1.305, paths outside the
+working tree, through symbolic links, untracked files and directories expand alike, under every
+hermetic mode; 2.1.309 was measured on the routes below only. Measured against the native
+fixture's stub endpoint (design amendment a35). **This holds for the task you pass with `-p`**: an
+`@path` in it is read with nothing to show for it.
 :::
 
 `--context <file>` therefore does **not** use the user turn. The declared files go to the value of
 `--append-system-prompt`, verbatim inside tags whose closing lines they do not contain, introduced
-as reference data and not instructions; `-p` carries the task alone. Neither pinned binary expands a
+as reference data and not instructions; `-p` carries the task alone. No pinned binary expands a
 mention there, and the block arrives byte-exact in the request's `system` field. The trade is that
 the files' text carries system-prompt authority, and `session.started.context_files` names each
 file with `"channel": "system-prompt"` so a reviewer can see which text that was. The checks are on
 [the CLI reference](../reference/cli.md#--context-files-the-run-is-handed).
 
-| route for `@marker.txt` | 2.1.304 | 2.1.305 |
-|---|---|---|
-| the `-p` argument | expanded | expanded |
-| stdin, with `-p` | expanded | expanded |
-| stdin, `--input-format stream-json` | expanded | expanded |
-| `--append-system-prompt` | not expanded | not expanded |
-| `--system-prompt` | not expanded | not expanded |
+| route for `@marker.txt` | 2.1.304 | 2.1.305 | 2.1.309 |
+|---|---|---|---|
+| the `-p` argument | expanded | expanded | expanded |
+| stdin, with `-p` | expanded | expanded | expanded |
+| stdin, `--input-format stream-json` | expanded | expanded | expanded |
+| `--append-system-prompt` | not expanded | not expanded | not expanded |
+| `--system-prompt` | not expanded | not expanded | not expanded |
 
 The adapter records this per pinned version (`MENTION_CANARIES`). A pin without a row fails a unit
 test; a row copied from the previous pin passes it, so the measurement is the native fixture's
@@ -57,23 +58,23 @@ canary case, run beside the H11 canary on each pin move — `task check` does no
 
 ## Built-in plugins
 
-Claude Code compiles plugins into its binary, so no scratch config home can remove them. 2.1.304
-and 2.1.305 each compile in the same twelve, and the adapter declares each one per version, by name,
-with the source a record gives it, `<name>@builtin`. H1a reads a plugin in the opening record as
-`ok` only when it is a plugin the run declared or one of the twelve the reported version compiles
-in, **by name and source**, and the row names every built-in it saw. A plugin that borrows a
-built-in's name from anywhere else stays a `gap`, and so does any built-in in a record on an
-unpinned version.
+Claude Code compiles plugins into its binary, so no scratch config home can remove them. 2.1.304,
+2.1.305 and 2.1.309 each compile in the same twelve, and the adapter declares each one per
+version, by name, with the source a record gives it, `<name>@builtin`. H1a reads a plugin in the
+opening record as `ok` only when it is a plugin the run declared or one of the twelve the reported
+version compiles in, **by name and source**, and the row names every built-in it saw. A plugin
+that borrows a built-in's name from anywhere else stays a `gap`, and so does any built-in in a
+record on an unpinned version.
 
-| Credential mode | Built-ins in a 2.1.304 or 2.1.305 opening record | What the launch does |
+| Credential mode | Built-ins in a 2.1.304, 2.1.305 or 2.1.309 opening record | What the launch does |
 |---|---|---|
-| `none`, `loopback` | `cc-plugin-agents-md`, `cc-plugin-plugin-authoring` (observed on both) | sets `CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC`, which keeps `cc-plugin-telemetry` out |
+| `none`, `loopback` | `cc-plugin-agents-md`, `cc-plugin-plugin-authoring` (observed on all three) | sets `CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC`, which keeps `cc-plugin-telemetry` out |
 | operator login | also `cc-plugin-telemetry` and, for Team and Enterprise organizations, `cc-plugin-sec-default` (relayed for 2.1.304, not driven here) | admits them by name and `@builtin` source; the traffic switch is not set under a real credential |
 
 `--strict-version` reads the resolved binary's `--version` before the spawn and refuses one that is
-not pinned; 2.1.303 is refused.
+not pinned; 2.1.303 and 2.1.308 are refused.
 
-Memory files: at both pins no memory file in the working directory or above it reached the model
+Memory files: at each pin no memory file in the working directory or above it reached the model
 under the launch's `--setting-sources ""` — `CLAUDE.md`, `.claude/CLAUDE.md`, `CLAUDE.local.md`,
 `.claude/rules/*.md`, `AGENTS.md` or `.claude/AGENTS.md`, twelve canaries in the cwd and its parent,
 all twelve sent by the same binary with the project and local sources on. H11 rests on that control
@@ -82,7 +83,8 @@ and the fresh scratch config home: the adapter records the canary per pinned ver
 shape out; a version with no canary, or one whose canary reached a request, reads `gap`. The ancestor
 walk looks for all six shapes and names what it finds in the H11 row; it refuses nothing. User memory
 (a `CLAUDE.md` in the config home) and managed memory were not probed. Design amendments **a33** and
-**a36**; evidence in `docs/research/2026-10-21-claude-code-2.1.304-adapter-surface.md`.
+**a36**; evidence in `docs/research/2026-10-21-claude-code-2.1.304-adapter-surface.md` and, for
+2.1.309, `docs/research/2026-10-23-claude-code-2.1.309-adapter-surface.md`.
 
 ## Declared capabilities
 

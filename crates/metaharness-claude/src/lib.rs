@@ -4,10 +4,10 @@
 //! onto [`metaharness_protocol::Event`], how a decision reaches it, and what hermetic means for
 //! it. Nothing outside this crate may know any of that.
 //!
-//! Pinned to **2.1.304** and **2.1.305** ([`PINNED_VERSIONS`]). Every claim this crate makes about
-//! those binaries is either read from `docs/design/metaharness-protocol-v0.1.md` § 2.7 — where each
-//! row carries its own method — or labelled unverified at the point of use with the `Q` row that
-//! would close it.
+//! Pinned to **2.1.304**, **2.1.305** and **2.1.309** ([`PINNED_VERSIONS`]). Every claim this
+//! crate makes about those binaries is either read from `docs/design/metaharness-protocol-v0.1.md`
+//! § 2.7 — where each row carries its own method — or labelled unverified at the point of use with
+//! the `Q` row that would close it.
 //! A string in a binary is weaker than a driven call, and this crate says which it has.
 //!
 //! **Where a claim below names 2.1.239, that is the binary the observation was read from, not the
@@ -19,12 +19,13 @@
 //!
 //! # The pinned binaries read files a prompt mentions, and nothing records it
 //!
-//! Claude Code 2.1.304 and 2.1.305 expand an `@path` in prompt text — the `-p` argument, stdin,
-//! a stream-json user message — into a synthesised Read result in the request they send: no tool
-//! call, no `PreToolUse` hook, no `tool.requested`, no line in the transcript. Paths outside the
-//! working tree, through symbolic links, untracked files and directories expand alike
-//! ([`MENTION_CANARIES`], design amendment a35). So the `--context` block never enters the user
-//! turn: it goes to `--append-system-prompt`, which neither binary scans ([`CONTEXT_CHANNEL`]).
+//! Claude Code 2.1.304, 2.1.305 and 2.1.309 expand an `@path` in prompt text — the `-p` argument,
+//! stdin, a stream-json user message — into a synthesised Read result in the request they send: no
+//! tool call, no `PreToolUse` hook, no `tool.requested`, no line in the transcript. At 2.1.304 and
+//! 2.1.305, paths outside the working tree, through symbolic links, untracked files and directories
+//! expand alike; 2.1.309 was measured on the canary's routes only ([`MENTION_CANARIES`], design
+//! amendment a35). So the `--context` block never enters the user turn: it goes to
+//! `--append-system-prompt`, which no pinned binary scans ([`CONTEXT_CHANNEL`]).
 //! The task text is the user turn and stays exposed; no route the canary measured carries it
 //! unexpanded.
 //!
@@ -91,8 +92,9 @@ pub const CONTEXT_CHANNEL: metaharness_protocol::ContextChannel =
 /// this pin is a `warning` (H9 `gap`), or a refusal before the spawn under `--strict-version`,
 /// which reads the resolved binary's `--version` without a model call.
 ///
-/// Two entries since 2026-10-21 (design amendment a33): the vendor ships faster than a pin moves,
-/// and the installed `claude` moved 2.1.304 → 2.1.305 within a day of the 2.1.304 qualification.
+/// Two entries since 2026-10-21 (design amendment a33) and three since 2026-10-23: the vendor ships
+/// faster than a pin moves, and the installed `claude` moved 2.1.304 → 2.1.305 within a day of the
+/// 2.1.304 qualification.
 /// Each entry is qualified on its own — the native fixture runs against each binary — and each
 /// declares its own built-in list ([`BUILTIN_PLUGINS`]); a version is added here only with both.
 ///
@@ -180,13 +182,35 @@ pub const CONTEXT_CHANNEL: metaharness_protocol::ContextChannel =
 /// * **Not verified** — an operator-login or API-key session on either (no paid run); the fourth
 ///   built-in of an operator login, `cc-plugin-sec-default`, is relayed from another session's
 ///   2.1.304 record.
-pub const PINNED_VERSIONS: [&str; 2] = ["2.1.304", "2.1.305"];
+///
+/// **2.1.309** added beside them on 2026-10-23, credential-free and by the same method
+/// (`docs/research/2026-10-23-claude-code-2.1.309-adapter-surface.md`). 2.1.306 to 2.1.308 stay
+/// off the pin; 2.1.308 is the binary `--strict-version` refused in that lane.
+///
+/// * **Verified, driven credential-free** — every case of the native fixture passed against
+///   2.1.309, and again against 2.1.305 with the same driver, including the memory and `@`-mention
+///   canaries whose rows below are 2.1.309's measurement. Its opening records equal 2.1.305's
+///   once scratch paths are set aside, no record became `opaque`, and the one new field on the
+///   wire, `model_usage_since_last_result` on `result`, is an optional per-result delta this
+///   reader ignores; `modelUsage`, which it reads, keeps 2.1.305's description word for word.
+/// * **Verified, from the binary's own help** — the help is byte-identical to 2.1.305's, so every
+///   flag the launch builds is declared except `--max-turns`, still registered with `.hideHelp()`.
+/// * **Read from the binary, not driven** — the same twelve built-ins in the same order under the
+///   same guards, the `name@builtin` sentinel, the memory-shapes string and the `projectSettings`
+///   gate on memory discovery, the `--setting-sources ""` parser, both refused hook literals, the
+///   traffic switch's mode function and the hook stdout parser, each equal to 2.1.305's. The `onFailure: "block"` reading (a41 § 3) changed in one
+///   place: a cancelled hook marked `stoppedAfterItsTimeout` now converts to "timed out", and so
+///   blocks, even when the abort signal is set, where 2.1.305 converted a cancelled hook only when
+///   it was not. The cases that block grew; none was lost. `launch.rs` records both readings.
+/// * **Not verified** — an operator-login or API-key session (no paid run), and the cloud-session
+///   control requests 2.1.309 adds, which this adapter never sends.
+pub const PINNED_VERSIONS: [&str; 3] = ["2.1.304", "2.1.305", "2.1.309"];
 
-/// The twelve plugins 2.1.304 and 2.1.305 compile in, in the order each registers them.
+/// The twelve plugins 2.1.304, 2.1.305 and 2.1.309 compile in, in the order each registers them.
 ///
 /// Read separately from each binary's registration function (`builtinPluginsInitialized`, with
-/// `rg -a`); the two lists are equal, so one constant serves both rows of [`BUILTIN_PLUGINS`].
-const COMPILED_IN_2_1_304_AND_2_1_305: [&str; 12] = [
+/// `rg -a`); the three lists are equal, so one constant serves every row of [`BUILTIN_PLUGINS`].
+const COMPILED_IN_2_1_304_2_1_305_AND_2_1_309: [&str; 12] = [
     "cc-plugin-sec-default",
     "cc-plugin-agents-md",
     "cc-plugin-telemetry",
@@ -209,11 +233,11 @@ const COMPILED_IN_2_1_304_AND_2_1_305: [&str; 12] = [
 /// so a scratch config home cannot remove one: the launch can only switch off what the binary lets
 /// it switch off, and the floor names the rest.
 ///
-/// | built-in | seen in an opening record (2.1.304 and 2.1.305) | what the launch does about it |
+/// | built-in | seen in an opening record (2.1.304, 2.1.305 and 2.1.309) | what the launch does about it |
 /// |---|---|---|
 /// | `cc-plugin-agents-md` | `none`, `loopback` (native fixture); operator login (relayed, 2.1.304) | nothing it can; admitted by name and `@builtin` source. Its ancestor walk for `AGENTS.md` is off without the `projectSettings` source (read from the binary); with the project and local sources on and no `CLAUDE.md`-family file in or above the cwd it sent both `AGENTS.md` shapes, and under the launch none (native fixture) |
 /// | `cc-plugin-plugin-authoring` | `none`, `loopback` (native fixture); operator login (relayed, 2.1.304) | nothing it can; admitted by name and `@builtin` source |
-/// | `cc-plugin-telemetry` | operator login (relayed, 2.1.304); resolved by `claude plugin details` in a plain scratch home of either binary, **not** with the traffic switch; absent from every native-fixture record | `CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC=1` under `credentials: none` and `loopback`; admitted by name and `@builtin` source under an operator login or an API key, where the switch is not set |
+/// | `cc-plugin-telemetry` | operator login (relayed, 2.1.304); resolved by `claude plugin details` in a plain scratch home of each binary, **not** with the traffic switch; absent from every native-fixture record | `CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC=1` under `credentials: none` and `loopback`; admitted by name and `@builtin` source under an operator login or an API key, where the switch is not set |
 /// | `cc-plugin-sec-default` | operator login (relayed, 2.1.304, Team/Enterprise policy) | nothing it can: seated by organization policy; admitted by name and `@builtin` source |
 /// | the other eight | never, in any probe here | none needed; each sits behind an entrypoint check or a further gate and is admitted by name and `@builtin` source if a record ever carries it |
 ///
@@ -224,9 +248,10 @@ const COMPILED_IN_2_1_304_AND_2_1_305: [&str; 12] = [
 /// record on an unpinned version has no list at all. The list never makes a row `ok` by itself
 /// (invariant 3): the record still has to carry the plugin. H9 is moved by [`PINNED_VERSIONS`],
 /// not by this list.
-pub const BUILTIN_PLUGINS: [(&str, &[&str]); 2] = [
-    ("2.1.304", &COMPILED_IN_2_1_304_AND_2_1_305),
-    ("2.1.305", &COMPILED_IN_2_1_304_AND_2_1_305),
+pub const BUILTIN_PLUGINS: [(&str, &[&str]); 3] = [
+    ("2.1.304", &COMPILED_IN_2_1_304_2_1_305_AND_2_1_309),
+    ("2.1.305", &COMPILED_IN_2_1_304_2_1_305_AND_2_1_309),
+    ("2.1.309", &COMPILED_IN_2_1_304_2_1_305_AND_2_1_309),
 ];
 
 /// What one pinned binary does with an `@path` mention, per route (design amendment a35,
@@ -235,9 +260,10 @@ pub const BUILTIN_PLUGINS: [(&str, &[&str]); 2] = [
 ///
 /// **That read is invisible.** No tool call is made, so no `PreToolUse` hook fires and no
 /// `tool.requested` reaches the stream; the transcript does not name the file. Measured by the
-/// adversary of correction round 1 on both pins: any `@` token at the start of a line or after
-/// whitespace expands, inside a code fence too, and `@../f`, `@/abs`, `@~/f`, directories,
-/// untracked files and links out of the tree all reach the request, under every hermetic mode.
+/// adversary of correction round 1 on 2.1.304 and 2.1.305, and not repeated on 2.1.309: any `@`
+/// token at the start of a line or after whitespace expands, inside a code fence too, and `@../f`,
+/// `@/abs`, `@~/f`, directories, untracked files and links out of the tree all reach the request,
+/// under every hermetic mode.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct MentionCanary {
     /// The binary measured.
@@ -268,13 +294,15 @@ pub enum Mention {
 ///
 /// Measured on 2026-10-21 against the native fixture's stub endpoint in a loopback-only namespace,
 /// no model reached: on 2.1.304 and on 2.1.305 every user-turn route expands and neither system
-/// prompt route does, and the text arrives byte-exact in the request's `system` field. A test holds
+/// prompt route does, and the text arrives byte-exact in the request's `system` field. The same on
+/// 2.1.309, measured the same way on 2026-10-23
+/// (`docs/research/2026-10-23-claude-code-2.1.309-adapter-surface.md`). A test holds
 /// the rows to the pin, so a pin without a row fails — the coupling [`BUILTIN_PLUGINS`] has; it
 /// cannot tell a measured row from a copied one. The native fixture's canary case re-measures the
 /// binary under test against its row; it is ignored in `task check`, which does not run it, so it
 /// is a step of every pin move. [`CONTEXT_CHANNEL`] rests on `append_system_prompt` being
 /// [`Mention::Text`]; the task text, which is the user turn, has no route the rows show as text.
-pub const MENTION_CANARIES: [MentionCanary; 2] = [
+pub const MENTION_CANARIES: [MentionCanary; 3] = [
     MentionCanary {
         version: "2.1.304",
         prompt_argument: Mention::Expanded,
@@ -285,6 +313,14 @@ pub const MENTION_CANARIES: [MentionCanary; 2] = [
     },
     MentionCanary {
         version: "2.1.305",
+        prompt_argument: Mention::Expanded,
+        stdin_text: Mention::Expanded,
+        stdin_stream_json: Mention::Expanded,
+        append_system_prompt: Mention::Text,
+        system_prompt: Mention::Text,
+    },
+    MentionCanary {
+        version: "2.1.309",
         prompt_argument: Mention::Expanded,
         stdin_text: Mention::Expanded,
         stdin_stream_json: Mention::Expanded,
@@ -306,7 +342,7 @@ pub fn mention_canary(version: &str) -> Option<MentionCanary> {
 /// The memory files the pinned binaries read from the cwd and every directory above it once the
 /// project or local source is on, in the binary's own order (design amendments a33, a36).
 ///
-/// Read from both binaries: `[["CLAUDE.md"],["CLAUDE.local.md"],["AGENTS.md"],[".claude",
+/// Read from each pinned binary: `[["CLAUDE.md"],["CLAUDE.local.md"],["AGENTS.md"],[".claude",
 /// "CLAUDE.md"],[".claude","AGENTS.md"],[".claude","rules"]]`, the same string in each. The last
 /// entry is a directory: every `.md` file under it, at any depth. The ancestor walk looks for
 /// exactly these, and what it finds is information in H11, never a refusal.
@@ -364,12 +400,14 @@ pub const MEMORY_NOT_PROBED: &str = "managed memory (/etc/claude-code/CLAUDE.md)
 /// § *H11: memory files*): on 2.1.304 and on 2.1.305 the positive control sent all twelve — the
 /// eight `CLAUDE.md`-family canaries, and the four `AGENTS.md` ones where no `CLAUDE.md`-family
 /// file sat in or above the cwd — and the production launch sent none under `none` or `loopback`.
-/// User memory (a `CLAUDE.md` in the config home) and managed memory were not probed. A test holds
+/// The same twelve and none on 2.1.309, measured the same way on 2026-10-23
+/// (`docs/research/2026-10-23-claude-code-2.1.309-adapter-surface.md`). User memory (a `CLAUDE.md`
+/// in the config home) and managed memory were not probed. A test holds
 /// the rows to the pin, so a pin without a row fails, the coupling [`MENTION_CANARIES`] has; it
 /// cannot tell a measured row from a copied one. The native fixture's canary case compares its
 /// measurement with the row of the binary under test; it is ignored in `task check`, so re-running
 /// it is a step of every pin move.
-pub const MEMORY_CANARIES: [MemoryCanary; 2] = [
+pub const MEMORY_CANARIES: [MemoryCanary; 3] = [
     MemoryCanary {
         version: "2.1.304",
         planted: 12,
@@ -379,6 +417,13 @@ pub const MEMORY_CANARIES: [MemoryCanary; 2] = [
     },
     MemoryCanary {
         version: "2.1.305",
+        planted: 12,
+        control_sent: 12,
+        launch_none: 0,
+        launch_loopback: 0,
+    },
+    MemoryCanary {
+        version: "2.1.309",
         planted: 12,
         control_sent: 12,
         launch_none: 0,
@@ -414,7 +459,9 @@ pub fn builtin_plugins(version: &str) -> Option<&'static [&'static str]> {
 /// WSL the binary also reads the same pair from the Windows policy directory through `DrvFs`. Managed
 /// settings are a source `--setting-sources ""` does not switch off, and their `env` or
 /// `apiKeyHelper` can put a key in the child, so the caller looks for each of these before the
-/// launch claims anything about the child's API key (H4). A directory counts by existing.
+/// launch claims anything about the child's API key (H4). A directory counts by existing. In
+/// 2.1.305 and 2.1.309 each of these strings, and the variable's name, occurs as often as in the
+/// other; the paths were not traced through the 2.1.309 code.
 pub const MANAGED_SETTINGS_PATHS: [&str; 4] = [
     "/etc/claude-code/managed-settings.json",
     "/etc/claude-code/managed-settings.d",
@@ -425,7 +472,8 @@ pub const MANAGED_SETTINGS_PATHS: [&str; 4] = [
 /// The source a Claude Code opening record gives a built-in plugin: `<name>@builtin`.
 ///
 /// The vendor's own sentinel — *"`name@builtin` for built-in plugins"*, in the 2.1.304 binary's
-/// schema for the `plugins` field — and the shape the native fixture observed on every built-in.
+/// schema for the `plugins` field and unchanged in 2.1.309's — and the shape the native fixture
+/// observed on every built-in.
 #[must_use]
 pub fn builtin_plugin_source(name: &str) -> String {
     format!("{name}@builtin")

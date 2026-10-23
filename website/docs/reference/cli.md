@@ -61,8 +61,8 @@ escapes `<` and `&` in the file's text, so the model reads the loop's escaped fo
 bytes. `session.started.context_files` lists each file's `path`, `sha256`, `bytes` and `channel`,
 and the key is absent when no file was declared.
 
-Claude Code is not given the files in its user turn because 2.1.304 and 2.1.305 turn an `@path`
-there into a file read that no tool call, hook or record shows — see
+Claude Code is not given the files in its user turn because 2.1.304, 2.1.305 and 2.1.309 turn an
+`@path` there into a file read that no tool call, hook or record shows — see
 [the claude adapter](../harnesses/claude.md). The task text is still the user turn, and the same
 holds for an `@path` in it.
 
