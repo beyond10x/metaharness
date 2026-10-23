@@ -2,10 +2,14 @@
 format: aep.planning-md/3
 id: story:claude-dir-list-search-unregistered
 kind: story
-status: draft
+status: implemented
 title: Claude adapter renders dir.list and search as Glob and Grep, which 2.1.305 and 2.1.309 do not register
 summary: Frames admitting dir.list/search without shell give the model no working tool on the current Claude pins
-revision: 1
+revision: 4
+transitions:
+- {from: "draft", to: "proposed", at: "2026-10-23T17:41:00Z", actor: "human:timo", revision: 2, decided_on: {"recorded":{"test_result":1,"verification":1}}}
+- {from: "proposed", to: "active", at: "2026-10-23T17:41:01Z", actor: "human:timo", revision: 3, decided_on: {"recorded":{"test_result":1,"verification":1}}}
+- {from: "active", to: "implemented", at: "2026-10-23T17:41:01Z", actor: "human:timo", revision: 4, decided_on: {"recorded":{"test_result":1,"verification":1}}}
 ---
 ## Problem
 

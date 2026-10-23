@@ -1,0 +1,13 @@
+{
+  "at": "2026-10-23T17:40:59Z",
+  "actor": "human:timo",
+  "artifact": "story:aep-pin-0-76-0",
+  "kind": "story",
+  "revision": 1,
+  "change": {
+    "change": "evidence",
+    "kind": "verification",
+    "source": "released in 0.16.0: tag 0.16.0 at 66bde60 (= main), PR 49 checks 4/4, Release run 39994391169 success, verify-release exit 0; a54 commit 40e8696",
+    "reference": "https://github.com/beyond10x/metaharness/releases/tag/0.16.0"
+  }
+}

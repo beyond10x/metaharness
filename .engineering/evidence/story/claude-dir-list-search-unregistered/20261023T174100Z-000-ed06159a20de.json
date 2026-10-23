@@ -1,0 +1,13 @@
+{
+  "at": "2026-10-23T17:41:00Z",
+  "actor": "human:timo",
+  "artifact": "story:claude-dir-list-search-unregistered",
+  "kind": "story",
+  "revision": 1,
+  "change": {
+    "change": "evidence",
+    "kind": "verification",
+    "source": "released in 0.16.0: tag 0.16.0 at 66bde60 (= main), PR 49 checks 4/4, Release run 39994391169 success, verify-release exit 0; a53 commit 265971b (PR 48)",
+    "reference": "https://github.com/beyond10x/metaharness/releases/tag/0.16.0"
+  }
+}

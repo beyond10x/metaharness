@@ -2,10 +2,14 @@
 format: aep.planning-md/3
 id: story:aep-pin-0-76-0
 kind: story
-status: draft
+status: implemented
 title: metaharness aep drive reads AEP 0.76.0 driver-steps/2 maps
 summary: 0.14.0 pins AEP 2481b483 (0.68.1) and cannot drive a store adopted with AEP 0.76.0; shipped maps need a b10x endpoint or --allow-evidence-gap
-revision: 1
+revision: 4
+transitions:
+- {from: "draft", to: "proposed", at: "2026-10-23T17:41:00Z", actor: "human:timo", revision: 2, decided_on: {"recorded":{"test_result":1,"verification":1}}}
+- {from: "proposed", to: "active", at: "2026-10-23T17:41:00Z", actor: "human:timo", revision: 3, decided_on: {"recorded":{"test_result":1,"verification":1}}}
+- {from: "active", to: "implemented", at: "2026-10-23T17:41:00Z", actor: "human:timo", revision: 4, decided_on: {"recorded":{"test_result":1,"verification":1}}}
 ---
 ## Problem
 
