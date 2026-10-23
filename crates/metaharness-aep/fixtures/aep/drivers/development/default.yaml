@@ -32,7 +32,7 @@
 # `--map` says which one. That refusal names both ids (`crates/edge/aep-cli/src/drive.rs:376-388`)
 # and is the same position `aep plan artifact move` takes on an illegal transition: the driver does
 # not guess which document the run is under.
-format: aep.driver-steps/1
+format: aep.driver-steps/2
 id: development/default
 # Pinned, and the pin is mandatory. A step map names states and orders steps inside them, so an
 # unpinned one is an instruction sheet for whatever happens to be in the tree. The refusal this
@@ -57,6 +57,9 @@ states:
       - kind: llm
         harness: b10x
         description: Read the task and record what is being asked for, unedited.
+        judgement: >-
+          What a task written in prose is asking for is interpretation: no command parses intent
+          out of prose.
         skills: [planning]
         # **No `context:` any more, because the planning skill arrives as a skill.** The plugin is
         # supplied at the driver boundary through `--plugin-dir` or `AEP_DRIVE_PLUGIN_DIR`; AEP
@@ -88,6 +91,9 @@ states:
       - kind: llm
         harness: b10x
         description: State the required behaviour as a specification artifact.
+        judgement: >-
+          Which behaviour the request requires, and how to state it so it can be checked, is a
+          choice no command derives from prose.
         skills: [planning]
         # Where this step may write. First match wins and the last rule is a catch-all, so a path
         # nobody thought of has an answer rather than a default. The planning store is denied to
@@ -111,6 +117,9 @@ states:
       - kind: llm
         harness: b10x
         description: Break the specification into units that can each be verified alone.
+        judgement: >-
+          Where to cut the work so that each unit can be verified alone is a design decision no
+          command makes.
         skills: [planning]
         # Where this step may write. First match wins and the last rule is a catch-all, so a path
         # nobody thought of has an answer rather than a default. The planning store is denied to
@@ -133,6 +142,9 @@ states:
       - kind: llm
         harness: b10x
         description: Write the tests before there is an implementation to shape them around.
+        judgement: >-
+          Which cases would decide the unit before any code exists is a judgement about what could
+          go wrong; a command runs checks, it does not choose them.
         skills: [planning]
         # Where this step may write. First match wins and the last rule is a catch-all, so a path
         # nobody thought of has an answer rather than a default. The planning store is denied to
@@ -163,7 +175,7 @@ states:
       # only because nothing had looked, or did not walk in at all. It is an `operator` step and
       # not an `llm` one because approving a specification is a person's act: a run that approved
       # its own specification would satisfy the principle by writing to the document the principle
-      # is about, which is invariant 7 one layer up.
+      # is about, which is the rule against manufacturing evidence one layer up.
       #
       # Last in the state, after the suite has run red, so the person is asked once with the
       # state's mechanical work already done — the same order `checks.yaml` takes.
@@ -185,6 +197,9 @@ states:
       - kind: llm
         harness: b10x
         description: Make the smallest change that satisfies the unit and its verifiers.
+        judgement: >-
+          Writing the change is authorship; the commands after this step decide whether it works,
+          and none of them writes it.
         skills: [planning]
         # Where this step may write. First match wins and the last rule is a catch-all, so a path
         # nobody thought of has an answer rather than a default. The planning store is denied to
@@ -307,7 +322,7 @@ states:
           - "{run_directory}/verification.yaml"
         evidence:
           kind: verification
-          verifier: protocol
+          verifier: aep
           record: "{run_directory}/verification.yaml"
 
   adversarial_verify:
@@ -315,6 +330,9 @@ states:
       - kind: llm
         harness: b10x
         description: Try to break what the previous state just declared working.
+        judgement: >-
+          Finding the input nobody thought of is invention; a command reruns the checks that exist
+          and cannot imagine new ones.
         skills: [planning]
         # Where this step may write. First match wins and the last rule is a catch-all, so a path
         # nobody thought of has an answer rather than a default. The planning store is denied to
@@ -399,7 +417,7 @@ states:
           # `specification` to `test-runner` and `human-review`, and neither is what this is. A
           # verifier the protocol has never heard of is admitted and checked at run start, which is
           # the honest shape — the record says which tool decided the document.
-          verifier: protocol
+          verifier: aep
           record: "{run_directory}/specification.yaml"
 
   # A person, and there is no route around them. `review → complete` is guarded on

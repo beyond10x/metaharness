@@ -1,0 +1,13 @@
+{
+  "at": "2026-10-23T16:52:23Z",
+  "actor": "human:timo",
+  "artifact": "story:aep-pin-0-76-0",
+  "kind": "story",
+  "revision": 1,
+  "change": {
+    "change": "evidence",
+    "kind": "test_result",
+    "source": "task check on story/aep-pin-0-76-0: exit 0, 1360 passed, 0 failed; drive run against a scratch project with the 0.76.0 tree loads development/default, development/checks and releases/source (driver-steps/2), which the 0.14.0 binary refuses",
+    "reference": "design amendment a54; test the_driver_steps_2_maps_aep_0_76_0_ships_load_under_the_pinned_aep"
+  }
+}

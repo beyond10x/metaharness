@@ -169,6 +169,7 @@ fn b10x_step() -> LlmStep {
             context: Vec::new(),
             scope: Vec::new(),
             description: None,
+            judgement: None,
             harness: "b10x".to_owned(),
             skills: Vec::new(),
             prompt: "do the thing".to_owned(),
@@ -212,6 +213,7 @@ fn b10x_step() -> LlmStep {
             context: Vec::new(),
             scope: Vec::new(),
             description: None,
+            judgement: None,
             harness: LlmStep::DEFAULT_HARNESS.to_owned(),
             skills: skills.iter().map(ToString::to_string).collect(),
             prompt: "do the thing".to_owned(),
@@ -283,6 +285,7 @@ fn b10x_step() -> LlmStep {
             context: Vec::new(),
             scope: Vec::new(),
             description: None,
+            judgement: None,
             harness: LlmStep::DEFAULT_HARNESS.to_owned(),
             skills: Vec::new(),
             prompt: "do the thing".to_owned(),
@@ -394,6 +397,7 @@ fn b10x_step() -> LlmStep {
             context: Vec::new(),
             scope: Vec::new(),
             description: None,
+            judgement: None,
             harness: LlmStep::DEFAULT_HARNESS.to_owned(),
             skills: Vec::new(),
             prompt: "find it".to_owned(),
@@ -494,6 +498,7 @@ fn b10x_step() -> LlmStep {
             context: Vec::new(),
             scope: Vec::new(),
             description: None,
+            judgement: None,
             harness: LlmStep::DEFAULT_HARNESS.to_owned(),
             skills: Vec::new(),
             prompt: "do the thing".to_owned(),
@@ -590,6 +595,7 @@ fn b10x_step() -> LlmStep {
             context: Vec::new(),
             scope: Vec::new(),
             description: None,
+            judgement: None,
             harness: LlmStep::DEFAULT_HARNESS.to_owned(),
             skills: Vec::new(),
             prompt: "Read the task under `.engineering/` and record what is asked for.".to_owned(),
@@ -649,6 +655,7 @@ fn b10x_step() -> LlmStep {
             context: Vec::new(),
             scope: Vec::new(),
             description: None,
+            judgement: None,
             harness: LlmStep::DEFAULT_HARNESS.to_owned(),
             skills: Vec::new(),
             prompt: "write the checks".to_owned(),
@@ -2087,6 +2094,59 @@ fn b10x_step() -> LlmStep {
                  binary: {refusal}"
             ),
         }
+    }
+
+    /// The three maps AEP 0.76.0 ships, read by the AEP this crate links (amendment a54).
+    ///
+    /// Under the 0.68.1 pin each was refused before a run existed: `` unknown field `judgement` ``
+    /// on the two development maps and `[unsupported_format_version]` on `releases/source`. The
+    /// fixtures are byte copies of `drivers/` at AEP `4d22c903`, so this test goes red on the day
+    /// the pin falls behind the maps a store adopted with the newest AEP carries.
+    #[test]
+    fn the_driver_steps_2_maps_aep_0_76_0_ships_load_under_the_pinned_aep() {
+        let tree = Path::new(env!("CARGO_MANIFEST_DIR")).join("fixtures/aep/drivers");
+        let load = |relative: &str| {
+            let path = tree.join(relative);
+            let text = fs::read_to_string(&path).expect("the committed step map is readable");
+            aep_schema::parse::step_map(&text, Some(&path.display().to_string()))
+                .unwrap_or_else(|error| panic!("{relative} validates: {error}"))
+        };
+        for relative in [
+            "development/default.yaml",
+            "development/checks.yaml",
+            "releases/source.yaml",
+        ] {
+            assert_eq!(load(relative).format(), "aep.driver-steps/2", "{relative}");
+        }
+        for relative in ["development/default.yaml", "development/checks.yaml"] {
+            let map = load(relative);
+            let llm: Vec<&LlmStep> = map
+                .states
+                .values()
+                .flat_map(|state| state.steps.iter())
+                .filter_map(|step| match step {
+                    Step::Llm(step) => Some(step),
+                    _ => None,
+                })
+                .collect();
+            assert!(!llm.is_empty(), "{relative} reaches the rule");
+            assert!(
+                llm.iter().all(|step| step.judgement.is_some()),
+                "a /2 map's every llm step carries the `judgement:` 0.68.1 could not read: \
+                 {relative}"
+            );
+        }
+
+        // The reporter's second finding, its first half: the cargo map still names the b10x
+        // harness, so a run under it still has to say where that loop is pointed.
+        let cargo = load("development/default.yaml");
+        assert_eq!(b10x_step_count(&cargo), 6, "development/default's b10x steps");
+        let refusal = b10x_preflight(&cargo, &B10xOptions::default()).expect("refused");
+        assert!(refusal.contains("--b10x-endpoint"), "{refusal}");
+        assert!(
+            b10x_preflight(&load("development/checks.yaml"), &B10xOptions::default()).is_none(),
+            "development/checks names no b10x step"
+        );
     }
 /// The name of the committed cross-repository golden, under this crate's `fixtures/`.
     const GOLDEN: &str = "metaharness-frame-canonical.json";

@@ -13,6 +13,7 @@ was amended and the amendment is named here.
 
 - **Breaking:** under `--tool-surface native`, a frame admitting `task.todo` is refused by name before the spawn (`LaunchRefusal::NotOfferedNatively`), because no pinned Claude Code binary offers `TodoWrite`, even when `--tools` names it (a53 § 6).
 - The native Claude argv now carries `--tools <list>`: the pinned built-ins plus `Glob` and `Grep`, one row per pinned version in `metaharness_claude::NATIVE_TOOLS` (2.1.304 unverified). The list does not depend on the frame, and the owned surface is unchanged (a53).
+- The eight AEP crates are linked at aep 0.76.0 (`4d22c9031b2cb24cfb3bf8ce1473c0856954ff64`) instead of 0.68.1 (`2481b48395afbaea9ad9b6165dbc0a80b80e1c01`). `metaharness aep drive` now loads the `aep.driver-steps/2` maps a store adopted with AEP 0.76.0 carries, with no `protocols:` pin to an older tree. `aep drive run` gains AEP's `--input <NAME=VALUE>`. `--aep-binary` and the eval's child `aep` must report 0.76.0. `development/checks` still needs `--allow-evidence-gap` for a task that declares nothing; that gap is in AEP's map, not in metaharness (a54).
 
 ## [0.15.0] — 2026-10-23
 

@@ -4936,3 +4936,51 @@ a frame that admits an operation which reaches no tool is the condition a51 § 7
 list is refused the same way. The cause is open: the probes do not show why the vendor drops it.
 
 No event or frame wire change.
+
+### Amendment a54 — `aep drive` links AEP 0.76.0, so `aep.driver-steps/2` maps load (2026-10-23)
+
+0.14.0 linked AEP 0.68.1 (`2481b483`), which reads `aep.driver-steps/1` only. A store adopted with
+AEP 0.76.0 carries a protocol tree whose maps are `/2`, so every `metaharness aep drive run` was
+refused before a run id: `` unknown field `judgement` `` on `drivers/development/{default,checks}.yaml`,
+`` unknown field `expect` `` on `drivers/bugfix/standard.yaml` and `[unsupported_format_version]` on
+`drivers/releases/source.yaml`. The workaround was a `protocols:` pin to the older tree
+(`story:aep-pin-0-76-0`). The eight AEP crates now link the 0.76.0 tag, `4d22c903`.
+
+**1. One adaptation.** The range is 206 commits. The only API change this workspace meets is
+`aep_driver_spec::map::LlmStep::judgement: Option<String>`, which the test literals in
+`drive_tests.rs` now set to `None`. The library code compiles unchanged.
+
+**2. The `/2` maps load.** Run against a scratch project with the 0.76.0 tree as `--root` and no
+vendor binary on `PATH`, the 0.14.0 binary refuses all three maps with the four document problems
+above. This build loads them. `development/default` and `development/checks` stop at the
+`METAHARNESS_LIVE=1` spending gate before any spawn, and `releases/source` stops because its
+workflow is `release/source/1` and not the task's `adp/default`. `the_driver_steps_2_maps_aep_0_76_0_ships_load_under_the_pinned_aep`
+parses byte copies of the three maps under `crates/metaharness-aep/fixtures/aep/drivers/` and
+asserts a `judgement:` on every `llm` step. `fixtures/aep/drivers/development/default.yaml` is
+the 0.76.0 file now, and the two tests that read it pass unchanged.
+
+**3. `development/default` still needs `--b10x-endpoint`.** It has 6 `llm` steps, all
+`harness: b10x`, at both revisions, and `b10x_preflight` refuses the map without the flag, which
+the new test asserts. This is expected.
+
+**4. `development/checks` still has an evidence gap, and AEP owns it.** With nothing declared on
+the task, the launch check still names `contract_result`, `property_test_result`, `verification`
+and `specification` as kinds "no step of the map declares", and each blocks
+`adversarial_verify -> review`. `--allow-evidence-gap` still gets the run past the check. The
+check is AEP's own (`aep_cli::drive`, `crates/edge/aep-cli/src/drive.rs:691` at `4d22c903`), and
+metaharness hosts it through `start_with_host`. `crates/metaharness-aep` adds no evidence
+pre-flight. AEP records the gap as a fact about the map:
+`the_checks_map_still_reports_the_gap_the_governed_run_measured_and_nothing_more`
+(`crates/drive/aep-driver/tests/coverage.rs`) asserts the same four kinds, and two
+(`verification`, `specification`) when the task declares `change.code: false`, and says that
+closing it "means adding steps to that map, which is a documents change and a decision". So the
+decision `story:aep-pin-0-76-0` asks for goes to AEP's `drivers/development/checks.yaml`.
+Pre-flight semantics here are unchanged.
+
+**5. The surface moves only by addition.** `metaharness aep drive run --help` gains AEP's
+`--input <NAME=VALUE>`, which a `/2` map's `{input.<name>}` needs. No other `aep drive` verb's
+help changes. `--aep-binary` and the eval's child `aep` must now report `aep_cli::VERSION`, 0.76.0,
+so an `AEP_REPO` checkout the eval builds from has to be at 0.76.0. The eval pins no AEP revision
+of its own.
+
+No event or frame wire change.
