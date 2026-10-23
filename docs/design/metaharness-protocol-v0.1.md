@@ -4806,3 +4806,89 @@ tests use the fixture name `llm/opencode-go-api-key` and never spawn a loop agai
 
 Per-claim evidence: `docs/research/2026-10-22-b10x-harness-0.18.0-adapter-surface.md`. No event or
 frame wire changes: `credential_source` is a string the opening record already carried.
+
+### Amendment a51 — the Claude pin adds 2.1.309 (2026-10-23)
+
+The installed `claude` is 2.1.309, so a stock install read H9 `gap` and `--strict-version` refused
+it before the spawn; takt's trial on 2026-10-23 had to run on a checksum-verified 2.1.305. The pin
+adds **2.1.309** beside 2.1.304 and 2.1.305, qualified the way a33 § 1 qualified those two.
+Evidence: `docs/research/2026-10-23-claude-code-2.1.309-adapter-surface.md`.
+
+**1. Three pins.** `PINNED_VERSIONS` is `["2.1.304", "2.1.305", "2.1.309"]`. 2.1.307 and 2.1.308
+are on disk and stay off the pin; 2.1.308 is the lane's off-pin binary, because 2.1.303 is no
+longer on this machine.
+
+**2. Qualified credential-free.** The native fixture ran the production driver in a loopback-only
+namespace with the operator's `~/.claude` hidden, under `credentials: none` and
+`credentials: loopback`, against the owned `/v1/messages` stub: 9 passed, 0 failed on 2.1.309 and
+9 passed, 0 failed on 2.1.305 with the same driver. The base tree, without the 2.1.309 row, was
+red against 2.1.309 (1 passed, 8 failed), so the lane decides the pin. No login, API key or paid
+run was used.
+
+**3. The per-version rows are measured, not copied.** 2.1.309 registers the same twelve built-ins
+in the same order (one constant serves the three rows of `BUILTIN_PLUGINS`). H11: 12 canaries
+planted, 12 sent by the positive control, 0 through the launch under either mode
+(`MEMORY_CANARIES`). `@`-mentions expand in the three user-turn routes and stay text in both
+system-prompt routes (`MENTION_CANARIES`).
+
+**4. a41's fail-closed hook holds.** 2.1.309 also reads a cancelled hook as timed out when
+`stoppedAfterItsTimeout` is set. That only widens the cases that block, so the seam stays
+fail-closed; `ON_FAILURE_READINGS` carries a 2.1.309 row.
+
+**5. What moved and is not read.** The terminal `result` gains the optional
+`model_usage_since_last_result`, ignored under D4; four control subtypes and two internal types
+are new and are neither sent nor read. Both lanes recorded 0 `opaque` records.
+
+**6. Wording.** Where a33 § 7 and a36 say "at both pins", the H11 claim now covers 2.1.304, 2.1.305
+and 2.1.309. `contract_result`'s provider reads `claude 2.1.304, 2.1.305, 2.1.309`.
+
+**7. Open.** `metaharness doctor claude` prints the flag-surface line without running the check
+behind it (`crates/metaharness/src/doctor.rs:206`); this predates a51. Mentions of paths outside the tree, through links
+and of directories were not re-measured on 2.1.309. 2.1.304 was not re-run. Neither 2.1.305 nor
+2.1.309 offers `Glob` or `Grep`, which `seam.rs` renders `dir.list` and `search` as (42 and 47
+`session.started` records of this qualification); a frame admitting those operations without
+`shell` reaches no working tool. That predates this pin and is `story:claude-dir-list-search-unregistered`.
+
+No event or frame wire change.
+
+### Amendment a52 — the Codex pin adds 0.160.0 (2026-10-23)
+
+The installed `codex` is 0.160.0, so `--strict-version` refused it before the spawn. The pin adds
+**0.160.0** beside 0.153.4, qualified the way a34 qualified 0.153.4: credential-free, in a
+loopback-only namespace. Evidence: `docs/research/2026-10-23-codex-0.160.0-record-surface.md`.
+
+**1. Two pins, one reader.** `PINNED_VERSIONS` is `["0.153.4", "0.160.0"]`. The native fixture ran
+8 passed, 0 failed on each, with 0.143.0 as the off-pin control, which failed as it should on both
+lanes. Every rollout's `cli_version` matched its own binary (12 per lane). `--strict-version`
+exited 2 before the vendor process started. No login, API key or paid run was used.
+
+**2. H1b stays read from the record.** It is still decided from `turn_context.personality` against
+the launch's `pragmatic` (24 rollouts across both lanes).
+
+**3. On 0.160.0 the personality key no longer changes the instructions.** Only `none` strips the
+`# Personality` section; unset, `pragmatic` and `friendly` give byte-identical instructions
+(`models-manager/src/model_info.rs:50-56`, 17 captured requests). H1b therefore proves what was
+recorded, not what the model was told. That is a34's caveat, and it is now stronger.
+
+**4. H1a, H4 and H5 stay `unk`.** The new `disabled_plugin_ids` is not a list of loaded plugins,
+and the reader does not use it as one.
+
+**5. `--worktree` is refused.** `codex exec --worktree` is new in 0.160.0. It joins
+`DENIED_ARGUMENTS` under the H7 working-directory rule.
+
+**6. Config layers are unchanged.** `CONFIG_LAYER_PATHS` and the two unchecked cloud layers stand.
+Apart from the no-key default, where 0.160.0 records no personality, layer precedence is the same on both pins.
+
+**7. What moved and is not read.** `runtime_workspace_roots` is new, and `world_state.state` lost
+`personality` and `orchestrator_skills`. The reader maps none of them. The new `RetainedContext`
+record and `configuration_update` item appear only in source. Neither was observed, so both stay
+opaque until they are seen.
+
+**8. The fixture model is `gpt-5.5`.** The 0.160.0 catalog dropped `gpt-5.2`. The first lane ran
+under fallback metadata, was offered no `apply_patch`, and failed the patch case (exit 134).
+`contract_result`'s provider reads `codex 0.153.4, 0.160.0`.
+
+**9. Open.** On 0.160.0, `@path` and the `-1` exit placeholder were not driven. The request capture
+on 0.153.4 came back empty and was not retried.
+
+No event or frame wire change.
