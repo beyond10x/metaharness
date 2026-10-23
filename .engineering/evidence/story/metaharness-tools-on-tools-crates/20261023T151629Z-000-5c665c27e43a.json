@@ -1,0 +1,13 @@
+{
+  "at": "2026-10-23T15:16:29Z",
+  "actor": "human:timo",
+  "artifact": "story:metaharness-tools-on-tools-crates",
+  "kind": "story",
+  "revision": 49,
+  "change": {
+    "change": "evidence",
+    "kind": "verification",
+    "source": "cargo tree -p metaharness-tools -i b10x-tool-<tool> at f39e773",
+    "reference": "docs/research/2026-10-23-metaharness-tools-serves-tools-crates.md"
+  }
+}
