@@ -5009,3 +5009,51 @@ smaller), and C, dropping the pin (a breaking array-length change for +0.55%). A
 tokens at a 0.153.4 baseline's maximum rebases that cap for 0.160.0; takt does so.
 
 No code, event or frame wire change.
+
+### Amendment a56 — `aep drive` links AEP 0.77.0, and a step that declares its commands is told them (2026-10-23)
+
+AEP 0.77.0 (`23294974`) lets an `llm` step's map declare the argv prefixes its shell admits, as
+`commands:` (`aep_driver_spec::map::CommandPrefix`). The executor receives them as
+`StepContext::commands`, and `driven_surface` then admits one simple invocation that starts with a
+declared prefix, plus the readers the state admits, and nothing else. It also refuses `cargo --config`
+and `rg --pre` at the call, whatever admitted the program (`aep_cli::drive::RUNNER_FLAGS`).
+`drivers/development/checks.yaml` declares `[aep, plan, artifact]` on `receive`, `specify`,
+`decompose`, `establish_verifiers` and `adversarial_verify`, and `task check|fmt|schema|ess|status`
+plus `cargo build|check|clippy|doc|fmt|test` on `implement`. `development/default.yaml` declares none.
+`b10x-chef-orchestrator` approved the bump and the rendering on 2026-10-23 (option A).
+
+**1. Two adaptations.** `LlmStep::commands` and `StepContext::commands` are new fields. The test
+literals set them to empty. The 14 commits in the range change no other API this workspace uses.
+
+**2. The prompt said the opposite of the map.** `surface_lines` rendered one fixed paragraph for every
+vendor step with a shell: the two store verbs, the readers, and "Not `git`, not `cargo`, …". Under
+`development/checks`, `implement` is admitted `cargo test` and `task check`, and its prompt told it not
+to run `cargo`. On the b10x arm the fixed paragraph named `plan artifact` and `observe trace` for
+`specify`, which declares only the first.
+
+**3. A declared step is told its declaration.** `declared_surface_lines` renders from the same two
+values `driven_surface` decides with: `context.commands` and the readers `driven_programs` derives
+from the state.
+
+- **Vendor arm.** The paragraph names each declared prefix, then the readers. It names the
+  `RUNNER_FLAGS` entry for each program the step can start (`cargo --config` under `implement`). It
+  says the engine's records come from the `command` steps that follow.
+- **b10x arm.** The paragraph names the declared `aep` prefixes under the mounted driver path
+  (`/toolchain/driver/aep plan artifact …`). It names every other declared prefix as one `run` will
+  not start, because the loop's `--allow-program` list holds the driver and the readers and nothing
+  else.
+- **The b10x allowlist is unchanged.** Adding `cargo` or `task` to `--allow-program` would widen the
+  observed arm's sandbox. The sandbox also does not mount `~/.cargo/bin`. Either change is its own
+  change under § Safety envelope.
+- **Undeclared steps.** A step that declares nothing keeps the paragraph it had, byte for byte.
+
+`a_declared_step_surface_is_rendered_from_the_map_and_admitted_by_the_driver` reads the 0.77.0
+`development/checks` fixture. It asserts that `driven_surface` admits every prefix the vendor prompt
+names, and that `driven_surface` refuses the runner flag the prompt names. It also asserts that
+`implement` is refused `aep plan artifact`, and checks both b10x renderings.
+
+**4. The surface moves.** `--aep-binary` and the eval's child `aep` must report 0.77.0. The fixture
+`fixtures/aep/drivers/development/checks.yaml` is the 0.77.0 file. `default.yaml` and
+`releases/source.yaml` are byte-identical between `4d22c903` and `23294974`.
+
+No event or frame wire change.

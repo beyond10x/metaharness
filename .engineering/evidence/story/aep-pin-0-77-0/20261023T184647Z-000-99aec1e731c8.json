@@ -1,0 +1,12 @@
+{
+  "at": "2026-10-23T18:46:47Z",
+  "actor": "human:timo",
+  "artifact": "story:aep-pin-0-77-0",
+  "kind": "story",
+  "revision": 2,
+  "change": {
+    "change": "evidence",
+    "kind": "approval",
+    "source": "b10x-chef-orchestrator 2026-10-23: aep 0.77.0 option A approved under the grant (bump, render per-step commands, correct the vendor 'not cargo' line, release)"
+  }
+}

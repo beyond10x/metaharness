@@ -1,0 +1,12 @@
+{
+  "at": "2026-10-23T18:46:47Z",
+  "actor": "human:timo",
+  "artifact": "story:aep-pin-0-77-0",
+  "kind": "story",
+  "revision": 2,
+  "change": {
+    "change": "evidence",
+    "kind": "verification",
+    "source": "a_declared_step_surface_is_rendered_from_the_map_and_admitted_by_the_driver reads the 0.77.0 development/checks fixture and checks every prefix the vendor prompt names against driven_surface; design amendment a56"
+  }
+}

@@ -3,6 +3,16 @@
 What changed. The design document carries *why*; where code and design disagreed, the design
 was amended and the amendment is named here.
 
+## [Unreleased]
+
+### Changed
+
+- The eight AEP crates are linked at aep 0.77.0 (`23294974a72bbe7e8651588ec3bfa69e1cb64145`) instead of 0.76.0 (`4d22c9031b2cb24cfb3bf8ce1473c0856954ff64`). A step map's `commands:` now reaches `metaharness aep drive`: the shell admits the declared prefixes and the state's readers, and refuses `cargo --config` and `rg --pre`. `--aep-binary` and the eval's child `aep` must report 0.77.0 (a56).
+
+### Fixed
+
+- A driven step whose map declares `commands:` is told those commands in its prompt. Under `development/checks`, `implement` was told "not `cargo`" while its map admits `cargo test` and `task check`. On the b10x arm, declared commands other than the driver's are named as ones `run` will not start (a56).
+
 ## [0.16.0] — 2026-10-23
 
 ### Fixed

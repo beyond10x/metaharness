@@ -12,7 +12,7 @@ use aep_domain::capability::{Audience, Capability};
 use aep_domain::ids::StateId;
 use aep_driver::executor::{LlmStepExecutor, StepAuthorizer, StepContext, StepOutcome};
 use aep_driver::tool::TOOL_CANDIDATES;
-use aep_driver_spec::map::{LlmStep, ScopeRule, Step, StepMap, WriteScope};
+use aep_driver_spec::map::{CommandPrefix, LlmStep, ScopeRule, Step, StepMap, WriteScope};
 use aep_driver_spec::tool::ToolConfig;
 use anyhow::{Context, Result, bail};
 use clap::{Args, Subcommand};
@@ -25,9 +25,9 @@ use spending::{AdmissionBudget, SpendOptions};
 // (`crates/observe/trace-domain/src/matcher.rs`).
 use aep_cli::drive::{
     Answer, CommandOnlyHost, ExecutionHost, Inputs, Launch, Moment, PreparedExecution,
-    READ_ONLY_PROGRAMS, TRANSCRIPTS, TransitionArgs, WriteSurface, answer, declared_write,
-    driven_surface, engine_refusal, has_llm_steps, llm_step_count, protocol_command_steps,
-    session_env, store_integrity_at, transcript_path, write_scope_word,
+    READ_ONLY_PROGRAMS, RUNNER_FLAGS, TRANSCRIPTS, TransitionArgs, WriteSurface, answer,
+    declared_write, driven_surface, engine_refusal, has_llm_steps, llm_step_count,
+    protocol_command_steps, session_env, store_integrity_at, transcript_path, write_scope_word,
 };
 
 /// Reservations made against a driven run's model-session ceiling.
@@ -727,7 +727,12 @@ impl LlmStepExecutor for CliExecutors {
 /// other is never offered the tool at all. Rendered from the same [`ToolConfig`] the policy reads,
 /// so the prompt and the enforcement cannot disagree — two lists that could drift would be worse
 /// than one list nobody has, because the model would trust the wrong one.
-fn surface_lines(harness: Harness, tools: &ToolConfig, driver: &str) -> String {
+fn surface_lines(
+    harness: Harness,
+    tools: &ToolConfig,
+    commands: &[CommandPrefix],
+    driver: &str,
+) -> String {
     let mut lines = String::new();
     let offered = harness.tools(tools);
     if !offered.is_empty() {
@@ -759,7 +764,16 @@ fn surface_lines(harness: Harness, tools: &ToolConfig, driver: &str) -> String {
     // `run` entry takes an argv **list**, so there is no string for a `&&` to appear in and a
     // composed command is not a thing that can be written. The program restriction still has to be
     // stated, because a declared program set is only cheap to obey when it is known.
-    if tools.shell_offered() && !harness.adjudicates() {
+    //
+    // **A step that declares its commands is told those, and not the default.** AEP 0.77.0 lets an
+    // `llm` step's map name the argv prefixes its shell admits (`StepContext::commands`), and
+    // `driven_surface` then admits those prefixes and the state's readers instead of the two store
+    // verbs. Under `development/checks` the `implement` step declares `cargo test` and `task check`,
+    // so the default paragraph's "Not `cargo`" would tell that step not to run the commands it was
+    // given.
+    if tools.shell_offered() && !commands.is_empty() {
+        lines.push_str(&declared_surface_lines(harness, tools, commands, driver));
+    } else if tools.shell_offered() && !harness.adjudicates() {
         // **The path, not the name.** The CLI is not on this sandbox's `PATH` and is not at the
         // path it occupies on the host: it is mounted read-only at one place, and a step told to
         // reach the store "through `aep`" and given no spelling that resolves will hand-write
@@ -796,6 +810,128 @@ fn surface_lines(harness: Harness, tools: &ToolConfig, driver: &str) -> String {
              a `command` step, recorded with a verifier's provenance rather than yours.\n",
         );
     }
+    lines
+}
+
+/// The shell paragraph for a step whose map declares its commands.
+///
+/// Rendered from the same two values `driven_surface` decides with: the declared prefixes, and the
+/// readers [`driven_programs`] derives from the state's capabilities. The runner flags AEP refuses
+/// at the call (`RUNNER_FLAGS`) are named for each program the step can start, so the first
+/// `cargo test --config …` is not how the session learns that rule.
+///
+/// The b10x arm is told less, because its sandbox can start less: `run` starts the mounted driver
+/// and the readers, and nothing else is on its allowlist ([`b10x_argv`]). A declared prefix for
+/// another program is named as one it cannot start here, so the session does not spend a turn on
+/// a `run` the loop never published.
+fn declared_surface_lines(
+    harness: Harness,
+    tools: &ToolConfig,
+    commands: &[CommandPrefix],
+    driver: &str,
+) -> String {
+    if !harness.adjudicates() {
+        return b10x_declared_lines(commands, driver);
+    }
+    let readers = driven_programs(tools);
+    let mut lines = String::new();
+    let _ = write!(
+        lines,
+        "\n`Bash` runs **one simple invocation per call**. No `&&`, no `|`, no `;`, no `$(…)`, \
+         no redirect — a composed command is refused whole, so two things you want are two \
+         calls.\n\
+         This step's map declares the commands its shell runs: {}.",
+        quoted_prefixes(commands.iter(), None),
+    );
+    if !readers.is_empty() {
+        let _ = write!(
+            lines,
+            " Beside them it runs the readers {}, which this state admits.",
+            readers
+                .iter()
+                .map(|name| format!("`{name}`"))
+                .collect::<Vec<_>>()
+                .join(", "),
+        );
+    }
+    let startable: Vec<String> = commands
+        .iter()
+        .map(|prefix| program_leaf(prefix).to_owned())
+        .chain(readers.iter().cloned())
+        .collect();
+    let refused: Vec<String> = RUNNER_FLAGS
+        .iter()
+        .filter(|(program, _)| startable.iter().any(|name| name == program))
+        .flat_map(|(program, flags)| flags.iter().map(move |flag| format!("`{program} {flag}`")))
+        .collect();
+    lines.push_str(" Anything else is refused");
+    if !refused.is_empty() {
+        let _ = write!(
+            lines,
+            ", and so is {}, which runs a program the call does not name",
+            refused.join(" and ")
+        );
+    }
+    lines.push_str(
+        ". The records the engine admits for this state are written by the `command` steps the \
+         driver runs after this one, so a passing run here is your own check and not evidence.\n",
+    );
+    lines
+}
+
+/// A declared prefix's program by its leaf name, as `driven_surface` compares it.
+fn program_leaf(prefix: &CommandPrefix) -> &str {
+    let program = prefix.program();
+    program.rsplit('/').next().unwrap_or(program)
+}
+
+/// Declared prefixes as the prompt quotes them, with the program spelled as `program` when given.
+fn quoted_prefixes<'a>(
+    prefixes: impl Iterator<Item = &'a CommandPrefix>,
+    program: Option<&str>,
+) -> String {
+    prefixes
+        .map(|prefix| match program {
+            None => format!("`{prefix} …`"),
+            Some(program) if prefix.words.len() == 1 => format!("`{program} …`"),
+            Some(program) => format!("`{program} {} …`", prefix.words[1..].join(" ")),
+        })
+        .collect::<Vec<_>>()
+        .join(", ")
+}
+
+/// The b10x half of [`declared_surface_lines`]: what of the declaration this sandbox can start.
+fn b10x_declared_lines(commands: &[CommandPrefix], driver: &str) -> String {
+    let (startable, absent): (Vec<&CommandPrefix>, Vec<&CommandPrefix>) = commands
+        .iter()
+        .partition(|prefix| program_leaf(prefix) == "aep");
+    let mut lines = String::new();
+    lines.push_str(
+        "\n`run` takes an argv **list** and starts one program. Nothing is composed, redirected \
+         or substituted — there is no shell here to do it with.",
+    );
+    if startable.is_empty() {
+        lines.push_str(" This step's map declares no command this sandbox can start.");
+    } else {
+        let _ = write!(
+            lines,
+            " Of the commands this step's map declares, this sandbox starts {}. `{driver}` is the \
+             whole path and it is not on `PATH`; the bare name `aep` does not resolve here.",
+            quoted_prefixes(startable.iter().copied(), Some(driver)),
+        );
+    }
+    if !absent.is_empty() {
+        let _ = write!(
+            lines,
+            " The map also declares {}, and `run` will not start them here: its allowlist holds \
+             the driver and the readers this state admits.",
+            quoted_prefixes(absent.iter().copied(), None),
+        );
+    }
+    lines.push_str(
+        " Building and testing are `command` steps the driver runs itself, so that their records \
+         carry a verifier's provenance instead of yours.\n",
+    );
     lines
 }
 
@@ -906,7 +1042,12 @@ fn prompt_for(step: &LlmStep, context: &StepContext<'_>, driver: &str) -> String
     // Rendered from `context.tools`, the same value `decide_tool` reads, so the prompt and the
     // policy cannot disagree. Two lists that could drift would be worse than one list nobody has:
     // the model would trust the wrong one.
-    prompt.push_str(&surface_lines(harness, context.tools, driver));
+    prompt.push_str(&surface_lines(
+        harness,
+        context.tools,
+        context.commands,
+        driver,
+    ));
     prompt.push_str(
         "\nYou cannot submit evidence, and nothing you say is evidence. What you achieve is \
          observed by the verifier the driver runs after this step.\n",

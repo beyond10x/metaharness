@@ -170,6 +170,7 @@ fn b10x_step() -> LlmStep {
             scope: Vec::new(),
             description: None,
             judgement: None,
+            commands: Vec::new(),
             harness: "b10x".to_owned(),
             skills: Vec::new(),
             prompt: "do the thing".to_owned(),
@@ -189,6 +190,7 @@ fn b10x_step() -> LlmStep {
             index: 0,
             attempt: 1,
             tools,
+            commands: &[],
             run_directory: Path::new("/runs/T-1/1"),
             requirements: &[],
             reaching: &[],
@@ -214,6 +216,7 @@ fn b10x_step() -> LlmStep {
             scope: Vec::new(),
             description: None,
             judgement: None,
+            commands: Vec::new(),
             harness: LlmStep::DEFAULT_HARNESS.to_owned(),
             skills: skills.iter().map(ToString::to_string).collect(),
             prompt: "do the thing".to_owned(),
@@ -231,6 +234,7 @@ fn b10x_step() -> LlmStep {
             index: 0,
             attempt: 1,
             tools: &tools,
+            commands: &[],
             run_directory: Path::new("/runs/T-1/1"),
             requirements: &requirements,
             reaching: &reaching,
@@ -286,6 +290,7 @@ fn b10x_step() -> LlmStep {
             scope: Vec::new(),
             description: None,
             judgement: None,
+            commands: Vec::new(),
             harness: LlmStep::DEFAULT_HARNESS.to_owned(),
             skills: Vec::new(),
             prompt: "do the thing".to_owned(),
@@ -303,6 +308,7 @@ fn b10x_step() -> LlmStep {
             index: 0,
             attempt: 1,
             tools: &tools,
+            commands: &[],
             run_directory: Path::new("/runs/T-1/1"),
             requirements: &requirements,
             reaching: &reaching,
@@ -398,6 +404,7 @@ fn b10x_step() -> LlmStep {
             scope: Vec::new(),
             description: None,
             judgement: None,
+            commands: Vec::new(),
             harness: LlmStep::DEFAULT_HARNESS.to_owned(),
             skills: Vec::new(),
             prompt: "find it".to_owned(),
@@ -415,6 +422,7 @@ fn b10x_step() -> LlmStep {
             index: 0,
             attempt: 1,
             tools: &tools,
+            commands: &[],
             run_directory: Path::new("/runs/T-1/1"),
             requirements: &requirements,
             reaching: &reaching,
@@ -499,6 +507,7 @@ fn b10x_step() -> LlmStep {
             scope: Vec::new(),
             description: None,
             judgement: None,
+            commands: Vec::new(),
             harness: LlmStep::DEFAULT_HARNESS.to_owned(),
             skills: Vec::new(),
             prompt: "do the thing".to_owned(),
@@ -516,6 +525,7 @@ fn b10x_step() -> LlmStep {
             index: 0,
             attempt: 1,
             tools: &tools,
+            commands: &[],
             run_directory: Path::new("/runs/T-1/1"),
             requirements: &requirements,
             reaching: &reaching,
@@ -596,6 +606,7 @@ fn b10x_step() -> LlmStep {
             scope: Vec::new(),
             description: None,
             judgement: None,
+            commands: Vec::new(),
             harness: LlmStep::DEFAULT_HARNESS.to_owned(),
             skills: Vec::new(),
             prompt: "Read the task under `.engineering/` and record what is asked for.".to_owned(),
@@ -613,6 +624,7 @@ fn b10x_step() -> LlmStep {
             index: 0,
             attempt: 1,
             tools: &tools,
+            commands: &[],
             run_directory: Path::new("/runs/T-1/1"),
             requirements: &requirements,
             reaching: &reaching,
@@ -656,6 +668,7 @@ fn b10x_step() -> LlmStep {
             scope: Vec::new(),
             description: None,
             judgement: None,
+            commands: Vec::new(),
             harness: LlmStep::DEFAULT_HARNESS.to_owned(),
             skills: Vec::new(),
             prompt: "write the checks".to_owned(),
@@ -676,6 +689,7 @@ fn b10x_step() -> LlmStep {
             index: 0,
             attempt: 1,
             tools: &tools,
+            commands: &[],
             run_directory: Path::new("/runs/W4-1/1"),
             requirements: &requirements,
             reaching: &reaching,
@@ -731,6 +745,7 @@ fn b10x_step() -> LlmStep {
             index: 0,
             attempt: 1,
             tools,
+            commands: &[],
             run_directory: Path::new("/runs/T-1/1"),
             requirements: &[],
             reaching: &[],
@@ -1082,6 +1097,7 @@ fn b10x_step() -> LlmStep {
             index: 2,
             attempt: 3,
             tools,
+            commands: &[],
             run_directory: Path::new("/runs/T-1/1"),
             requirements,
             reaching,
@@ -1436,7 +1452,7 @@ fn b10x_step() -> LlmStep {
                 ..B10xOptions::default()
             };
             let mounted = staged_driver(&options);
-            let prompt = surface_lines(Harness::B10x, &executing, &mounted);
+            let prompt = surface_lines(Harness::B10x, &executing, &[], &mounted);
             assert!(prompt.contains(&format!("\x60{mounted} plan artifact")));
             let argv = b10x_argv(
                 &options, Path::new("/workspace"), &[], &[], &prompt, &executing,
@@ -2100,7 +2116,8 @@ fn b10x_step() -> LlmStep {
     ///
     /// Under the 0.68.1 pin each was refused before a run existed: `` unknown field `judgement` ``
     /// on the two development maps and `[unsupported_format_version]` on `releases/source`. The
-    /// fixtures are byte copies of `drivers/` at AEP `4d22c903`, so this test goes red on the day
+    /// fixtures are byte copies of `drivers/` at AEP `4d22c903`, and `development/checks` at
+    /// `23294974` (0.77.0, which adds its `commands:`), so this test goes red on the day
     /// the pin falls behind the maps a store adopted with the newest AEP carries.
     #[test]
     fn the_driver_steps_2_maps_aep_0_76_0_ships_load_under_the_pinned_aep() {
@@ -2148,6 +2165,82 @@ fn b10x_step() -> LlmStep {
             "development/checks names no b10x step"
         );
     }
+
+    /// The commands a step's map declares, as AEP 0.77.0's `development/checks` declares them.
+    ///
+    /// The default paragraph told every vendor step "Not `cargo`", and `implement` under that map
+    /// declares `cargo test` and `task check`. Each prefix the prompt names is checked against
+    /// `driven_surface` with the same context, so the prompt cannot name a command the call is
+    /// refused on, and the runner flag it warns about is the one the call refuses.
+    #[test]
+    fn a_declared_step_surface_is_rendered_from_the_map_and_admitted_by_the_driver() {
+        let path = Path::new(env!("CARGO_MANIFEST_DIR"))
+            .join("fixtures/aep/drivers/development/checks.yaml");
+        let text = fs::read_to_string(&path).expect("the committed step map is readable");
+        let map = aep_schema::parse::step_map(&text, Some(&path.display().to_string()))
+            .expect("development/checks validates");
+        let declared = |state: &str| -> Vec<CommandPrefix> {
+            map.states
+                .iter()
+                .find(|(id, _)| id.as_str() == state)
+                .and_then(|(_, steps)| {
+                    steps.steps.iter().find_map(|step| match step {
+                        Step::Llm(step) => Some(step.commands.clone()),
+                        _ => None,
+                    })
+                })
+                .expect("the state has an llm step")
+        };
+        let implement = declared("implement");
+        let specify = declared("specify");
+        assert!(implement.iter().any(|prefix| prefix.words == ["cargo", "test"]));
+        assert!(specify.iter().all(|prefix| prefix.program() == "aep"));
+
+        let tools = config(&[Capability::RepositoryRead, Capability::CommandExecution]);
+        let state: StateId = "implement".parse().expect("a state id");
+        let task = driven_task();
+        let mut context = step_context(&tools, &state, &task);
+        context.commands = &implement;
+
+        let vendor = surface_lines(Harness::ClaudeCode, &tools, &implement, "aep");
+        assert!(!vendor.contains("not `cargo`"), "{vendor}");
+        for prefix in &implement {
+            assert!(vendor.contains(&format!("`{prefix} …`")), "{prefix}: {vendor}");
+            let command = format!("{prefix} --workspace");
+            assert_eq!(
+                driven_surface(&context, &serde_json::json!({ "command": command })),
+                Ok(()),
+                "the prompt names `{prefix} …` and the driver admits it"
+            );
+        }
+        assert!(vendor.contains("`cargo --config`"), "{vendor}");
+        assert!(
+            driven_surface(
+                &context,
+                &serde_json::json!({ "command": "cargo test --config x" })
+            )
+            .is_err(),
+            "and the flag the prompt names is the one the call refuses"
+        );
+        assert!(
+            driven_surface(&context, &serde_json::json!({ "command": "aep plan artifact list" }))
+                .is_err(),
+            "a declaration replaces the store verbs: implement does not declare them"
+        );
+
+        // An undeclared step keeps the paragraph it had.
+        assert!(surface_lines(Harness::ClaudeCode, &tools, &[], "aep").contains("not `cargo`"));
+
+        // The b10x arm starts the mounted driver and the readers, and is told which of the
+        // declared commands it can start.
+        let mounted = "/toolchain/driver/aep";
+        let store = surface_lines(Harness::B10x, &tools, &specify, mounted);
+        assert!(store.contains(&format!("`{mounted} plan artifact …`")), "{store}");
+        assert!(!store.contains("observe trace"), "specify declares only the store: {store}");
+        let build = surface_lines(Harness::B10x, &tools, &implement, mounted);
+        assert!(build.contains("declares no command this sandbox can start"), "{build}");
+        assert!(build.contains("`cargo test …`"), "{build}");
+    }
 /// The name of the committed cross-repository golden, under this crate's `fixtures/`.
     const GOLDEN: &str = "metaharness-frame-canonical.json";
 /// The one frame the golden is minted from, and the reason it can be committed at all.
@@ -2180,6 +2273,7 @@ fn b10x_step() -> LlmStep {
             index: 2,
             attempt: 1,
             tools: &tools,
+            commands: &[],
             run_directory: Path::new("."),
             requirements: &requirements,
             reaching: &reaching,
