@@ -3,6 +3,16 @@
 What changed. The design document carries *why*; where code and design disagreed, the design
 was amended and the amendment is named here.
 
+## [0.15.0] — 2026-10-23
+
+### Changed
+
+- **Breaking:** `metaharness_claude::PINNED_VERSIONS` is `[&str; 3]` and `metaharness_codex::PINNED_VERSIONS` is `[&str; 2]`. A caller that names either array's type needs the new length.
+- Claude Code pins 2.1.309 beside 2.1.304 and 2.1.305. The credential-free native fixture passes 9/9 on 2.1.309 and on 2.1.305 under `credentials: none` and `credentials: loopback`. The base tree fails 8 of 9 on 2.1.309. 2.1.309 compiles in the same twelve built-ins, and its `BUILTIN_PLUGINS`, `MEMORY_CANARIES`, `MENTION_CANARIES` and `ON_FAILURE_READINGS` rows are measured on it. The contract result names `claude 2.1.304, 2.1.305, 2.1.309`. Evidence: `docs/research/2026-10-23-claude-code-2.1.309-adapter-surface.md` (a51).
+- Codex pins 0.160.0 beside 0.153.4. The credential-free native fixture passes 8/8 on each, and the off-pin 0.143.0 control fails. The contract result names `codex 0.153.4, 0.160.0`, and the fixture's model is `gpt-5.5` because 0.160.0's catalog has no `gpt-5.2`. On 0.160.0 the personality key changes the instructions only when it is `none`, so H1b proves what was recorded and not what the model was told. Evidence: `docs/research/2026-10-23-codex-0.160.0-record-surface.md` (a52).
+- **Breaking:** the Codex launch refuses `--worktree`, new in `codex exec` 0.160.0, with the other denied launch arguments (a52 § 5).
+- The specification and the gate move to ESS 0.68.0. `spec/conformance.json` is unchanged at 116 scenarios.
+
 ## [0.14.0] — 2026-10-22
 
 ### Added
