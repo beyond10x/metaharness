@@ -4984,3 +4984,28 @@ so an `AEP_REPO` checkout the eval builds from has to be at 0.76.0. The eval pin
 of its own.
 
 No event or frame wire change.
+
+### Amendment a55 — the Codex 0.160.0 pin stays; its extra input tokens are not the launch's (2026-10-23)
+
+takt's trial cycle 2026-10-23-54b8dd83 capped each run at the 0.153.4 baseline's saved maximum, 85088
+tokens. Codex 0.160.0 ran 0/2 with gpt-6.1-sol and 0/2 with gpt-6-astra, every run over the cap
+(`story:codex-0-160-0-token-cost`). Evidence: `docs/research/2026-10-23-codex-0.160.0-token-cost.md`.
+
+**1. The increase is input only.** With the model fixed at gpt-6-astra, 0.160.0 spends +466 input
+tokens a run over 0.153.4, about +93 per model call across the run's five calls. Output and reasoning
+tokens do not change.
+
+**2. It is not in what this adapter writes.** The native fixture's credential-free, loopback-only run
+shows the same `plan_launch` output producing a first request 708 bytes **smaller** on 0.160.0 (gpt-6-astra) and 177
+bytes smaller with gpt-5.5. `additional_tools` grows by 70 bytes and the base developer instructions by
+159. The skills list loses `plugin-creator`, 937 bytes. The difference therefore lies in content that
+0.160.0 adds with network access, in the tool list or a fetched model catalogue. That is inferred: it
+cannot be shown without a networked run against the real provider, and this work made none.
+
+**3. Decision: keep 0.160.0 in `metaharness_codex::PINNED_VERSIONS`.** `b10x-chef-orchestrator`
+chose option A on 2026-10-23. The rejected options were B, keeping the pin and looking for a launch
+argument that removes the tokens (no offline lever exists, since the offline request is already
+smaller), and C, dropping the pin (a breaking array-length change for +0.55%). A consumer that caps
+tokens at a 0.153.4 baseline's maximum rebases that cap for 0.160.0; takt does so.
+
+No code, event or frame wire change.

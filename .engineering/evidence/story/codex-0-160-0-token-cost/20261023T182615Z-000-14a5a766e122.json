@@ -1,0 +1,12 @@
+{
+  "at": "2026-10-23T18:26:15Z",
+  "actor": "human:timo",
+  "artifact": "story:codex-0-160-0-token-cost",
+  "kind": "story",
+  "revision": 3,
+  "change": {
+    "change": "evidence",
+    "kind": "test_result",
+    "source": "native fixture actual_codex_reports_terminal_answer_model_and_failure_from_fixture_provider under unshare -rn, credentials none: 6 lanes (0.153.4 and 0.160.0 x gpt-5.5, gpt-6-astra, gpt-6.1-sol) 1 passed 0 failed each; task check on plan/codex-0-160-0-cost: exit 0, 1360 passed, 0 failed"
+  }
+}

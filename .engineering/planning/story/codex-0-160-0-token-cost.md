@@ -2,10 +2,14 @@
 format: aep.planning-md/3
 id: story:codex-0-160-0-token-cost
 kind: story
-status: draft
+status: implemented
 title: Decide the Codex 0.160.0 pin from its token cost
 summary: 'takt trial 2026-10-23: Codex 0.160.0 ran 0/2 and 0/2 at cap 85088, about +475 tokens a run over 0.153.4 with the model fixed; keep, fix or drop the pin'
-revision: 1
+revision: 4
+transitions:
+- {from: "draft", to: "proposed", at: "2026-10-23T18:23:46Z", actor: "human:timo", revision: 2, decided_on: {"recorded":{"approval":1,"verification":1}}}
+- {from: "proposed", to: "active", at: "2026-10-23T18:23:46Z", actor: "human:timo", revision: 3, decided_on: {"recorded":{"approval":1,"verification":1}}}
+- {from: "active", to: "implemented", at: "2026-10-23T18:26:15Z", actor: "human:timo", revision: 4, decided_on: {"recorded":{"test_result":1,"approval":1,"verification":1}}}
 ---
 ## Problem
 

@@ -1,0 +1,12 @@
+{
+  "at": "2026-10-23T18:23:46Z",
+  "actor": "human:timo",
+  "artifact": "story:codex-0-160-0-token-cost",
+  "kind": "story",
+  "revision": 1,
+  "change": {
+    "change": "evidence",
+    "kind": "approval",
+    "source": "b10x-chef-orchestrator 2026-10-23: option A, keep the 0.160.0 pin; takt rebases its cap (amendment a55)"
+  }
+}
