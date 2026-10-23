@@ -71,7 +71,7 @@ pub fn capabilities() -> Capabilities {
     //      admits no shell, so the command did not run`;
     //   3. the model was told, not walled — its last message was "The command was blocked and did
     //      not run."
-    // Native 0.153.4 fixture observations also establish allow and deny effects through
+    // Native 0.153.4 and 0.160.0 fixture observations also establish allow and deny effects through
     // this hook. Replacement-input behavior remains unverified; see amendment a25 and
     // docs/research/2026-10-03-native-codex-fixture.md. No paid request was needed.
     commands.insert("tool.decide".to_string(), CommandSupport::Honoured);
@@ -98,7 +98,7 @@ pub fn capabilities() -> Capabilities {
             (Tier::Kill, TierStatus::Delivered),
         ]),
         commands,
-        // Frame/ask/observe share the hook wire. Native 0.153.4 fixture probes observe
+        // Frame/ask/observe share the hook wire. Native 0.153.4 and 0.160.0 fixture probes observe
         // allow and deny effects; full CLI ask denial is correlated to the pending call.
         // A fixture-provider observation does not qualify the wider governed AEP walk.
         decision_modes: BTreeMap::from([
@@ -211,7 +211,7 @@ const UNSTATED_DENY_REASON: &str =
 /// denied approval`). What is certain is that the vendor requires `permissionDecision: "allow"`
 /// wherever `updatedInput` is used, which is the same value this renders.
 ///
-/// Native 0.153.4 fixture probes now observe the grant reaching the actual hook and
+/// Native 0.153.4 and 0.160.0 fixture probes observe the grant reaching the actual hook and
 /// the permitted command executing. This resolves the old string-table uncertainty
 /// for that surface. Replacement-input behavior remains unverified (amendment a25).
 #[must_use]
@@ -336,6 +336,18 @@ fn string_field(value: Option<&Value>) -> Option<String> {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    /// The pin is the two qualified releases, in release order, and the declared capabilities
+    /// carry exactly that list: a binary the native fixture has not driven is not admitted by
+    /// `--strict-version`, and one it has driven is not refused.
+    #[test]
+    fn the_adapter_pins_both_qualified_releases_and_declares_exactly_those() {
+        assert_eq!(PINNED_VERSIONS, ["0.153.4", "0.160.0"]);
+        assert_eq!(
+            capabilities().versions_pinned,
+            PINNED_VERSIONS.map(str::to_string).to_vec()
+        );
+    }
 
     /// The grant half of the wire, as bytes. Every key here is one the 0.145.0 binary names, and
     /// the two that are **absent** are the ones it refuses beside a bare allow.

@@ -4,12 +4,14 @@
 //! [`metaharness_protocol::Event`], what it can honour, and what hermetic would mean for it.
 //! Nothing outside this crate may know any of that.
 //!
-//! Pinned to **0.153.4** ([`PINNED_VERSIONS`]). The evidence base is the research record
-//! migrated into `docs/research/2026-08-21-codex-harness-research.md`: every claim there is
+//! Pinned to **0.153.4** and **0.160.0** ([`PINNED_VERSIONS`]). The evidence base is the research
+//! record migrated into `docs/research/2026-08-21-codex-harness-research.md`: every claim there is
 //! labelled **V** (verified locally against the binary and 2,437 rollout files), **D** (official
 //! docs), **I** (inferred) or **?** (unknown), and this crate inherits those labels at the point
 //! of use. Current native observations are recorded in
-//! `docs/research/2026-10-03-native-codex-fixture.md` (amendment a25).
+//! `docs/research/2026-10-03-native-codex-fixture.md` (amendment a25),
+//! `docs/research/2026-10-21-codex-0.153.4-record-surface.md` and, for 0.160.0,
+//! `docs/research/2026-10-23-codex-0.160.0-record-surface.md`.
 //!
 //! # What this milestone is, and is not (CX-M2)
 //!
@@ -25,10 +27,11 @@
 //!   run refused a shell call at that hook and **the vendor's own record shows the command
 //!   blocked with empty output**, so [`capabilities`] declares the call tier `Delivered` and
 //!   `tool.decide` `Honoured`. Design amendment a7.
-//! * **Native 0.153.4 observations (2026-10-03):** an owned loopback provider drove the
-//!   actual binary through allow/deny hooks, command exits0/7, patch completion,
-//!   authoritative final answers, selected models and synthetic usage. Full CLI probes
-//!   exercised halt/interrupt and correlated ask-mode denial without the denied effect.
+//! * **Native observations, 0.153.4 (2026-10-03) and 0.160.0 (2026-10-23):** an owned loopback
+//!   provider drove the actual binary through allow/deny hooks, command exits0/7, patch
+//!   completion, authoritative final answers, selected models and synthetic usage. Full CLI
+//!   probes exercised halt/interrupt and correlated ask-mode denial without the denied effect.
+//!   The same eight cases passed on both binaries.
 //! * **Still unverified:** registration/turn tiers, plugin enumeration, replacement-input
 //!   semantics, hosted authentication and model quality. Patch effects and completion were
 //!   observed; patch hook-name/rendering claims are not widened by that observation.
@@ -83,13 +86,21 @@ pub const ADAPTER_ID: &str = "codex";
 
 /// The channel `--context` files reach codex through: inline in the prompt, ahead of the task
 /// (design amendment a35). `codex exec` 0.153.4 expands no `@path` mention there (relayed
-/// measurement, 2026-10-20).
+/// measurement, 2026-10-20); that was not driven on 0.160.0, and the channel does not depend on
+/// it, because the files are inlined either way.
 pub const CONTEXT_CHANNEL: metaharness_protocol::ContextChannel =
     metaharness_protocol::ContextChannel::UserPrompt;
 
 /// The vendor versions this adapter was written against (design § 8.4 O1).
 ///
-/// One entry, because the rollout format is not a stable public schema: a verdict that changed
-/// because the reader changed must be visible as such rather than as a change in the agent's
-/// behaviour.
-pub const PINNED_VERSIONS: [&str; 1] = ["0.153.4"];
+/// Each entry is a release the native fixture drove, because the rollout format is not a stable
+/// public schema: a verdict that changed because the reader changed must be visible as such
+/// rather than as a change in the agent's behaviour. 0.153.4 is amendment a25's qualification;
+/// 0.160.0 is `docs/research/2026-10-23-codex-0.160.0-record-surface.md`, where the eight native
+/// cases passed on both binaries, the record order the reader holds on was the same, and each
+/// claim the adapter cites was re-read at `rust-v0.160.0`. One reader serves both: the 0.160.0
+/// rollouts the fixture wrote add fields the reader does not map and move none it maps. The two
+/// shapes the 0.160.0 source adds, a `RolloutItem::RetainedContext` record and a
+/// `configuration_update` response item, did not appear in them; the reader would keep either as
+/// `opaque`.
+pub const PINNED_VERSIONS: [&str; 2] = ["0.153.4", "0.160.0"];
