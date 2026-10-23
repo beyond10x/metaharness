@@ -111,8 +111,11 @@ fn rendering() -> BTreeMap<String, Option<String>> {
 ///
 /// Two entries need their reason beside them:
 ///
-/// * `dir.list` renders to `Glob`, because 2.1.239 offers no directory-listing tool at all — the
-///   offered set read from a 2.1.239 opening record carries `Glob` and `Grep` and no `LS`.
+/// * `dir.list` renders to `Glob`, because no pinned binary has a directory-listing tool: there is
+///   no `LS`. 2.1.305 and 2.1.309 offer `Glob` and `Grep` only when `--tools` names them
+///   (observed; 2.1.304 unverified), so the
+///   native launch names them ([`crate::NATIVE_TOOLS`], design amendment a53) and the owned
+///   surface serves both through its catalogue.
 /// * `subagent.spawn` renders to `Task` and is **not admitted by default** on any adapter: a
 ///   subagent's tool set is derived by nothing in these decisions and would be a route around
 ///   the per-step admission (design § 5.2). Rendering it is not admitting it.

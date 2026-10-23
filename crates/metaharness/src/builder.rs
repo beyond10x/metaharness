@@ -873,6 +873,10 @@ fn start_claude(
         if !refusals.is_empty() {
             return Err(Refusal::Control { refusals });
         }
+        // Before the scratch exists: a frame admitting an operation the native launch offers no
+        // tool for is refused by name (amendment a53 § 6).
+        metaharness_claude::guard_native_frame(&spec, frame.as_ref())
+            .map_err(Refusal::from_claude_launch)?;
 
         let scratch = tempfile::TempDir::new()?;
         guard_scratch_path(scratch.path())?;

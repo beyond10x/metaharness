@@ -3,6 +3,7 @@
 //! counts and vendor-computed prices are synthetic inputs, never evidence of paid model usage.
 #![cfg(target_os = "linux")]
 
+use metaharness_protocol::Operation;
 use serde_json::{Value, json};
 use std::collections::BTreeSet;
 use std::fmt::Write as _;
@@ -54,9 +55,16 @@ impl Credentials {
 enum Mode {
     Text,
     Refusal,
-    Tool { deny: bool },
+    Tool {
+        deny: bool,
+    },
+    /// One turn that calls `Glob`, which the native launch offers only because `--tools` names it
+    /// (design amendment a53), then a final answer.
+    Glob,
     RepeatTool,
-    Hang { command: &'static str },
+    Hang {
+        command: &'static str,
+    },
 }
 
 struct Provider {
@@ -268,27 +276,40 @@ fn serve(
     if matches!(mode, Mode::Refusal) {
         return reply(&mut stream, "400 Bad Request", "application/json", &json!({"type":"error","error":{"type":"invalid_request_error","message":"fixture model refusal"}}).to_string());
     }
-    let tool =
-        matches!(mode, Mode::RepeatTool) || (matches!(mode, Mode::Tool { .. }) && *turn == 0);
-    if tool
+    let call = match mode {
+        Mode::RepeatTool => Some(bash_call()),
+        Mode::Tool { .. } if *turn == 0 => Some(bash_call()),
+        Mode::Glob if *turn == 0 => Some(("Glob", json!({"pattern":"*"}))),
+        _ => None,
+    };
+    if let Some((name, _)) = &call
         && !body["tools"]
             .as_array()
-            .is_some_and(|tools| tools.iter().any(|t| t["name"] == "Bash"))
+            .is_some_and(|tools| tools.iter().any(|t| t["name"] == *name))
     {
-        return Err(invalid("native request did not offer Bash"));
+        return Err(invalid(&format!("native request did not offer {name}")));
     }
     *turn += 1;
-    respond_message(&mut stream, body, tool, *turn)
+    respond_message(&mut stream, body, call.as_ref(), *turn)
+}
+
+fn bash_call() -> (&'static str, Value) {
+    (
+        "Bash",
+        json!({"command":"printf marker > native-fixture-marker; printf native-fixture-tool","description":"Write the owned fixture marker"}),
+    )
 }
 
 fn respond_message(
     stream: &mut TcpStream,
     body: &Value,
-    tool: bool,
+    call: Option<&(&'static str, Value)>,
     turn: usize,
 ) -> io::Result<()> {
-    let content = if tool {
-        json!({"type":"tool_use","id":format!("fixture-call-{turn}"),"name":"Bash","input":{"command":"printf marker > native-fixture-marker; printf native-fixture-tool","description":"Write the owned fixture marker"}})
+    let tool = call.is_some();
+    let name = call.map_or("", |(name, _)| *name);
+    let content = if let Some((name, input)) = call {
+        json!({"type":"tool_use","id":format!("fixture-call-{turn}"),"name":name,"input":input})
     } else {
         json!({"type":"text","text":ANSWER})
     };
@@ -298,7 +319,7 @@ fn respond_message(
         return reply(stream, "200 OK", "application/json", &response.to_string());
     }
     let start = if tool {
-        json!({"type":"tool_use","id":content["id"],"name":"Bash","input":{}})
+        json!({"type":"tool_use","id":content["id"],"name":name,"input":{}})
     } else {
         json!({"type":"text","text":""})
     };
@@ -561,11 +582,13 @@ fn run_in(
                 root.display()
             );
         }
-        assert!(
-            Instant::now() < deadline,
-            "native fixture exceeded 45 seconds; private evidence: {}",
-            root.display()
-        );
+        if Instant::now() >= deadline {
+            retain_provider(&root, &provider);
+            panic!(
+                "native fixture exceeded 45 seconds; private evidence: {}",
+                root.display()
+            );
+        }
         thread::sleep(Duration::from_millis(20));
     };
     let events = collect_evidence(&root, &provider, credentials);
@@ -771,6 +794,77 @@ fn native_hook_allows_and_denies_the_real_marker_effect() {
             .find(|e| e["event"] == "tool.result" && e["call_id"] == "fixture-call-1")
             .unwrap();
         assert_eq!(result["is_error"], deny);
+    }
+}
+
+/// The native launch names its built-ins with `--tools` (design amendment a53), so the opening
+/// record offers exactly the pinned row: `Glob` and `Grep` included, every rendered operation's
+/// tool present except the ones the adapter refuses by name before the spawn (`TodoWrite`). A
+/// `Glob` call then goes through the `PreToolUse` hook like any other: the seam asks, the fixture
+/// allows, and the result lists the file the test planted.
+#[test]
+#[ignore = "actual Claude and production driver; explicit binaries/evidence and isolated loopback network namespace required"]
+fn native_launch_offers_its_pinned_tools_and_the_hook_decides_glob() {
+    let _lease = NATIVE_RUN
+        .lock()
+        .unwrap_or_else(std::sync::PoisonError::into_inner);
+    let pinned: BTreeSet<&str> = metaharness_claude::native_tools(vendor_version())
+        .expect("a native row for the pinned version")
+        .iter()
+        .copied()
+        .collect();
+    let unoffered: BTreeSet<&str> = metaharness_claude::native_unoffered_operations()
+        .iter()
+        .filter_map(metaharness_claude::render_operation)
+        .collect();
+    assert_eq!(unoffered, BTreeSet::from(["TodoWrite"]));
+    for credentials in Credentials::ALL {
+        let (root, events, exit) = run_in(Mode::Glob, credentials, &[], |root| {
+            fs::write(root.join("work/glob-target.txt"), "planted").unwrap();
+        });
+        assert_eq!(exit, 0, "{credentials:?}: {}", root.display());
+        let started = events
+            .iter()
+            .find(|e| e["event"] == "session.started")
+            .unwrap();
+        let offered: BTreeSet<&str> = started["offered_tools"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .map(|t| t["name"].as_str().or_else(|| t.as_str()).unwrap())
+            .collect();
+        assert_eq!(offered, pinned, "{credentials:?}");
+        for operation in Operation::PARAMETERLESS {
+            let Some(tool) = metaharness_claude::render_operation(&operation) else {
+                continue;
+            };
+            assert_eq!(
+                offered.contains(tool),
+                !unoffered.contains(tool),
+                "{credentials:?}: {} renders to {tool}",
+                operation.name()
+            );
+        }
+        let requested = events
+            .iter()
+            .find(|e| e["event"] == "tool.requested" && e["call_id"] == "fixture-call-1")
+            .unwrap_or_else(|| panic!("{credentials:?}: no Glob request: {}", root.display()));
+        assert_eq!(requested["name"], "Glob");
+        assert_eq!(requested["decision_required"], true);
+        assert_eq!(requested["operations"], json!(["dir.list"]));
+        assert_eq!(requested["seam"], "hook");
+        assert!(events.iter().any(|e| e["event"] == "tool.decided"
+            && e["call_id"] == "fixture-call-1"
+            && e["decision"]["decision"] == "allow"));
+        let result = events
+            .iter()
+            .find(|e| e["event"] == "tool.result" && e["call_id"] == "fixture-call-1")
+            .unwrap();
+        assert_ne!(result["is_error"], true, "{credentials:?}");
+        assert!(
+            result.to_string().contains("glob-target.txt"),
+            "{credentials:?}: {result}"
+        );
     }
 }
 

@@ -4892,3 +4892,47 @@ under fallback metadata, was offered no `apply_patch`, and failed the patch case
 on 0.153.4 came back empty and was not retried.
 
 No event or frame wire change.
+
+### Amendment a53 — the native Claude launch names its built-in tools, so `Glob` and `Grep` are offered (2026-10-23)
+
+On 2.1.305 and 2.1.309 the vendor drops `Glob` and `Grep` from a session unless the launch opts
+in, and the opt-in fires only when `--tools` or `--allowedTools` names one of them. Under § 7.5
+strategy A the native launch passed neither, so `dir.list` and `search`, which `seam.rs` renders as
+`Glob` and `Grep`, reached no tool. This closes the open item a51 § 7 names
+(`story:claude-dir-list-search-unregistered`). Evidence:
+`docs/research/2026-10-23-claude-search-tools-opt-in.md`.
+
+**1. The native argv carries `--tools <list>`.** Under `--tool-surface native` the list is the
+pinned built-in set, the 21 tools a session opens with by default, then `Glob` and `Grep`. On
+2.1.305 and 2.1.309 that gives exactly the default set plus `Glob` and `Grep`, 23 tools. The owned
+surface still passes `--tools ""` and `--mcp-config`.
+
+**2. `--tools` decides what is offered, never what runs.** The list does not depend on the frame.
+Per-call decisions stay with the `PreToolUse` hook (§ 7.5 strategy A). The native fixture drives
+one `Glob` call through the hook on each pinned binary and records the decision.
+
+**3. Two alternatives were rejected.** `--allowedTools Glob,Grep` also opts in, but it adds a bare
+allow rule that pre-approves both tools and shadows the seam, which `guard_shadowing` refuses.
+`--tools default,Glob,Grep` offers only `Glob` and `Grep`: the vendor does not expand `default`
+inside a list.
+
+**4. One list per pinned version.** `NATIVE_TOOLS` in `metaharness-claude` has one row per entry of
+`PINNED_VERSIONS`, and a test holds the rows to the pin. The plan does not know the resolved
+binary's version (H9 is read from the opening record), so the argv uses one list, and a test holds
+every row equal to it. The 2.1.304 row is **unverified** (invariant 4): 2.1.304 is not on this
+machine, and the row is carried on a33's evidence that 2.1.304 and 2.1.305 register the same
+built-ins.
+
+**5. The vendor ignores names it does not offer.** A list with `NoSuchTool` opens the same 23 tools
+with nothing on stderr, on 2.1.305, 2.1.307, 2.1.308 and 2.1.309. So the vendor does not refuse a
+stale list, and an unoffered name in a list proves nothing. The fixture therefore asserts the
+opening record's `offered_tools` against the row.
+
+**6. `task.todo` is not offered on the native surface.** `TodoWrite` is in none of the sessions,
+including one whose `--tools` names it. It stays out of the list. A frame admitting `task.todo`
+under `--tool-surface native` is refused by name before the spawn (`NotOfferedNatively`), because
+a frame that admits an operation which reaches no tool is the condition a51 § 7 records for
+`dir.list`. The refusal is derived from the list, so a rendered operation whose tool leaves the
+list is refused the same way. The cause is open: the probes do not show why the vendor drops it.
+
+No event or frame wire change.

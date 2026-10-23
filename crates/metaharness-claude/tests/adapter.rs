@@ -9,8 +9,9 @@ use std::path::PathBuf;
 use metaharness_claude::{
     ADAPTER_ID, BUILTIN_PLUGINS, CONTEXT_CHANNEL, HOOK_TIMEOUT_SECONDS, LaunchContext,
     LaunchRefusal, MEMORY_CANARIES, MEMORY_SHAPES, MENTION_CANARIES, MemoryCanary, Mention,
-    PINNED_VERSIONS, TranscriptReader, builtin_plugin_source, builtin_plugins, capabilities,
-    conformance_vectors, memory_canary, mention_canary, parse_hook_input, plan_launch,
+    NATIVE_TOOLS, PINNED_VERSIONS, TranscriptReader, builtin_plugin_source, builtin_plugins,
+    capabilities, conformance_vectors, memory_canary, mention_canary, native_tools,
+    native_tools_argument, native_unoffered_operations, parse_hook_input, plan_launch,
     render_hook_response, render_operation,
 };
 use metaharness_protocol::{
@@ -77,6 +78,46 @@ fn every_pinned_version_declares_the_plugins_its_binary_compiles_in() {
         None,
         "an unpinned binary has no list"
     );
+}
+
+/// Every pinned version declares the tools its binary offers under the native launch, and the one
+/// argv list is every row (design amendment a53). A pin added without a row fails the first
+/// assertion; a pin whose binary offers a different set fails the second until the argv can say
+/// which binary it starts. Every operation the seam renders is offered or is refused before the
+/// spawn: `mcp.call` has no static name, and `task.todo` is the one refused.
+#[test]
+fn every_pinned_version_declares_its_native_tools_and_the_argv_carries_each_row() {
+    let listed: Vec<&str> = NATIVE_TOOLS.iter().map(|(version, _)| *version).collect();
+    assert_eq!(
+        listed, PINNED_VERSIONS,
+        "one native tool list per pinned version, in the pin's order"
+    );
+    for (version, tools) in NATIVE_TOOLS {
+        assert_eq!(tools.join(","), native_tools_argument(), "{version}");
+        assert!(
+            tools.contains(&"Glob") && tools.contains(&"Grep"),
+            "{version}"
+        );
+        assert!(!tools.contains(&"default"), "{version}");
+    }
+    assert_eq!(
+        native_tools("2.1.308"),
+        None,
+        "an unpinned binary has no list"
+    );
+    assert_eq!(native_unoffered_operations(), vec![Operation::TaskTodo]);
+    for operation in Operation::PARAMETERLESS {
+        let Some(tool) = render_operation(&operation) else {
+            continue;
+        };
+        let offered = native_tools("2.1.309").is_some_and(|tools| tools.contains(&tool));
+        assert_eq!(
+            offered,
+            !native_unoffered_operations().contains(&operation),
+            "{} renders to {tool}",
+            operation.name()
+        );
+    }
 }
 
 /// Correction round 1, condition 3: every pinned version records its `@`-mention canary, measured

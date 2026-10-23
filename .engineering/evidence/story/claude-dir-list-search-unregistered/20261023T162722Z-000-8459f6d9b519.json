@@ -1,0 +1,13 @@
+{
+  "at": "2026-10-23T16:27:22Z",
+  "actor": "human:timo",
+  "artifact": "story:claude-dir-list-search-unregistered",
+  "kind": "story",
+  "revision": 1,
+  "change": {
+    "change": "evidence",
+    "kind": "test_result",
+    "source": "native fixture lane, loopback-only namespace, credentials none and loopback, on story/claude-search-optin: 2.1.309 10 passed 0 failed, 2.1.305 10 passed 0 failed; the 0.15.0 driver on 2.1.309 9 passed 1 failed (the new Glob case)",
+    "reference": "docs/research/2026-10-23-claude-search-tools-opt-in.md, design amendment a53"
+  }
+}

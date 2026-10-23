@@ -591,6 +591,14 @@ pub enum LaunchRefusal {
         /// The programs the run named.
         programs: Vec<String>,
     },
+    /// The frame admits an operation whose rendered tool the native launch does not offer
+    /// (design amendment a53 § 6). The frame would admit it, and no call could make it.
+    NotOfferedNatively {
+        /// The operation's wire name.
+        operation: String,
+        /// The vendor tool it renders to.
+        tool: String,
+    },
 }
 
 /// The code a [`LaunchRefusal::ScratchPathNamesPluginVariable`] message begins with (design
@@ -733,8 +741,55 @@ impl fmt::Display for LaunchRefusal {
             LaunchRefusal::CatalogueUnread { .. }
             | LaunchRefusal::CatalogueWithoutOwnedSurface
             | LaunchRefusal::CatalogueWithAllowProgram { .. } => catalogue_words(self, f),
+            LaunchRefusal::NotOfferedNatively { operation, tool } => {
+                not_offered_natively(f, operation, tool)
+            }
         }
     }
+}
+
+fn not_offered_natively(f: &mut fmt::Formatter<'_>, operation: &str, tool: &str) -> fmt::Result {
+    write!(
+        f,
+        "the frame admits {operation}, which renders to {tool}, and no pinned {ADAPTER_ID} binary \
+         offers {tool} under --tool-surface native; the operation would be admitted and reach no \
+         tool, so the run is refused before the spawn (design amendment a53)"
+    )
+}
+
+/// Refuse a native run whose frame admits an operation no pinned binary offers (design amendment
+/// a53 § 6).
+///
+/// Run by the caller before anything is spawned. The plan does not see the frame, which the
+/// library resolves before planning, so this check sits beside [`plan_launch`] rather than inside
+/// it. The owned surface serves its operations itself and is not checked here.
+///
+/// # Errors
+///
+/// [`LaunchRefusal::NotOfferedNatively`] for the first admitted operation, in
+/// [`metaharness_protocol::Operation::PARAMETERLESS`] order, whose rendered tool the native
+/// launch does not offer.
+pub fn guard_native_frame(
+    spec: &RunSpec,
+    frame: Option<&metaharness_protocol::Frame>,
+) -> Result<(), LaunchRefusal> {
+    let Some(frame) = frame else {
+        return Ok(());
+    };
+    if spec.tool_surface != ToolSurface::Native {
+        return Ok(());
+    }
+    for operation in crate::native_unoffered_operations() {
+        if frame.operations.admits(&operation) {
+            return Err(LaunchRefusal::NotOfferedNatively {
+                operation: operation.name().to_string(),
+                tool: crate::render_operation(&operation)
+                    .unwrap_or_default()
+                    .to_string(),
+            });
+        }
+    }
+    Ok(())
 }
 
 /// How the adapter declares a decision mode, in the words of the refusal that names it.
@@ -1345,6 +1400,15 @@ fn build_args(
         args.push(mcp_config_path.display().to_string());
         args.push("--allowedTools".to_string());
         args.push(format!("mcp__{TOOL_SERVER_NAME}"));
+    } else {
+        // Strategy A (design § 7.5, amendment a53). The pinned binaries drop `Glob` and `Grep`
+        // unless `--tools` or `--allowedTools` names one of them, and the seam renders `dir.list`
+        // and `search` to those two. `--allowedTools` would add a bare grant that shadows the
+        // seam, and `default,Glob,Grep` offers only the two named. So the launch names the whole
+        // pinned set. This decides what is offered and not what runs: every call still meets the
+        // `PreToolUse` hook, and the list does not depend on the frame.
+        args.push("--tools".to_string());
+        args.push(crate::native_tools_argument());
     }
     args
 }
@@ -3222,13 +3286,106 @@ mod tests {
     }
 
     /// A `native` run carries no MCP configuration at all, so nothing is written claiming servers
-    /// it never had.
+    /// it never had. It names the pinned built-in set with `--tools`, `Glob` and `Grep` included,
+    /// because the pinned binaries offer those two only when named (amendment a53), and it adds no
+    /// `--allowedTools` grant that would shadow the seam.
     #[test]
     fn a_native_surface_plans_no_mcp_configuration_and_no_flag() {
         let plan = plan_launch(&spec(), &context()).expect("plans");
         assert!(plan.mcp_config.is_none());
         assert!(!plan.args.iter().any(|arg| arg == "--mcp-config"));
-        assert!(!plan.args.iter().any(|arg| arg == "--tools"));
+        assert!(!plan.args.iter().any(|arg| arg == "--allowedTools"));
+        let at: Vec<usize> = plan
+            .args
+            .iter()
+            .enumerate()
+            .filter(|(_, arg)| *arg == "--tools")
+            .map(|(index, _)| index)
+            .collect();
+        assert_eq!(at.len(), 1, "{:?}", plan.args);
+        assert_eq!(
+            plan.args[at[0] + 1],
+            "Task,Bash,CronCreate,CronDelete,CronList,Edit,EnterWorktree,ExitWorktree,ListAgents,\
+             NotebookEdit,Read,ReportFindings,ScheduleWakeup,SendMessage,Skill,TaskStop,\
+             ToolSearch,WebFetch,WebSearch,Workflow,Write,Glob,Grep"
+        );
+        assert!(
+            !plan.args[at[0] + 1]
+                .split(',')
+                .any(|name| name == "default")
+        );
+    }
+
+    /// Amendment a53 § 6: a native frame admitting `task.todo` is refused by name, because no
+    /// pinned binary offers `TodoWrite` under the native launch. The owned surface, a frame that
+    /// does not admit it, and no frame at all are not refused.
+    #[test]
+    fn a_native_frame_admitting_an_unoffered_operation_is_refused_by_name() {
+        use metaharness_protocol::{
+            Frame, Handoff, NodeRef, Operation, OperationSet, StepRef, SubjectScope, WorkflowRef,
+        };
+        let frame = |operations: Vec<Operation>| {
+            Frame {
+                workflow: WorkflowRef {
+                    id: "fixture".into(),
+                    version: "1".into(),
+                },
+                node: NodeRef { id: "step".into() },
+                step: StepRef {
+                    workflow: "fixture".into(),
+                    state: "step".into(),
+                    index: 0,
+                    attempt: 1,
+                },
+                prior: Vec::new(),
+                obligations: Vec::new(),
+                reaching: Vec::new(),
+                next: Vec::new(),
+                handoff: Handoff::Artifact {
+                    name: "the answer".into(),
+                    kind: None,
+                },
+                operations: OperationSet::of(operations),
+                subjects: SubjectScope::default(),
+                entities: None,
+                digest: Digest::of(b""),
+            }
+            .seal()
+        };
+        let native = spec();
+        let todo = frame(vec![Operation::FileRead, Operation::TaskTodo]);
+        let refusal =
+            guard_native_frame(&native, Some(&todo)).expect_err("TodoWrite is offered nowhere");
+        assert_eq!(
+            refusal,
+            LaunchRefusal::NotOfferedNatively {
+                operation: "task.todo".to_string(),
+                tool: "TodoWrite".to_string(),
+            }
+        );
+        let words = refusal.to_string();
+        assert!(
+            words.contains("task.todo") && words.contains("TodoWrite"),
+            "{words}"
+        );
+        assert!(words.contains("--tool-surface native"), "{words}");
+        assert_eq!(refusal.code(), None);
+
+        let search = frame(vec![
+            Operation::DirList,
+            Operation::Search,
+            Operation::FileRead,
+        ]);
+        assert_eq!(guard_native_frame(&native, Some(&search)), Ok(()));
+        assert_eq!(guard_native_frame(&native, None), Ok(()));
+        let mut owned = spec();
+        owned.tool_surface = ToolSurface::Owned;
+        assert_eq!(guard_native_frame(&owned, Some(&todo)), Ok(()));
+        assert_eq!(
+            crate::native_unoffered_operations(),
+            vec![Operation::TaskTodo],
+            "task.todo alone, on every pinned version"
+        );
     }
 
     /// A specifier-carrying entry does not auto-approve the whole tool, so it is not the trap

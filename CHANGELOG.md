@@ -3,6 +3,17 @@
 What changed. The design document carries *why*; where code and design disagreed, the design
 was amended and the amendment is named here.
 
+## [Unreleased]
+
+### Fixed
+
+- Under `--tool-surface native`, Claude Code 2.1.305 and 2.1.309 now offer `Glob` and `Grep`, so `dir.list` and `search` reach a tool and the `PreToolUse` hook decides each call. The native fixture passes 10/10 on 2.1.305 and on 2.1.309; the 0.15.0 driver fails the new case. Evidence: `docs/research/2026-10-23-claude-search-tools-opt-in.md` (a53).
+
+### Changed
+
+- **Breaking:** under `--tool-surface native`, a frame admitting `task.todo` is refused by name before the spawn (`LaunchRefusal::NotOfferedNatively`), because no pinned Claude Code binary offers `TodoWrite`, even when `--tools` names it (a53 § 6).
+- The native Claude argv now carries `--tools <list>`: the pinned built-ins plus `Glob` and `Grep`, one row per pinned version in `metaharness_claude::NATIVE_TOOLS` (2.1.304 unverified). The list does not depend on the frame, and the owned surface is unchanged (a53).
+
 ## [0.15.0] — 2026-10-23
 
 ### Changed

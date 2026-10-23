@@ -212,6 +212,43 @@ fn an_owned_tool_surface_is_refused_for_a_kind_whose_tools_cannot_be_taken_away(
     }
 }
 
+/// Amendment a53 § 6: no pinned Claude binary offers `TodoWrite` under the native launch, so a
+/// frame admitting `task.todo` there is refused by name before anything is spawned. The same
+/// frame without `task.todo` plans and spawns.
+#[test]
+fn a_native_claude_frame_admitting_task_todo_is_refused_before_the_spawn() {
+    let log = ScriptedLog::new();
+    let mut runner = ScriptedRunner::new(vec![ScriptStep::line(INIT)], log.clone());
+    let refusal = Metaharness::new(Kind::Claude)
+        .with_decisions(DecisionMode::Frame)
+        .with_frame(frame_admitting(OperationSet::of([
+            Operation::DirList,
+            Operation::TaskTodo,
+        ])))
+        .start_with_clock(
+            Input::Prompt("do the thing".to_string()),
+            &mut runner,
+            &mut ScriptedSeams,
+            Box::new(ManualClock::new()),
+        )
+        .expect_err("TodoWrite is offered by no pinned binary");
+    assert!(matches!(refusal, Refusal::Launch { .. }), "{refusal}");
+    let said = refusal.to_string();
+    assert!(
+        said.contains("task.todo") && said.contains("TodoWrite"),
+        "{said}"
+    );
+    assert_eq!(log.spawns(), 0, "nothing was spawned");
+
+    let started = start(
+        Metaharness::new(Kind::Claude)
+            .with_decisions(DecisionMode::Frame)
+            .with_frame(frame_admitting(OperationSet::of([Operation::DirList]))),
+        vec![ScriptStep::line(INIT), ScriptStep::line(END)],
+    );
+    assert_eq!(started.log.spawns(), 1);
+}
+
 /// A caller with two problems should learn about the one they can fix — and should learn it
 /// **before** anything is spawned, because a refusal that costs a process start is a refusal that
 /// costs money on the run after this one.

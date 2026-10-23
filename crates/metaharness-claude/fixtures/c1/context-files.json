@@ -15,7 +15,9 @@
     "--model",
     "a-model",
     "--max-turns",
-    "8"
+    "8",
+    "--tools",
+    "Task,Bash,CronCreate,CronDelete,CronList,Edit,EnterWorktree,ExitWorktree,ListAgents,NotebookEdit,Read,ReportFindings,ScheduleWakeup,SendMessage,Skill,TaskStop,ToolSearch,WebFetch,WebSearch,Workflow,Write,Glob,Grep"
   ],
   "env": {
     "CLAUDE_CONFIG_DIR": "/scratch/run-1/claude-home",

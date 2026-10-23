@@ -59,8 +59,8 @@ pub use hook::{
 pub use launch::{
     CredentialCopy, ENDPOINT_KEY_POSTURE, HOOK_COMMAND_PLUGIN_VARIABLES, HOOK_TIMEOUT_SECONDS,
     LaunchContext, LaunchPlan, LaunchRefusal, LoopbackParams, SCRATCH_PATH_NAMES_PLUGIN_VARIABLE,
-    ScratchFile, catalogue_path, child_path, hook_program_path, mcp_config_path, plan_launch,
-    settings_path,
+    ScratchFile, catalogue_path, child_path, guard_native_frame, hook_program_path,
+    mcp_config_path, plan_launch, settings_path,
 };
 pub use marketplace::{
     INSTALLED_PLUGINS, KNOWN_MARKETPLACES, MARKETPLACES_HOME, MarketplaceMatch, MarketplaceRefusal,
@@ -253,6 +253,91 @@ pub const BUILTIN_PLUGINS: [(&str, &[&str]); 3] = [
     ("2.1.305", &COMPILED_IN_2_1_304_2_1_305_AND_2_1_309),
     ("2.1.309", &COMPILED_IN_2_1_304_2_1_305_AND_2_1_309),
 ];
+
+/// The built-in tools the native launch names with `--tools` (design amendment a53).
+///
+/// The first 21 are the set a 2.1.305 and a 2.1.309 session opens with when `--tools` is absent,
+/// in the opening record's order. `Glob` and `Grep` follow. Both binaries drop those two unless the
+/// launch names them in `--tools` or `--allowedTools`, and `--allowedTools` would pre-approve them
+/// past the seam. With this list both binaries open with exactly these 23 tools. `TodoWrite` is
+/// absent: neither binary offers it, even when `--tools` names it, and a name the binary does not
+/// offer is dropped without a word, so listing it would prove nothing.
+const NATIVE_2_1_304_2_1_305_AND_2_1_309: [&str; 23] = [
+    "Task",
+    "Bash",
+    "CronCreate",
+    "CronDelete",
+    "CronList",
+    "Edit",
+    "EnterWorktree",
+    "ExitWorktree",
+    "ListAgents",
+    "NotebookEdit",
+    "Read",
+    "ReportFindings",
+    "ScheduleWakeup",
+    "SendMessage",
+    "Skill",
+    "TaskStop",
+    "ToolSearch",
+    "WebFetch",
+    "WebSearch",
+    "Workflow",
+    "Write",
+    "Glob",
+    "Grep",
+];
+
+/// The built-in tools each pinned binary offers under the native launch, keyed by the version
+/// (design amendment a53).
+///
+/// One row per entry of [`PINNED_VERSIONS`], in the same order, and a test holds the two to each
+/// other. The plan does not know which pinned binary it will start (H9 is read from the opening
+/// record), so the argv carries one list, [`native_tools_argument`], and a test holds every row
+/// equal to it: a pin whose binary offers a different set fails there.
+///
+/// | version | label |
+/// |---|---|
+/// | 2.1.305, 2.1.309 | **observed**: the opening record of a credential-free launch with this list, and the native fixture's `offered_tools` |
+/// | 2.1.304 | **unverified**: not on this machine; carried on a33's evidence that 2.1.304 and 2.1.305 register the same built-ins |
+pub const NATIVE_TOOLS: [(&str, &[&str]); 3] = [
+    ("2.1.304", &NATIVE_2_1_304_2_1_305_AND_2_1_309),
+    ("2.1.305", &NATIVE_2_1_304_2_1_305_AND_2_1_309),
+    ("2.1.309", &NATIVE_2_1_304_2_1_305_AND_2_1_309),
+];
+
+/// The tools the pinned binary of `version` offers under the native launch, or `None` for a
+/// version this adapter does not pin.
+#[must_use]
+pub fn native_tools(version: &str) -> Option<&'static [&'static str]> {
+    NATIVE_TOOLS
+        .iter()
+        .find(|(pinned, _)| *pinned == version)
+        .map(|(_, names)| *names)
+}
+
+/// The value of `--tools` under the native launch: the shared list, comma-separated.
+#[must_use]
+pub fn native_tools_argument() -> String {
+    NATIVE_2_1_304_2_1_305_AND_2_1_309.join(",")
+}
+
+/// Every operation the seam renders to a built-in tool the native launch does not offer
+/// (design amendment a53 § 6), in [`metaharness_protocol::Operation::PARAMETERLESS`] order.
+///
+/// Derived from the list, so a tool that leaves it puts its operation here without a second edit.
+/// On every pinned version this is `task.todo` alone.
+#[must_use]
+pub fn native_unoffered_operations() -> Vec<metaharness_protocol::Operation> {
+    metaharness_protocol::Operation::PARAMETERLESS
+        .iter()
+        .filter(|operation| {
+            render_operation(operation)
+                .is_some_and(|tool| !NATIVE_2_1_304_2_1_305_AND_2_1_309.contains(&tool))
+        })
+        .cloned()
+        .collect()
+}
 
 /// What one pinned binary does with an `@path` mention, per route (design amendment a35,
 /// correction round 1). `true` means the binary turned `@marker.txt` into a synthesised *"Result of

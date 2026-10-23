@@ -13,7 +13,9 @@
     "--model",
     "a-model",
     "--max-turns",
-    "8"
+    "8",
+    "--tools",
+    "Task,Bash,CronCreate,CronDelete,CronList,Edit,EnterWorktree,ExitWorktree,ListAgents,NotebookEdit,Read,ReportFindings,ScheduleWakeup,SendMessage,Skill,TaskStop,ToolSearch,WebFetch,WebSearch,Workflow,Write,Glob,Grep"
   ],
   "env": {
     "ANTHROPIC_API_KEY": "sk-not-a-real-key",
