@@ -143,7 +143,7 @@ object, carry a key that is not one of the entry's input fields, or leave out (o
 field the entry requires. The answer names the entry and the field. A field the entry does not
 require, given as null, reads as absent and is taken out before the call is performed. A field
 given a value that the performing `b10x-harness` entry does not declare, such as `process.run`'s
-`timeout_ms` at 0.18.0, is refused by the harness by name, and nothing is done (design amendment
+`timeout_ms` at 0.18.0 and 0.19.0, is refused by the harness by name, and nothing is done (design amendment
 a50 § 2).
 
 Refused before the spawn with exit 2, by name: `catalogue-not-carried` on `codex` and `b10x`;

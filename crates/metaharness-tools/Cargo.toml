@@ -11,9 +11,9 @@ publish = false
 workspace = true
 
 [dependencies]
-b10x-harness-catalogue = { git = "https://github.com/beyond10x/harness", rev = "330e2cde6299e4e55b05664001e73903959a076f" }
-b10x-harness-wire = { git = "https://github.com/beyond10x/harness", rev = "330e2cde6299e4e55b05664001e73903959a076f" }
-b10x-tool-contract = { git = "https://github.com/beyond10x/tools", tag = "0.4.0" }
+b10x-harness-catalogue = { git = "https://github.com/beyond10x/harness", rev = "13d72c06a78f92fcc6027c9317dd314c6a6ce34e" }
+b10x-harness-wire = { git = "https://github.com/beyond10x/harness", rev = "13d72c06a78f92fcc6027c9317dd314c6a6ce34e" }
+b10x-tool-contract = { git = "https://github.com/beyond10x/tools", tag = "0.5.0" }
 serde_json = { workspace = true, features = ["raw_value"] }
 serde_yaml_ng = "0.10"
 

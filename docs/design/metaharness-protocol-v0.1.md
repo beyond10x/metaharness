@@ -5057,3 +5057,42 @@ names, and that `driven_surface` refuses the runner flag the prompt names. It al
 `releases/source.yaml` are byte-identical between `4d22c903` and `23294974`.
 
 No event or frame wire change.
+
+### Amendment a59 — the b10x pin moves to harness 0.19.0 (2026-10-26)
+
+A trial's harness arm on 2026-10-24 read H9 `gap`: the installed loop was 0.19.0 and the adapter
+was pinned to `["0.18.0"]`. Harness lines are read at `13d72c06a78f92fcc6027c9317dd314c6a6ce34e`,
+the commit the annotated tag `0.19.0` points at. Evidence:
+`docs/research/2026-10-26-b10x-harness-0.19.0-adapter-surface.md`.
+
+**1. The pair moves; 0.18.0 leaves the pin.** On a25's rule, from 0.18.0 (`330e2cde`) to
+**0.19.0**: both manifests, the lock, `PINNED_VERSIONS` and `HARNESS_REVISION` move in one change,
+and `metaharness-tools` takes `b10x-tool-contract` at tag `0.5.0`, the tools release harness 0.19.0
+takes, so the lock still holds one harness revision and one tools revision. `PINNED_VERSIONS` is
+`["0.19.0"]`, not `["0.18.0", "0.19.0"]`: unlike the Claude and Codex pins, this one names the
+release whose library crates the workspace compiles, `cargo_resolves_exactly_the_pinned_harness`
+holds the lock's crate versions to `PINNED_VERSIONS[0]`, and the eval requires the installed banner
+to equal it. A second entry would be a claim about a binary this workspace does not compile
+against.
+
+**2. What moved.** Harness 0.19.0 changes no crate of `harness-cli`, `harness-llm`, `harness-wire`
+or `harness-loop`, so the argv the adapter emits, the `--json` record and the `credential_source`
+strings are 0.18.0's. Through tools 0.5.0, every `file_read`, `dir_list`, `search` and `find`
+reply carries `deadline_reached` and each call stops at a 10000 ms default deadline. No entry
+publishes `timeout_ms`, so a caller's non-null `timeout_ms` is still refused as undeclared (a50
+§ 2). The field reaches the model and is not written to the `--json` record, so the adapter maps
+nothing new.
+
+**3. Qualification.** The released 0.19.0 Linux archive passed its `SHA256SUMS` check and its
+banner is `b10x-harness 0.19.0`. The golden is recorded again with that executable against
+harness's emulator at `13d72c06` by the fixture README's procedure; it differs from 0.18.0's only
+in the opening line's two `captured_at` stamps and the `environment.workspace` digest, and the
+replay's expected stream only in `harness_version`. The trace domain's `transcript_digest` follows
+the new record. `contract_result`'s provider reads `b10x 0.19.0`. a25's runtime proof ran against
+the emulator, credential-free: `metaharness run b10x --strict-version --decisions observe` exits 0
+on 0.19.0 with this change and exits 2 before the spawn with the released 0.17.0.
+
+**4. Open.** A paid one-turn run on 0.19.0 was not made. No call reached the deadline, so
+`deadline_reached: true` was not observed.
+
+No event or frame wire change.

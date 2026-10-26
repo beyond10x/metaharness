@@ -1169,7 +1169,8 @@ struct ConfinedProbe<'a> {
 /// `base_url`.
 ///
 /// Every flag is a field of `RunCommand`/`RunOptions` in `crates/harness-cli/src/lib.rs` of the
-/// harness, and exists at both `330e2cde` (0.18.0) and `f0870131` (0.15.1):
+/// harness, and exists at both `330e2cde` (0.18.0) and `f0870131` (0.15.1). The pinned 0.19.0
+/// (`13d72c06`) has no diff in `crates/harness-cli/src` from 0.18.0, so its column is 0.18.0's:
 ///
 /// | flag | 0.18.0 | 0.15.1 |
 /// |---|---|---|

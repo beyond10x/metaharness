@@ -1,0 +1,12 @@
+{
+  "at": "2026-10-26T08:51:15Z",
+  "actor": "human:timo",
+  "artifact": "story:b10x-harness-pin-0-19-0",
+  "kind": "story",
+  "revision": 1,
+  "change": {
+    "change": "evidence",
+    "kind": "verification",
+    "source": "credential-free metaharness run b10x --strict-version --decisions observe against harness's emulator with the released 0.19.0 archive: this change exit 0 (session.started harness_version 0.19.0), metaharness 0.17.0 exit 2 before the spawn; golden re-recorded; design amendment a59"
+  }
+}

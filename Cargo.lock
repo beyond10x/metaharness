@@ -370,8 +370,8 @@ checksum = "f2032f911046de80f0a198e0901378627c33f59ea0ac00e363d481118bd70a53"
 
 [[package]]
 name = "b10x-harness-catalogue"
-version = "0.18.0"
-source = "git+https://github.com/beyond10x/harness?rev=330e2cde6299e4e55b05664001e73903959a076f#330e2cde6299e4e55b05664001e73903959a076f"
+version = "0.19.0"
+source = "git+https://github.com/beyond10x/harness?rev=13d72c06a78f92fcc6027c9317dd314c6a6ce34e#13d72c06a78f92fcc6027c9317dd314c6a6ce34e"
 dependencies = [
  "b10x-harness-wire",
  "b10x-tool-code-editor",
@@ -386,8 +386,8 @@ dependencies = [
 
 [[package]]
 name = "b10x-harness-loop"
-version = "0.18.0"
-source = "git+https://github.com/beyond10x/harness?rev=330e2cde6299e4e55b05664001e73903959a076f#330e2cde6299e4e55b05664001e73903959a076f"
+version = "0.19.0"
+source = "git+https://github.com/beyond10x/harness?rev=13d72c06a78f92fcc6027c9317dd314c6a6ce34e#13d72c06a78f92fcc6027c9317dd314c6a6ce34e"
 dependencies = [
  "b10x-harness-wire",
  "jsonschema",
@@ -399,8 +399,8 @@ dependencies = [
 
 [[package]]
 name = "b10x-harness-wire"
-version = "0.18.0"
-source = "git+https://github.com/beyond10x/harness?rev=330e2cde6299e4e55b05664001e73903959a076f#330e2cde6299e4e55b05664001e73903959a076f"
+version = "0.19.0"
+source = "git+https://github.com/beyond10x/harness?rev=13d72c06a78f92fcc6027c9317dd314c6a6ce34e#13d72c06a78f92fcc6027c9317dd314c6a6ce34e"
 dependencies = [
  "httpdate",
  "serde",
@@ -411,8 +411,8 @@ dependencies = [
 
 [[package]]
 name = "b10x-tool-code-editor"
-version = "0.4.0"
-source = "git+https://github.com/beyond10x/tools?tag=0.4.0#6017fccc5a0110f0f8f1da5f0a56570825cf95b5"
+version = "0.5.0"
+source = "git+https://github.com/beyond10x/tools?tag=0.5.0#99e36edceee62f7d21d4532df993c2628a70229b"
 dependencies = [
  "b10x-tool-contract",
  "schemars 1.2.3",
@@ -424,8 +424,8 @@ dependencies = [
 
 [[package]]
 name = "b10x-tool-contract"
-version = "0.4.0"
-source = "git+https://github.com/beyond10x/tools?tag=0.4.0#6017fccc5a0110f0f8f1da5f0a56570825cf95b5"
+version = "0.5.0"
+source = "git+https://github.com/beyond10x/tools?tag=0.5.0#99e36edceee62f7d21d4532df993c2628a70229b"
 dependencies = [
  "clap",
  "schemars 1.2.3",
@@ -438,8 +438,8 @@ dependencies = [
 
 [[package]]
 name = "b10x-tool-fs"
-version = "0.4.0"
-source = "git+https://github.com/beyond10x/tools?tag=0.4.0#6017fccc5a0110f0f8f1da5f0a56570825cf95b5"
+version = "0.5.0"
+source = "git+https://github.com/beyond10x/tools?tag=0.5.0#99e36edceee62f7d21d4532df993c2628a70229b"
 dependencies = [
  "b10x-tool-contract",
  "globset",
@@ -452,8 +452,8 @@ dependencies = [
 
 [[package]]
 name = "b10x-tool-process"
-version = "0.4.0"
-source = "git+https://github.com/beyond10x/tools?tag=0.4.0#6017fccc5a0110f0f8f1da5f0a56570825cf95b5"
+version = "0.5.0"
+source = "git+https://github.com/beyond10x/tools?tag=0.5.0#99e36edceee62f7d21d4532df993c2628a70229b"
 dependencies = [
  "b10x-tool-contract",
  "nix",
@@ -465,8 +465,8 @@ dependencies = [
 
 [[package]]
 name = "b10x-tool-search"
-version = "0.4.0"
-source = "git+https://github.com/beyond10x/tools?tag=0.4.0#6017fccc5a0110f0f8f1da5f0a56570825cf95b5"
+version = "0.5.0"
+source = "git+https://github.com/beyond10x/tools?tag=0.5.0#99e36edceee62f7d21d4532df993c2628a70229b"
 dependencies = [
  "b10x-tool-contract",
  "b10x-tool-fs",
@@ -479,8 +479,8 @@ dependencies = [
 
 [[package]]
 name = "b10x-tool-toolchain"
-version = "0.4.0"
-source = "git+https://github.com/beyond10x/tools?tag=0.4.0#6017fccc5a0110f0f8f1da5f0a56570825cf95b5"
+version = "0.5.0"
+source = "git+https://github.com/beyond10x/tools?tag=0.5.0#99e36edceee62f7d21d4532df993c2628a70229b"
 dependencies = [
  "b10x-tool-contract",
  "b10x-tool-process",

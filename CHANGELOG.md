@@ -3,6 +3,13 @@
 What changed. The design document carries *why*; where code and design disagreed, the design
 was amended and the amendment is named here.
 
+## [Unreleased]
+
+### Changed
+
+- **Breaking:** the b10x adapter is pinned to `b10x-harness` 0.19.0 (`13d72c06a78f92fcc6027c9317dd314c6a6ce34e`) instead of 0.18.0 (`330e2cde`). A 0.18.0 binary now reads H9 `gap`, and `--strict-version` refuses it before the spawn; install harness 0.19.0. `metaharness-tools` takes the tools crates at `0.5.0`, so the `file_read`, `dir_list`, `search` and `find` replies it serves carry `deadline_reached`. The golden loop record was captured again from the released 0.19.0 archive against harness's emulator. A credential-free `--strict-version` run on 0.19.0 exits 0. Evidence: `docs/research/2026-10-26-b10x-harness-0.19.0-adapter-surface.md` (a59).
+- The specification and the gate move to ESS 0.69.2. `spec/conformance.json` is unchanged at 116 scenarios.
+
 ## [0.17.0] — 2026-10-23
 
 ### Changed

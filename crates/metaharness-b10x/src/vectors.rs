@@ -231,7 +231,7 @@ fn working_directory_carried(input: &str, replay: &str) -> Result<(), String> {
 fn reader() -> Box<dyn HarnessSeam> {
     let mut attestation = HermeticAttestation::none(HermeticMode::Strict);
     attestation.decisions = DecisionMode::Observe;
-    B10xSeams::new(Some("0.18.0".to_owned()), Some("b10x-emulated".to_owned())).build(
+    B10xSeams::new(Some("0.19.0".to_owned()), Some("b10x-emulated".to_owned())).build(
         TranscriptRef {
             path: Some("/scratch/run/loop.jsonl".to_owned()),
             digest: None,
