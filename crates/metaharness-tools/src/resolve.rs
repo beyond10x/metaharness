@@ -173,6 +173,25 @@ pub fn subjects_of_verb(tool: &str, input: &Value, surface: VerbSurface) -> Vec<
         .collect()
 }
 
+/// What a call to a catalogue entry published **flat** would touch.
+///
+/// The b10x loop publishes its entries as tools of their own by default (`--surface flat`): the
+/// model calls `file_write` with `{"path": …}`, not `tool_invoke` with the entry inside. The entry
+/// is then the tool's name and its arguments are the call's whole input, and the subject is read
+/// from the catalogue's own rule, as [`subjects_of_verb`] reads it, so one write names one subject
+/// whichever surface carried it. Empty for a name that is no entry.
+///
+/// Without this a flat call named no subject, and a call that names none is never judged on where
+/// it acts: a frame's subject scope let every flat write through with any path. That was harmless
+/// while the b10x arm only observed, and is not once it decides (design amendment a61).
+#[must_use]
+pub fn subjects_of_entry(entry: &str, arguments: &Value) -> Vec<String> {
+    harness_catalogue::subjects_of(entry, arguments)
+        .into_iter()
+        .map(|subject| subject.as_str().to_owned())
+        .collect()
+}
+
 /// What a **vendor's own** tool call would touch, from the argument a path is recorded under.
 ///
 /// Claude Code writes `file_path`, its notebook editor writes `notebook_path`, and several tools

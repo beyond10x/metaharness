@@ -3,6 +3,21 @@
 What changed. The design document carries *why*; where code and design disagreed, the design
 was amended and the amendment is named here.
 
+## [Unreleased]
+
+### Added
+
+- `metaharness run b10x --decisions frame|ask` now decides each write and each `run` the loop asks about (atlas ADR 0104 point 3). The loop is launched with `--approve-up-to low --approve caller` and a stdin pipe. Its `approval-required` becomes a `tool.requested` on the `control_request` seam, and the frame, the embedder's `tool.decide` or the deadline answers it with one line on the loop's stdin. `abstain` and `replace` are written as a deny that says why, because the loop's grammar has only `allow` and `deny`. A loop `approval-resolved` that disagrees with the answer is a `warning{code: "approval-disagreed"}`. `capabilities b10x` declares `ask` and `frame` delivered and `tool.decide` honoured; every tier stays unverified (a61).
+- Two conformance vectors, `provider-emulated-caller-allow` and `-deny`, replay 0.20.0 caller captures and assert that the line metaharness writes is byte for byte the line the loop accepted; `c1-caller-launch` holds the caller launch's argv. `conformance b10x` runs 11 vectors and `contract_result` reads `checked: 11` (a61 § 9).
+- `metaharness_tools::subjects_of_entry` names the subjects of a flat harness entry from its own arguments (a61 § 6).
+
+### Changed
+
+- **Breaking:** the b10x adapter is pinned to `b10x-harness` 0.20.0 (`684c99f5e8c7e1d22d7b29f717b71856db81766a`) instead of 0.19.0 (`13d72c06`). A 0.19.0 binary now reads H9 `gap`, and `--strict-version` refuses it before the spawn; install harness 0.20.0. The golden loop record was captured again from the released 0.20.0 archive against harness's emulator. A credential-free `--strict-version` run on 0.20.0 exits 0. Evidence: `docs/research/2026-10-26-b10x-harness-0.20.0-adapter-surface.md` (a60).
+- **Breaking:** a `frame`-mode b10x run without a frame, the CLI default, is refused before the spawn; pass `--decisions observe` for the arm that decides nothing, or name a frame. A frame that does not admit `file.read`, `dir.list` and `search`, in its operation set and in every subject rule, is refused at start: the loop runs its reads unasked at every ceiling it offers (a61 § 5).
+- b10x `tool.requested` events carry `subjects` in `observe` too, read from the flat entry's arguments; they carried none before. The observe launch and its decisions are unchanged (a61 § 6).
+- `spec/conformance.json` is regenerated for the new golden's `transcript_digest`; still 116 scenarios.
+
 ## [0.18.0] — 2026-10-26
 
 ### Changed

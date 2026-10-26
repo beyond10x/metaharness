@@ -387,6 +387,7 @@ impl Metaharness {
         // The runner and the seam are the kind's, because the two vendors do not put their record
         // and their calls in the same place: Claude Code writes both down one pipe, codex writes
         // its record to a session file and its calls to a hook channel beside it.
+        let decisions = self.spec.decisions;
         match self.spec.kind {
             Kind::Claude => self.start_with(
                 input,
@@ -399,11 +400,16 @@ impl Metaharness {
                 &mut metaharness_codex::CodexSeams,
             ),
             // The loop writes its whole record down one pipe, like Claude Code, so the plain
-            // spawn runner reads it. What differs is that nothing decides its calls, which is the
-            // seam's business rather than the runner's.
+            // spawn runner reads it. Under `frame` and `ask` the loop puts each approval to
+            // metaharness and reads the answer on its stdin (design amendment a61), so that stdin
+            // is a pipe; an observe run keeps `/dev/null`, as before.
             Kind::B10x => self.start_with(
                 input,
-                &mut crate::spawn::SpawnRunner::new(),
+                &mut if decisions == DecisionMode::Observe {
+                    crate::spawn::SpawnRunner::new()
+                } else {
+                    crate::spawn::SpawnRunner::with_stdin_decisions()
+                },
                 &mut metaharness_b10x::B10xSeams::new(None, None),
             ),
         }
@@ -540,7 +546,7 @@ fn start_b10x(
     clock: Box<dyn Clock>,
 ) -> Result<Run, Refusal> {
     let capabilities = metaharness_b10x::capabilities();
-    guard_b10x_decision_mode(&capabilities, &spec)?;
+    guard_b10x_decision_mode(&capabilities, &spec, frame.as_ref())?;
     let refusals = start_refusals(&capabilities, &spec);
     if !refusals.is_empty() {
         return Err(Refusal::Control { refusals });
@@ -586,15 +592,28 @@ fn start_b10x(
         digest: None,
         bytes: None,
     };
-    // `Seam::None` whatever the tool surface says. There is no seam: no registration, no hook, no
-    // control request. Naming one would put a word in the record for a thing that does not exist,
-    // and every `tool.requested` this adapter emits says `nobody adjudicated this` in the same
-    // breath.
-    let seam = Seam::None;
+    // An observe run has no seam: no registration, no hook, no control request. Naming one would
+    // put a word in the record for a thing that does not exist, and every `tool.requested` it
+    // emits says `nobody adjudicated this` in the same breath.
+    //
+    // A `frame` or `ask` run has one (atlas ADR 0104 point 3, design amendment a61): the loop's
+    // `--approve caller` puts each call above its floor to the process that launched it, on the
+    // loop's own bidirectional wire — its record out, one decision line in. That is a control
+    // request in this protocol's words, and the calls below the floor still say `Seam::None`.
+    let caller = spec.decisions != DecisionMode::Observe;
+    let seam = if caller {
+        Seam::ControlRequest
+    } else {
+        Seam::None
+    };
     let mut attestation = metaharness_protocol::HermeticAttestation::none(spec.hermetic);
-    attestation.decisions = DecisionMode::Observe;
+    attestation.decisions = spec.decisions;
 
-    let mut argv = metaharness_b10x::argv(&b10x_launch(&spec, &cwd, &handed)?);
+    let mut launch_plan = b10x_launch(&spec, &cwd, &handed)?;
+    if caller {
+        launch_plan = launch_plan.with_caller_decisions();
+    }
+    let mut argv = metaharness_b10x::argv(&launch_plan);
     let home = std::env::var("HOME").ok();
     let config_home = scratch.path().join("config");
     let mut env = metaharness_b10x::base_environment(home.as_deref(), &config_home);
@@ -751,9 +770,10 @@ fn start_b10x(
         env: &env,
         cwd: &cwd,
         credential_copies: &[],
-        // There is no decision channel. The scratch root stands in as a path the runner can hold,
-        // and nothing is ever written to it: a run that answered a decision here would be a run
-        // this adapter had decided something in.
+        // There is no decision channel on disk. The scratch root stands in as a path the runner
+        // can hold, and nothing is ever written to it: an observe run decides nothing, and a
+        // caller-seam run answers on the child's stdin, which the runner opened for it
+        // (`SpawnRunner::with_stdin_decisions`).
         decision_channel: scratch.path(),
         transcript: &transcript_path,
     };
@@ -791,9 +811,19 @@ fn start_b10x(
         capabilities,
         frame,
         seam,
-        // Zero, because there is no vendor deadline to wait out: nothing asks this adapter for a
-        // decision, so no call is ever left hanging on one.
-        vendor_timeout_ms: 0,
+        // Zero on an observe run, because there is no vendor deadline to wait out: nothing asks
+        // this adapter for a decision, so no call is ever left hanging on one.
+        //
+        // A caller-seam run is asked, and the loop has no timeout of its own: under `--approve
+        // caller` it waits on stdin until it is answered or cancelled. A loop blocked for good is
+        // the failure § 7.7 rule 2 exists to prevent, so the run takes the hook default as the
+        // budget it answers inside, and its own deadline (5 s less) denies a call nobody answered
+        // as metaharness's refusal (design amendment a61).
+        vendor_timeout_ms: if caller {
+            crate::run::DEFAULT_VENDOR_HOOK_TIMEOUT_MS
+        } else {
+            0
+        },
         launch,
         wire: vec![transcript_path],
         scratch: Some(scratch),
@@ -840,21 +870,36 @@ fn b10x_version(program: &str) -> Option<String> {
         .map(ToOwned::to_owned)
 }
 
-/// This adapter observes and never adjudicates; every other decision mode would claim a seam it
-/// does not have.
-fn guard_b10x_decision_mode(capabilities: &Capabilities, spec: &RunSpec) -> Result<(), Refusal> {
+/// A decision mode the adapter does not deliver is refused by name, and so is a frame the
+/// caller seam could not hold the loop to (design amendment a61).
+///
+/// Observe is the evaluation arm and decides nothing. `frame` and `ask` launch the loop with
+/// `--approve caller`, which covers every call above the loop's floor and none below it; the
+/// reads below it run whatever a frame says, so a frame that refused them, or a frame-mode run
+/// with no frame at all, is refused here rather than recorded as enforced.
+fn guard_b10x_decision_mode(
+    capabilities: &Capabilities,
+    spec: &RunSpec,
+    frame: Option<&Frame>,
+) -> Result<(), Refusal> {
     let status = capabilities.decision_mode(spec.decisions);
-    if status == metaharness_protocol::TierStatus::Delivered {
+    if status != metaharness_protocol::TierStatus::Delivered {
+        return Err(Refusal::Launch {
+            detail: format!(
+                "the run asked for --decisions {} and the b10x adapter declares that mode \
+                 {status:?}; pass a mode it delivers rather than claiming a decision seam this \
+                 adapter does not have",
+                spec.decisions.as_str()
+            ),
+        });
+    }
+    if spec.decisions == DecisionMode::Observe {
         return Ok(());
     }
-    Err(Refusal::Launch {
-        detail: format!(
-            "the run asked for --decisions {} and the b10x adapter declares that mode {status:?}; \
-             b10x is observe-only, so pass --decisions observe rather than claiming a decision \
-             seam this adapter does not have",
-            spec.decisions.as_str()
-        ),
-    })
+    match metaharness_b10x::caller_frame_problem(spec.decisions, frame) {
+        None => Ok(()),
+        Some(detail) => Err(Refusal::Launch { detail }),
+    }
 }
 
 #[allow(clippy::too_many_lines)]
@@ -3747,15 +3792,19 @@ mod b10x_launch_tests {
     }
 
     #[test]
-    fn b10x_accepts_only_its_delivered_observe_mode_and_needs_no_decision_channel() {
+    fn b10x_refuses_a_frame_mode_without_a_frame_and_observe_needs_no_decision_channel() {
         let capabilities = metaharness_b10x::capabilities();
         let frame = spec();
-        let refusal = guard_b10x_decision_mode(&capabilities, &frame).expect_err("frame refused");
-        assert!(refusal.to_string().contains("observe-only"), "{refusal}");
+        let refusal =
+            guard_b10x_decision_mode(&capabilities, &frame, None).expect_err("no frame refused");
+        assert!(refusal.to_string().contains("needs a frame"), "{refusal}");
+        let mut ask = spec();
+        ask.decisions = metaharness_protocol::DecisionMode::Ask;
+        guard_b10x_decision_mode(&capabilities, &ask, None).expect("ask needs no frame");
 
         let mut observe = spec();
         observe.decisions = metaharness_protocol::DecisionMode::Observe;
-        guard_b10x_decision_mode(&capabilities, &observe).expect("observe is delivered");
+        guard_b10x_decision_mode(&capabilities, &observe, None).expect("observe is delivered");
         assert!(
             start_refusals(&capabilities, &observe).is_empty(),
             "a direct-provider observation has no decision line to send"

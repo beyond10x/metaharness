@@ -1,6 +1,6 @@
-//! The b10x adapter: an agent loop we own, **observed** rather than driven.
+//! The b10x adapter: an agent loop we own, **observed** by default and decided only when asked.
 //!
-//! # Why this adapter decides nothing, and why that is the design
+//! # Why observe is the default, and why that is the design
 //!
 //! Every other adapter in this workspace exists to put metaharness between a vendor's loop and its
 //! tools: a hook that blocks a call, a control request that answers one, a registration that bounds
@@ -12,17 +12,32 @@
 //! does, and a seam that adjudicated its calls would put the driven arm's treatment back on top and
 //! measure that instead. The two arms would then differ in name only.
 //!
-//! So this adapter runs in [`DecisionMode::Observe`](metaharness_protocol::spec::DecisionMode) and
-//! nothing else. What it contributes is the half that is **not** control:
+//! So [`DecisionMode::Observe`](metaharness_protocol::spec::DecisionMode) is the arm the
+//! evaluation runs, and on it this adapter decides nothing: every `tool.requested` carries
+//! `decision_required: false` and [`Seam::None`] — *nobody adjudicated this call*, which is the
+//! fact rather than the omission — and [`B10xSeam::decision_line`] answers a line no observe run
+//! will ever send. What it contributes there is the half that is **not** control:
 //!
 //! * **attestation** — what metaharness imposed on the launch, in metaharness's own words, beside
 //!   the loop's record so a reader can notice when the two disagree;
 //! * **one wire** — the same `metaharness.event/1` stream every other arm is judged from, so a
 //!   matrix that compares four cells is comparing runs and not instruments.
 //!
-//! Refusing to decide is asserted rather than assumed: [`B10xSeam::decision_line`] answers a line
-//! no run will ever send, and every `tool.requested` carries `decision_required: false` and
-//! [`Seam::None`] — *nobody adjudicated this call*, which is the fact rather than the omission.
+//! # The caller seam: `frame` and `ask` (atlas ADR 0104, design amendment a61)
+//!
+//! ADR 0104 makes metaharness the one decider of tool permission, and harness 0.20.0 gave the loop
+//! the other half: `run --approve caller`, under which each call above the loop's ceiling is put to
+//! the process that launched it as an `approval-required` record line, and answered by one JSON
+//! line on the loop's stdin. A `frame` or `ask` run launches that way, at the lowest ceiling the
+//! loop offers (`--approve-up-to low`), and each question reaches the run as a `tool.requested` on
+//! [`Seam::ControlRequest`] that the frame, the embedder or a deadline answers like any other.
+//!
+//! **What the caller seam does not cover is stated rather than hidden.** `low` is the loop's floor,
+//! and the reads — `file_read`, `dir_list`, `search`, `find` — are `low`, so they run unasked and
+//! reach the record on [`Seam::None`] exactly as on an observe run. A frame that did not admit them
+//! would be a frame the model is held to and the loop is not, so such a frame is refused at start
+//! ([`caller_frame_problem`]). `Tier::Call` therefore stays unverified: metaharness decides every
+//! call the loop asks about, and not every call.
 //!
 //! # `adapter_class` is `direct_provider`, not `harness`
 //!
@@ -41,14 +56,15 @@
 //! rather than being guessed empty.
 //!
 //! **MCP has stopped being one of those absences.** Since 0.12.1 the loop publishes
-//! `--mcp-profile` and `--mcp-registry` and writes an `mcp` field in its opening record; the 0.19.0
+//! `--mcp-profile` and `--mcp-registry` and writes an `mcp` field in its opening record; the 0.20.0
 //! capture in `fixtures/golden/` carries it as `"mcp":[]`. `mcp_servers` is still the hardcoded
 //! `[]` the old standing fact justified, because every observation so far — 2026-09-15 on 0.12.1,
-//! 2026-10-20 on 0.15.0 and 0.15.1, 2026-10-22 on 0.18.0, 2026-10-26 on 0.19.0 — saw that field
+//! 2026-10-20 on 0.15.0 and 0.15.1, 2026-10-22 on 0.18.0, 2026-10-26 on 0.19.0 and 0.20.0 — saw it
 //! only as `[]` and the shape of an element is unestablished — see `B10xSeam`'s own note,
 //! `docs/research/2026-10-20-b10x-harness-0.15.1-adapter-surface.md`,
-//! `docs/research/2026-10-22-b10x-harness-0.18.0-adapter-surface.md` and
-//! `docs/research/2026-10-26-b10x-harness-0.19.0-adapter-surface.md`.
+//! `docs/research/2026-10-22-b10x-harness-0.18.0-adapter-surface.md`,
+//! `docs/research/2026-10-26-b10x-harness-0.19.0-adapter-surface.md` and
+//! `docs/research/2026-10-26-b10x-harness-0.20.0-adapter-surface.md`.
 //!
 //! **The working directory is the loop's own word since 0.15.1.** The opening record's `cwd` is
 //! the `started` line's `cwd` — the canonical root the loop's file tools act in — and `null` when
@@ -95,14 +111,14 @@ pub const ADAPTER_CLASS: &str = "direct_provider";
 /// Pinned for the reason the other adapters pin: every version-specific claim in here — the field
 /// names of the loop record, the shape of its terminal event — was observed against these, and a
 /// run against another is unverified rather than wrong.
-pub const PINNED_VERSIONS: [&str; 1] = ["0.19.0"];
+pub const PINNED_VERSIONS: [&str; 1] = ["0.20.0"];
 
 /// The immutable harness source revision this adapter is built against.
 ///
 /// The version identifies the released CLI; the revision identifies the Rust crates Cargo
 /// resolves. Both are checked by the AEP eval before it trusts an installed
 /// binary, so a filesystem timestamp is never mistaken for provenance.
-pub const HARNESS_REVISION: &str = "13d72c06a78f92fcc6027c9317dd314c6a6ce34e";
+pub const HARNESS_REVISION: &str = "684c99f5e8c7e1d22d7b29f717b71856db81766a";
 
 /// The `credential_source` the pinned loop records when its key is named by `--api-key-secret`
 /// (design amendment a50 § 7).
@@ -121,6 +137,82 @@ pub const SECRET_KEY_SOURCE: &str = "api-key:secrets";
 /// constructed environment, as on every other route.
 pub const SECRET_SERVICE_SESSION_BUS_VARIABLES: [&str; 2] =
     ["DBUS_SESSION_BUS_ADDRESS", "XDG_RUNTIME_DIR"];
+
+/// The operations the pinned loop runs **without asking**, even at its lowest ceiling (design
+/// amendment a61).
+///
+/// `--approve-up-to low` is the floor harness 0.20.0 offers, and its read entries are declared
+/// `low` (`harness-catalogue`): `file_read`, `dir_list`, `search` and `find`. The first three render
+/// to these operations; `find` has no word in the v0.1 vocabulary and reads as they do. A caller
+/// seam therefore decides every write and every `run`, and none of these.
+pub const UNASKED_OPERATIONS: [metaharness_protocol::Operation; 3] = [
+    metaharness_protocol::Operation::FileRead,
+    metaharness_protocol::Operation::DirList,
+    metaharness_protocol::Operation::Search,
+];
+
+/// Why this frame cannot govern a caller-seam run, or `None` when it can (design amendment a61).
+///
+/// A frame says *strictly these operations*, and on this arm the reads in [`UNASKED_OPERATIONS`]
+/// run whether the frame admits them or not: the loop never asks about a call below its ceiling.
+/// A frame that refused them, in its operation set or in any subject rule, would therefore be text
+/// the model is held to and the loop is not — the advisory frame finding F9 forbids. Refused at
+/// start, by name, rather than recorded as enforced.
+///
+/// `None` for a frame-mode run is a refusal too: with no frame metaharness has nothing to decide
+/// from and every write the loop asks about would be refused, which reads as a model that could
+/// not do its work. Pass `--decisions observe` for the undecided arm, or name a frame.
+#[must_use]
+pub fn caller_frame_problem(
+    decisions: metaharness_protocol::DecisionMode,
+    frame: Option<&metaharness_protocol::Frame>,
+) -> Option<String> {
+    use metaharness_protocol::DecisionMode;
+    let Some(frame) = frame else {
+        return (decisions == DecisionMode::Frame).then(|| {
+            "a frame-mode b10x run needs a frame: metaharness decides each call the loop asks \
+             about from it, and with none every write would be refused. Name one with --frame, \
+             or pass --decisions observe for the arm that decides nothing"
+                .to_owned()
+        });
+    };
+    let names = |operations: &[&metaharness_protocol::Operation]| {
+        operations
+            .iter()
+            .map(|operation| operation.name())
+            .collect::<Vec<_>>()
+            .join(", ")
+    };
+    let missing: Vec<_> = UNASKED_OPERATIONS
+        .iter()
+        .filter(|operation| !frame.operations.admits(operation))
+        .collect();
+    if !missing.is_empty() {
+        return Some(format!(
+            "the frame does not admit {}, and the b10x loop runs every read without asking even at \
+             its lowest ceiling (--approve-up-to low), so the frame would not hold for them; admit \
+             {} in the frame, or run this step on another kind",
+            names(&missing),
+            names(&UNASKED_OPERATIONS.iter().collect::<Vec<_>>())
+        ));
+    }
+    for rule in &frame.subjects.rules {
+        let missing: Vec<_> = UNASKED_OPERATIONS
+            .iter()
+            .filter(|operation| !rule.operations.admits(operation))
+            .collect();
+        if !missing.is_empty() {
+            return Some(format!(
+                "the frame's subject rule for {:?} does not admit {}, and the b10x loop runs every \
+                 read without asking, so the rule would not hold for them; admit the reads in every \
+                 rule, or run this step on another kind",
+                rule.subjects,
+                names(&missing)
+            ));
+        }
+    }
+    None
+}
 
 /// Check that a secret name has the shape `<namespace>/<name>`: a first `/` with something on
 /// each side of it (design amendment a50 § 5).
@@ -159,7 +251,7 @@ pub fn workspace_component_is_adoptable(name: &str) -> bool {
 
 /// Validate exact workspace-relative process write directories before native launch.
 ///
-/// Harness 0.19.0 (`13d72c06`, `crates/harness-substrate/src/lib.rs` unchanged from 0.15.0)
+/// Harness 0.20.0 (`684c99f5`, `crates/harness-substrate/src/lib.rs` unchanged from 0.15.0)
 /// canonicalizes the set before Substrate 0.7.17 (`00fa634c`) validates workspace
 /// access. This adapter mirrors those syntax bounds
 /// without importing a different native dependency. Glob spelling is additionally
@@ -343,14 +435,14 @@ mod tests {
     /// **The one deliberate literal pair.** Every other reader of the pin goes through these two
     /// constants, so a move that forgot one of them would agree with itself everywhere else. Moved
     /// 0.13.3 / `798325f0` → 0.15.0 / `dd5c2a66` → 0.15.1 / `f0870131` on 2026-10-20, and then →
-    /// 0.18.0 / `330e2cde` on 2026-10-22 (amendment a50), and then → 0.19.0 / `13d72c06` on
-    /// 2026-10-26: the commit the annotated tag `0.19.0` (tag object `6c855c6b`) points at, never
-    /// the tag object, because the eval compares this with `git rev-parse HEAD` in the harness
-    /// checkout.
+    /// 0.18.0 / `330e2cde` on 2026-10-22 (amendment a50), → 0.19.0 / `13d72c06` on 2026-10-26
+    /// (a59), and then → 0.20.0 / `684c99f5` on 2026-10-26 (a60): the commit the annotated tag
+    /// `0.20.0` (tag object `ab2abfd9`) points at, never the tag object, because the eval compares
+    /// this with `git rev-parse HEAD` in the harness checkout.
     #[test]
-    fn the_pin_names_the_harness_0_19_0_release_commit() {
-        assert_eq!(PINNED_VERSIONS, ["0.19.0"]);
-        assert_eq!(HARNESS_REVISION, "13d72c06a78f92fcc6027c9317dd314c6a6ce34e");
+    fn the_pin_names_the_harness_0_20_0_release_commit() {
+        assert_eq!(PINNED_VERSIONS, ["0.20.0"]);
+        assert_eq!(HARNESS_REVISION, "684c99f5e8c7e1d22d7b29f717b71856db81766a");
     }
 
     /// D30: the string the pinned loop records for `--api-key-secret`, read from

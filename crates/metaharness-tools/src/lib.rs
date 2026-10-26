@@ -60,8 +60,8 @@ pub use harness_catalogue::{
     Catalogue, DESCRIBE_VERB, INVOKE_VERB, LocalOperations, Operations, SEARCH_VERB, Verbs,
 };
 pub use resolve::{
-    Resolved, VerbSurface, operation_of, resolve_verb, subjects_of_vendor_call, subjects_of_verb,
-    unprefixed,
+    Resolved, VerbSurface, operation_of, resolve_verb, subjects_of_entry, subjects_of_vendor_call,
+    subjects_of_verb, unprefixed,
 };
 pub use server::{PROTOCOL_VERSION, SERVER_NAME, Server, serve};
 

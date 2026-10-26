@@ -54,15 +54,17 @@ census counts them all.
 
 | Mode | `claude` | `codex` | `b10x` |
 |---|---|---|---|
-| `frame` | `delivered` | `delivered` | `unverified` |
-| `ask` | `delivered` | `delivered` | `unverified` |
+| `frame` | `delivered` | `delivered` | `delivered` |
+| `ask` | `delivered` | `delivered` | `delivered` |
 | `observe` | `delivered` | `delivered` | `delivered` |
 
 Each cell is the adapter's own capability descriptor, `metaharness capabilities <kind>`, and the
 same value decides at plan time: a mode declared `unverified` is refused before anything spawns.
 `crates/metaharness-cli/tests/website_claims.rs` reads every cell against
-`capabilities(kind).decision_mode(mode)`. b10x refuses `frame` and `ask` because it has no
-decision seam; see [the b10x adapter](./harnesses/b10x.md).
+`capabilities(kind).decision_mode(mode)`. On b10x, `frame` and `ask` launch the loop with
+`--approve caller`: it puts each write and each `run` to metaharness and reads the answer on its
+stdin. Its reads run unasked, so a frame that does not admit them is refused at start; see
+[the b10x adapter](./harnesses/b10x.md).
 
 ### `observe` — measuring a harness nobody is steering
 

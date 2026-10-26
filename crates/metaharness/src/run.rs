@@ -962,6 +962,15 @@ impl Run {
             return catalogue.subjects_of(tool, input);
         }
         if self.publishes_verbs() {
+            // The b10x loop publishes its entries flat by default, so a call that is not one of
+            // the verbs is an entry called by its own name, and its input is the arguments. Its
+            // operation already resolved through the rendering; its subject has to as well, or a
+            // frame's scope would admit it with any path (amendment a61).
+            if self.spec.kind == Kind::B10x
+                && metaharness_tools::resolve_verb(tool, input, self.verb_surface()).is_none()
+            {
+                return metaharness_tools::subjects_of_entry(tool, input);
+            }
             return metaharness_tools::subjects_of_verb(tool, input, self.verb_surface());
         }
         metaharness_tools::subjects_of_vendor_call(input)

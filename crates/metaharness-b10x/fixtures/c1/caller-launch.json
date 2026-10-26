@@ -1,0 +1,26 @@
+{
+  "args": [
+    "run",
+    "--base-url",
+    "https://example.invalid/v1",
+    "--model",
+    "b10x-emulated",
+    "--workspace",
+    "/scratch/run/work",
+    "--execution-path",
+    "metaharness",
+    "--json",
+    "--no-session",
+    "--approve-up-to",
+    "low",
+    "--approve",
+    "caller",
+    "--input",
+    "decide this run"
+  ],
+  "env": {
+    "PATH": "/operator/.local/bin:/usr/local/bin:/usr/bin:/bin",
+    "XDG_CONFIG_HOME": "/scratch/run/config"
+  },
+  "program": "/opt/b10x/bin/b10x-harness"
+}

@@ -40,7 +40,7 @@ then a deliberate count movement with the diff read.
 **The b10x adapter now meets that standard too (2026-08-31).** Its free contract has one recorded
 C1 launch, one byte-exact recorded loop replay, two `provider_emulated` enforcement excerpts and
 one version-pair vector; its hook-input row is a reasoned N/A because this observe-only adapter has
-no metaharness hook seam. The resulting `contract_result` is pinned as bytes at `checked: 5`. The
+no metaharness hook seam (filled on 2026-10-26 by the caller seam's two recorded exchanges, design amendment a61). The resulting `contract_result` is pinned as bytes at `checked: 5`. The
 launch recording also caught and closed ambient profile discovery by putting `XDG_CONFIG_HOME` in
 scratch, corrected the opening attestation from the generic `frame` default to `observe`, and the
 strict audit now consumes the resolved binary's version and the loop's credential class rather

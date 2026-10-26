@@ -26,7 +26,8 @@ and `tests/website_claims.rs` fail when this table and the binary disagree. `cap
 | `mcp-serve` | Serve the owned tool surface over MCP on stdio. Not typed by an operator: its client is the harness, which starts it from the `--mcp-config` that `run --tool-surface owned` (or `--catalogue`) writes, naming this binary. |
 
 `<KIND>` is `claude`, `codex` or `b10x`. The first two are vendors metaharness drives; the third is
-the beyond10x loop, which it observes — see [the b10x adapter](../harnesses/b10x.md).
+the beyond10x loop, which it observes under `observe` and decides through the loop's caller seam
+under `frame` and `ask` — see [the b10x adapter](../harnesses/b10x.md).
 
 ## `metaharness run`
 
@@ -143,7 +144,7 @@ object, carry a key that is not one of the entry's input fields, or leave out (o
 field the entry requires. The answer names the entry and the field. A field the entry does not
 require, given as null, reads as absent and is taken out before the call is performed. A field
 given a value that the performing `b10x-harness` entry does not declare, such as `process.run`'s
-`timeout_ms` at 0.18.0 and 0.19.0, is refused by the harness by name, and nothing is done (design amendment
+`timeout_ms` at 0.18.0, 0.19.0 and 0.20.0, is refused by the harness by name, and nothing is done (design amendment
 a50 § 2).
 
 Refused before the spawn with exit 2, by name: `catalogue-not-carried` on `codex` and `b10x`;

@@ -34,6 +34,11 @@
 //! stdin open would buy nothing and cost a stall: 2.1.239 waits for stdin data and reports
 //! *"no stdin data received in 3s, proceeding without it"* on every run.
 //!
+//! **One exception, and it is the b10x loop's.** Under `--approve caller` (harness 0.20.0, design
+//! amendment a61) that loop asks on its record and reads each answer as one JSON line on its
+//! stdin, so [`SpawnRunner::with_stdin_decisions`] gives the child a pipe and every decision line
+//! is written there. An observe launch of the same loop keeps `/dev/null`.
+//!
 //! # What it captures, and why each one
 //!
 //! * **stdout** — every line goes to the transcript file as it is read, because § 8.4 O8's raw
@@ -44,7 +49,7 @@
 use std::collections::BTreeMap;
 use std::io::{BufRead, BufReader, Write};
 use std::path::{Path, PathBuf};
-use std::process::{Child, Command, Stdio};
+use std::process::{Child, ChildStdin, Command, Stdio};
 use std::sync::mpsc::{Receiver, RecvTimeoutError, SyncSender, sync_channel};
 use std::sync::{Arc, Mutex};
 use std::time::Duration;
@@ -208,6 +213,7 @@ impl HookChannel {
 pub struct SpawnRunner {
     spawns: u32,
     credential_copies: u32,
+    stdin_decisions: bool,
 }
 
 impl SpawnRunner {
@@ -215,6 +221,20 @@ impl SpawnRunner {
     #[must_use]
     pub fn new() -> Self {
         Self::default()
+    }
+
+    /// A runner whose child reads its decisions as lines on stdin (design amendment a61).
+    ///
+    /// The b10x loop under `--approve caller` asks on stdout and reads one JSON line per answer
+    /// on stdin, so its stdin is a pipe metaharness holds and every decision line is written to
+    /// it. [`SpawnRunner::new`] keeps `/dev/null` and the hook channel, which is what the vendor
+    /// kinds need: Claude Code stalls on an open stdin it is not fed.
+    #[must_use]
+    pub fn with_stdin_decisions() -> Self {
+        Self {
+            stdin_decisions: true,
+            ..Self::default()
+        }
     }
 
     /// How many children this runner has started.
@@ -255,11 +275,16 @@ impl ProcessRunner for SpawnRunner {
             // plan is absent from the child however it got into this process.
             .env_clear()
             .envs(plan.env.iter())
-            .stdin(Stdio::null())
+            .stdin(if self.stdin_decisions {
+                Stdio::piped()
+            } else {
+                Stdio::null()
+            })
             .stdout(Stdio::piped())
             .stderr(Stdio::piped());
         let mut child = command.spawn()?;
         self.spawns += 1;
+        let stdin = child.stdin.take();
 
         let stdout = child.stdout.take().ok_or_else(|| {
             std::io::Error::other("the child was spawned with no stdout pipe to read")
@@ -287,6 +312,7 @@ impl ProcessRunner for SpawnRunner {
             transcript: plan.transcript.to_path_buf(),
             stream_ended: false,
             exit: Exited::NotYet,
+            stdin,
         }))
     }
 }
@@ -376,6 +402,8 @@ pub struct SpawnedProcess {
     transcript: PathBuf,
     stream_ended: bool,
     exit: Exited,
+    /// The child's stdin, when decisions travel on it (`SpawnRunner::with_stdin_decisions`).
+    stdin: Option<ChildStdin>,
 }
 
 /// Whether the child has been waited for, and what it said.
@@ -537,6 +565,16 @@ impl HarnessProcess for SpawnedProcess {
         let value: Value = serde_json::from_str(line).map_err(|error| {
             std::io::Error::other(format!("metaharness wrote a line it cannot route: {error}"))
         })?;
+
+        // A child that reads its decisions on stdin gets every line there, as one line. Only the
+        // b10x loop under `--approve caller` is started this way, and its seam writes nothing
+        // but decisions (design amendment a61).
+        if let Some(stdin) = self.stdin.as_mut() {
+            let mut bytes = value.to_string().into_bytes();
+            bytes.push(b'\n');
+            stdin.write_all(&bytes)?;
+            return stdin.flush();
+        }
 
         if let Some(call_id) = value.get("call_id").and_then(Value::as_str) {
             // `Value::Null` is `abstain` and is not the absence of a decision: it means write an

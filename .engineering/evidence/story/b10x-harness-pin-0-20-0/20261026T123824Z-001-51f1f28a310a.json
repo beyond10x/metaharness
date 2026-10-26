@@ -1,0 +1,12 @@
+{
+  "at": "2026-10-26T12:38:24Z",
+  "actor": "human:timo",
+  "artifact": "story:b10x-harness-pin-0-20-0",
+  "kind": "story",
+  "revision": 1,
+  "change": {
+    "change": "evidence",
+    "kind": "test_result",
+    "source": "task check exit 0 (ess validate x2, fmt, clippy -D warnings, test --workspace, metaharness-docs check): 1374 passed, 0 failed, 52 ignored; includes cargo_resolves_exactly_the_pinned_harness and the golden replay at 0.20.0"
+  }
+}

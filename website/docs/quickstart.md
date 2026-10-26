@@ -75,7 +75,7 @@ is absent.
 ```bash
 metaharness conformance claude    # 30 vectors
 metaharness conformance codex     # 24 vectors, 4 of which run a real process and the real hook
-metaharness conformance b10x      # 8 vectors
+metaharness conformance b10x      # 11 vectors
 ```
 
 Free conformance vectors: no model, no network, no credential. Each count is

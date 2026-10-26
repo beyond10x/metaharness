@@ -1,0 +1,13 @@
+{"kind":"started","model":"b10x-emulated","published_tools":["file_read","dir_list","search","find","file_write","file_edit"],"operations":["file.read","dir.list","search","find","file.write","file.edit"],"withheld":[],"skills":[],"agents":[],"memories":[],"profiles":[],"context":[{"id":"harness.instructions","kind":"harness_instructions","trust":"harness","cache":"session","bytes":647,"sha256":"c4adfed8b4dad61ce1c44da883bf156fb95b480e1e4d41b0cfce75ccb0752a89"},{"id":"environment.workspace","kind":"environment","trust":"machine","cache":"session","captured_at":"2026-10-26T12:15:55Z","bytes":94,"sha256":"4bd48418431a66726471ef2e177fd2ab8b2337adbbe5e3ae3745cf5e17cc4efe"},{"id":"environment.execution","kind":"environment","trust":"machine","cache":"session","captured_at":"2026-10-26T12:15:55Z","bytes":375,"sha256":"2a397c2553c26a407d3b22556892b68ddac8aa89d8236def7fedfc0dc388baa2"}],"toolchains":[],"mcp":[],"credential_source":"none","cwd":"/scratch/run/work"}
+{"kind":"turn-started","turn":1}
+{"kind":"tool-arguments-delta","call_id":"call_b10x_001","delta":"{\"path\":\"note.md\",\"text\":\"written by the harness\\n\"}"}
+{"kind":"usage","model":"b10x-emulated","input_tokens":42,"output_tokens":8,"cached_input_tokens":7}
+{"kind":"tool-requested","call_id":"call_b10x_001","name":"file_write","arguments":{"path":"note.md","text":"written by the harness\n"},"operation":"file.write","subjects":["file:note.md"]}
+{"kind":"approval-required","call_id":"call_b10x_001","name":"file_write"}
+{"kind":"approval-resolved","call_id":"call_b10x_001","approved":false}
+{"kind":"tool-completed","call_id":"call_b10x_001","failed":true}
+{"kind":"turn-started","turn":2}
+{"kind":"text-delta","text":"that is what "}
+{"kind":"text-delta","text":"the tool said"}
+{"kind":"usage","model":"b10x-emulated","input_tokens":42,"output_tokens":4,"cached_input_tokens":7}
+{"kind":"finished","stop":{"kind":"completed"},"turns":2}

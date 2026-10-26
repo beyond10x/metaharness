@@ -90,10 +90,15 @@ Each is a claim that can be checked. Breaking one is a design change, not a refa
    the control seam, the hermetic contract and the adapter obligations are
    `docs/design/metaharness-protocol-v0.1.md`. A change to any of them amends that document, and the
    review's corrections are recorded in it.
-9. **The b10x adapter decides nothing, and asserts that it decides nothing.** `metaharness-b10x`
-   runs in `DecisionMode::Observe` only; every `tool.requested` it emits carries
-   `decision_required: false` and `Seam::None`. Giving it a seam would put the driven arm's
-   treatment on top of the observed arm and make the two differ in name only.
+9. **The b10x observe arm decides nothing, and asserts that it decides nothing.** Under
+   `DecisionMode::Observe` every `tool.requested` `metaharness-b10x` emits carries
+   `decision_required: false` and `Seam::None`, and the launch keeps `--approve-up-to high` and the
+   loop's own approver. Giving that arm a seam would put the driven arm's treatment on top of the
+   observed arm and make the two differ in name only, so evaluation arms stay on observe. `frame`
+   and `ask` are the caller seam (atlas ADR 0104 point 3, design amendment a61): `--approve-up-to
+   low --approve caller`, each asked call on `Seam::ControlRequest`, answered on the loop's stdin.
+   The loop's reads are `low` and run unasked, so a frame that does not admit `file.read`,
+   `dir.list` and `search` is refused at start, and `Tier::Call` stays unverified.
 10. **harness is taken by git revision, never by `path`.** `metaharness-tools` and `metaharness-b10x`
    depend on `b10x-harness-catalogue`, `b10x-harness-wire` and `b10x-harness-loop` with
    `git = "https://github.com/beyond10x/harness"` and a `rev` (`.cargo/config.toml` makes cargo
@@ -284,8 +289,8 @@ long and the interesting lines are in the middle. Redirect to a file and grep it
   pin, so the run's own exit code is the provenance. Build the binary at the pinned revision and
   put it on the child's `PATH` — which is `$HOME/.local/bin:/usr/local/bin:/usr/bin:/bin`,
   constructed from the *process's* `HOME` and never inherited, so an install elsewhere plus a
-  `PATH` export changes nothing and only `HOME` does. `--decisions` defaults to `frame` and b10x
-  refuses it by name; the observe-only arm has to be asked for.
+  `PATH` export changes nothing and only `HOME` does. `--decisions` defaults to `frame`, and b10x
+  refuses a frame-mode run without a frame by name; the observe arm has to be asked for.
 - **What that run found, neither of which reading the code showed.** 0.12.1 reports
   `usage.cache_creation_input_tokens` and the seam hardcoded `None` over it; and
   `b10x-harness` has had an MCP client since before this pin, while the adapter still carried

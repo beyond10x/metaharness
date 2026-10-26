@@ -213,14 +213,16 @@ Two boundaries are stated rather than claimed. `metaharness.source` is observed
 as the constant `metaharness.event/1`; whether it ever carries a vendor format
 name is `story:project-reads-vendor-transcripts`'s open question and is marked
 `UNMAPPED:` in the domain. The b10x golden record is read as captured from
-`b10x-harness 0.19.0` (re-recorded 2026-10-26 under amendment a59, over a 0.18.0
+`b10x-harness 0.20.0` (re-recorded 2026-10-26 under amendment a60, over a 0.19.0
+capture of the same day under amendment a59, which had replaced a 0.18.0
 capture of 2026-10-22 under amendment a50, which had replaced a 0.15.1 capture
 of 2026-10-20, which had replaced a 0.15.0 capture, which had replaced the 0.9.1
 capture this suite was written against) and no count of its nodes is declared,
 so no re-recording added or removed a trace scenario; the 0.15.1 one added the
-`started` line's `cwd`, which no scenario reads, and the 0.18.0 and 0.19.0 ones
+`started` line's `cwd`, which no scenario reads, the 0.18.0 and 0.19.0 ones
 each differ from the one before only in two `captured_at` stamps and one context
-digest, so the only expectation each moved is the `transcript_digest` of
+digest, and the 0.20.0 one only in the two stamps, so the only expectation each
+moved is the `transcript_digest` of
 `SummarizeRecord/outcome/harness-record-summarized` (`spec/domains/trace.yaml`;
 `spec/conformance.json` regenerated on ESS 0.69.2, 116 scenarios). The
 secret-named key route a50 adds (`--api-key-secret`) is

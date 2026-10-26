@@ -39,9 +39,10 @@ fn the_lock_resolves_no_secret_store_client() {
 }
 
 /// Brief item 4: one harness revision and one tools source. Wave 8 pinned the 0.18.0 commit and
-/// tools tag 0.4.0; the 0.19.0 admission (2026-10-26) moved both to 13d72c06 and tag 0.5.0.
+/// tools tag 0.4.0; the 0.19.0 admission (2026-10-26) moved both to 13d72c06 and tag 0.5.0, and
+/// the 0.20.0 admission (2026-10-26, amendment a60) moved the harness to 684c99f5.
 #[test]
-fn the_lock_names_harness_13d72c06_and_tools_0_5_0_and_nothing_else() {
+fn the_lock_names_harness_684c99f5_and_tools_0_5_0_and_nothing_else() {
     let sources: std::collections::BTreeSet<&str> = LOCK
         .lines()
         .filter_map(|line| line.strip_prefix("source = \"git+"))
@@ -57,7 +58,7 @@ fn the_lock_names_harness_13d72c06_and_tools_0_5_0_and_nothing_else() {
     assert_eq!(
         harness,
         [
-            &"https://github.com/beyond10x/harness?rev=13d72c06a78f92fcc6027c9317dd314c6a6ce34e#13d72c06a78f92fcc6027c9317dd314c6a6ce34e\""
+            &"https://github.com/beyond10x/harness?rev=684c99f5e8c7e1d22d7b29f717b71856db81766a#684c99f5e8c7e1d22d7b29f717b71856db81766a\""
         ],
     );
     assert_eq!(

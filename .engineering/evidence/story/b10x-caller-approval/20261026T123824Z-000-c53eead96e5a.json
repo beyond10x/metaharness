@@ -1,0 +1,12 @@
+{
+  "at": "2026-10-26T12:38:24Z",
+  "actor": "human:timo",
+  "artifact": "story:b10x-caller-approval",
+  "kind": "story",
+  "revision": 1,
+  "change": {
+    "change": "evidence",
+    "kind": "approval",
+    "source": "b10x-chef-orchestrator 2026-10-26 under the grant (dispatch-queue #8): 'plus ADR 0104 point 3 (metaharness caller policy: the metaharness side of the delegated approval; read the ADR on atlas origin/main and the harness story:approver-delegates-to-caller) as a story in the same wave'"
+  }
+}

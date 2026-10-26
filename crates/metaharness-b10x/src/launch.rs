@@ -238,6 +238,12 @@ pub struct B10xLaunch {
     /// their own service delivers, and this loop is priced by rates somebody declared. Both
     /// figures are the harness's own; only one of them needs a file.
     pub prices: Option<String>,
+    /// Hand every approval above the floor to metaharness: `--approve caller --approve-up-to low`
+    /// (atlas ADR 0104 point 3, design amendment a61).
+    ///
+    /// `false` keeps the observe launch byte for byte: `--approve-up-to high` and the loop's own
+    /// approver, which on this child has no terminal and denies what is above the ceiling.
+    pub caller_decides: bool,
     /// The request.
     pub input: String,
 }
@@ -273,6 +279,7 @@ impl B10xLaunch {
             context: Vec::new(),
             scope_silent: false,
             prices: None,
+            caller_decides: false,
             input: input.into(),
         }
     }
@@ -446,6 +453,13 @@ impl B10xLaunch {
         self.max_turns = Some(turns);
         self
     }
+
+    /// The same launch, asking metaharness for every approval above the floor.
+    #[must_use]
+    pub fn with_caller_decisions(mut self) -> Self {
+        self.caller_decides = true;
+        self
+    }
 }
 
 /// The argv this launch spawns.
@@ -505,7 +519,8 @@ fn launches_with_every_option() -> [B10xLaunch; 4] {
     // particular launch does.
     let other = B10xLaunch::new("https://endpoint.invalid/v1", "a-model", "/w", "a request")
         .from_environment("A_VARIABLE")
-        .confined("/a/socket", ["a-program".to_owned()]);
+        .confined("/a/socket", ["a-program".to_owned()])
+        .with_caller_decisions();
     let secret = B10xLaunch::new("https://endpoint.invalid/v1", "a-model", "/w", "a request")
         .from_secret("a-namespace/a-name");
     let authenticated = launch.clone().authenticated("/a/key");
@@ -607,9 +622,22 @@ pub fn argv(launch: &B10xLaunch) -> Vec<String> {
         // waiting for a terminal this child does not have. Above `high` there is only the
         // destructive class, which no driven step should reach — and if one does, the default
         // approver has no terminal, denies, and says so to the model rather than doing it.
+        //
+        // That is the observe launch. Under `--decisions frame` or `ask` the ceiling drops to the
+        // loop's floor and every call above it is put to metaharness instead (`caller_decides`
+        // below): the approver seam is where ADR 0104 point 3 hands the decision over.
         "--approve-up-to".to_owned(),
-        "high".to_owned(),
+        if launch.caller_decides { "low" } else { "high" }.to_owned(),
     ];
+    // **The loop's approver becomes metaharness** (atlas ADR 0104 point 3, design amendment a61).
+    // The `approval-required` record on stdout is the question and one JSON line on stdin is the
+    // answer, so the runner that starts this launch must give the child a stdin pipe. `low` is the
+    // lowest ceiling 0.20.0 takes: every `file_read`, `dir_list`, `search` and `find` (risk `low`)
+    // still runs unasked, and everything that writes or starts a process is metaharness's call.
+    if launch.caller_decides {
+        argv.push("--approve".to_owned());
+        argv.push("caller".to_owned());
+    }
     // Named and never discovered, which is the loop's own rule: a hook found in the workspace would
     // be a program the repository runs on this machine.
     if let Some(hooks) = &launch.hooks {

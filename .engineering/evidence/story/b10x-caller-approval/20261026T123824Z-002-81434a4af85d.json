@@ -1,0 +1,12 @@
+{
+  "at": "2026-10-26T12:38:24Z",
+  "actor": "human:timo",
+  "artifact": "story:b10x-caller-approval",
+  "kind": "story",
+  "revision": 1,
+  "change": {
+    "change": "evidence",
+    "kind": "verification",
+    "source": "released b10x-harness 0.20.0 against harness's emulator (flat-write), credential-free: --decisions frame denied the write (decided_by frame, seam control_request, no note.md); --decisions ask denied over tool.decide (decided_by embedder, latency_ms 90); --decisions observe wrote note.md; all exit 0; design amendment a61"
+  }
+}

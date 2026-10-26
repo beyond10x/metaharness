@@ -52,17 +52,25 @@ fn the_codex_adapter_fills_the_contract_authoring_shape() {
     assert!(unmet.is_empty(), "{unmet:#?}");
 }
 
-/// The direct-provider adapter fills every applicable row. Its hook row remains a named N/A:
-/// adding a hook would violate the observe-only boundary rather than improve contract coverage.
+/// The direct-provider adapter fills every row. Its hook row was a named N/A while the adapter
+/// only observed; since the caller seam (design amendment a61) it is filled by the two recorded
+/// exchanges, in which the loop's `approval-required` is the question and metaharness's stdin line
+/// the answer — and by nothing else, because no vendor hook was added.
 #[test]
 fn the_b10x_adapter_fills_every_applicable_contract_row() {
     let unmet = unmet(Kind::B10x);
     assert!(unmet.is_empty(), "{unmet:#?}");
     let declared = contract_obligations(Kind::B10x).expect("the adapter exists");
-    let Obligation::Gap(reason) = declared.recorded_hook_input else {
-        panic!("b10x must not claim a hook input for a seam it does not have")
+    let Obligation::Filled(ids) = declared.recorded_hook_input else {
+        panic!("the caller seam's question is recorded input, and the row must say which vectors")
     };
-    assert!(reason.contains("not applicable"), "{reason}");
+    assert_eq!(
+        ids,
+        [
+            "provider-emulated-caller-allow",
+            "provider-emulated-caller-deny"
+        ]
+    );
 }
 
 /// The asymmetry CT-4 found, now closed — and pinned closed, so re-opening it is deliberate too.

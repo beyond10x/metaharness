@@ -8,6 +8,8 @@ use metaharness_protocol::{
     Seam, SeamFactory, TranscriptRef, Usage, WithheldTool,
 };
 use serde_json::Value;
+use std::cell::RefCell;
+use std::collections::BTreeMap;
 
 use crate::{ADAPTER_CLASS, ADAPTER_ID};
 
@@ -49,14 +51,17 @@ impl SeamFactory for B10xSeams {
             model: self.model.clone(),
             transcript,
             attestation,
-            // Recorded and not used to decide anything: this adapter adjudicates nothing, and the
-            // tier it was built at is a fact about the launch that a reader may want.
+            // `Seam::None` on an observe launch, which adjudicates nothing. Anything else is the
+            // caller seam of design amendment a61: the launch said `--approve caller`, and every
+            // `approval-required` record is a call metaharness answers on the loop's stdin.
             control: seam,
             line: 0,
             started: false,
             ended: false,
             census: DecisionCensus::default(),
             spent_micro_usd: None,
+            held: Vec::new(),
+            answered: RefCell::new(BTreeMap::new()),
         })
     }
 }
@@ -78,16 +83,68 @@ pub struct B10xSeam {
     /// [`None`] until a turn is priced, and `None` at the end means no rate card covered this run
     /// — which reaches `session.ended.total_cost_usd` as `null` rather than as a zero.
     spent_micro_usd: Option<u64>,
+    /// Under the caller seam: each `tool-requested` not yet known to be asked about, in arrival
+    /// order.
+    ///
+    /// The loop announces a call (`tool-requested`, with its arguments) before it decides whether
+    /// to ask (`approval-required`, with only the id), and a call below the ceiling is never asked
+    /// about at all. So the announcement waits here until the record says which it is: an
+    /// `approval-required` for its id turns it into a call metaharness decides, and its
+    /// `tool-completed` (or the end of the run) releases it as the record of a call nobody asked
+    /// about, `Seam::None`, exactly as an observe run reports every call.
+    held: Vec<Emission>,
+    /// Under the caller seam: what metaharness answered each call it was asked about, `true` for
+    /// allow, so the loop's own `approval-resolved` can be checked against it.
+    ///
+    /// A cell because [`HarnessSeam::decision_line`] takes `&self`: writing the line is the moment
+    /// the answer is known, and nothing else records it on this side.
+    answered: RefCell<BTreeMap<String, bool>>,
+}
+
+/// The loop's bound on one decision line is 64 KiB; a reason is cut well inside it, on a character
+/// boundary, so a long frame refusal can never be the line the loop refuses.
+const REASON_BOUND: usize = 8 * 1024;
+
+/// `reason` cut to [`REASON_BOUND`] bytes on a character boundary, saying that it was cut.
+fn bounded(reason: &str) -> String {
+    if reason.len() <= REASON_BOUND {
+        return reason.to_owned();
+    }
+    let mut end = REASON_BOUND;
+    while !reason.is_char_boundary(end) {
+        end -= 1;
+    }
+    format!(
+        "{}… (first {end} of {} bytes)",
+        &reason[..end],
+        reason.len()
+    )
 }
 
 impl B10xSeam {
-    /// The control tier this seam was built at.
-    ///
-    /// Recorded and never acted on: this adapter adjudicates nothing, and the tier is a fact about
-    /// the launch a reader may want rather than an input to a decision that is not taken.
+    /// The control tier this seam was built at: `Seam::None` for an observe launch, and the caller
+    /// seam for a launch that hands its approvals to metaharness (design amendment a61).
     #[must_use]
     pub fn control(&self) -> Seam {
         self.control
+    }
+
+    /// Whether this launch put its approvals to metaharness (`--approve caller`).
+    fn caller(&self) -> bool {
+        self.control != Seam::None
+    }
+
+    /// The held announcement for this call, if there is one, removed.
+    fn take_held(&mut self, call_id: &str) -> Option<Emission> {
+        let at = self.held.iter().position(|emission| {
+            matches!(&emission.event, Event::ToolRequested { call_id: held, .. } if held == call_id)
+        })?;
+        Some(self.held.remove(at))
+    }
+
+    /// Every held announcement, as the record of a call nobody asked about.
+    fn release_held(&mut self) -> Vec<Emission> {
+        std::mem::take(&mut self.held)
     }
 
     /// Whether an opening record has been read.
@@ -232,15 +289,15 @@ impl HarnessSeam for B10xSeam {
                     // standing claim behind the hardcoded `[]` was that `b10x-harness` has no MCP
                     // client at all; 0.12.1 has one — `--mcp-profile` and `--mcp-registry`
                     // (`b10x-harness run --help`, read 2026-09-15) — and its `started` record
-                    // carries an `mcp` field, which the 0.19.0 capture in `fixtures/golden/` holds
+                    // carries an `mcp` field, which the 0.20.0 capture in `fixtures/golden/` holds
                     // as `[]`. So the harness can now report servers and this asserts it reported
                     // none.
                     //
                     // It is deliberately **not** read here yet: the 2026-09-15 run on 0.12.1 and
                     // the 2026-10-20 runs on 0.15.0 and 0.15.1 and the emulator runs on 0.18.0
-                    // (2026-10-22) and 0.19.0 (2026-10-26) observed the field only as `[]`, so
-                    // the shape of an element is unestablished, and inventing one would be the
-                    // guess this adapter refuses to make elsewhere.
+                    // (2026-10-22), 0.19.0 and 0.20.0 (2026-10-26) observed the field only as
+                    // `[]`, so the shape of an element is unestablished, and inventing one would be
+                    // the guess this adapter refuses to make elsewhere.
                     // What closes it is a run that publishes a profile, recorded the way the
                     // `skills` move was — `docs/research/2026-09-15-b10x-harness-0.12.1-adapter-surface.md`.
                     //
@@ -296,36 +353,81 @@ impl HarnessSeam for B10xSeam {
                 text: string("text").unwrap_or_default(),
                 request_id: None,
             })],
-            "tool-requested" => vec![Emission::untimed(Event::ToolRequested {
-                // Left empty here on purpose, exactly as `operations` is: what a call touches is
-                // resolved by whoever holds the run's published rendering, and an adapter that
-                // answered for itself would be a second owner of one rule (design § 8.4 O6).
-                subjects: Vec::new(),
-                // Left empty here on purpose: the resolution needs the adapter\'s *published*
-                // rendering, which the loop holds and an adapter must not (design § 8.4 O6).
-                operations: Vec::new(),
-                call_id: string("call_id").unwrap_or_default(),
-                name: string("name").unwrap_or_default(),
-                input: value.get("arguments").cloned().unwrap_or(Value::Null),
-                // **The claim this adapter exists to make honestly.** Nothing adjudicated this
-                // call, because the toolset it was drawn from is the policy. Emitting `false` and
-                // `Seam::None` says *nobody decided this*, which is a fact; omitting the fields
-                // would leave a reader to infer it from silence.
-                decision_required: false,
-                deadline_ms: None,
-                seam: Seam::None,
-            })],
-            "tool-completed" => vec![Emission::untimed(Event::ToolResult {
-                exit_code: None,
-                outcome_source: None,
-                call_id: string("call_id").unwrap_or_default(),
-                is_error: value.get("failed").and_then(Value::as_bool),
-                // The loop's record names the outcome and not its bytes; a content field invented
-                // here would be this adapter writing the tool's answer for it.
-                content: None,
-                bytes: None,
-                tool_use_result: None,
-            })],
+            "tool-requested" => {
+                let announced = Emission::untimed(Event::ToolRequested {
+                    // Left empty here on purpose, exactly as `operations` is: what a call touches
+                    // is resolved by whoever holds the run's published rendering, and an adapter
+                    // that answered for itself would be a second owner of one rule (design § 8.4
+                    // O6).
+                    subjects: Vec::new(),
+                    // Left empty here on purpose: the resolution needs the adapter\'s *published*
+                    // rendering, which the loop holds and an adapter must not (design § 8.4 O6).
+                    operations: Vec::new(),
+                    call_id: string("call_id").unwrap_or_default(),
+                    name: string("name").unwrap_or_default(),
+                    input: value.get("arguments").cloned().unwrap_or(Value::Null),
+                    // **The claim this adapter exists to make honestly.** On an observe launch
+                    // nothing adjudicated this call, because the toolset it was drawn from is the
+                    // policy. Emitting `false` and `Seam::None` says *nobody decided this*, which
+                    // is a fact; omitting the fields would leave a reader to infer it from
+                    // silence. Under the caller seam the same holds for a call below the ceiling,
+                    // and a call the loop asks about is re-stamped when it asks (below).
+                    decision_required: false,
+                    deadline_ms: None,
+                    seam: Seam::None,
+                });
+                if self.caller() {
+                    self.held.push(announced);
+                    Vec::new()
+                } else {
+                    vec![announced]
+                }
+            }
+            // **The question, under the caller seam** (design amendment a61). The loop is about to
+            // block on stdin for this call, so the call goes to the run as one metaharness
+            // decides: the announcement held above, now on the caller seam, which the run answers
+            // from the frame, the embedder or observe, and whose answer comes back here as
+            // `decision_line`. An `approval-required` with no announcement before it is still a
+            // question the loop is waiting on, so it is put to the run with the entry's name and
+            // no input rather than dropped: an unanswered question is a loop blocked for good.
+            "approval-required" if self.caller() => {
+                let call_id = string("call_id").unwrap_or_default();
+                let mut asked = self.take_held(&call_id).unwrap_or_else(|| {
+                    Emission::untimed(Event::ToolRequested {
+                        subjects: Vec::new(),
+                        operations: Vec::new(),
+                        call_id: call_id.clone(),
+                        name: string("name").unwrap_or_default(),
+                        input: Value::Null,
+                        decision_required: false,
+                        deadline_ms: None,
+                        seam: Seam::None,
+                    })
+                });
+                if let Event::ToolRequested { seam, .. } = &mut asked.event {
+                    *seam = self.control;
+                }
+                vec![asked]
+            }
+            "tool-completed" => {
+                // A call that completes without having been asked about ran below the ceiling (or
+                // was refused before the approver, as an unpublished name is): its announcement
+                // goes out now, as a record of a call nobody decided.
+                let call_id = string("call_id").unwrap_or_default();
+                let mut emitted: Vec<Emission> = self.take_held(&call_id).into_iter().collect();
+                emitted.push(Emission::untimed(Event::ToolResult {
+                    exit_code: None,
+                    outcome_source: None,
+                    call_id,
+                    is_error: value.get("failed").and_then(Value::as_bool),
+                    // The loop's record names the outcome and not its bytes; a content field
+                    // invented here would be this adapter writing the tool's answer for it.
+                    content: None,
+                    bytes: None,
+                    tool_use_result: None,
+                }));
+                emitted
+            }
             "usage" => vec![Emission::untimed(Event::Usage {
                 request_id: None,
                 model: string("model").or_else(|| self.model.clone()),
@@ -335,7 +437,7 @@ impl HarnessSeam for B10xSeam {
                     cache_read_input_tokens: number("cached_input_tokens"),
                     // **Read from the record since the 0.12.1 observation.** It was a hardcoded
                     // `None` because the golden fixture, then a 0.9.1 recording, carried no such
-                    // field — and the 0.19.0 capture there carries none either, because harness's
+                    // field — and the 0.20.0 capture there carries none either, because harness's
                     // Responses emulator reports no cache-write counter. The paid run on
                     // 2026-09-15 saw `cache_creation_input_tokens` 2183 and
                     // 132 on the two `usage` lines of a two-turn run, so `None` here stopped being
@@ -373,7 +475,10 @@ impl HarnessSeam for B10xSeam {
                     .and_then(Value::as_str)
                     .unwrap_or("unknown")
                     .to_owned();
-                vec![Emission::untimed(Event::SessionEnded {
+                // Anything still held ran without being asked about; its record goes out before the
+                // end.
+                let mut emitted = self.release_held();
+                emitted.push(Emission::untimed(Event::SessionEnded {
                     final_answer: None,
                     observed_models: None,
                     is_error: Some(reason != "completed"),
@@ -413,7 +518,8 @@ impl HarnessSeam for B10xSeam {
                     usage: None,
                     model_usage: None,
                     census: self.census.clone(),
-                })]
+                }));
+                emitted
             }
             // **Control plane, not opaque, and the difference was costing this arm its score.**
             //
@@ -493,8 +599,8 @@ impl HarnessSeam for B10xSeam {
             // broke. One of those is the approval tier working and the other is a bug, and a
             // column that cannot tell them apart cannot score either.
             //
-            // A `warning`, not `tool.decided`, for the reason invariant 9 gives: this adapter runs
-            // in observe mode and decides nothing. Every `DecidedBy` this protocol has —
+            // A `warning`, not `tool.decided`, for the reason invariant 9 gives: on an observe
+            // launch this adapter decides nothing. Every `DecidedBy` this protocol has —
             // `Embedder`, `Frame`, `Deadline`, `Adapter`, observe — names a metaharness-side
             // decider, and the loop's approver is none of them. Saying `tool.decided` would claim
             // a seam that is not there, which is the same mistake `hook-ran` avoids above.
@@ -503,6 +609,45 @@ impl HarnessSeam for B10xSeam {
             // and the reason goes into the failed outcome's message. So this names the call rather
             // than inventing a cause, and a reader joins it to the `tool.requested` that names the
             // tool.
+            //
+            // **Under the caller seam the approver is metaharness**, whose answer is already the
+            // `tool.decided` the run emitted, so an outcome that agrees with it is bookkeeping. One
+            // that does not is the finding: the loop recorded the opposite of what metaharness
+            // wrote (its stdin closed, it refused the line, or the answer went to another call),
+            // or decided a call metaharness was never asked about. Either way the record must not
+            // read as if metaharness's decision held.
+            "approval-resolved" if self.caller() => {
+                let call = value["call_id"].as_str().unwrap_or("an unnamed call");
+                let approved = value["approved"].as_bool();
+                let answered = self.answered.borrow().get(call).copied();
+                match (answered, approved) {
+                    (Some(allowed), Some(approved)) if allowed == approved => Vec::new(),
+                    (Some(allowed), _) => vec![Emission::untimed(Event::Warning {
+                        code: "approval-disagreed".to_owned(),
+                        message: format!(
+                            "metaharness {} {call} and the loop recorded it {}",
+                            if allowed { "allowed" } else { "denied" },
+                            match approved {
+                                Some(true) => "approved",
+                                Some(false) => "denied",
+                                None => "neither approved nor denied",
+                            }
+                        ),
+                    })],
+                    (None, Some(false)) => vec![Emission::untimed(Event::Warning {
+                        code: "approval-denied".to_owned(),
+                        message: format!(
+                            "the loop denied {call} without an answer from metaharness"
+                        ),
+                    })],
+                    (None, _) => vec![Emission::untimed(Event::Warning {
+                        code: "approval-disagreed".to_owned(),
+                        message: format!(
+                            "the loop approved {call}, which metaharness was never asked about"
+                        ),
+                    })],
+                }
+            }
             "approval-resolved" => {
                 if value["approved"].as_bool() == Some(false) {
                     let call = value["call_id"].as_str().unwrap_or("an unnamed call");
@@ -525,8 +670,9 @@ impl HarnessSeam for B10xSeam {
     fn finish(&mut self) -> Vec<Emission> {
         // No terminal record is invented for a run that stopped without one. A checker reading a
         // synthesised `completed` would call a killed run a finished one, and the honest answer to
-        // *how did this end* is that nobody found out.
-        Vec::new()
+        // *how did this end* is that nobody found out. A call still held is released as the record
+        // it is: it was announced and never asked about.
+        self.release_held()
     }
 
     fn set_census(&mut self, census: DecisionCensus) {
@@ -534,14 +680,55 @@ impl HarnessSeam for B10xSeam {
     }
 
     fn decision_line(&self, call_id: &str, decision: &Decision) -> String {
-        // **Unreachable, and it says so rather than doing something.** This adapter runs in observe
-        // mode; no call ever asks, so no decision ever needs a line. Returning a plausible one
-        // would leave a wire that could carry an adjudication this arm must not have.
-        format!(
-            "{{\"unreachable\":\"the b10x adapter observes and does not decide\",\
-             \"call_id\":{call_id:?},\"well_formed\":{}}}",
-            decision.is_well_formed()
-        )
+        if !self.caller() {
+            // **Unreachable on an observe launch, and it says so rather than doing something.**
+            // No call ever asks, so no decision ever needs a line. Returning a plausible one would
+            // leave a wire that could carry an adjudication this arm must not have.
+            return format!(
+                "{{\"unreachable\":\"the b10x adapter observes and does not decide\",\
+                 \"call_id\":{call_id:?},\"well_formed\":{}}}",
+                decision.is_well_formed()
+            );
+        }
+        // The loop's caller vocabulary is `allow` and `deny` with a reason (harness 0.20.0,
+        // `story:approver-delegates-to-caller`). The two decisions it has no word for are answered
+        // `deny`, never `allow`: a rewrite it cannot apply must not run as sent (how a rewrite
+        // reaches the loop is ADR 0104's open question), and an abstention has nobody else to fall
+        // to, because under `--approve caller` the loop's own approver is metaharness. The
+        // `tool.decided` the run emits still says which of the four metaharness decided.
+        let (allowed, reason) = match decision {
+            Decision::Allow => (true, None),
+            Decision::Deny { reason } if !reason.trim().is_empty() => (false, Some(reason.clone())),
+            Decision::Deny { .. } => (false, Some("metaharness denied this call".to_owned())),
+            Decision::Replace { .. } => (
+                false,
+                Some(
+                    "metaharness decided to rewrite this call's input, and this loop cannot take a \
+                     rewrite, so the call is refused rather than run as sent"
+                        .to_owned(),
+                ),
+            ),
+            Decision::Abstain => (
+                false,
+                Some(
+                    "metaharness abstained on this call and nothing else decides it, so it is \
+                     refused"
+                        .to_owned(),
+                ),
+            ),
+        };
+        self.answered
+            .borrow_mut()
+            .insert(call_id.to_owned(), allowed);
+        let line = match reason {
+            None => serde_json::json!({"call_id": call_id, "decision": "allow"}),
+            Some(reason) => serde_json::json!({
+                "call_id": call_id,
+                "decision": "deny",
+                "reason": bounded(&reason),
+            }),
+        };
+        line.to_string()
     }
 
     fn control_line(&self, _command: &Command) -> Option<String> {
@@ -1012,11 +1199,14 @@ fn rendering() -> std::collections::BTreeMap<String, Option<String>> {
 
 /// What this adapter can and cannot do, published as a value.
 ///
-/// **Observe only, and every tier that implies a decision is `Unverified` rather than
-/// `Delivered`.** There is no registration seam, no hook, no control request: the loop decides in
-/// process and this adapter reads what it did. Declaring a tier delivered here would let an
-/// embedder ask for a decision mode that silently does nothing, which is the failure the whole
-/// capability document exists to prevent.
+/// **All three decision modes are delivered, and every tier stays `Unverified`.** Observe decides
+/// nothing. `frame` and `ask` answer the loop's `--approve caller` questions (design amendment
+/// a61), driven against the released binary and asserted by the `provider-emulated-caller-allow`
+/// and `-deny` vectors, so `tool.decide` is honoured. `Tier::Call` is not claimed even so: the
+/// loop asks only about calls above its floor, and its reads run unasked, so metaharness decides
+/// some calls and not each one. Declaring the tier delivered would let an embedder believe every
+/// call passes through a decision, which is the failure the whole capability document exists to
+/// prevent.
 #[must_use]
 pub fn capabilities() -> metaharness_protocol::Capabilities {
     use metaharness_protocol::{
@@ -1025,9 +1215,8 @@ pub fn capabilities() -> metaharness_protocol::Capabilities {
     };
     use std::collections::BTreeMap;
 
-    // Refused by default, and `tool.decide` stays refused for the reason above: nothing asks, so
-    // there is nothing to answer, and claiming it would let an embedder select a decision mode
-    // that silently does nothing.
+    // Refused by default. `frame.set` stays refused: the loop takes no mid-run frame, and the frame
+    // a caller-seam run decides from is the one it started with.
     let mut commands: BTreeMap<String, CommandSupport> = COMMAND_NAMES
         .iter()
         .map(|name| {
@@ -1055,6 +1244,9 @@ pub fn capabilities() -> metaharness_protocol::Capabilities {
     for name in ["interrupt", "halt"] {
         commands.insert(name.to_string(), CommandSupport::Honoured);
     }
+    // **Honoured since the caller seam** (atlas ADR 0104 point 3, design amendment a61): an `ask`
+    // run's answer is written to the loop's stdin as the decision line it waits on.
+    commands.insert("tool.decide".to_string(), CommandSupport::Honoured);
 
     Capabilities {
         adapter: AdapterId {
@@ -1076,8 +1268,8 @@ pub fn capabilities() -> metaharness_protocol::Capabilities {
         commands,
         decision_modes: BTreeMap::from([
             ("observe".to_string(), TierStatus::Delivered),
-            ("ask".to_string(), TierStatus::Unverified),
-            ("frame".to_string(), TierStatus::Unverified),
+            ("ask".to_string(), TierStatus::Delivered),
+            ("frame".to_string(), TierStatus::Delivered),
         ]),
         // **Published, and the empty table this held for one commit was a mistake.** The rendering
         // is what lets anything downstream ask *did this run write a file* without knowing whose
@@ -1198,5 +1390,194 @@ mod rendering_tests {
             assert!(table.contains_key(absent), "{absent} is named");
             assert_eq!(table[absent], None, "{absent} is not served");
         }
+    }
+}
+
+/// The caller seam (atlas ADR 0104 point 3, design amendment a61), line by line.
+#[cfg(test)]
+mod caller_tests {
+    use metaharness_protocol::{
+        Decision, Emission, Event, HarnessSeam, HermeticAttestation, HermeticMode, Seam,
+        SeamFactory, TranscriptRef,
+    };
+    use serde_json::{Value, json};
+
+    const NOTHING: Vec<Emission> = Vec::new();
+
+    fn caller() -> Box<dyn HarnessSeam> {
+        super::B10xSeams::new(Some("0.20.0".to_owned()), Some("m".to_owned())).build(
+            TranscriptRef {
+                path: None,
+                digest: None,
+                bytes: None,
+            },
+            HermeticAttestation::none(HermeticMode::Strict),
+            Seam::ControlRequest,
+        )
+    }
+
+    const REQUESTED: &str = r#"{"kind":"tool-requested","call_id":"c-1","name":"file_write","arguments":{"path":"a"},"operation":"file.write","subjects":["file:a"]}"#;
+    const ASKED: &str = r#"{"kind":"approval-required","call_id":"c-1","name":"file_write"}"#;
+
+    fn seam_of(event: &Event) -> Option<Seam> {
+        match event {
+            Event::ToolRequested { seam, .. } => Some(*seam),
+            _ => None,
+        }
+    }
+
+    /// The announcement waits for the record to say whether the loop asks. Asked, it goes to the
+    /// run on the caller seam, with its input; never asked, it goes out as a record of a call
+    /// nobody decided, before the result that closes it.
+    #[test]
+    fn an_announcement_is_held_until_the_loop_says_whether_it_asks() {
+        let mut seam = caller();
+        assert!(
+            seam.push_line(REQUESTED).is_empty(),
+            "held, not yet emitted"
+        );
+        let asked = seam.push_line(ASKED);
+        assert_eq!(asked.len(), 1);
+        assert_eq!(seam_of(&asked[0].event), Some(Seam::ControlRequest));
+        let Event::ToolRequested { input, .. } = &asked[0].event else {
+            panic!("a question is a tool.requested")
+        };
+        assert_eq!(input["path"], "a", "the question carries the call's input");
+
+        let read = r#"{"kind":"tool-requested","call_id":"c-2","name":"file_read","arguments":{"path":"a"}}"#;
+        assert_eq!(seam.push_line(read), NOTHING);
+        let closed = seam.push_line(r#"{"kind":"tool-completed","call_id":"c-2","failed":false}"#);
+        assert_eq!(closed.len(), 2, "{closed:?}");
+        assert_eq!(seam_of(&closed[0].event), Some(Seam::None));
+        assert!(matches!(closed[1].event, Event::ToolResult { .. }));
+    }
+
+    /// A call still held when the run ends was announced and never asked about; its record is not
+    /// dropped.
+    #[test]
+    fn a_held_call_goes_out_when_the_run_ends() {
+        let mut seam = caller();
+        assert_eq!(seam.push_line(REQUESTED), NOTHING);
+        let ended = seam.push_line(r#"{"kind":"finished","stop":{"kind":"completed"},"turns":1}"#);
+        assert_eq!(seam_of(&ended[0].event), Some(Seam::None), "{ended:?}");
+        assert!(matches!(
+            ended.last().map(|e| &e.event),
+            Some(Event::SessionEnded { .. })
+        ));
+
+        let mut seam = caller();
+        assert_eq!(seam.push_line(REQUESTED), NOTHING);
+        let finished = seam.finish();
+        assert_eq!(finished.len(), 1);
+        assert_eq!(seam_of(&finished[0].event), Some(Seam::None));
+    }
+
+    /// A question with no announcement before it is still a question the loop is blocked on.
+    #[test]
+    fn a_question_without_an_announcement_is_still_put_to_the_run() {
+        let mut seam = caller();
+        let asked = seam.push_line(ASKED);
+        assert_eq!(asked.len(), 1);
+        assert_eq!(seam_of(&asked[0].event), Some(Seam::ControlRequest));
+    }
+
+    fn line(seam: &dyn HarnessSeam, decision: &Decision) -> Value {
+        serde_json::from_str(&seam.decision_line("c-1", decision)).expect("a JSON line")
+    }
+
+    /// The four decisions in the loop's two words. Only `allow` lets a call run; the two the loop
+    /// has no word for are refusals that say why, never a silent `allow`.
+    #[test]
+    fn every_decision_maps_to_the_loops_grammar_and_only_allow_runs() {
+        let seam = caller();
+        assert_eq!(
+            line(seam.as_ref(), &Decision::Allow),
+            json!({"call_id": "c-1", "decision": "allow"})
+        );
+        assert_eq!(
+            line(
+                seam.as_ref(),
+                &Decision::Deny {
+                    reason: "outside the step".to_owned()
+                }
+            ),
+            json!({"call_id": "c-1", "decision": "deny", "reason": "outside the step"})
+        );
+        for decision in [
+            Decision::Abstain,
+            Decision::Replace { input: json!({}) },
+            Decision::Deny {
+                reason: "  ".to_owned(),
+            },
+        ] {
+            let answer = line(seam.as_ref(), &decision);
+            assert_eq!(answer["decision"], "deny", "{decision:?}");
+            assert!(
+                !answer["reason"]
+                    .as_str()
+                    .unwrap_or_default()
+                    .trim()
+                    .is_empty(),
+                "the loop refuses a deny without a reason: {answer}"
+            );
+        }
+    }
+
+    /// The loop refuses a decision line over 64 KiB, so a long reason is cut well inside it and
+    /// says it was cut.
+    #[test]
+    fn a_long_reason_is_cut_on_a_character_boundary_and_says_so() {
+        let seam = caller();
+        let reason = "é".repeat(10_000);
+        let written = seam.decision_line(
+            "c-1",
+            &Decision::Deny {
+                reason: reason.clone(),
+            },
+        );
+        assert!(written.len() < 16 * 1024, "{}", written.len());
+        let answer: Value = serde_json::from_str(&written).expect("still JSON");
+        let cut = answer["reason"].as_str().expect("a reason");
+        assert!(cut.contains("of 20000 bytes"), "{}", &cut[cut.len() - 40..]);
+    }
+
+    /// The loop's own outcome is checked against what metaharness answered. Agreement is
+    /// bookkeeping; disagreement is the finding.
+    #[test]
+    fn an_outcome_that_disagrees_with_the_answer_is_a_warning() {
+        let mut seam = caller();
+        seam.push_line(REQUESTED);
+        seam.push_line(ASKED);
+        let _ = seam.decision_line("c-1", &Decision::Allow);
+        assert_eq!(
+            seam.push_line(r#"{"kind":"approval-resolved","call_id":"c-1","approved":true}"#),
+            NOTHING
+        );
+
+        let mut seam = caller();
+        seam.push_line(REQUESTED);
+        seam.push_line(ASKED);
+        let _ = seam.decision_line("c-1", &Decision::Allow);
+        let warned =
+            seam.push_line(r#"{"kind":"approval-resolved","call_id":"c-1","approved":false}"#);
+        match &warned[..] {
+            [one] => match &one.event {
+                Event::Warning { code, message } => {
+                    assert_eq!(code, "approval-disagreed");
+                    assert!(message.contains("metaharness allowed c-1"), "{message}");
+                }
+                other => panic!("{other:?}"),
+            },
+            other => panic!("{other:?}"),
+        }
+
+        // A denial nobody answered (the loop's stdin closed, say) reads as the loop's refusal.
+        let mut seam = caller();
+        let warned =
+            seam.push_line(r#"{"kind":"approval-resolved","call_id":"c-9","approved":false}"#);
+        assert!(
+            matches!(&warned[0].event, Event::Warning { code, .. } if code == "approval-denied"),
+            "{warned:?}"
+        );
     }
 }

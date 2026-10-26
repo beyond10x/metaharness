@@ -5096,3 +5096,116 @@ on 0.19.0 with this change and exits 2 before the spawn with the released 0.17.0
 `deadline_reached: true` was not observed.
 
 No event or frame wire change.
+
+### Amendment a60 — the b10x pin moves to harness 0.20.0 (2026-10-26)
+
+Harness 0.20.0 adds `run --approve caller`, the L1 half of atlas ADR 0104 ("L1 enforces and does
+not decide"). Harness lines are read at `684c99f5e8c7e1d22d7b29f717b71856db81766a`, the commit the
+annotated tag `0.20.0` points at. Evidence:
+`docs/research/2026-10-26-b10x-harness-0.20.0-adapter-surface.md`.
+`b10x-chef-orchestrator` approved the admission on 2026-10-26 (dispatch-queue #8).
+
+**1. The pair moves; 0.19.0 leaves the pin.** On a25's rule and a59 § 1's reasoning, from 0.19.0
+(`13d72c06`) to **0.20.0**: both manifests, the lock, `PINNED_VERSIONS` and `HARNESS_REVISION` move
+in one change. `PINNED_VERSIONS` is `["0.20.0"]`. The tools crates stay at `b10x-tool-*` 0.5.0,
+which harness 0.20.0 also takes, so the lock moves only harness's own crates.
+
+**2. What moved.** `harness-wire` and `harness-loop` have no diff from 0.19.0. `harness-cli` gains
+`caller.rs` and the `caller` value of `--approve`; `harness-llm` moves to llm 0.15.0. Without
+`--approve caller` the argv the adapter emits, the `--json` record and the `credential_source`
+strings are 0.19.0's.
+
+**3. Qualification.** The released 0.20.0 Linux archive passed its `SHA256SUMS` check and its banner
+is `b10x-harness 0.20.0`. The golden is recorded again with that executable by the fixture README's
+procedure. It differs from 0.19.0's only in the opening line's two `captured_at` stamps, and the
+replay's expected stream only in `harness_version`. The trace domain's `transcript_digest` follows
+the new record. `contract_result`'s provider reads `b10x 0.20.0`. a25's runtime proof ran against
+the emulator, credential-free: `metaharness run b10x --strict-version --decisions observe` exits 0
+on 0.20.0 with this change and exits 2 before the spawn with the released 0.18.0.
+
+**4. Open.** A paid one-turn run on 0.20.0 was not made.
+
+No event or frame wire change.
+
+### Amendment a61 — b10x `frame` and `ask` decide through the loop's caller approver (2026-10-26)
+
+Atlas ADR 0104 point 2: "metaharness (L2) is the one layer that decides per-call tool permission."
+Point 3: "L1 enforces and does not decide. A harness running under metaharness hands each approval
+to" L2. Harness 0.20.0 (a60) is point 3's L1 half. This amendment is metaharness's half for the b10x
+adapter. It supersedes invariant 9's "the b10x adapter decides nothing" for `frame` and `ask`;
+`observe` is unchanged. `b10x-chef-orchestrator` approved it as a story in the same wave on
+2026-10-26: "plus ADR 0104 point 3 (metaharness caller policy: the metaharness side of the delegated
+approval …) as a story in the same wave".
+
+**1. Launch.** `observe` keeps its launch byte for byte: `--approve-up-to high`, stdin
+`/dev/null`, `Seam::None`. `frame` and `ask` launch with `--approve-up-to low --approve caller`
+(`B10xLaunch::with_caller_decisions`), stdin a pipe the run owns (`Spawned::with_stdin_decisions`),
+and `Seam::ControlRequest`. `low` is the lowest ceiling 0.20.0 offers, so every write and every
+`run` is asked. The vector `c1-caller-launch` holds the argv to the observe launch's with only the
+approver changed.
+
+**2. One call, held then stamped.** The loop writes `tool-requested` before it knows whether it
+will ask. The seam holds that record until the next record about the same call. An
+`approval-required` turns it into a `tool.requested` with `decision_required: true` on
+`control_request`. A `tool-completed` or `finished` with no question in between releases it on seam
+`none`, as observe always did.
+
+**3. The answer.** The control seam decides as on any adapter (frame, the embedder's `tool.decide`,
+or the deadline) and the seam writes one line to the loop's stdin:
+
+| metaharness decision | line on stdin |
+|---|---|
+| `allow` | `{"call_id":…,"decision":"allow"}` |
+| `deny` with a reason | `{"call_id":…,"decision":"deny","reason":…}` |
+| `deny` with an empty reason | a deny whose reason says metaharness refused the call |
+| `abstain` | a deny that says metaharness abstained and nothing else decides the call |
+| `replace` | a deny that says a rewrite cannot be applied through this approver |
+
+The loop refuses an `allow` that carries a reason and a `deny` without one (harness
+`caller.rs:289-330`), so neither is written. A reason is cut at 8 KiB on a character boundary and
+says how much was kept, well under the loop's 64 KiB line bound. `tool.decided` still records which
+of the four metaharness decided. How a rewrite should reach L1 is ADR 0104's open question; until
+it is answered, `replace` fails closed.
+
+**4. The loop's echo.** The loop reports the outcome as `approval-resolved{call_id, approved}`. When
+it agrees with the answer the seam emits nothing; when it does not, `warning{code:
+"approval-disagreed"}`. An `approval-resolved{approved: false}` for a call the seam never answered
+stays `approval-denied`, as in observe.
+
+**5. What a frame cannot hold here.** `file_read`, `dir_list`, `search` and `find` are `low` in
+harness's catalogue and run unasked at every ceiling 0.20.0 offers. A frame that does not admit
+`file.read`, `dir.list` and `search` (`metaharness_b10x::UNASKED_OPERATIONS`), in its operation set
+and in every subject rule, is refused at start (`caller_frame_problem`) rather than recorded as
+enforced. `find` has no operation word, so no frame can name it. A frame-mode run with no frame is
+refused before the spawn: the CLI's default mode is `frame`, and with nothing to decide from every
+write would be refused. `--decisions observe` is the arm that decides nothing.
+
+**6. Subjects on a flat entry.** A subject rule is judged on the flat b10x entry's own arguments
+(`metaharness_tools::subjects_of_entry`), so `file_write` to `note.md` names `file:note.md`. The same
+function now fills `subjects` on b10x `tool.requested` events in `observe`, which carried none
+before. That is the one change an observe run's stream shows.
+
+**7. The deadline.** The loop waits on stdin with no deadline of its own. The run's hook budget is
+the default 30000 ms (`DEFAULT_VENDOR_HOOK_TIMEOUT_MS`), so an unanswered call is denied by
+metaharness's deadline at 25000 ms.
+
+**8. Capabilities.** `ask` and `frame` are `delivered`; `tool.decide` is `honoured`; `frame.set`
+stays refused. Every tier stays `unverified`: the caller seam decides only the calls the loop asks
+about, and its reads run unasked, so `call` delivered would let an expectation be satisfied for
+calls no decision touched.
+
+**9. Evidence.** `fixtures/caller/` holds two 0.20.0 captures against harness's emulator
+(`flat-write`), one fed `allow` and one `deny`. The vectors `provider-emulated-caller-allow` and
+`-deny` fill the contract checklist's hook-input row; each asserts the line the seam writes is byte
+for byte the line the loop was fed. `tests/b10x_caller_seam.rs` drives the seam in-process. Against
+the released binary and the emulator, a frame denied the write with `decided_by: "frame"` on
+`control_request` and no file was written; an embedder denied it over `tool.decide` with
+`latency_ms: 90`; `observe` wrote it.
+
+**10. Consumers.** Loom's session executor and the AEP eval arms run b10x under `observe`, whose
+launch and decisions are unchanged.
+
+**11. Open.** No paid run. The reads stay outside every decision until the loop offers a ceiling
+below `low` or asks about reads on request. `replace` waits on ADR 0104's open question.
+
+Event wire: one new warning code, `approval-disagreed`. No frame wire change.
