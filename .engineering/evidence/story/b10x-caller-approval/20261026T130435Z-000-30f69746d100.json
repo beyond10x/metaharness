@@ -1,0 +1,12 @@
+{
+  "at": "2026-10-26T13:04:35Z",
+  "actor": "human:timo",
+  "artifact": "story:b10x-caller-approval",
+  "kind": "story",
+  "revision": 4,
+  "change": {
+    "change": "evidence",
+    "kind": "verification",
+    "source": "Shipped in 0.19.0: tag 0.19.0 at e1b0e36, Release run 40325272547 success, https://github.com/beyond10x/metaharness/releases/tag/0.19.0 by b10x-bot[bot] with 4 archives + SHA256SUMS, verify-release.sh metaharness 0.19.0 exit 0"
+  }
+}
