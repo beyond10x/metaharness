@@ -11,11 +11,11 @@ publish = false
 workspace = true
 
 [dependencies]
-b10x-harness-catalogue = { git = "https://github.com/beyond10x/harness", rev = "684c99f5e8c7e1d22d7b29f717b71856db81766a" }
+b10x-harness-catalogue = { git = "https://github.com/beyond10x/harness", rev = "ef6df52e015f986026fb1517c7880f9ebfa596d0" }
 # The crate that defines the record this adapter reads. Taken for `micro_usd_as_decimal`, so the
 # figure this seam puts on the wire is rendered by the same function that rendered it in the loop's
 # own record — two spellings of one number is exactly the disagreement a cost figure must not have.
-b10x-harness-loop = { git = "https://github.com/beyond10x/harness", rev = "684c99f5e8c7e1d22d7b29f717b71856db81766a" }
+b10x-harness-loop = { git = "https://github.com/beyond10x/harness", rev = "ef6df52e015f986026fb1517c7880f9ebfa596d0" }
 metaharness-protocol = { path = "../metaharness-protocol" }
 serde = { workspace = true }
 serde_json = { workspace = true }

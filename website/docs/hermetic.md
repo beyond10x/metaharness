@@ -114,7 +114,7 @@ the ones the pinned loop's store client finds that bus by: the address, or the r
 its default socket sits in. Neither holds a credential. H3's imposed sentence on this route names
 each of the two that was forwarded, or says none was, and each the caller lacked, so the
 attestation shows whether the child was given a way to reach the bus. The record's `api-key:secrets` is the
-string `b10x-harness` 0.20.0 writes for that flag and no other (design amendment a50).
+string `b10x-harness` 0.21.0 writes for that flag and no other (design amendment a50).
 
 **Unverified:** whether the store opens in that environment, with no `HOME` and everything else
 cleared. No run has shown it. Until one does, a secret-named run that fails at its first request

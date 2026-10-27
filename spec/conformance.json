@@ -173,9 +173,9 @@
     }
   },
   "provenance": {
-    "contract_digest": "aaee2d921fba0bd056d64d6115e92c647d105f23a1b6d007349042b22b2dbe97",
+    "contract_digest": "fc491420c26133c80e22009d89a64a499a4acb8fa1f874575db14daad6431f25",
     "scenario_initial_state": "empty",
-    "spec_digest": "a364c141dcbe597c7d512d37e619f746259cc9ed0166aca32884e2fe395e4f33",
+    "spec_digest": "ef135bf8a08e3c1aad9f9de6c1e429fe11c00c6e96d77cfe745fce81b566fa46",
     "specification_version": "v1",
     "suite_version": "ess-conformance/35",
     "system": "metaharness"
@@ -22942,7 +22942,7 @@
             "stop_reason": "null",
             "tokens_basis": "\"sum-of-requests\"",
             "tool_calls": "[{\"answered\":true,\"call_id\":\"call_b10x_001\",\"error\":false,\"name\":\"file_read\"}]",
-            "transcript_digest": "\"bce1c4d0f120aa4932c6a284b80a0859221af763f39149d8abb9a71e68749062\"",
+            "transcript_digest": "\"3430a15724061aac514a8b06b8221d5d6215cb05be1e656851287a78c79fbfa7\"",
             "turns": "2",
             "unk": "2"
           },

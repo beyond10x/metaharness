@@ -56,11 +56,11 @@
 //! rather than being guessed empty.
 //!
 //! **MCP has stopped being one of those absences.** Since 0.12.1 the loop publishes
-//! `--mcp-profile` and `--mcp-registry` and writes an `mcp` field in its opening record; the 0.20.0
+//! `--mcp-profile` and `--mcp-registry` and writes an `mcp` field in its opening record; the 0.21.0
 //! capture in `fixtures/golden/` carries it as `"mcp":[]`. `mcp_servers` is still the hardcoded
 //! `[]` the old standing fact justified, because every observation so far — 2026-09-15 on 0.12.1,
-//! 2026-10-20 on 0.15.0 and 0.15.1, 2026-10-22 on 0.18.0, 2026-10-26 on 0.19.0 and 0.20.0 — saw it
-//! only as `[]` and the shape of an element is unestablished — see `B10xSeam`'s own note,
+//! 2026-10-20 on 0.15.0 and 0.15.1, 2026-10-22 on 0.18.0, 2026-10-26 on 0.19.0 and 0.20.0,
+//! 2026-10-27 on 0.21.0 — saw it only as `[]` and the shape of an element is unestablished — see `B10xSeam`'s own note,
 //! `docs/research/2026-10-20-b10x-harness-0.15.1-adapter-surface.md`,
 //! `docs/research/2026-10-22-b10x-harness-0.18.0-adapter-surface.md`,
 //! `docs/research/2026-10-26-b10x-harness-0.19.0-adapter-surface.md` and
@@ -111,14 +111,14 @@ pub const ADAPTER_CLASS: &str = "direct_provider";
 /// Pinned for the reason the other adapters pin: every version-specific claim in here — the field
 /// names of the loop record, the shape of its terminal event — was observed against these, and a
 /// run against another is unverified rather than wrong.
-pub const PINNED_VERSIONS: [&str; 1] = ["0.20.0"];
+pub const PINNED_VERSIONS: [&str; 1] = ["0.21.0"];
 
 /// The immutable harness source revision this adapter is built against.
 ///
 /// The version identifies the released CLI; the revision identifies the Rust crates Cargo
 /// resolves. Both are checked by the AEP eval before it trusts an installed
 /// binary, so a filesystem timestamp is never mistaken for provenance.
-pub const HARNESS_REVISION: &str = "684c99f5e8c7e1d22d7b29f717b71856db81766a";
+pub const HARNESS_REVISION: &str = "ef6df52e015f986026fb1517c7880f9ebfa596d0";
 
 /// The `credential_source` the pinned loop records when its key is named by `--api-key-secret`
 /// (design amendment a50 § 7).
@@ -436,13 +436,14 @@ mod tests {
     /// constants, so a move that forgot one of them would agree with itself everywhere else. Moved
     /// 0.13.3 / `798325f0` → 0.15.0 / `dd5c2a66` → 0.15.1 / `f0870131` on 2026-10-20, and then →
     /// 0.18.0 / `330e2cde` on 2026-10-22 (amendment a50), → 0.19.0 / `13d72c06` on 2026-10-26
-    /// (a59), and then → 0.20.0 / `684c99f5` on 2026-10-26 (a60): the commit the annotated tag
-    /// `0.20.0` (tag object `ab2abfd9`) points at, never the tag object, because the eval compares
-    /// this with `git rev-parse HEAD` in the harness checkout.
+    /// (a59), → 0.20.0 / `684c99f5` on 2026-10-26 (a60), and then → 0.21.0 / `ef6df52e` on
+    /// 2026-10-27 (Substrate 0.13.0): the commit the annotated tag `0.21.0` (tag object
+    /// `76c7f5ae`) points at, never the tag object, because the eval compares this with
+    /// `git rev-parse HEAD` in the harness checkout.
     #[test]
-    fn the_pin_names_the_harness_0_20_0_release_commit() {
-        assert_eq!(PINNED_VERSIONS, ["0.20.0"]);
-        assert_eq!(HARNESS_REVISION, "684c99f5e8c7e1d22d7b29f717b71856db81766a");
+    fn the_pin_names_the_harness_0_21_0_release_commit() {
+        assert_eq!(PINNED_VERSIONS, ["0.21.0"]);
+        assert_eq!(HARNESS_REVISION, "ef6df52e015f986026fb1517c7880f9ebfa596d0");
     }
 
     /// D30: the string the pinned loop records for `--api-key-secret`, read from

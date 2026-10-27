@@ -7,7 +7,7 @@ was amended and the amendment is named here.
 
 ### Changed
 
-- The harness crates and the `b10x-harness` release `metaharness run b10x --strict-version` admits move to Harness `0.21.0`, which embeds Substrate `0.13.0` (the confinement contract of ADR 0109 and its follow-ups) and pins ESS 0.70.0; the golden loop record is captured again from that release (story:b10x-harness-pin-substrate-0-12).
+- The harness crates and the `b10x-harness` release `metaharness run b10x --strict-version` admits move to Harness `0.21.0`, which embeds Substrate `0.13.0` (the confinement contract of ADR 0109 and its follow-ups) and pins ESS 0.70.0; the golden loop record and the caller-seam samples are captured again from that release (story:b10x-harness-pin-substrate-0-12).
 
 ## [0.20.0] — 2026-10-27
 
