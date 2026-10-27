@@ -1170,9 +1170,9 @@ struct ConfinedProbe<'a> {
 ///
 /// Every flag is a field of `RunCommand`/`RunOptions` in `crates/harness-cli/src/lib.rs` of the
 /// harness, and exists at both `330e2cde` (0.18.0) and `f0870131` (0.15.1). 0.19.0 (`13d72c06`)
-/// has no diff in `crates/harness-cli/src` from 0.18.0. The pinned 0.20.0 (`684c99f5`) adds the
-/// `caller` value to `--approve` and no flag, and moves each line below by 1 to 11; the table
-/// keeps the 0.18.0 column:
+/// has no diff in `crates/harness-cli/src` from 0.18.0. 0.20.0 (`684c99f5`) adds the `caller`
+/// value to `--approve` and no flag, and moves each line below by 1 to 11; the pinned 0.21.0
+/// (`ef6df52e`) has no diff there from 0.20.0. The table keeps the 0.18.0 column:
 ///
 /// | flag | 0.18.0 | 0.15.1 |
 /// |---|---|---|

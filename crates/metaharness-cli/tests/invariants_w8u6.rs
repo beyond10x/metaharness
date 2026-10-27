@@ -44,7 +44,7 @@ impl Scratch {
             &stub,
             format!(
                 "#!/bin/sh\n\
-                 if [ \"$1\" = --version ]; then echo 'b10x-harness 0.20.0'; exit 0; fi\n\
+                 if [ \"$1\" = --version ]; then echo 'b10x-harness 0.21.0'; exit 0; fi\n\
                  printf '%s\\0' \"$@\" > '{}'\n\
                  /usr/bin/env > '{}'\n\
                  cat '{}'\n\

@@ -9,6 +9,12 @@ was amended and the amendment is named here.
 
 - `metaharness::qualify(kind, program, hermetic) -> Result<Qualification, Refusal>` reports the floor rows a binary's version decides, from one `--version` and no model call: H9 for every kind and H11 for Claude, read through the same functions the floor uses. Each `QualifiedRow` says whether it gates (a gating row that is not `ok`, under `strict`), and `Qualification::strict_version_refuses` says whether `--strict-version` would refuse the binary. A program that resolves to nothing is a `Refusal::Io` naming it and the `PATH` searched.
 
+## [0.21.0] — 2026-10-27
+
+### Changed
+
+- The harness crates and the `b10x-harness` release `metaharness run b10x --strict-version` admits move to Harness `0.21.0`, which embeds Substrate `0.13.0` (the confinement contract of ADR 0109 and its follow-ups) and pins ESS 0.70.0; the golden loop record and the caller-seam samples are captured again from that release (story:b10x-harness-pin-substrate-0-12).
+
 ## [0.20.0] — 2026-10-27
 
 ### Changed
