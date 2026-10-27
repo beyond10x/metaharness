@@ -42,7 +42,7 @@
     },
     "counts": {
       "authored": 6,
-      "generated": 110,
+      "generated": 111,
       "outside": 0,
       "refused": 0
     },
@@ -69,6 +69,7 @@
       "metaharness.session.CloseUnsteeredStream/outcome/observed-budget-stop",
       "metaharness.session.CloseUnsteeredStream/outcome/positive-terminal-record",
       "metaharness.session.ExitAuditedRun/outcome/a-gating-row-failed",
+      "metaharness.session.ExitAuditedRun/outcome/an-off-pin-version-is-unmeasured",
       "metaharness.session.ExitAuditedRun/outcome/every-control-held",
       "metaharness.session.ExitAuditedRun/outcome/nobody-found-out",
       "metaharness.session.FinishCodexCompletion/outcome/explicit-failure",
@@ -172,9 +173,9 @@
     }
   },
   "provenance": {
-    "contract_digest": "8ef8de48ad9763a3193c9372138791dad45719385090794e237230d224ebc816",
+    "contract_digest": "aaee2d921fba0bd056d64d6115e92c647d105f23a1b6d007349042b22b2dbe97",
     "scenario_initial_state": "empty",
-    "spec_digest": "98b926d4e84a1a96d3fbcf9a519de1d34921aa364d63e38a9dee4d6914ad1f1e",
+    "spec_digest": "a364c141dcbe597c7d512d37e619f746259cc9ed0166aca32884e2fe395e4f33",
     "specification_version": "v1",
     "suite_version": "ess-conformance/35",
     "system": "metaharness"
@@ -6200,7 +6201,7 @@
             },
             "opening": {
               "kind": "literal",
-              "value": "off-the-pin"
+              "value": "undeclared-plugin"
             }
           },
           "step": "execute_command"
@@ -6219,6 +6220,298 @@
             "child_exit": "exited-zero",
             "control": "gap",
             "exit_code": 1.0
+          },
+          "shape": {
+            "audit": {
+              "holds": "enum",
+              "variants": [
+                "ok",
+                "gap",
+                "no-verdict"
+              ]
+            },
+            "child_exit": {
+              "holds": "enum",
+              "variants": [
+                "exited-zero",
+                "exited-nonzero",
+                "signaled",
+                "unknown"
+              ]
+            },
+            "control": {
+              "holds": "enum",
+              "variants": [
+                "ok",
+                "unk",
+                "gap"
+              ]
+            },
+            "exit_code": {
+              "holds": "primitive",
+              "kind": "integer"
+            }
+          },
+          "step": "expect_event"
+        },
+        {
+          "event": "metaharness.boundaries.CallDecided",
+          "step": "expect_no_event"
+        },
+        {
+          "event": "metaharness.boundaries.FileRead",
+          "step": "expect_no_event"
+        },
+        {
+          "event": "metaharness.boundaries.FrameRead",
+          "step": "expect_no_event"
+        },
+        {
+          "event": "metaharness.observations.NativeStatusClassified",
+          "step": "expect_no_event"
+        },
+        {
+          "event": "metaharness.observations.PresenceRead",
+          "step": "expect_no_event"
+        },
+        {
+          "event": "metaharness.observations.ToolOutcomeRead",
+          "step": "expect_no_event"
+        },
+        {
+          "event": "metaharness.session.ClosureRecorded",
+          "step": "expect_no_event"
+        },
+        {
+          "event": "metaharness.session.CompletionClassified",
+          "step": "expect_no_event"
+        },
+        {
+          "event": "metaharness.session.PollingObserved",
+          "step": "expect_no_event"
+        },
+        {
+          "event": "metaharness.session.StreamClassified",
+          "step": "expect_no_event"
+        },
+        {
+          "event": "metaharness.spending.AdmissionRecorded",
+          "step": "expect_no_event"
+        },
+        {
+          "event": "metaharness.spending.FiniteLedgerRecorded",
+          "step": "expect_no_event"
+        },
+        {
+          "event": "metaharness.trace.CompletenessVerified",
+          "step": "expect_no_event"
+        },
+        {
+          "event": "metaharness.trace.DigestNamed",
+          "step": "expect_no_event"
+        },
+        {
+          "event": "metaharness.trace.FamilyClassified",
+          "step": "expect_no_event"
+        },
+        {
+          "event": "metaharness.trace.ProjectionRecorded",
+          "step": "expect_no_event"
+        },
+        {
+          "event": "metaharness.trace.RecordNormalized",
+          "step": "expect_no_event"
+        },
+        {
+          "event": "metaharness.trace.SessionSummarized",
+          "step": "expect_no_event"
+        },
+        {
+          "event": "metaharness.trace.UnkClassified",
+          "step": "expect_no_event"
+        },
+        {
+          "event": "metaharness.trace.VendorRecordProjected",
+          "step": "expect_no_event"
+        },
+        {
+          "event": "metaharness.trace.VendorSourceRefused",
+          "step": "expect_no_event"
+        },
+        {
+          "event": "metaharness.workspace.ContextFilesRecorded",
+          "step": "expect_no_event"
+        },
+        {
+          "event": "metaharness.workspace.ProcessWritePlanned",
+          "step": "expect_no_event"
+        },
+        {
+          "event": "metaharness.workspace.ScratchCwdAttested",
+          "step": "expect_no_event"
+        }
+      ]
+    },
+    "metaharness.session.ExitAuditedRun/outcome/an-off-pin-version-is-unmeasured": {
+      "purpose": "`metaharness.session.ExitAuditedRun` answers `an-off-pin-version-is-unmeasured` for an input that satisfies that branch's guard",
+      "source": [
+        {
+          "kind": "type",
+          "name": "metaharness.session.AuditVerdict"
+        },
+        {
+          "kind": "type",
+          "name": "metaharness.session.ChildExit"
+        },
+        {
+          "kind": "type",
+          "name": "metaharness.session.ControlVerdict"
+        },
+        {
+          "kind": "type",
+          "name": "metaharness.session.OpeningRecord"
+        },
+        {
+          "kind": "command",
+          "name": "metaharness.session.ExitAuditedRun"
+        },
+        {
+          "kind": "outcome",
+          "name": {
+            "command": "metaharness.session.ExitAuditedRun",
+            "outcome": "an-off-pin-version-is-unmeasured"
+          }
+        },
+        {
+          "kind": "event",
+          "name": "metaharness.boundaries.CallDecided"
+        },
+        {
+          "kind": "event",
+          "name": "metaharness.boundaries.FileRead"
+        },
+        {
+          "kind": "event",
+          "name": "metaharness.boundaries.FrameRead"
+        },
+        {
+          "kind": "event",
+          "name": "metaharness.observations.NativeStatusClassified"
+        },
+        {
+          "kind": "event",
+          "name": "metaharness.observations.PresenceRead"
+        },
+        {
+          "kind": "event",
+          "name": "metaharness.observations.ToolOutcomeRead"
+        },
+        {
+          "kind": "event",
+          "name": "metaharness.session.AuditedRunExited"
+        },
+        {
+          "kind": "event",
+          "name": "metaharness.session.ClosureRecorded"
+        },
+        {
+          "kind": "event",
+          "name": "metaharness.session.CompletionClassified"
+        },
+        {
+          "kind": "event",
+          "name": "metaharness.session.PollingObserved"
+        },
+        {
+          "kind": "event",
+          "name": "metaharness.session.StreamClassified"
+        },
+        {
+          "kind": "event",
+          "name": "metaharness.spending.AdmissionRecorded"
+        },
+        {
+          "kind": "event",
+          "name": "metaharness.spending.FiniteLedgerRecorded"
+        },
+        {
+          "kind": "event",
+          "name": "metaharness.trace.CompletenessVerified"
+        },
+        {
+          "kind": "event",
+          "name": "metaharness.trace.DigestNamed"
+        },
+        {
+          "kind": "event",
+          "name": "metaharness.trace.FamilyClassified"
+        },
+        {
+          "kind": "event",
+          "name": "metaharness.trace.ProjectionRecorded"
+        },
+        {
+          "kind": "event",
+          "name": "metaharness.trace.RecordNormalized"
+        },
+        {
+          "kind": "event",
+          "name": "metaharness.trace.SessionSummarized"
+        },
+        {
+          "kind": "event",
+          "name": "metaharness.trace.UnkClassified"
+        },
+        {
+          "kind": "event",
+          "name": "metaharness.trace.VendorRecordProjected"
+        },
+        {
+          "kind": "event",
+          "name": "metaharness.trace.VendorSourceRefused"
+        },
+        {
+          "kind": "event",
+          "name": "metaharness.workspace.ContextFilesRecorded"
+        },
+        {
+          "kind": "event",
+          "name": "metaharness.workspace.ProcessWritePlanned"
+        },
+        {
+          "kind": "event",
+          "name": "metaharness.workspace.ScratchCwdAttested"
+        }
+      ],
+      "steps": [
+        {
+          "command": "metaharness.session.ExitAuditedRun",
+          "input": {
+            "child": {
+              "kind": "literal",
+              "value": "exited-zero"
+            },
+            "opening": {
+              "kind": "literal",
+              "value": "off-the-pin"
+            }
+          },
+          "step": "execute_command"
+        },
+        {
+          "outcome": {
+            "command": "metaharness.session.ExitAuditedRun",
+            "outcome": "an-off-pin-version-is-unmeasured"
+          },
+          "step": "expect_outcome"
+        },
+        {
+          "event": "metaharness.session.AuditedRunExited",
+          "payload": {
+            "audit": "no-verdict",
+            "child_exit": "exited-zero",
+            "control": "unk",
+            "exit_code": 3.0
           },
           "shape": {
             "audit": {
@@ -21592,7 +21885,7 @@
             "tool_calls": "[{\"answered\":true,\"call_id\":\"toolu_0126wZX9VgSsd4Hw7AbgMkc3\",\"error\":false,\"name\":\"Bash\"}]",
             "transcript_digest": "\"ff0d5eebe13e1e1c3722688b17b071af62ba8adaddece4899a5c482ea881179a\"",
             "turns": "2",
-            "unk": "0"
+            "unk": "1"
           },
           "shape": {
             "adapter": {

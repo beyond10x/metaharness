@@ -1,0 +1,12 @@
+{
+  "at": "2026-10-27T01:45:00Z",
+  "actor": "human:timo",
+  "artifact": "story:off-pin-vendor-version-is-advisory",
+  "kind": "story",
+  "revision": 1,
+  "change": {
+    "change": "evidence",
+    "kind": "approval",
+    "source": "approval-record:off-pin-vendor-version-is-advisory"
+  }
+}

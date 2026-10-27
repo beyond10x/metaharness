@@ -3,6 +3,17 @@
 What changed. The design document carries *why*; where code and design disagreed, the design
 was amended and the amendment is named here.
 
+## [Unreleased]
+
+### Changed
+
+- **Breaking:** an off-pin vendor version is reported, never refused: H9 is advisory on every kind (a62). The row still reads `gap` and names both versions, and the report renders it `gap advisory`, but it no longer moves the control verdict or the exit code. A strict Codex run on a binary outside the pin exits as the same run on a pinned one. `--strict-version` is unchanged and still refuses an off-pin binary before the spawn, exit 2.
+- On Claude, H11 reads `unk` instead of `gap` for a record version with no memory canary, because nobody measured that binary. A canary that reached a request still reads `gap` (a62 § 2).
+- On Claude, H1a reads `unk` instead of `gap` for an undeclared `<name>@builtin` plugin in a record whose version has no built-in list, whether off the pin or unstated. Nobody measured which plugins that binary compiles in, and the row says so. An ambient plugin, a borrowed or foreign source, a nameless entry and a missing declared plugin are still a `gap`, and pinned versions are unchanged. A strict run on an off-pin binary whose record carries only its built-ins now exits 3, not 1 (a62 § 5).
+- The Claude reader adds one `warning{code: "version_outside_pin"}` after an off-pin opening record, as the Codex reader already did. `metaharness run` prints its message once on stderr, in every hermetic mode. The code is `metaharness_protocol::warning_code::VERSION_OUTSIDE_PIN` (a62 § 3).
+- The Claude golden and C2 replay expectations gain that warning, because their record names 2.1.240, which is off the pin.
+- The specification and the gate move to ESS 0.70.0 (`077e4ee1811438f1b3f762c3aefca1f3cbda8792`). `ExitAuditedRun`'s `off-the-pin` opening exits 3 as `an-off-pin-version-is-unmeasured`, and a new `undeclared-plugin` opening carries exit 1. `spec/conformance.json` has 117 scenarios (a62 § 6).
+
 ## [0.19.0] — 2026-10-26
 
 ### Added

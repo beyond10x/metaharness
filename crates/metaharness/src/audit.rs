@@ -16,7 +16,9 @@
 //!
 //! H2 and H6 are **advisory**: evaluated, reported, printed, and they do not move the exit code.
 //! Their unobservability is a property of the mechanism rather than of the run, and if any `unk`
-//! failed a strict run then every strict run would have failed forever (finding F3).
+//! failed a strict run then every strict run would have failed forever (finding F3). H9 is
+//! advisory too, by decision: a vendor version off the pin is reported, never refused (amendment
+//! a62).
 
 use std::fmt::Write as _;
 use std::path::{Component, Path, PathBuf};
@@ -1012,13 +1014,25 @@ pub fn hermetic_floor(events: &[Event], inputs: &FloorInputs<'_>) -> Vec<RowVerd
 /// A plugin the record gives no name is neither, and is a `gap` rather than a plugin the comparison
 /// skips. The row names every built-in it admitted, so a reader sees what the vendor brought along
 /// as well as what the run declared.
+///
+/// **A version with no built-in list (amendment a62).** On a kind that declares built-ins, a record
+/// whose version has no list — off the pin, or unstated — carries `<name>@builtin` plugins nobody
+/// measured: which plugins that binary compiles in was never read. Such a plugin, one the run did
+/// not declare, makes the row `unk`, never `ok`, and the row names each one. Every other plugin is
+/// judged as on the pin, so an ambient plugin, a built-in name with a foreign or borrowed source, a
+/// nameless entry and a missing declared plugin are each still a `gap`, and a `gap` outranks the
+/// `unk`. A kind that declares no built-in admits none on any version.
 fn plugin_row(
     loaded: &[PluginRef],
     version: Option<&str>,
     declared: &[String],
     builtins: &[BuiltinPlugin],
 ) -> RowVerdict {
+    let listed =
+        version.is_some_and(|version| builtins.iter().any(|builtin| builtin.version == version));
+    let unmeasurable = !builtins.is_empty() && !listed;
     let mut admitted: Vec<String> = Vec::new();
+    let mut unmeasured: Vec<String> = Vec::new();
     let mut names: Vec<String> = Vec::new();
     let mut unmatched: Vec<String> = Vec::new();
     let mut nameless = false;
@@ -1032,6 +1046,14 @@ fn plugin_row(
             admitted.push(builtin.source.clone());
             continue;
         }
+        if unmeasurable
+            && let (Some(name), Some(source)) = (plugin.name.as_deref(), plugin.source.as_deref())
+            && source == format!("{name}@builtin")
+            && !declared.iter().any(|declared| declared == name)
+        {
+            unmeasured.push(source.to_owned());
+            continue;
+        }
         let name = plugin.name.clone();
         nameless |= name.is_none();
         unmatched.push(format!(
@@ -1042,12 +1064,13 @@ fn plugin_row(
         names.extend(name);
     }
     admitted.sort();
+    unmeasured.sort();
     names.sort();
     unmatched.sort();
     let mut declared = declared.to_vec();
     declared.sort();
     let version = version.unwrap_or("an unstated version");
-    let beside = if admitted.is_empty() {
+    let compiled = if admitted.is_empty() {
         String::new()
     } else {
         format!(
@@ -1056,13 +1079,18 @@ fn plugin_row(
             admitted.len()
         )
     };
-    if !nameless && names == declared {
-        row(
-            HermeticRow::H1a,
-            Verdict::Ok,
-            format!("loaded exactly the declared set: {names:?}{beside}"),
-        )
+    let unlisted = if unmeasured.is_empty() {
+        String::new()
     } else {
+        format!(
+            ", beside {} plugin(s) the record calls built-in, {unmeasured:?}, which nobody \
+             measured: no built-in list is recorded for {version}, so whether that binary compiles \
+             them in was never read",
+            unmeasured.len()
+        )
+    };
+    let beside = format!("{compiled}{unlisted}");
+    if nameless || names != declared {
         row(
             HermeticRow::H1a,
             Verdict::Gap,
@@ -1070,6 +1098,18 @@ fn plugin_row(
                 "declared {declared:?} and the record says {unmatched:?}, none of which is a \
                  built-in the adapter declares for {version} by name and source{beside}"
             ),
+        )
+    } else if !unmeasured.is_empty() {
+        row(
+            HermeticRow::H1a,
+            Verdict::Unk,
+            format!("loaded the declared set: {names:?}{beside}"),
+        )
+    } else {
+        row(
+            HermeticRow::H1a,
+            Verdict::Ok,
+            format!("loaded exactly the declared set: {names:?}{beside}"),
         )
     }
 }
@@ -1179,6 +1219,10 @@ fn resolve_without_the_reader(name: &Path) -> Option<PathBuf> {
 
 /// H11's attested verdict, held to the memory canary of the binary that ran (amendment a36).
 /// Only an `ok` is held: a canary never turns a `gap` or an `unk` into anything better.
+///
+/// A version with no canary row reads `unk`, not `gap` (amendment a62): nobody measured that
+/// binary, which is *nobody found out*. A row that measured a leak, or a control that could not
+/// see every shape, is still `gap`.
 fn memory_held_to_canary(
     attested: RowVerdict,
     version: Option<&str>,
@@ -1204,7 +1248,7 @@ fn memory_held_to_canary(
     let Some(canary) = canaries.iter().find(|canary| canary.version == version) else {
         return row(
             HermeticRow::H11,
-            Verdict::Gap,
+            Verdict::Unk,
             format!(
                 "{}; but there is no memory canary recorded for {version}, so nobody measured \
                  whether this binary honours the control",

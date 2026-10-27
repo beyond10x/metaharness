@@ -4,7 +4,7 @@ This is a bounded retrofit of Metaharness's observable boundaries. It preserves
 frame/1 and adapter ownership. It does not claim to specify every event,
 credential rule, process-isolation mechanism or vendor version.
 
-ESS 0.69.2 validates both manifests. The core model uses ess/29;
+ESS 0.70.0 validates both manifests. The core model uses ess/29;
 conformance.json is a declared-coverage ess-conformance/35 suite. Regenerate it:
 
 ```console
@@ -12,14 +12,14 @@ ess verify conform synthesize --path spec --scenarios spec --suite-format 5 --st
 ```
 
 `--scenarios spec` selects the authored scenarios `spec/ess-inputs.yaml` lists;
-without it ESS selects none and writes the 107 generated ones only.
+without it ESS selects none and writes the 111 generated ones only.
 `task check` validates both manifests, checks suite drift, and executes the
 production target in `crates/metaharness-aep/src/drive/ess_conformance.rs`.
-CI installs ESS 0.69.2 from commit
-`a3bc2df3df986e8d340553145e8615a00f982331`. Use that compiler locally.
+CI installs ESS 0.70.0 from commit
+`077e4ee1811438f1b3f762c3aefca1f3cbda8792`. Use that compiler locally.
 
-The committed count is **116 selected scenarios** (110 generated, 6 authored):
-116 passed, zero failed, skipped, unsupported or synthesis refusals. Unknown suite versions, steps,
+The committed count is **117 selected scenarios** (111 generated, 6 authored):
+117 passed, zero failed, skipped, unsupported or synthesis refusals. Unknown suite versions, steps,
 bindings, shapes and predicates fail closed. The target handles only the
 constructs this suite uses; extending the specification may require extending it.
 
@@ -586,15 +586,22 @@ over `ok`) and `audit verdict:` (the exit code). No exit code changes. The domai
 `AuditedRunExited`, and the process exit status leaves the `UNMAPPED:` note
 beside `CloseUnsteeredStream`.
 
-`ExitAuditedRun` has three generated scenarios, one per outcome, chosen by the
-opening record alone: `complete` reads `every-control-held` (exit 0),
-`silent-on-plugins-and-mcp` (H1a and H5 `unk`) reads `nobody-found-out` (exit 3)
-and `off-the-pin` (H9 `gap`) reads `a-gating-row-failed` (exit 1). The event
-echoes the child (`child_exit: input.child`), and no guard reads it. Synthesis
+`ExitAuditedRun` has four generated scenarios (three before amendment a62, below),
+one per outcome, chosen by the opening record alone:
+
+- `complete` reads `every-control-held` (exit 0);
+- `silent-on-plugins-and-mcp` (H1a and H5 `unk`) reads `nobody-found-out`
+  (exit 3);
+- `undeclared-plugin` (H1a `gap`) reads `a-gating-row-failed` (exit 1);
+- `off-the-pin` (H9 `gap` and advisory, H11 `unk`) reads
+  `an-off-pin-version-is-unmeasured` (exit 3).
+
+Before a62, `off-the-pin` read `a-gating-row-failed`. The event echoes the child
+(`child_exit: input.child`), and no guard reads it. Synthesis
 fixes the child at the enum's first variant, `exited-zero`, so
 `every_declared_child_exit_drives_the_audited_run_scenarios` runs each generated
-scenario again with every child the event's shape declares, 12 runs through the
-same arm. The authored scenario
+scenario again with every child the event's shape declares: 16 runs through the
+same arm (12 before a62). The authored scenario
 `audited-run-child-exit-zero-with-unknown-controls-exits-three` is the case the
 amendment exists for: a child that exited 0 beside unknown gating rows still
 exits 3. The suite moves from 107 to 111 scenarios (107 generated, 4 authored),
@@ -606,3 +613,48 @@ An auditor's own exit, which moves the audit verdict and never the control
 verdict, and a run with no terminal record, which exits 3 beside a control
 verdict of `ok`, are pinned by `crates/metaharness/tests/audit.rs`, not by this
 suite.
+
+## Amendment a62 — an off-pin version is reported, never refused
+
+Protocol amendment a62 (2026-10-27) makes H9 advisory on every kind. A vendor
+version off the adapter's pin still reads `gap`, and the report still names both
+versions, but the row no longer folds into the control verdict or the exit code.
+On Claude, H11 reads `unk` instead of `gap` for a version with no memory canary,
+because nobody measured it. A measured leak stays `gap`. On Claude, H1a also reads
+`unk` instead of `gap` for an undeclared `<name>@builtin` plugin in a record whose
+version has no built-in list (a62 § 5). Everything else the run did not declare
+stays `gap`. `--strict-version` is unchanged: it still refuses a binary off the
+pin before the spawn, exit 2.
+
+`OpeningRecord` gains `undeclared-plugin` (H1a `gap`). Both runners give it a
+plugin named `an-ambient-plugin` with no source, which is not the `<name>@builtin`
+shape, so it stays `gap` on any version. Without it,
+`a-gating-row-failed` (exit 1) would have no generated scenario, and
+`crates/metaharness-cli/tests/exit_verdicts_documented.rs` would stop checking
+the CLI reference's `audit verdict: gap (exit 1)` line. `off-the-pin`
+moves to the new outcome `an-off-pin-version-is-unmeasured`: H9 `gap` and
+advisory, H11 `unk`, so control `unk`, audit `no-verdict`, exit 3. The production
+target names that outcome from the rendered H9 and H11 lines; a record silent on
+plugins and MCP still names `nobody-found-out`.
+`every_declared_child_exit_drives_the_audited_run_scenarios` runs 16 times: four
+outcomes, four children each.
+
+The Claude reader now adds one `warning` `version_outside_pin` after an opening
+record off the pin, as the Codex reader already did. The Claude golden record
+names Claude Code 2.1.240, which is off the pin. Its committed expectation and
+the C2 `session` and `auth-expired` replays each gain that line, and every later
+`seq` moves up by one. `claude-transcript-summarized` moves from `unk: '0'` to
+`unk: '1'`.
+
+ESS moves from 0.69.2 to 0.70.0 (commit
+`077e4ee1811438f1b3f762c3aefca1f3cbda8792`). Over the specification as it stood
+before this amendment, ESS 0.70.0 reproduces the committed 116-scenario suite
+byte for byte, so the compiler move alone changes no scenario. The suite moves
+from 116 to 117 scenarios (111 generated, 6 authored), zero refused:
+
+- `an-off-pin-version-is-unmeasured` is new;
+- `a-gating-row-failed` changes its opening;
+- `claude-transcript-summarized` changes its `unk`.
+
+Every other scenario is unchanged when compared as JSON values. The
+specification and contract digests change.

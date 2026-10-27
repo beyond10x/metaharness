@@ -409,7 +409,7 @@ impl RolloutReader {
             && !PINNED_VERSIONS.contains(&version.as_str())
         {
             events.push(Event::Warning {
-                code: "version_outside_pin".to_string(),
+                code: metaharness_protocol::warning_code::VERSION_OUTSIDE_PIN.to_string(),
                 message: format!(
                     "the rollout was written by codex-cli {version} and this adapter is \
                          pinned to {}; the format has no documented stability guarantee, so \

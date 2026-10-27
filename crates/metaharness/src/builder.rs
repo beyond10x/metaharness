@@ -4780,12 +4780,16 @@ mod codex_record_rows_tests {
     /// A pinned 0.153.4 rollout over `cwd`, in the order the native run wrote it, with the
     /// personality its first `turn_context` recorded (or none) and a successful completion.
     fn rollout(cwd: &Path, personality: Option<&str>) -> Vec<String> {
+        rollout_at(metaharness_codex::PINNED_VERSIONS[0], cwd, personality)
+    }
+
+    /// [`rollout`], written by the `cli_version` named.
+    fn rollout_at(version: &str, cwd: &Path, personality: Option<&str>) -> Vec<String> {
         let context =
             personality.map_or_else(String::new, |value| format!(r#","personality":"{value}""#));
         vec![
             format!(
-                r#"{{"timestamp":"2026-10-21T00:00:00.000Z","type":"session_meta","payload":{{"id":"s-1","session_id":"s-1","cli_version":"{}","cwd":"{}"}}}}"#,
-                metaharness_codex::PINNED_VERSIONS[0],
+                r#"{{"timestamp":"2026-10-21T00:00:00.000Z","type":"session_meta","payload":{{"id":"s-1","session_id":"s-1","cli_version":"{version}","cwd":"{}"}}}}"#,
                 cwd.display()
             ),
             r#"{"timestamp":"2026-10-21T00:00:00.001Z","type":"event_msg","payload":{"type":"task_started","turn_id":"t1"}}"#.to_owned(),
@@ -4808,13 +4812,24 @@ mod codex_record_rows_tests {
         personality: Option<&str>,
         prepare: impl FnOnce(&Path),
     ) -> (tempfile::TempDir, Run) {
+        codex_strict_run_at(metaharness_codex::PINNED_VERSIONS[0], personality, prepare)
+    }
+
+    /// [`codex_strict_run_in`], over a rollout written by the `cli_version` named.
+    fn codex_strict_run_at(
+        version: &str,
+        personality: Option<&str>,
+        prepare: impl FnOnce(&Path),
+    ) -> (tempfile::TempDir, Run) {
         let root = tempfile::tempdir().unwrap();
         let copy = root.path().join("copy");
         std::fs::create_dir(&copy).unwrap();
         prepare(&copy);
         let canonical = std::fs::canonicalize(&copy).unwrap();
-        let mut runner =
-            ScriptedRunner::of_lines(rollout(&canonical, personality), ScriptedLog::new());
+        let mut runner = ScriptedRunner::of_lines(
+            rollout_at(version, &canonical, personality),
+            ScriptedLog::new(),
+        );
         let mut run = Metaharness::new(Kind::Codex)
             .with_hermetic(HermeticMode::Strict)
             .with_decisions(DecisionMode::Observe)
@@ -4866,6 +4881,52 @@ mod codex_record_rows_tests {
             assert_eq!(found, Verdict::Ok, "{}: {detail}", row.id());
         }
         assert_eq!(exit(&run), RunExit::NoVerdict);
+    }
+
+    /// Amendment a62: a rollout written by a codex-cli off the pin — 0.164.0, the release that
+    /// held every Codex proposal on 2026-10-27 — exits as the same strict run on the pin does. H9
+    /// still reads `gap` and names both versions, and the report renders it `gap advisory`.
+    #[test]
+    fn an_off_pin_codex_strict_run_exits_as_the_pinned_run_does() {
+        let personality = Some(metaharness_codex::PERSONALITY);
+        let (_root, pinned) =
+            codex_strict_run_at(metaharness_codex::PINNED_VERSIONS[1], personality, |_| {});
+        let (_root, off) = codex_strict_run_at("0.164.0", personality, |_| {});
+        let (h9, detail) = verdict(&off, HermeticRow::H9);
+        assert_eq!(h9, Verdict::Gap, "{detail}");
+        assert!(
+            detail.contains("0.164.0") && detail.contains(metaharness_codex::PINNED_VERSIONS[1]),
+            "{detail}"
+        );
+        assert_eq!(
+            exit(&off),
+            exit(&pinned),
+            "story:off-pin-vendor-version-is-advisory: an off-pin version alone moves no exit code"
+        );
+        let report = off
+            .audit(&mut FakeAuditor::missing())
+            .expect("no auditor was asked for");
+        let rendered = report.render();
+        assert!(
+            rendered
+                .lines()
+                .any(|line| line.starts_with("  H9   gap advisory record ")),
+            "story:off-pin-vendor-version-is-advisory: H9 renders `gap advisory`:\n{rendered}"
+        );
+        let warned = |run: &Run| {
+            run.events()
+                .iter()
+                .filter(|event| {
+                    matches!(
+                        event,
+                        metaharness_protocol::Event::Warning { code, .. }
+                            if code == metaharness_protocol::warning_code::VERSION_OUTSIDE_PIN
+                    )
+                })
+                .count()
+        };
+        assert_eq!(warned(&off), 1, "{:?}", off.events());
+        assert_eq!(warned(&pinned), 0, "{:?}", pinned.events());
     }
 
     /// A record that names a personality the launch did not write is a gap, and a gap outranks the

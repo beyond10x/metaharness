@@ -528,7 +528,9 @@ commands:
         # (modelUsage claude-opus-5[1m]), while cost_usd 0.238876 is both
         # models'. models: the opening model, the request nodes' claude-opus-5
         # (no per-model figure), then the modelUsage keys in the document's
-        # order; haiku's cost is the vendor's 17-digit spelling.
+        # order; haiku's cost is the vendor's 17-digit spelling. unk 1 is the
+        # version_outside_pin warning the reader adds after the opening record,
+        # which names Claude Code 2.1.240, off the adapter's pin (amendment a62).
         payload:
           metaharness.trace.SessionSummarized:
             format: '"trace-ir-summary/1"'
@@ -551,7 +553,7 @@ commands:
             is_error: 'false'
             stop_reason: '"end_turn"'
             tool_calls: '[{"answered":true,"call_id":"toolu_0126wZX9VgSsd4Hw7AbgMkc3","error":false,"name":"Bash"}]'
-            unk: '0'
+            unk: '1'
             byte_stable: true
       - name: codex-rollout-summarized
         when: source == codex-rollout

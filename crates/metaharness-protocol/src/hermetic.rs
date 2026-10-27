@@ -8,7 +8,9 @@
 //! * **Gating is per row, not global.** Two rows are unobservable as a property of the
 //!   *mechanism* rather than of the run; if any `unk` failed a strict run, every strict run
 //!   would fail forever (design § 8.1, finding F3). Those two are [`Severity::Advisory`]:
-//!   evaluated, reported, printed, and not counted against the exit code.
+//!   evaluated, reported, printed, and not counted against the exit code. H9 is the third,
+//!   by decision rather than mechanism: a vendor version off the pin is reported, never refused
+//!   (amendment a62).
 
 use serde::{Deserialize, Serialize};
 
@@ -157,10 +159,15 @@ impl HermeticRow {
     /// H2 and H6 are advisory, and the reason is the mechanism rather than the run: the absence
     /// of allow rules that would shadow the seam is not observable in any record, and credential
     /// carriage leaves no trace of its own — its evidence is H1a, H4 and H5 holding.
+    ///
+    /// H9 is advisory on every kind for a different reason (amendment a62): a binary off the pin
+    /// is a reader that may have moved, not a control that failed. Its verdict still reads `gap`,
+    /// names both versions and is printed; the rows that rest on a per-version measurement say
+    /// for themselves that the binary was not measured, and `--strict-version` is the refusal.
     #[must_use]
     pub fn severity(&self) -> Severity {
         match self {
-            HermeticRow::H2 | HermeticRow::H6 => Severity::Advisory,
+            HermeticRow::H2 | HermeticRow::H6 | HermeticRow::H9 => Severity::Advisory,
             _ => Severity::Gating,
         }
     }
@@ -354,16 +361,22 @@ mod tests {
         assert_eq!(HermeticRow::ALL.len(), 12);
     }
 
-    /// Exactly two rows are advisory. If a third became advisory the strict verdict would
-    /// quietly weaken; if these two became gating, no strict run could ever pass (finding F3).
+    /// Exactly three rows are advisory. If a fourth became advisory the strict verdict would
+    /// quietly weaken; if H2 or H6 became gating, no strict run could ever pass (finding F3); if
+    /// H9 became gating again, a binary off the pin would be refused for its version alone
+    /// (amendment a62).
     #[test]
-    fn exactly_h2_and_h6_are_advisory() {
+    fn exactly_h2_h6_and_h9_are_advisory() {
         let advisory: Vec<&str> = HermeticRow::ALL
             .iter()
             .filter(|row| row.severity() == Severity::Advisory)
             .map(HermeticRow::id)
             .collect();
-        assert_eq!(advisory, ["H2", "H6"]);
+        assert_eq!(
+            advisory,
+            ["H2", "H6", "H9"],
+            "story:off-pin-vendor-version-is-advisory: H9 is advisory on every kind"
+        );
     }
 
     /// H3 is a launch assertion and not a record one. The first draft claimed a record for it

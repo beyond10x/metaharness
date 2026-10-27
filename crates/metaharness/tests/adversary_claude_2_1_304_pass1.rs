@@ -216,13 +216,18 @@ fn h11_names_every_memory_shape_the_pinned_loader_reads_and_refuses_none() {
 }
 
 /// The guard half of decision C: the claim is only as good as the canary of the binary that ran.
-/// A record on a version with no memory canary reads H11 `gap`, whatever the attestation says.
+/// A record on a version with no memory canary never reads H11 `ok`, whatever the attestation
+/// says; since amendment a62 it reads `unk`, because nobody measured that binary.
 #[test]
-fn h11_is_gap_on_a_record_version_with_no_memory_canary() {
+fn h11_is_unk_on_a_record_version_with_no_memory_canary() {
     let (_, outcome) = h11_over_a_declared_copy("2.1.303", |_| {});
     let Ok((verdict, detail)) = outcome else {
         panic!("the launch was refused: {outcome:?}");
     };
-    assert_eq!(verdict, Verdict::Gap, "{detail}");
+    assert_eq!(
+        verdict,
+        Verdict::Unk,
+        "story:off-pin-vendor-version-is-advisory: an unmeasured version is unk: {detail}"
+    );
     assert!(detail.contains("2.1.303"), "{detail}");
 }

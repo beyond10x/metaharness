@@ -1,0 +1,12 @@
+{
+  "at": "2026-10-27T01:35:30Z",
+  "actor": "human:timo",
+  "artifact": "story:off-pin-vendor-version-is-advisory",
+  "kind": "story",
+  "revision": 1,
+  "change": {
+    "change": "evidence",
+    "kind": "test_result",
+    "source": "red, metaharness 0.19.0: metaharness run codex --hermetic strict --decisions observe (child codex 0.164.0): H9 gap gating, audit verdict gap, exit 1; takt run --harness codex --forge none on a scratch crate: H9 Gap held the proposal, exit 5"
+  }
+}

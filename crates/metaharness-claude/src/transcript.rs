@@ -55,6 +55,8 @@ pub struct TranscriptReader {
     credential_source: Option<String>,
     line: u64,
     terminal_record_seen: bool,
+    /// Whether the off-pin version warning was emitted; it is owed once per stream (a62).
+    version_warned: bool,
 }
 
 impl TranscriptReader {
@@ -78,6 +80,7 @@ impl TranscriptReader {
             credential_source: None,
             line: 0,
             terminal_record_seen: false,
+            version_warned: false,
         }
     }
 
@@ -180,7 +183,7 @@ impl TranscriptReader {
     fn map_record(&mut self, record: &Record, source_line: u64) -> Vec<Event> {
         match str_field(record, "type").as_deref() {
             Some("system") => match str_field(record, "subtype").as_deref() {
-                Some("init") => vec![self.session_started(record)],
+                Some("init") => self.opening(record),
                 Some("thinking_tokens") => thinking_estimate(record),
                 Some("api_retry") => vec![api_retry(record)],
                 Some("background_tasks_changed") => vec![background_tasks(record)],
@@ -195,6 +198,32 @@ impl TranscriptReader {
             }
             _ => Vec::new(),
         }
+    }
+
+    /// The opening record, and the one warning an off-pin version earns (amendment a62).
+    ///
+    /// A version outside [`crate::PINNED_VERSIONS`] is read like any other: the record is mapped
+    /// and the run goes on. The warning names the version and the pin, so a reader sees that the
+    /// transcript's shapes are a binary nobody qualified, and H9 reads `gap` from the same record.
+    /// It is owed once per stream, whatever number of opening records follow.
+    fn opening(&mut self, record: &Record) -> Vec<Event> {
+        let mut events = vec![self.session_started(record)];
+        if let Some(version) = str_field(record, "claude_code_version")
+            && !crate::PINNED_VERSIONS.contains(&version.as_str())
+            && !self.version_warned
+        {
+            self.version_warned = true;
+            events.push(Event::Warning {
+                code: warning_code::VERSION_OUTSIDE_PIN.to_string(),
+                message: format!(
+                    "the transcript was written by Claude Code {version} and this adapter is \
+                     pinned to {}; stream-json is not a stable public schema, so unmapped shapes \
+                     become opaque rather than errors",
+                    crate::PINNED_VERSIONS.join(", ")
+                ),
+            });
+        }
+        events
     }
 
     /// The opening record: the only place that can distinguish *offered* from *called*.
@@ -1046,13 +1075,15 @@ mod tests {
     #[test]
     fn the_opening_record_carries_the_attestation_and_the_inputs_digest() {
         let mut reader = new_reader().with_inputs_digest(Digest::of(b"inputs"));
-        let event = only(reader.push_line(
-            r#"{"type":"system","subtype":"init","cwd":"/scratch/run-1/work",
+        // On the pin, so the record is one event and no version warning follows it (a62).
+        let event = only(reader.push_line(&format!(
+            r#"{{"type":"system","subtype":"init","cwd":"/scratch/run-1/work",
                 "session_id":"s-1","tools":["Read"],"mcp_servers":[],"model":"a-model",
                 "permissionMode":"default","slash_commands":[],"apiKeySource":"none",
-                "claude_code_version":"2.1.240","output_style":"default","agents":[],
-                "skills":[],"plugins":[]}"#,
-        ));
+                "claude_code_version":"{}","output_style":"default","agents":[],
+                "skills":[],"plugins":[]}}"#,
+            crate::PINNED_VERSIONS[0]
+        )));
         let Event::SessionStarted {
             adapter,
             harness_version,
@@ -1067,12 +1098,76 @@ mod tests {
             panic!("expected session.started");
         };
         assert_eq!(adapter, ADAPTER_ID);
-        assert_eq!(harness_version.as_deref(), Some("2.1.240"));
+        assert_eq!(harness_version.as_deref(), Some(crate::PINNED_VERSIONS[0]));
         assert_eq!(credential_source.as_deref(), Some("none"));
         assert_eq!(output_style.as_deref(), Some("default"));
         assert_eq!(offered_tools, Some(vec!["Read".to_string()]));
         assert_eq!(inputs_digest, Some(Digest::of(b"inputs")));
         assert_eq!(transcript.bytes, Some(10));
+    }
+
+    /// The `version_outside_pin` warnings among these emissions.
+    fn version_warnings(events: &[Emission]) -> Vec<String> {
+        events
+            .iter()
+            .filter_map(|emission| match &emission.event {
+                Event::Warning { code, message } if code == warning_code::VERSION_OUTSIDE_PIN => {
+                    Some(message.clone())
+                }
+                _ => None,
+            })
+            .collect()
+    }
+
+    /// Amendment a62: an opening record off the pin is read like any other and followed by one
+    /// warning that names the version and the pin. It is the report, never a refusal; a second
+    /// opening record in the same stream does not repeat it.
+    #[test]
+    fn an_off_pin_opening_record_is_followed_by_one_version_outside_pin_warning() {
+        let mut reader = new_reader();
+        let first = reader.push_line(
+            r#"{"type":"system","subtype":"init","claude_code_version":"2.1.400","tools":[]}"#,
+        );
+        let names: Vec<&str> = first.iter().map(|e| e.event.name()).collect();
+        assert_eq!(
+            names,
+            ["session.started", "warning"],
+            "story:off-pin-vendor-version-is-advisory: an off-pin record warns once"
+        );
+        let warned = version_warnings(&first);
+        assert_eq!(warned.len(), 1, "{warned:?}");
+        assert!(warned[0].contains("2.1.400"), "{}", warned[0]);
+        for pinned in crate::PINNED_VERSIONS {
+            assert!(warned[0].contains(pinned), "{}", warned[0]);
+        }
+        let again = reader.push_line(
+            r#"{"type":"system","subtype":"init","claude_code_version":"2.1.400","tools":[]}"#,
+        );
+        assert_eq!(
+            version_warnings(&again),
+            Vec::<String>::new(),
+            "story:off-pin-vendor-version-is-advisory: once per stream"
+        );
+    }
+
+    /// A pinned version earns no warning, and a record that names no version earns none either:
+    /// there is nothing to compare, which H9 reads as `unk`.
+    #[test]
+    fn a_pinned_or_unnamed_version_earns_no_version_warning() {
+        for pinned in crate::PINNED_VERSIONS {
+            let mut reader = new_reader();
+            let events = reader.push_line(&format!(
+                r#"{{"type":"system","subtype":"init","claude_code_version":"{pinned}","tools":[]}}"#
+            ));
+            assert_eq!(version_warnings(&events), Vec::<String>::new(), "{pinned}");
+        }
+        let mut reader = new_reader();
+        let events = reader.push_line(r#"{"type":"system","subtype":"init","tools":[]}"#);
+        assert_eq!(
+            version_warnings(&events),
+            Vec::<String>::new(),
+            "a record that names no version"
+        );
     }
 
     #[test]

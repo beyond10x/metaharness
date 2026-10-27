@@ -55,9 +55,14 @@ types:
     # (amendment a48). unknown is a runner that measured nothing, never exit 0.
   - name: metaharness.session.OpeningRecord
     kind: enum
-    variants: [complete, silent-on-plugins-and-mcp, off-the-pin]
+    variants: [complete, silent-on-plugins-and-mcp, off-the-pin, undeclared-plugin]
     # complete: every field the floor reads, on the adapter's pin. silent: no
-    # plugin and no MCP server list, so H1a and H5 are unk. off-the-pin: H9 gap.
+    # plugin and no MCP server list, so H1a and H5 are unk. off-the-pin: the
+    # version 0.0.0-off-the-pin, so H9 is gap and advisory and H11 is unk, no
+    # memory canary being recorded for it (amendment a62). undeclared-plugin:
+    # a plugin nobody declared, named with no <name>@builtin source, so H1a is
+    # gap on any version; a62 reads only a <name>@builtin plugin on a version
+    # with no built-in list as unk.
   - name: metaharness.session.ControlVerdict
     kind: enum
     variants: [ok, unk, gap]
@@ -197,10 +202,17 @@ commands:
       - {name: opening, type: metaharness.session.OpeningRecord}
     outcomes:
       - name: a-gating-row-failed
-        when: opening == off-the-pin
+        when: opening == undeclared-plugin
         emits: [metaharness.session.AuditedRunExited]
         payload:
           metaharness.session.AuditedRunExited: {child_exit: input.child, control: gap, audit: gap, exit_code: 1}
+      # Amendment a62: a version off the pin is reported, never refused. H9 reads
+      # gap and is advisory; H11 is unk because nobody measured that binary.
+      - name: an-off-pin-version-is-unmeasured
+        when: opening == off-the-pin
+        emits: [metaharness.session.AuditedRunExited]
+        payload:
+          metaharness.session.AuditedRunExited: {child_exit: input.child, control: unk, audit: no-verdict, exit_code: 3}
       - name: nobody-found-out
         when: opening == silent-on-plugins-and-mcp
         emits: [metaharness.session.AuditedRunExited]

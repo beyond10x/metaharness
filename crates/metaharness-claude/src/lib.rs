@@ -89,8 +89,9 @@ pub const CONTEXT_CHANNEL: metaharness_protocol::ContextChannel =
 /// Each entry is a binary this adapter was driven against, because the vendor's transcript and
 /// hook shapes are not stable public schemas: a verdict that changed because the reader changed
 /// must be visible as such rather than as a change in the agent's behaviour. A version outside
-/// this pin is a `warning` (H9 `gap`), or a refusal before the spawn under `--strict-version`,
-/// which reads the resolved binary's `--version` without a model call.
+/// this pin is a `version_outside_pin` warning and an H9 `gap`, which is advisory since design
+/// amendment a62, or a refusal before the spawn under `--strict-version`, which reads the
+/// resolved binary's `--version` without a model call.
 ///
 /// Two entries since 2026-10-21 (design amendment a33) and three since 2026-10-23: the vendor ships
 /// faster than a pin moves, and the installed `claude` moved 2.1.304 → 2.1.305 within a day of the

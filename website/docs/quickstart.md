@@ -33,8 +33,8 @@ The workspace gate is one task, run from the checkout root:
 task check
 ```
 
-It needs [go-task](https://taskfile.dev), Rust 1.98 or newer and the `ess` CLI of ESS 0.69.2 on
-your `PATH`: `spec/ess-inputs.yaml` declares `requires: ess 0.69.2` and the gate validates with
+It needs [go-task](https://taskfile.dev), Rust 1.98 or newer and the `ess` CLI of ESS 0.70.0 on
+your `PATH`: `spec/ess-inputs.yaml` declares `requires: ess 0.70.0` and the gate validates with
 `--strict-requires`. It runs these steps, in this order (`Taskfile.yml`, task `check`):
 
 ```text
@@ -56,8 +56,9 @@ metaharness doctor codex
 ```
 
 Every adapter claim about a vendor binary is pinned to a version. `doctor` compares the installed
-binary against that pin. During a run, `--strict-version` turns a mismatch from a warning into a
-refusal before anything spawns.
+binary against that pin. During a run a mismatch is a warning on stderr and an advisory H9 `gap`
+in the audit. The run is never failed for it: what nobody measured for that binary reads `unk`,
+never `gap`. `--strict-version` turns the mismatch into a refusal before anything spawns.
 
 ## 2. What does the adapter say it can do?
 

@@ -469,12 +469,16 @@ fn trim_line_end(line: &[u8]) -> Vec<u8> {
 /// while the run waits for its child to exit answered before `stream.closed`: the run writes the
 /// marker on a later poll than the one that saw the stream end (amendment a44 § 4).
 fn drive(run: &mut Run, commands: &Receiver<Vec<u8>>) -> std::io::Result<()> {
+    let mut version_warned = false;
     loop {
         while let Ok(line) = commands.try_recv() {
             steer(run, &line)?;
         }
         match run.poll_event()? {
-            metaharness::EventPoll::Event(line) => emit(&line),
+            metaharness::EventPoll::Event(line) => {
+                emit(&line);
+                warn_off_pin_once(&line, &mut version_warned);
+            }
             metaharness::EventPoll::Progress => (),
             metaharness::EventPoll::Ended => return Ok(()),
             metaharness::EventPoll::Idle | metaharness::EventPoll::DecisionPending => {
@@ -501,6 +505,22 @@ fn drive(run: &mut Run, commands: &Receiver<Vec<u8>>) -> std::io::Result<()> {
 /// binary holds no protocol logic of its own (design D11).
 fn steer(run: &mut Run, line: &[u8]) -> std::io::Result<()> {
     run.send_line(line).map(drop)
+}
+
+/// The adapter's off-pin warning, on stderr, once per run and in every hermetic mode
+/// (amendment a62).
+///
+/// The event is already on stdout; stderr is where an operator who reads no event stream looks.
+/// A binary off the pin is run, not refused, so this line is the only sign of it such a reader
+/// gets before the H9 row of an audit.
+fn warn_off_pin_once(line: &metaharness::protocol::EventLine, warned: &mut bool) {
+    if let metaharness::protocol::Event::Warning { code, message } = &line.event
+        && code == metaharness::protocol::warning_code::VERSION_OUTSIDE_PIN
+        && !*warned
+    {
+        *warned = true;
+        eprintln!("metaharness: {message}");
+    }
 }
 
 /// One event line on stdout.

@@ -226,14 +226,26 @@ fn h11_ok_adds_no_caveat_for_a_canary_that_states_none() {
     );
 }
 
-/// A version with no recorded canary is a `gap`: nobody measured whether this binary honours
-/// the control.
+/// A version with no recorded canary is `unk` (amendment a62, superseding a36 § 3 for this
+/// case): nobody measured whether this binary honours the control, which is *nobody found out*
+/// and not a measured leak.
 #[test]
-fn h11_is_gap_on_a_version_without_a_memory_canary() {
+fn h11_is_unk_on_a_version_without_a_memory_canary() {
     let row = h11_with_canaries(Some("2.1.240"), &[canary("2.1.239", 12, 0)]);
-    assert_eq!(row.verdict, Verdict::Gap, "{}", row.detail);
-    assert!(row.detail.contains("no memory canary"), "{}", row.detail);
-    assert!(row.detail.contains("2.1.240"), "{}", row.detail);
+    assert_eq!(
+        row.verdict,
+        Verdict::Unk,
+        "story:off-pin-vendor-version-is-advisory: an unmeasured version is unk: {}",
+        row.detail
+    );
+    assert!(
+        row.detail.contains(
+            "no memory canary recorded for 2.1.240, so nobody measured whether this binary \
+             honours the control"
+        ),
+        "{}",
+        row.detail
+    );
 }
 
 /// A canary that reached a request through the launch turns H11 to `gap` (decision C's guard).
@@ -794,10 +806,11 @@ fn the_claude_adapter_declares_every_builtin_of_each_pinned_version_with_the_bui
     assert_eq!(builtin_plugins(Kind::B10x), Vec::<BuiltinPlugin>::new());
 }
 
-/// The lists are keyed by version: a record on a version the adapter does not pin carries
-/// plugins nobody declared a list for, whatever their source says.
+/// The lists are keyed by version. A record on a version the adapter does not pin carries
+/// `<name>@builtin` plugins nobody recorded a list for: unmeasured, so `unk` and never `ok`
+/// (amendment a62). Before a62 they were a `gap`, which failed a strict run for its version alone.
 #[test]
-fn a_builtin_in_a_record_on_an_unpinned_version_is_a_gap_and_on_each_pinned_one_is_ok() {
+fn a_builtin_in_a_record_on_an_unpinned_version_is_unk_and_on_each_pinned_one_is_ok() {
     for version in metaharness_claude::PINNED_VERSIONS {
         let (verdict, detail) = h1a(
             with_plugins_on(version, operator_login_builtins()),
@@ -811,7 +824,111 @@ fn a_builtin_in_a_record_on_an_unpinned_version_is_a_gap_and_on_each_pinned_one_
         &[],
         &builtin_plugins(Kind::Claude),
     );
-    assert_eq!(verdict, Verdict::Gap, "{detail}");
+    assert_eq!(
+        verdict,
+        Verdict::Unk,
+        "story:off-pin-vendor-version-is-advisory: {detail}"
+    );
+    assert!(
+        detail.contains("2.1.303") && detail.contains("no built-in list is recorded"),
+        "story:off-pin-vendor-version-is-advisory: the row names the version and why: {detail}"
+    );
+    for name in [
+        "cc-plugin-sec-default",
+        "cc-plugin-agents-md",
+        "cc-plugin-telemetry",
+        "cc-plugin-plugin-authoring",
+    ] {
+        assert!(
+            detail.contains(&format!("{name}@builtin")),
+            "the row names {name}: {detail}"
+        );
+    }
+
+    let unnamed = with_record(with_plugins(operator_login_builtins()), |record| {
+        if let Event::SessionStarted {
+            harness_version, ..
+        } = record
+        {
+            *harness_version = None;
+        }
+    });
+    let (verdict, detail) = h1a(unnamed, &[], &builtin_plugins(Kind::Claude));
+    assert_eq!(
+        verdict,
+        Verdict::Unk,
+        "story:off-pin-vendor-version-is-advisory: a record naming no version names no list: \
+         {detail}"
+    );
+}
+
+/// What a62 leaves a `gap` on a version with no built-in list: a plugin that is not
+/// `<name>@builtin` and that the run did not declare, a built-in name carrying another name's
+/// `@builtin` source, and a nameless entry. Each beside the realistic built-ins, which alone
+/// would read `unk`.
+#[test]
+fn on_an_unpinned_version_only_the_builtin_shape_is_unmeasured_and_everything_else_is_a_gap() {
+    let beside = |extra: PluginRef| {
+        let mut plugins = operator_login_builtins();
+        plugins.push(extra);
+        with_plugins_on("2.1.303", plugins)
+    };
+    for (case, extra) in [
+        (
+            "ambient",
+            plugin("an-ambient-plugin", Some("an-ambient-plugin@inline")),
+        ),
+        (
+            "borrowed name",
+            plugin(
+                "cc-plugin-telemetry",
+                Some("cc-plugin-telemetry@some-marketplace"),
+            ),
+        ),
+        (
+            "another name's source",
+            plugin("cc-plugin-agents-md", Some("cc-plugin-telemetry@builtin")),
+        ),
+        ("no source", plugin("cc-plugin-agents-md", None)),
+        (
+            "nameless",
+            PluginRef {
+                name: None,
+                source: Some("x@builtin".to_string()),
+                version: None,
+            },
+        ),
+    ] {
+        let (verdict, detail) = h1a(beside(extra), &[], &builtin_plugins(Kind::Claude));
+        assert_eq!(
+            verdict,
+            Verdict::Gap,
+            "story:off-pin-vendor-version-is-advisory: {case}: {detail}"
+        );
+    }
+
+    let declared = vec!["mine".to_string()];
+    let (verdict, detail) = h1a(
+        beside(plugin("mine", Some("mine@inline"))),
+        &declared,
+        &builtin_plugins(Kind::Claude),
+    );
+    assert_eq!(
+        verdict,
+        Verdict::Unk,
+        "story:off-pin-vendor-version-is-advisory: the declared plugin is there, the built-ins \
+         are unmeasured: {detail}"
+    );
+    let (verdict, detail) = h1a(
+        with_plugins_on("2.1.303", operator_login_builtins()),
+        &declared,
+        &builtin_plugins(Kind::Claude),
+    );
+    assert_eq!(
+        verdict,
+        Verdict::Gap,
+        "story:off-pin-vendor-version-is-advisory: a declared plugin missing is a gap: {detail}"
+    );
 }
 
 /// The vector built from takt's operator-login list: four built-ins, each matched on its name
@@ -1192,6 +1309,48 @@ fn a_vendor_off_its_pin_is_a_gap_and_the_report_names_both_versions() {
     let h9 = rows.iter().find(|row| row.row == HermeticRow::H9).unwrap();
     assert_eq!(h9.verdict, Verdict::Gap);
     assert!(h9.detail.contains("2.2.0") && h9.detail.contains("2.1.239"));
+    assert_eq!(
+        h9.severity,
+        Severity::Advisory,
+        "story:off-pin-vendor-version-is-advisory: H9 is advisory"
+    );
+    assert!(!h9.gates(), "story:off-pin-vendor-version-is-advisory");
+}
+
+/// Amendment a62: a strict run whose only row that is not `ok` is an off-pin H9 exits `0`, and
+/// the report still names the version beside the pin, rendered `gap advisory`.
+#[test]
+fn an_off_pin_version_alone_does_not_move_the_exit_code() {
+    let spec = RunSpec::new(Kind::Claude);
+    let record = with_record(good_record(), |record| {
+        if let Event::SessionStarted {
+            harness_version, ..
+        } = record
+        {
+            *harness_version = Some("2.2.0".to_string());
+        }
+    });
+    let rows = hermetic_floor(&[record], &inputs(&spec, &pins(), &[]));
+    let not_ok: Vec<&str> = rows
+        .iter()
+        .filter(|row| row.verdict != Verdict::Ok)
+        .map(|row| row.row.id())
+        .collect();
+    assert_eq!(not_ok, ["H9"], "precondition: H9 is the only row off ok");
+    let report = report_with(rows);
+    assert_eq!(
+        report.exit(),
+        RunExit::Ok,
+        "story:off-pin-vendor-version-is-advisory: an off-pin H9 alone exits 0"
+    );
+    assert_eq!(report.control(), Verdict::Ok);
+    let rendered = report.render();
+    assert!(
+        rendered
+            .lines()
+            .any(|line| line.starts_with("  H9   gap advisory record ") && line.contains("2.2.0")),
+        "{rendered}"
+    );
 }
 
 #[test]
@@ -1659,50 +1818,75 @@ fn a_clean_audited_run_exits_zero() {
     assert_eq!(RunExit::Ok.code(), 0);
 }
 
-#[test]
-fn a_gating_gap_exits_one() {
-    let record = with_record(good_record(), |record| {
+/// The opening record with its output style replaced: `None` makes H1b `unk`, a foreign style
+/// makes it `gap`. H1b is a gating row; H9 was the stand-in until amendment a62 made it advisory.
+fn styled(style: Option<&str>) -> Event {
+    with_record(good_record(), |record| {
+        if let Event::SessionStarted { output_style, .. } = record {
+            *output_style = style.map(str::to_owned);
+        }
+    })
+}
+
+/// The opening record with its plugin list left unstated, which H1a reads as `unk`.
+fn silent_on_plugins(record: Event) -> Event {
+    with_record(record, |record| {
+        if let Event::SessionStarted { plugins, .. } = record {
+            *plugins = None;
+        }
+    })
+}
+
+/// The opening record naming a version off the pin and nothing else wrong.
+fn off_the_pin() -> Event {
+    with_record(good_record(), |record| {
         if let Event::SessionStarted {
             harness_version, ..
         } = record
         {
             *harness_version = Some("9.9.9".to_string());
         }
-    });
-    let report = report_with(floor_for(record));
+    })
+}
+
+#[test]
+fn a_gating_gap_exits_one() {
+    let rows = floor_for(styled(Some("Explanatory")));
+    assert_eq!(
+        verdict_of(&rows, HermeticRow::H1b),
+        Verdict::Gap,
+        "story:off-pin-vendor-version-is-advisory: H1b is the gating stand-in"
+    );
+    let report = report_with(rows);
     assert_eq!(report.exit(), RunExit::Gap);
     assert_eq!(RunExit::Gap.code(), 1);
 }
 
 #[test]
 fn a_gating_unknown_exits_three_because_nobody_found_out() {
-    let record = with_record(good_record(), |record| {
-        if let Event::SessionStarted {
-            harness_version, ..
-        } = record
-        {
-            *harness_version = None;
-        }
-    });
-    let report = report_with(floor_for(record));
+    let rows = floor_for(styled(None));
+    assert_eq!(
+        verdict_of(&rows, HermeticRow::H1b),
+        Verdict::Unk,
+        "story:off-pin-vendor-version-is-advisory: H1b is the gating stand-in"
+    );
+    let report = report_with(rows);
     assert_eq!(report.exit(), RunExit::NoVerdict);
     assert_eq!(RunExit::NoVerdict.code(), 3);
 }
 
 #[test]
 fn a_gap_outranks_an_unknown_because_a_definite_failure_is_a_fact() {
-    let record = with_record(good_record(), |record| {
-        if let Event::SessionStarted {
-            harness_version,
-            output_style,
-            ..
-        } = record
-        {
-            *harness_version = None; // unk
-            *output_style = Some("Explanatory".to_string()); // gap
-        }
-    });
-    assert_eq!(report_with(floor_for(record)).exit(), RunExit::Gap);
+    let rows = floor_for(silent_on_plugins(styled(Some("Explanatory"))));
+    assert_eq!(
+        (
+            verdict_of(&rows, HermeticRow::H1a),
+            verdict_of(&rows, HermeticRow::H1b)
+        ),
+        (Verdict::Unk, Verdict::Gap),
+        "story:off-pin-vendor-version-is-advisory: an unk and a gap on two gating rows"
+    );
+    assert_eq!(report_with(rows).exit(), RunExit::Gap);
 }
 
 #[test]
@@ -1740,15 +1924,7 @@ fn verdict_lines(report: &AuditReport) -> Vec<String> {
 
 #[test]
 fn a_gating_unknown_still_exits_three_and_the_report_names_each_verdict_apart() {
-    let record = with_record(good_record(), |record| {
-        if let Event::SessionStarted {
-            harness_version, ..
-        } = record
-        {
-            *harness_version = None;
-        }
-    });
-    let report = report_with(floor_for(record));
+    let report = report_with(floor_for(styled(None)));
     assert_eq!(report.exit(), RunExit::NoVerdict);
     assert_eq!(
         verdict_lines(&report),
@@ -1774,26 +1950,18 @@ fn a_child_nothing_measured_prints_unknown_and_never_zero() {
 
 #[test]
 fn the_control_verdict_folds_the_gating_rows_gap_over_unk_over_ok() {
-    let version = |value: Option<&str>| {
-        with_record(good_record(), |record| {
-            if let Event::SessionStarted {
-                harness_version, ..
-            } = record
-            {
-                *harness_version = value.map(str::to_owned);
-            }
-        })
-    };
-    let both = with_record(version(None), |record| {
-        if let Event::SessionStarted { output_style, .. } = record {
-            *output_style = Some("Explanatory".to_string());
-        }
-    });
-    for (record, control, audit) in [
-        (good_record(), "ok", "ok (exit 0)"),
-        (version(None), "unk", "no verdict (exit 3)"),
-        (version(Some("9.9.9")), "gap", "gap (exit 1)"),
-        (both, "gap", "gap (exit 1)"),
+    for (case, record, control, audit) in [
+        ("clean", good_record(), "ok", "ok (exit 0)"),
+        ("unk", styled(None), "unk", "no verdict (exit 3)"),
+        ("gap", styled(Some("Explanatory")), "gap", "gap (exit 1)"),
+        (
+            "gap over unk",
+            silent_on_plugins(styled(Some("Explanatory"))),
+            "gap",
+            "gap (exit 1)",
+        ),
+        // Amendment a62: H9 is advisory, so a version off the pin folds into neither verdict.
+        ("off the pin", off_the_pin(), "ok", "ok (exit 0)"),
     ] {
         let lines = verdict_lines(&report_with(floor_for(record)));
         assert_eq!(
@@ -1801,7 +1969,8 @@ fn the_control_verdict_folds_the_gating_rows_gap_over_unk_over_ok() {
             [
                 format!("control verdict: {control}"),
                 format!("audit verdict: {audit}")
-            ]
+            ],
+            "story:off-pin-vendor-version-is-advisory: {case}"
         );
     }
 }

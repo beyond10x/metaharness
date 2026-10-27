@@ -82,9 +82,9 @@ credentials whatever the variable holds. The per-change record of what was verif
 
 The gate is **`task check`** — ESS specification validation, `cargo fmt --check`,
 `cargo clippy --workspace --all-targets -D warnings`, `cargo test --workspace`.
-Install ESS 0.69.2 first: `spec/ess-inputs.yaml` declares `requires: ess 0.69.2`, the gate validates with
+Install ESS 0.70.0 first: `spec/ess-inputs.yaml` declares `requires: ess 0.70.0`, the gate validates with
 `--strict-requires`, and CI installs `ess-cli` from that release's commit (`.github/workflows/gate.yml`).
-The tests execute 116 conformance scenarios (110 generated, 6 authored) and check suite
+The tests execute 117 conformance scenarios (111 generated, 6 authored) and check suite
 freshness; [spec/coverage.md](spec/coverage.md) records the coverage and hardening bounds.
 Green before any push.
 

@@ -28,7 +28,10 @@ credential**.
 
 `--strict-version` resolves `codex` on the `PATH` the child gets, reads its `--version` before
 anything is written for the child, and refuses one off the pin by name, exit 2 (design amendment
-a34; a run without the flag warns, and H9 reads the version the rollout records).
+a34). A run without the flag runs the binary. The rollout's opening record earns one
+`version_outside_pin` warning, which `metaharness run` prints once on stderr, and H9 reads `gap`
+from the version the rollout records. H9 is advisory, so the version alone never moves the exit
+code (amendment a62).
 
 `--context <file>` puts each declared file **inline in the prompt**, ahead of the task, verbatim
 inside a tag whose closing line the file does not contain (design amendment a35; the checks are on

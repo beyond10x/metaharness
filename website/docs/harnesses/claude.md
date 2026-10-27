@@ -63,16 +63,23 @@ Claude Code compiles plugins into its binary, so no scratch config home can remo
 version, by name, with the source a record gives it, `<name>@builtin`. H1a reads a plugin in the
 opening record as `ok` only when it is a plugin the run declared or one of the twelve the reported
 version compiles in, **by name and source**, and the row names every built-in it saw. A plugin
-that borrows a built-in's name from anywhere else stays a `gap`, and so does any built-in in a
-record on an unpinned version.
+that borrows a built-in's name from anywhere else stays a `gap`. A record on an unpinned version
+has no built-in list. There, a `<name>@builtin` plugin the run did not declare is unmeasured: H1a
+reads `unk` and names the version and the plugin. Anything else the run did not declare is still a
+`gap` (design amendment a62).
 
 | Credential mode | Built-ins in a 2.1.304, 2.1.305 or 2.1.309 opening record | What the launch does |
 |---|---|---|
 | `none`, `loopback` | `cc-plugin-agents-md`, `cc-plugin-plugin-authoring` (observed on all three) | sets `CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC`, which keeps `cc-plugin-telemetry` out |
 | operator login | also `cc-plugin-telemetry` and, for Team and Enterprise organizations, `cc-plugin-sec-default` (relayed for 2.1.304, not driven here) | admits them by name and `@builtin` source; the traffic switch is not set under a real credential |
 
-`--strict-version` reads the resolved binary's `--version` before the spawn and refuses one that is
-not pinned; 2.1.303 and 2.1.308 are refused.
+Without `--strict-version` a binary off the pin runs. The adapter adds one `version_outside_pin`
+warning after the opening record, `metaharness run` prints it once on stderr, and H9 reads `gap`
+naming both versions. H9 is advisory and never moves the exit code. What nobody measured for that
+binary reads `unk`: H11 with no memory canary, and H1a for its built-ins. So `--hermetic strict`
+exits 3 ("nobody found out"), never 1, for the version alone (design amendment a62).
+`--strict-version` reads the resolved binary's `--version` before the spawn and
+refuses one that is not pinned; 2.1.303 and 2.1.308 are refused.
 
 Memory files: at each pin no memory file in the working directory or above it reached the model
 under the launch's `--setting-sources ""` — `CLAUDE.md`, `.claude/CLAUDE.md`, `CLAUDE.local.md`,
@@ -80,7 +87,8 @@ under the launch's `--setting-sources ""` — `CLAUDE.md`, `.claude/CLAUDE.md`, 
 all twelve sent by the same binary with the project and local sources on. H11 rests on that control
 and the fresh scratch config home: the adapter records the canary per pinned version
 (`MEMORY_CANARIES`), and the floor reads H11 `ok` only on a record version whose canary kept every
-shape out; a version with no canary, or one whose canary reached a request, reads `gap`. The ancestor
+shape out. A version with no canary reads `unk`, because nobody measured it (amendment a62), and
+one whose canary reached a request reads `gap`. The ancestor
 walk looks for all six shapes and names what it finds in the H11 row; it refuses nothing. User memory
 (a `CLAUDE.md` in the config home) and managed memory were not probed. Design amendments **a33** and
 **a36**; evidence in `docs/research/2026-10-21-claude-code-2.1.304-adapter-surface.md` and, for

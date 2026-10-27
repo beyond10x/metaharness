@@ -72,7 +72,17 @@ pub struct ObservedModel {
 /// Short codes for [`Event::Warning`], so an embedder can match on one without matching prose.
 pub mod warning_code {
     /// The vendor binary's version is outside the adapter's pin (design § 8.4 O1).
+    ///
+    /// No adapter emits this spelling: the Claude and Codex readers emit
+    /// [`VERSION_OUTSIDE_PIN`]. It stays so a caller matching on it still builds.
     pub const VERSION_OFF_PIN: &str = "VERSION_OFF_PIN";
+    /// The opening record names a vendor version outside the adapter's pin (design § 8.4 O1,
+    /// amendment a62).
+    ///
+    /// Emitted once per run, right after `session.started`, by the Claude and Codex readers, and
+    /// printed once on stderr by `metaharness run`. It is the report of an off-pin binary, never
+    /// a refusal: H9 reads `gap` and is advisory, and `--strict-version` is the refusal.
+    pub const VERSION_OUTSIDE_PIN: &str = "version_outside_pin";
     /// A tool is offered that the control seam does not cover (design § 7.8).
     pub const COVERAGE_GAP: &str = "COVERAGE_GAP";
     /// The run asked for a control this adapter declares unverified rather than delivered.

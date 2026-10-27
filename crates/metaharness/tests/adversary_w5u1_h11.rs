@@ -198,7 +198,12 @@ fn adversary_w5u1_a_version_banner_is_not_a_pinned_canary_key() {
     let banner = format!("{} (Claude Code)", pinned());
     let run = claude_declared_copy(&copy, &banner);
     let (verdict, detail) = h11(&run);
-    assert_eq!(verdict, Verdict::Gap, "{detail}");
+    assert_eq!(
+        verdict,
+        Verdict::Unk,
+        "story:off-pin-vendor-version-is-advisory: no canary is keyed by the banner, so H11 is \
+         unk and never ok: {detail}"
+    );
     assert!(detail.contains("no memory canary"), "{detail}");
 }
 

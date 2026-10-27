@@ -27,8 +27,11 @@ enum Opening {
     Complete,
     /// No plugin list and no MCP server list: H1a and H5 are `unk`.
     SilentOnPluginsAndMcp,
-    /// A harness version off the pin: H9 is `gap`.
+    /// A harness version off the pin: H9 is `gap` and advisory, and H11 is `unk` because no
+    /// memory canary is recorded for that version (amendment a62).
     OffThePin,
+    /// A plugin nobody declared and the binary does not compile in: H1a is `gap`.
+    UndeclaredPlugin,
 }
 
 /// A scripted child whose runner says what it measured, or measures nothing at all.
@@ -105,6 +108,7 @@ fn audited(opening: Opening, measured: Option<ProcessTermination>) -> (Vec<Strin
             fields.remove("mcp_servers");
         }
         Opening::OffThePin => record["harness_version"] = "0.0.0-off-the-pin".into(),
+        Opening::UndeclaredPlugin => record["plugins"] = serde_json::json!(["an-ambient-plugin"]),
     }
     let lines = vec![
         record.to_string(),
@@ -150,7 +154,7 @@ const CHILDREN: [(Option<ProcessTermination>, &str); 4] = [
     (None, "child exit: unknown"),
 ];
 
-const OPENINGS: [(Opening, &str, &str, i32); 3] = [
+const OPENINGS: [(Opening, &str, &str, i32); 4] = [
     (
         Opening::Complete,
         "control verdict: ok",
@@ -163,8 +167,15 @@ const OPENINGS: [(Opening, &str, &str, i32); 3] = [
         "audit verdict: no verdict (exit 3)",
         3,
     ),
+    // story:off-pin-vendor-version-is-advisory: off the pin is no longer a gap (a62).
     (
         Opening::OffThePin,
+        "control verdict: unk",
+        "audit verdict: no verdict (exit 3)",
+        3,
+    ),
+    (
+        Opening::UndeclaredPlugin,
         "control verdict: gap",
         "audit verdict: gap (exit 1)",
         1,
@@ -244,8 +255,15 @@ fn the_report_names_the_childs_exit_the_control_verdict_and_the_audit_verdict_ap
     for (opening, control, audit, code) in OPENINGS {
         for (measured, child) in CHILDREN {
             let (lines, exit) = audited(opening, measured);
-            assert_eq!(lines, [child, control, audit], "{opening:?}, {measured:?}");
-            assert_eq!(exit, code, "{opening:?}, {measured:?}");
+            assert_eq!(
+                lines,
+                [child, control, audit],
+                "story:off-pin-vendor-version-is-advisory: {opening:?}, {measured:?}"
+            );
+            assert_eq!(
+                exit, code,
+                "story:off-pin-vendor-version-is-advisory: {opening:?}, {measured:?}"
+            );
         }
     }
 }

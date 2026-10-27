@@ -24,9 +24,10 @@ so a reader can see the intent beside the outcome and notice when they disagree.
 
 ## 2. Gating is per row, not global
 
-Two rows are unobservable as a property of the **mechanism** rather than of the run. If any `unk`
-failed a strict run, every strict run would fail forever. Those two are advisory: evaluated,
-reported, printed — and not counted against the exit code.
+Three rows are advisory: evaluated, reported, printed — and not counted against the exit code. Two
+of them, H2 and H6, are unobservable as a property of the **mechanism** rather than of the run. If
+any `unk` failed a strict run, every strict run would fail forever. The third, H9, is advisory by
+decision: a vendor version off the pin is reported, never refused (amendment a62).
 
 ## The twelve rows
 
@@ -41,7 +42,7 @@ reported, printed — and not counted against the exit code.
 | **H6** | Credentials are one file, copied | `effect` | **advisory** |
 | **H7** | The working directory is ours | `record` | gating |
 | **H8** | Hooks and customizations are not skipped | `launch` | gating |
-| **H9** | The vendor version is the pinned one | `record` | gating |
+| **H9** | The vendor version is the pinned one | `record` | **advisory** |
 | **H10** | Governing documents cannot move under the run | `record` | gating |
 | **H11** | No memory file outside the copied tree is discoverable | `launch` | gating |
 
@@ -51,6 +52,14 @@ other.
 H2 and H6 are advisory because of the mechanism: the absence of allow rules that would shadow the
 seam is not observable in any record, and a credential copy leaves no trace of its own — its
 evidence is H1a, H4 and H5 holding.
+
+H9 is advisory because the binary is the operator's, and a version off the pin is a fact about the
+run to report, not a failure of it. The row still reads `gap` and names both versions, the adapter
+adds one `version_outside_pin` warning to the stream, and `metaharness run` prints that warning
+once on stderr. What a version off the pin leaves unmeasured shows up in the rows that depend on
+the version. On Claude Code a version with no memory canary reads H11 `unk`, and so does H1a for a
+`<name>@builtin` plugin on a version with no built-in list. A strict run on such a binary exits 3,
+never 1. `--strict-version` still refuses a binary off the pin before the spawn, exit 2.
 
 ## Three verdicts, not two
 

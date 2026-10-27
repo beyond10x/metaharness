@@ -1246,7 +1246,9 @@ two rows (H2, H6) declared themselves unobservable *unconditionally* — so ever
 have exited `3` forever (review finding **F3**). `trace-spec` already has the right shape for this
 and it is borrowed here: a row is **gating** or **advisory**, an advisory row is evaluated,
 reported and printed like any other, and it does not move the exit code. A row is advisory only
-when its unobservability is a property of the mechanism rather than of the run.
+when its unobservability is a property of the mechanism rather than of the run. *(a62: H9 is the
+one exception, advisory by the operator's decision — a version off the pin is reported, never
+refused.)*
 
 | # | control | imposed by | asserted how | unknown means | gating? |
 |---|---|---|---|---|---|
@@ -1259,9 +1261,9 @@ when its unobservability is a property of the mechanism rather than of the run.
 | H6 | credential carriage is exactly declared | vendor adapters: one file into the scratch home, nothing else, **re-copied immediately before every spawn** (amendment a1); direct-provider adapters: no operator login is copied and the only source is the caller-named source or none (**amendment a14**) | **not directly assertable in any record.** The evidence is the effect: H1a, H4, H5 | — | **advisory**, and § 8.3 says why an attestation is not evidence |
 | H7 | the working directory is ours | a directory metaharness created; `--add-dir` never passed. **a6: under an operator-named `--cwd` this row is attested unavailable, never claimed** — and **a6.1: its reason states that the vendor sandbox was widened to that tree** (codex: `sandbox_mode = "workspace-write"`), because a run that may change the operator's repository must say so in its own record and not only in a scratch config file. **a27: under `--cwd <dir> --scratch-cwd` this row is `declared` — the embedder declared `<dir>` as its disposable scratch copy, metaharness did not create it, `--add-dir` is never passed, and the sandbox grant is stated as under a6.1. The floor reads `declared` as `ok` only when the record's `cwd` is the planned one; a declaration on any other row is `gap`; an a6 `unavailable` H7 is `gap`, which the floor never said before a27.** **a30: the direct-provider loop's `started` record names no working directory at the pinned release, so on b10x the record's `cwd` is `null`, never metaharness's plan echoed back, and the row is `unk` (*"the loop did not report its working directory"*) before the attestation is read: declared, a6 and metaharness-created alike** *(a31: superseded for the pinned release, 0.15.1, whose `started` record names the directory; the `unk` arm now applies only to a record that names none)* **a31: harness 0.15.1's `started` record names the canonical root its file tools act in, so on b10x the record's `cwd` is that directory and the row reads it as on every kind — `unk` only when the record names none; and on every kind the record and the plan are compared as directories, not spellings: equal, or both absolute and resolving (links followed) to the same path without any step reaching `/proc` or `/dev/fd`** | record: `cwd` in the opening record, read beside the attestation's H7 state (a27) | absent ⇒ `unk` | **gating** |
 | H8 | hooks and customizations are not skipped | an argv **denylist**: neither `--bare` nor **`--safe-mode`**, and neither `CLAUDE_CODE_SAFE_MODE` nor `CLAUDE_CODE_SIMPLE` in the child environment | launch: the argv and environment as values | n/a — launch assertion | **gating** |
-| H9 | the vendor version is the pinned one | `doctor` before the run | record: the harness version in the opening record | absent ⇒ `unk` | **gating** |
+| H9 | the vendor version is the pinned one | `doctor` before the run | record: the harness version in the opening record | absent ⇒ `unk` | ~~**gating**~~ **advisory (a62)**: a version off the pin is reported — the row reads `gap` and names both versions, the adapter warns once, `metaharness run` prints the warning on stderr — and never moves the exit code; `--strict-version` still refuses before the spawn |
 | H10 | governing documents cannot move under the run | inputs are copied into the run directory, not referenced | record: the digest of the copied tree, in `session.started` | n/a | **gating** |
-| H11 | **no memory file outside the copied tree is discoverable** | the scratch root has no `CLAUDE.md` / `AGENTS.md` ancestor above it, or an explicit `--system-prompt` replaces discovery. **a33: the 2.1.304 and 2.1.305 loader also reads `.claude/CLAUDE.md`, `CLAUDE.local.md`, `.claude/AGENTS.md` and `.claude/rules/**/*.md` from an ancestor; the walk does not look for them, and `story:claude-h11-memory-walk-shapes` (decided: option C) covers them.** *(Superseded by a36 for Claude: the walk looks for all six shapes.)* **a36 (Claude only): the row rests on the launch's own control — `--setting-sources ""` and a fresh scratch `CLAUDE_CONFIG_DIR` with no memory file in it — and the floor reads it `ok` only where `MEMORY_CANARIES` records, for the opening record's version, that no planted canary of the six shapes reached the model; a version with no row, or a canary that reached it, is `gap`. The walk looks for all six shapes and its findings are information in the row, never a refusal; under a27 a memory file above the copy is named and the row stays `imposed`. Codex and b10x keep the walk as the control.** **a6: under an operator-named `--cwd` the walk's findings go into the attested-unavailable reason instead of refusing — the operator declared the tree, memory files and all.** **a27: under `--cwd <dir> --scratch-cwd` this row is never declared: the same walk runs from `<dir>`, nothing above it is `imposed`, a memory file above it is `unavailable` (so strict exits 1 after the run) *(superseded by a36 for Claude, where it is named in an `imposed` row; Codex and b10x keep this)*, and a `CLAUDE.md`/`AGENTS.md` at the copy's root is the copy's own, listed in `ambient_inputs`** | launch: the ancestor walk from the scratch cwd — or from the declared copy (a27) — as a value | n/a — launch assertion | **gating** |
+| H11 | **no memory file outside the copied tree is discoverable** | the scratch root has no `CLAUDE.md` / `AGENTS.md` ancestor above it, or an explicit `--system-prompt` replaces discovery. **a33: the 2.1.304 and 2.1.305 loader also reads `.claude/CLAUDE.md`, `CLAUDE.local.md`, `.claude/AGENTS.md` and `.claude/rules/**/*.md` from an ancestor; the walk does not look for them, and `story:claude-h11-memory-walk-shapes` (decided: option C) covers them.** *(Superseded by a36 for Claude: the walk looks for all six shapes.)* **a36 (Claude only): the row rests on the launch's own control — `--setting-sources ""` and a fresh scratch `CLAUDE_CONFIG_DIR` with no memory file in it — and the floor reads it `ok` only where `MEMORY_CANARIES` records, for the opening record's version, that no planted canary of the six shapes reached the model; a version with no row, or a canary that reached it, is `gap` *(a62: superseded for a version with no row, which is `unk` — nobody measured it; a canary that reached the model stays `gap`)*. The walk looks for all six shapes and its findings are information in the row, never a refusal; under a27 a memory file above the copy is named and the row stays `imposed`. Codex and b10x keep the walk as the control.** **a6: under an operator-named `--cwd` the walk's findings go into the attested-unavailable reason instead of refusing — the operator declared the tree, memory files and all.** **a27: under `--cwd <dir> --scratch-cwd` this row is never declared: the same walk runs from `<dir>`, nothing above it is `imposed`, a memory file above it is `unavailable` (so strict exits 1 after the run) *(superseded by a36 for Claude, where it is named in an `imposed` row; Codex and b10x keep this)*, and a `CLAUDE.md`/`AGENTS.md` at the copy's root is the copy's own, listed in `ambient_inputs`** | launch: the ancestor walk from the scratch cwd — or from the declared copy (a27) — as a value | n/a — launch assertion | **gating** |
 
 Three rows deserve their reasons in full.
 
@@ -1566,7 +1568,7 @@ expectation language.**
 
 | layer | who owns it | always runs? |
 |---|---|---|
-| **the hermetic verdict** — the twelve rows of § 8.1, each `ok` / `gap` / `unk`, with the two advisory rows reported and not gating, plus the decision census (allowed, denied, by seam) and, **since amendment a12, what the opening record said this machine would not admit** | metaharness, built in, no spec file | yes, whenever `--audit` is given |
+| **the hermetic verdict** — the twelve rows of § 8.1, each `ok` / `gap` / `unk`, with the two advisory rows reported and not gating *(three since a62: H9)*, plus the decision census (allowed, denied, by seam) and, **since amendment a12, what the opening record said this machine would not admit** | metaharness, built in, no spec file | yes, whenever `--audit` is given |
 | **the expectation check** — arbitrary claims about what the run did | an external auditor over `trace-ir/1` | only when `--spec` is given |
 
 The reasons, in order of weight:
@@ -2760,7 +2762,7 @@ as one of two things: a **declared installed plugin**, compared by name with wha
 installed as before; or a **built-in**, whose record version, name **and** source equal a declared
 entry. Anything else is a `gap`: a plugin carrying a built-in's name with another source or none (an
 ambient plugin can be called anything, so a name alone never matches), a built-in source on a name
-the binary does not compile, any built-in in a record on an unpinned version, and a plugin with no
+the binary does not compile, any built-in in a record on an unpinned version *(a62: superseded — a `<name>@builtin` plugin on a version with no list is unmeasured, `unk`)*, and a plugin with no
 name, which the comparison used to drop. The row names every built-in it admitted. This is not a
 declaration standing in for an observation (invariant 3): the record still has to carry each
 plugin. Which built-ins a session carries varies with the account and server flags — the
@@ -3186,7 +3188,7 @@ run it.
 **3. The floor reads the canary of the record's version.** `FloorInputs` gains `memory_canaries`:
 the adapter's rows on Claude, `None` on every other kind. Where it is `Some` and the attestation
 reads H11 `ok`, the floor looks up the opening record's harness version: no version → `unk`
-(nothing names the binary the claim is about); a version with no row → `gap`; a row in which any
+(nothing names the binary the claim is about); a version with no row → `gap` *(superseded by a62: `unk`, because nobody measured that binary)*; a row in which any
 canary reached a request through the launch, or in which the control sent fewer than were planted
 (a probe that could not see the shape shows nothing about it) → `gap`; otherwise `ok`, the detail
 naming the attestation and the canary. An `unavailable` H11 (a6) and a declared one are read as
@@ -4568,7 +4570,7 @@ and every audit verdict, and holds the page to the rendered lines.
 scratch copy. A measured child is a `/bin/sh` launched and reaped by the production `SpawnRunner`,
 which exits `0`, exits `7` or kills itself with `SIGKILL`. The unknown child is the scripted
 runner. The opening record selects the gating rows: complete, silent on plugins and MCP servers
-(H1a and H5 `unk`), or off the pin (H9 `gap`). The target reads the three fields off the report's
+(H1a and H5 `unk`), or off the pin (H9 `gap`; *a62: H9 is advisory, so this opening reads H11 `unk` and exits 3, and exit 1 has its own opening, a plugin nobody declared*). The target reads the three fields off the report's
 own lines and the code off `Run::exit`. Only the opening record selects an outcome; the event echoes
 the child. Synthesis fixes the child at the enum's first variant, so the target runs each generated
 scenario again with every child the event declares. The authored scenario
@@ -5209,3 +5211,109 @@ launch and decisions are unchanged.
 below `low` or asks about reads on request. `replace` waits on ADR 0104's open question.
 
 Event wire: one new warning code, `approval-disagreed`. No frame wire change.
+
+### Amendment a62 — an off-pin vendor version is reported, never refused (2026-10-27)
+
+The operator, 2026-10-27, on a Codex run held for its version: "There shouldn't be a hard failure
+due to that." The run's child resolved `~/.local/bin/codex` on the `PATH` built from its `HOME`.
+A standalone updater had moved that binary to 0.164.0, outside the pin of 0.153.4 and 0.160.0.
+Under `--hermetic strict` H9 read `gap`, which was gating, and the audit exited 1. Loom's session
+executor holds a proposal on a gating Codex row that is not `ok`, so the session proposed nothing.
+The story is `story:off-pin-vendor-version-is-advisory`.
+
+**1. H9 is advisory on every kind.** `HermeticRow::H9.severity()` is `Advisory`, beside H2 and H6.
+Its verdicts are unchanged: `ok` on the pin, `gap` off it with both versions named, `unk` when the
+record names no version. The row renders `gap advisory` and enters neither the control verdict nor
+the exit code. This supersedes § 8.1's **gating** for H9, and it is the one exception to § 8.1's
+rule that a row is advisory only when the mechanism cannot be observed. H9 is observable. It is
+advisory because the binary is the operator's, and a version off the pin is a fact to report, not
+a failure of the run. § 8.4 O1's pin is unchanged: the adapter still declares the versions it was
+written against, and a verdict that changed because the reader changed is still visible as such,
+in the H9 row and in the warning.
+
+**2. H11 reads `unk` for an unmeasured Claude version.** a36 § 3 read a record version with no
+`MEMORY_CANARIES` row as `gap`. Nobody measured that binary, so the row is now `unk`, and the detail
+says so: "there is no memory canary recorded for <version>, so nobody measured whether this binary
+honours the control". A row in which a canary reached a request, or in which the control sent fewer
+than were planted, stays `gap`. A record that names no version stays `unk`. This supersedes a36 § 3's
+"a version with no row → `gap`" and the same clause in § 8.1's H11 row.
+
+**3. The warning, once on the stream and once on stderr.** `warning_code::VERSION_OUTSIDE_PIN`,
+`version_outside_pin`, names the code. The Codex rollout reader already emitted it as a literal
+after an off-pin `session_meta`. The Claude transcript reader now emits it once per stream, right
+after an `init` record whose `claude_code_version` is outside the pin, and a record that names no
+version earns none. `metaharness run` prints the first such message on stderr as `metaharness:
+<message>`, once per run and in every hermetic mode, because an operator who reads no event stream
+otherwise learns of the version only from the audit. `VERSION_OFF_PIN` stays in `warning_code` for
+callers that match on it; no adapter emits it.
+
+**4. `--strict-version` is unchanged.** It is the operator's refusal: it reads the resolved binary's
+`--version` before anything is written for the child and refuses one off the pin, or one whose
+version it cannot read, exit 2.
+
+**5. H1a reads an unmeasured built-in as `unk`.** Every real Claude binary reports `<name>@builtin`
+plugins in its opening record. The credential-free modes report `cc-plugin-agents-md` and
+`cc-plugin-plugin-authoring`. a33 declares built-ins per pinned version and read any built-in in a
+record on an unpinned version as `gap`. So a strict run on a binary off the pin exited 1 for its
+version alone, through H1a instead of H9 (adversary pass 1 against this story; the coordinator
+decided the fix). Now, on a kind that declares built-ins, a record whose version has no built-in
+list, whether off the pin or unstated, reads a plugin it did not declare whose source is exactly
+`<name>@builtin` as unmeasured. That plugin makes H1a `unk`, and the row names the version, the
+plugin and that no built-in list is recorded for that version. These remain a `gap`, and a `gap`
+outranks the `unk`:
+
+- an ambient plugin;
+- a built-in's name carrying another source or none;
+- a name carrying another name's `@builtin` source;
+- a nameless entry;
+- a declared plugin the record lacks.
+
+Pinned versions, and kinds that declare no built-ins, are judged as before. This supersedes a33
+§ 3's "any built-in in a record on an unpinned version" for the `<name>@builtin` shape. A strict
+Claude run on a binary off the pin whose record carries only the built-ins therefore exits 3, with
+H1a and H11 `unk`, never 1. A strict Codex run whose rollout names 0.164.0 exits as the same run on
+0.160.0 does.
+
+**6. The specification.** In `metaharness.session`, `OpeningRecord` gains `undeclared-plugin` (H1a
+`gap`), which now selects `a-gating-row-failed`, exit 1. The `off-the-pin` opening selects a new
+outcome, `an-off-pin-version-is-unmeasured`: control `unk`, audit `no-verdict`, exit 3. The target
+names it from the rendered H9 `gap advisory` and H11 `unk` lines. The specification and the gate move
+to ESS 0.70.0 (`077e4ee1811438f1b3f762c3aefca1f3cbda8792`). That compiler regenerates the 0.69.2
+suite byte for byte, so the 117 scenarios differ from the 116 only by this amendment. The Claude
+golden record names 2.1.240, which is off the pin. Its expectation and the C2 `session` and
+`auth-expired` replays gain the warning line, and `claude-transcript-summarized` counts one `unk`
+node. `spec/coverage.md` lists the scenarios that changed.
+
+**7. Evidence.** These tests show the change:
+
+- `exactly_h2_h6_and_h9_are_advisory`.
+- `an_off_pin_codex_strict_run_exits_as_the_pinned_run_does`: a scripted Codex strict run on 0.164.0
+  against the same run on 0.160.0.
+- `h11_is_unk_on_a_version_without_a_memory_canary`.
+- `a_builtin_in_a_record_on_an_unpinned_version_is_unk_and_on_each_pinned_one_is_ok` and
+  `on_an_unpinned_version_only_the_builtin_shape_is_unmeasured_and_everything_else_is_a_gap`
+  (§ 5).
+- `adversary_off_pin_pass1_a_realistic_off_pin_claude_record_is_not_failed_for_its_version`: a
+  strict Claude run on 2.1.400 whose record carries the two credential-free built-ins exits 3.
+- `an_off_pin_opening_record_is_followed_by_one_version_outside_pin_warning`.
+- `an_off_pin_binary_is_warned_once_on_the_stream_and_once_on_stderr_in_every_hermetic_mode`: fake
+  `claude` and `codex` binaries through the CLI, under `--hermetic off`, `on` and `strict`.
+
+These existing tests are unchanged:
+
+- `strict_version_resolves_codex_on_the_childs_path_and_refuses_one_off_the_pin` and
+  `strict_version_still_refuses_the_off_pin_binary_before_the_spawn` show that `--strict-version`
+  still refuses.
+- `a_run_that_produced_no_record_says_what_the_child_said_on_the_way_out`,
+  `a_harness_that_died_without_a_record_exits_three_even_with_every_row_ok` and the Codex vectors
+  `CX2-drift-opaque` and `CX2-nothing-dropped` show that a binary that does not speak the protocol
+  still fails as the protocol says. No record is a `NO_TERMINAL_RECORD` warning carrying the
+  child's stderr, and exit 3. An unmapped shape is opaque, never fatal.
+
+**8. Open.** The end-to-end run that prompted this, takt on the 0.164.0 binary built against this
+tree, was not made here. Loom's executor arm that treats H9 as gating is dead once H9 is advisory,
+and Loom's pin hop removes it. No pin moves: moving `PINNED_VERSIONS` to 0.164.0 is a measurement
+(invariant 4), not this fix.
+
+Event wire: the warning code `version_outside_pin`, which Codex already emitted, is a named constant,
+and Claude emits it too. No frame wire change.

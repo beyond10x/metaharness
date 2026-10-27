@@ -60,7 +60,7 @@ jobs:
       - uses: Swatinem/rust-cache@6323deb102c322ba6fcbdcafc7e3dddab59af2b6 # v2
 
       - name: Install the ESS compiler pinned by the specification
-        run: cargo install --git https://github.com/beyond10x/ess --rev a3bc2df3df986e8d340553145e8615a00f982331 --locked ess-cli
+        run: cargo install --git https://github.com/beyond10x/ess --rev 077e4ee1811438f1b3f762c3aefca1f3cbda8792 --locked ess-cli
 
       # The gate's own exit status, never a pipeline's (AGENTS.md § The gate).
       - name: Run the repository gate

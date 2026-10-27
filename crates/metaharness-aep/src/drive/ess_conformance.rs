@@ -61,8 +61,9 @@ fn scratch_cwd_plan(input: &Value) -> Observed {
         other => panic!("unsupported scratch cwd probe {other}"),
     };
     let canonical = fs::canonicalize(&copy).unwrap();
-    // The record must sit on the adapter's pin or H9 fails the strict run for a reason this
-    // command does not test; the pin is read off the adapter's own capabilities, never spelled.
+    // The record must sit on the adapter's pin: off it, H9 is advisory but H11 reads `unk` with no
+    // memory canary for the version (amendment a62), so the strict run would exit 3 for a reason
+    // this command does not test. The pin is read off the adapter's own capabilities, never spelled.
     let pinned = metaharness::capabilities(Kind::Claude)
         .unwrap()
         .versions_pinned;
@@ -183,7 +184,8 @@ impl metaharness::ProcessRunner for ShellChild {
 }
 
 /// The opening and terminal records a Claude child prints for the declared opening: every field the
-/// floor reads on the adapter's pin, no plugin and no MCP server list, or a version off the pin.
+/// floor reads on the adapter's pin, no plugin and no MCP server list, a version off the pin, or a
+/// plugin nobody declared.
 fn audited_records(opening: &str, cwd: &Path) -> [String; 2] {
     let pinned = metaharness::capabilities(metaharness::protocol::Kind::Claude)
         .unwrap()
@@ -205,6 +207,7 @@ fn audited_records(opening: &str, cwd: &Path) -> [String; 2] {
             fields.remove("mcp_servers");
         }
         "off-the-pin" => record["harness_version"] = json!("0.0.0-off-the-pin"),
+        "undeclared-plugin" => record["plugins"] = json!(["an-ambient-plugin"]),
         other => panic!("unsupported opening record {other}"),
     }
     [
@@ -297,8 +300,23 @@ fn audited_run_exit(input: &Value) -> Observed {
             ("no verdict (exit 3)", "no-verdict"),
         ],
     );
+    // Amendment a62: an off-pin version is told apart from a silent record by what the report
+    // printed, never by the probe: H9 `gap` and advisory, H11 `unk` and gating.
+    let row_words = |id: &str| -> Option<(String, String)> {
+        rendered.lines().find_map(|line| {
+            let mut words = line.split_whitespace();
+            (words.next() == Some(id))
+                .then(|| Some((words.next()?.to_owned(), words.next()?.to_owned())))
+                .flatten()
+        })
+    };
+    let off_pin_unmeasured = row_words("H9") == Some(("gap".to_owned(), "advisory".to_owned()))
+        && row_words("H11") == Some(("unk".to_owned(), "gating".to_owned()));
     let outcome = match (control.as_str(), audit.as_str(), exit_code) {
         ("gap", "gap", 1) => "a-gating-row-failed".to_owned(),
+        ("unk", "no-verdict", 3) if off_pin_unmeasured => {
+            "an-off-pin-version-is-unmeasured".to_owned()
+        }
         ("unk", "no-verdict", 3) => "nobody-found-out".to_owned(),
         ("ok", "ok", 0) => "every-control-held".to_owned(),
         other => format!("undeclared-shape:{other:?}"),
@@ -357,8 +375,8 @@ fn every_declared_child_exit_drives_the_audited_run_scenarios() {
     }
     assert_eq!(
         driven.len(),
-        12,
-        "three outcomes, four children: {driven:#?}"
+        16,
+        "four outcomes, four children (story:off-pin-vendor-version-is-advisory): {driven:#?}"
     );
 }
 
@@ -2407,7 +2425,7 @@ fn ess_generated_scenarios_drive_production_targets() {
     if external.is_none() {
         assert_eq!(
             scenarios.len(),
-            116,
+            117,
             "review and update coverage deliberately"
         );
         assert_eq!(
@@ -2527,7 +2545,7 @@ fn ess_suite_matches_the_current_specification() {
         .args(["--suite-format", "5", "--strict-requires", "--out"])
         .arg(&output)
         .output()
-        .expect("ESS 0.69.2 is a gate prerequisite");
+        .expect("ESS 0.70.0 is a gate prerequisite");
     assert!(
         status.status.success(),
         "{}",
@@ -2537,7 +2555,7 @@ fn ess_suite_matches_the_current_specification() {
     assert_eq!(
         fresh,
         suite(),
-        "regenerate spec/conformance.json with ESS 0.69.2"
+        "regenerate spec/conformance.json with ESS 0.70.0"
     );
 }
 
@@ -2658,7 +2676,7 @@ fn the_reference_model_closes_every_terminal_record_shape_as_production_does() {
         .args(["--report-format", "2", "--report-out"])
         .arg(&report)
         .output()
-        .expect("ESS 0.69.2 is a gate prerequisite");
+        .expect("ESS 0.70.0 is a gate prerequisite");
     let text = format!(
         "{}{}",
         String::from_utf8_lossy(&output.stdout),

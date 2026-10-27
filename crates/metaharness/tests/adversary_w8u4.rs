@@ -15,7 +15,9 @@ use metaharness::{
 const INIT: &str = r#"{"emit":"session.started","harness_version":"2.1.240","output_style":"default","plugins":[],"mcp_servers":[],"credential_source":"operator-login"}"#;
 const END: &str = r#"{"emit":"session.ended","is_error":false,"subtype":"success"}"#;
 
-const GATING: [HermeticRow; 3] = [HermeticRow::H1a, HermeticRow::H4, HermeticRow::H9];
+// H5 stands where H9 stood: story:off-pin-vendor-version-is-advisory made H9 advisory (a62), and a
+// row labelled gating here must be one whose own severity says so.
+const GATING: [HermeticRow; 3] = [HermeticRow::H1a, HermeticRow::H4, HermeticRow::H5];
 const ADVISORY: [HermeticRow; 2] = [HermeticRow::H2, HermeticRow::H6];
 const VERDICTS: [Verdict; 3] = [Verdict::Ok, Verdict::Unk, Verdict::Gap];
 
@@ -71,6 +73,17 @@ fn adversary_w8u4_every_gating_combination_folds_gap_over_unk_over_ok_and_adviso
         ),
         (ProcessTermination::Unknown, "child exit: unknown"),
     ];
+    for id in GATING {
+        assert_eq!(
+            id.severity(),
+            Severity::Gating,
+            "story:off-pin-vendor-version-is-advisory: {} is labelled gating here",
+            id.id()
+        );
+    }
+    for id in ADVISORY {
+        assert_eq!(id.severity(), Severity::Advisory, "{}", id.id());
+    }
     let mut checked = 0usize;
     for gating_count in 0..=GATING.len() {
         for gating in assignments(gating_count) {
