@@ -2426,11 +2426,11 @@ fn list_declared_copy_memory_files(
 /// How long `--strict-version` waits for a vendor binary's `--version` before it kills the child
 /// and refuses (design amendments a33 and a34). `--version` answers in well under a second; a binary
 /// that does not exit in this long is not one a strict run should start.
-const VERSION_PROBE_DEADLINE: std::time::Duration = std::time::Duration::from_secs(5);
+pub(crate) const VERSION_PROBE_DEADLINE: std::time::Duration = std::time::Duration::from_secs(5);
 
 /// What asking a vendor binary for its `--version` produced.
 #[derive(Debug, Clone, PartialEq, Eq)]
-enum VersionProbe {
+pub(crate) enum VersionProbe {
     /// The version token it printed.
     Reported(String),
     /// It could not be run, failed, or printed nothing that reads as a version.
@@ -2446,7 +2446,7 @@ enum VersionProbe {
 /// holds no credential. `2.1.304 (Claude Code)` and `codex-cli 0.153.4` each reduce to their first
 /// token that starts with a digit, as `doctor` reduces them. A child still running at the deadline
 /// is killed and reaped.
-fn vendor_version(
+pub(crate) fn vendor_version(
     program: &std::path::Path,
     env: &BTreeMap<String, String>,
     deadline: std::time::Duration,

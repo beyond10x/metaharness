@@ -63,6 +63,26 @@ types:
     # a plugin nobody declared, named with no <name>@builtin source, so H1a is
     # gap on any version; a62 reads only a <name>@builtin plugin on a version
     # with no built-in list as unk.
+  - name: metaharness.session.VersionEvidence
+    kind: enum
+    variants: [pinned, off-the-pin, unreadable]
+    # What a binary's `--version` told metaharness::qualify, before any session.
+    # pinned: a version in the adapter's pin. off-the-pin: any other version.
+    # unreadable: it failed, printed no version or did not exit in time. The
+    # rows are the floor's own readings of the same version: H9 ok, gap and
+    # unk, advisory on every kind (a62); H11, where the kind records a memory
+    # canary, ok, unk (no canary recorded) and unk (no version), gating.
+  - name: metaharness.session.Qualification
+    kind: struct
+    fields:
+      - {name: evidence, type: metaharness.session.VersionEvidence}
+      - {name: qualified, type: Boolean}
+      - {name: strict_version_refuses, type: Boolean}
+    # qualified: no row gates under the mode asked, which only strict does.
+    # strict_version_refuses: the evidence is not pinned. The two differ on
+    # purpose: an off-pin Codex binary is qualified and --strict-version
+    # refuses it. UNMAPPED: held by crates/metaharness/tests/qualify.rs, which
+    # runs a script standing in for the vendor, not by a generated scenario.
   - name: metaharness.session.ControlVerdict
     kind: enum
     variants: [ok, unk, gap]

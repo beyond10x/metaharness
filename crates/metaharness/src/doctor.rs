@@ -113,27 +113,23 @@ pub fn installed(kind: Kind) -> Result<Installed, Refusal> {
         });
     }
     let reported = String::from_utf8_lossy(&output.stdout).trim().to_string();
-    let pinned: Vec<String> = match kind {
-        Kind::Claude => metaharness_claude::PINNED_VERSIONS
-            .iter()
-            .map(ToString::to_string)
-            .collect(),
-        Kind::Codex => metaharness_codex::PINNED_VERSIONS
-            .iter()
-            .map(ToString::to_string)
-            .collect(),
-        Kind::B10x => metaharness_b10x::PINNED_VERSIONS
-            .iter()
-            .map(ToString::to_string)
-            .collect(),
-    };
     Ok(Installed {
         adapter: adapter.to_string(),
         program,
         version: version_token(&reported),
         reported,
-        pinned,
+        pinned: pinned_versions(kind),
     })
+}
+
+/// The versions the adapter for `kind` declares it was written against.
+pub(crate) fn pinned_versions(kind: Kind) -> Vec<String> {
+    let pinned: &[&str] = match kind {
+        Kind::Claude => &metaharness_claude::PINNED_VERSIONS,
+        Kind::Codex => &metaharness_codex::PINNED_VERSIONS,
+        Kind::B10x => &metaharness_b10x::PINNED_VERSIONS,
+    };
+    pinned.iter().map(ToString::to_string).collect()
 }
 
 /// A flag the adapter emits that the installed binary will not accept.

@@ -53,6 +53,7 @@ mod custody;
 mod doctor;
 mod loopback;
 mod process;
+mod qualify;
 mod refusal;
 mod run;
 mod scripted;
@@ -87,6 +88,7 @@ pub use process::{
     LaunchPlanView, ProcessEnvelope, ProcessPoll, ProcessRunner, copy_credentials,
     start_in_envelope,
 };
+pub use qualify::{Qualification, QualifiedRow, qualify};
 pub use refusal::{
     CATALOGUE_COPY_DIFFERS, CATALOGUE_MALFORMED, CATALOGUE_NEEDS_OWNED_SURFACE,
     CATALOGUE_NOT_CARRIED, CATALOGUE_NOT_TOOL_CONTRACT, CATALOGUE_UNREADABLE,

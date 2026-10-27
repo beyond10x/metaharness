@@ -3,6 +3,12 @@
 What changed. The design document carries *why*; where code and design disagreed, the design
 was amended and the amendment is named here.
 
+## [Unreleased]
+
+### Added
+
+- `metaharness::qualify(kind, program, hermetic) -> Result<Qualification, Refusal>` reports the floor rows a binary's version decides, from one `--version` and no model call: H9 for every kind and H11 for Claude, read through the same functions the floor uses. Each `QualifiedRow` says whether it gates (a gating row that is not `ok`, under `strict`), and `Qualification::strict_version_refuses` says whether `--strict-version` would refuse the binary. A program that resolves to nothing is a `Refusal::Io` naming it and the `PATH` searched.
+
 ## [0.20.0] — 2026-10-27
 
 ### Changed

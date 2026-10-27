@@ -443,7 +443,7 @@ fn silent(base: &str, which: HermeticRow, silences: &[(HermeticRow, &str)]) -> S
     }
 }
 
-fn row(row: HermeticRow, verdict: Verdict, detail: impl Into<String>) -> RowVerdict {
+pub(crate) fn row(row: HermeticRow, verdict: Verdict, detail: impl Into<String>) -> RowVerdict {
     RowVerdict {
         row,
         verdict,
@@ -950,20 +950,7 @@ pub fn hermetic_floor(events: &[Event], inputs: &FloorInputs<'_>) -> Vec<RowVerd
             Verdict::Unk,
             "the opening record carries no harness version",
         ),
-        Some(observed) if inputs.pinned_versions.iter().any(|pin| pin == observed) => row(
-            HermeticRow::H9,
-            Verdict::Ok,
-            format!("the vendor is {observed}, which the adapter is pinned to"),
-        ),
-        Some(observed) => row(
-            HermeticRow::H9,
-            Verdict::Gap,
-            format!(
-                "the vendor is {observed} and the adapter is pinned to {:?}; a verdict that \
-                 changed because the reader changed must be visible as such",
-                inputs.pinned_versions
-            ),
-        ),
+        Some(observed) => pin_row(observed, inputs.pinned_versions),
     });
 
     // H10 — governing documents cannot move under the run.
@@ -1217,13 +1204,36 @@ fn resolve_without_the_reader(name: &Path) -> Option<PathBuf> {
     Some(resolved)
 }
 
+/// H9 for a vendor version the caller has in hand: `ok` on a pinned one, `gap` off the pin.
+///
+/// The one place the verdict is worded, read by the floor over an opening record and by
+/// [`crate::qualify`] over a `--version`, so the two cannot disagree about a version.
+pub(crate) fn pin_row(observed: &str, pinned: &[String]) -> RowVerdict {
+    if pinned.iter().any(|pin| pin == observed) {
+        row(
+            HermeticRow::H9,
+            Verdict::Ok,
+            format!("the vendor is {observed}, which the adapter is pinned to"),
+        )
+    } else {
+        row(
+            HermeticRow::H9,
+            Verdict::Gap,
+            format!(
+                "the vendor is {observed} and the adapter is pinned to {pinned:?}; a verdict that \
+                 changed because the reader changed must be visible as such"
+            ),
+        )
+    }
+}
+
 /// H11's attested verdict, held to the memory canary of the binary that ran (amendment a36).
 /// Only an `ok` is held: a canary never turns a `gap` or an `unk` into anything better.
 ///
 /// A version with no canary row reads `unk`, not `gap` (amendment a62): nobody measured that
 /// binary, which is *nobody found out*. A row that measured a leak, or a control that could not
 /// see every shape, is still `gap`.
-fn memory_held_to_canary(
+pub(crate) fn memory_held_to_canary(
     attested: RowVerdict,
     version: Option<&str>,
     canaries: Option<&[MemoryCanary]>,
