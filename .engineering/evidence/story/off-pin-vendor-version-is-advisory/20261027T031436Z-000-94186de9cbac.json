@@ -1,0 +1,13 @@
+{
+  "at": "2026-10-27T03:14:36Z",
+  "actor": "human:timo",
+  "artifact": "story:off-pin-vendor-version-is-advisory",
+  "kind": "story",
+  "revision": 4,
+  "change": {
+    "change": "evidence",
+    "kind": "verification",
+    "source": "released in 0.20.0: tag 0.20.0 at f982a69 (= main), PR 61 checks green, Release run 40440962658 success, release by b10x-bot[bot] with 4 archives + SHA256SUMS, verify-release.sh metaharness 0.20.0 exit 0",
+    "reference": "https://github.com/beyond10x/metaharness/releases/tag/0.20.0"
+  }
+}
