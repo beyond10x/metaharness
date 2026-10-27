@@ -13,12 +13,18 @@ scope:
 - confidence: inferred
   path: crates/metaharness-claude/src/lib.rs
 - confidence: inferred
-  path: crates/metaharness-codex/src
+  path: crates/metaharness-codex/src/launch.rs
 - confidence: inferred
-  path: crates/metaharness/src
+  path: crates/metaharness-codex/src/lib.rs
+- confidence: inferred
+  path: crates/metaharness/src/lib.rs
+- confidence: inferred
+  path: crates/metaharness/src/qualify.rs
+- confidence: inferred
+  path: crates/metaharness/tests/qualify.rs
 - confidence: inferred
   path: spec/system.yaml
-revision: 2
+revision: 4
 ---
 # Story: qualify-a-binary-without-a-model-call
 
@@ -53,12 +59,17 @@ Each is a named test run by `task check`.
    `qualify` returns equal the rows the launch's attestation claims for the same version and mode.
 4. `qualify::a_missing_binary_is_named`: a `program` that resolves to nothing is an error naming the program and the
    `PATH` searched.
+5. `qualify::codex_rows_match_its_pins`: a fake `codex` printing a version in the Codex `PINNED_VERSIONS`
+   (`crates/metaharness-codex/src/lib.rs:106`) gives H9 `ok`. One printing an unpinned version gives H9 `gap`, gating
+   only under `strict_version`, as the Codex launch claims it.
 
 ## Scope
 
-- `crates/metaharness/src/` (the public `qualify` and its `Qualification`)
+- `crates/metaharness/src/qualify.rs` (new: the public `qualify` and its `Qualification`)
+- `crates/metaharness/src/lib.rs` (re-export)
 - `crates/metaharness-claude/src/lib.rs`, `crates/metaharness-claude/src/launch.rs` (row derivation shared with the launch)
-- `crates/metaharness-codex/src/` (the same for Codex)
+- `crates/metaharness-codex/src/lib.rs`, `crates/metaharness-codex/src/launch.rs` (the same for Codex)
+- `crates/metaharness/tests/qualify.rs` (new)
 - `spec/system.yaml` (the `Qualification` noun, before code)
 
 ## Delivery
