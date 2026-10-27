@@ -2,7 +2,7 @@
 format: aep.planning-md/3
 id: story:qualify-a-binary-without-a-model-call
 kind: story
-status: active
+status: implemented
 title: metaharness reports a harness binary's floor rows without a model call
 summary: qualify(kind, program, hermetic) from --version only
 tags:
@@ -24,10 +24,11 @@ scope:
   path: crates/metaharness/tests/qualify.rs
 - confidence: inferred
   path: spec/system.yaml
-revision: 6
+revision: 8
 transitions:
 - {from: "draft", to: "proposed", at: "2026-10-27T12:13:55Z", actor: "human:timo", revision: 5, decided_on: {"recorded":{"review_outcome":4}}}
 - {from: "proposed", to: "active", at: "2026-10-27T12:13:55Z", actor: "human:timo", revision: 6, decided_on: {"recorded":{"review_outcome":4}}}
+- {from: "active", to: "implemented", at: "2026-10-27T12:26:18Z", actor: "human:timo", revision: 8, decided_on: {"recorded":{"test_result":1,"review_outcome":4}}}
 ---
 # Story: qualify-a-binary-without-a-model-call
 
@@ -88,3 +89,15 @@ metaharness -> loom -> takt is delivered in one workspace:
 
 - Making H11 advisory.
 - Qualifying a new vendor version. That remains the native fixture's measured canary.
+
+## Status
+
+Implemented on `unit/tr-qualify` (4348571, review fix 39e8a7b).
+
+- Acceptance 1 reads H11 `unk`, not `gap`, for an unpinned Claude: since a62 the floor reads `unk` on a version with no
+  memory canary (`audit.rs` `memory_held_to_canary`, `spec/domains/session.yaml`). Both gate under Strict, so a
+  consumer stops on any gating row that is not `ok`.
+- Tests: `cargo test -p metaharness --test qualify --test qualify_adv1` 7 passed and 7 passed; `--test audit` 103
+  passed; `--lib builder` 61 passed.
+- The adversary pass found the version read could outlive the 5 s deadline when a grandchild held stdout open; fixed
+  in 39e8a7b.

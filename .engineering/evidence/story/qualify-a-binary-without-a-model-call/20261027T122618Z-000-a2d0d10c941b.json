@@ -1,0 +1,12 @@
+{
+  "at": "2026-10-27T12:26:18Z",
+  "actor": "human:timo",
+  "artifact": "story:qualify-a-binary-without-a-model-call",
+  "kind": "story",
+  "revision": 7,
+  "change": {
+    "change": "evidence",
+    "kind": "test_result",
+    "source": "cargo test -p metaharness --test qualify --test qualify_adv1 at 39e8a7b: 7 passed, 7 passed"
+  }
+}
