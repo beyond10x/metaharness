@@ -2,7 +2,7 @@
 format: aep.planning-md/3
 id: story:qualify-a-binary-without-a-model-call
 kind: story
-status: draft
+status: active
 title: metaharness reports a harness binary's floor rows without a model call
 summary: qualify(kind, program, hermetic) from --version only
 tags:
@@ -24,7 +24,10 @@ scope:
   path: crates/metaharness/tests/qualify.rs
 - confidence: inferred
   path: spec/system.yaml
-revision: 4
+revision: 6
+transitions:
+- {from: "draft", to: "proposed", at: "2026-10-27T12:13:55Z", actor: "human:timo", revision: 5, decided_on: {"recorded":{"review_outcome":4}}}
+- {from: "proposed", to: "active", at: "2026-10-27T12:13:55Z", actor: "human:timo", revision: 6, decided_on: {"recorded":{"review_outcome":4}}}
 ---
 # Story: qualify-a-binary-without-a-model-call
 
