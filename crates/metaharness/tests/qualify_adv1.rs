@@ -18,7 +18,11 @@ mod qualify_adv1 {
     impl Fake {
         /// A script named `name` whose body after the call log is `body`.
         fn new(name: &str, body: &str) -> Self {
-            let dir = tempfile::tempdir().expect("a directory");
+            Self::in_dir(tempfile::tempdir().expect("a directory"), name, body)
+        }
+
+        /// As `new`, in an already made directory.
+        fn in_dir(dir: tempfile::TempDir, name: &str, body: &str) -> Self {
             let calls = dir.path().join("calls.log");
             let program = dir.path().join(name);
             std::fs::write(
@@ -194,7 +198,13 @@ mod qualify_adv1 {
     #[test]
     fn a_relative_path_with_a_slash_is_looked_up_on_the_child_path() {
         let pinned = metaharness_claude::PINNED_VERSIONS[0];
-        let fake = Fake::new("claude", &format!("echo '{pinned} (Claude Code)'"));
+        // Under the target directory, shallow from the cwd, so no child PATH entry reaches it by a
+        // chain of `..` whatever its depth.
+        let fake = Fake::in_dir(
+            tempfile::tempdir_in(env!("CARGO_TARGET_TMPDIR")).expect("a directory"),
+            "claude",
+            &format!("echo '{pinned} (Claude Code)'"),
+        );
         let relative = relative_from_cwd(&fake.program);
         let relative = relative.to_str().expect("utf-8").to_owned();
         assert!(
