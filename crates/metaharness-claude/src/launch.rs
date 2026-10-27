@@ -219,7 +219,7 @@ pub struct LaunchContext {
     /// or above the cwd, the only case their built-in loads them). The older reading here —
     /// *auto-discovery is on in every run that is not `--bare`* — is superseded for those pins.
     /// That observation is the binary's behaviour, which is why the floor reads H11 `gap` on a
-    /// record version with no canary, or whose canary reached a request (a36).
+    /// record whose canary reached a request (a36), and `unk` on a version with no canary (a62).
     pub memory_ancestors: Vec<PathBuf>,
     /// The digest of the copied input tree, carried into `session.started.inputs_digest` — the
     /// evidence for H10. `None` means the caller pinned nothing, and the attestation says so

@@ -82,8 +82,11 @@ fn child_path(kind: Kind, home: Option<&str>) -> String {
 /// decides.
 ///
 /// `program` is resolved on the `PATH` a spawned child of `kind` gets, built from this process's
-/// `HOME` (the way [`crate::installed`] and the launch resolve it); a name containing a `/` is
-/// that path. It is run once, as `program --version`, in a constructed environment holding that
+/// `HOME` (the way [`crate::installed`] and the launch resolve it). An absolute path is that path;
+/// a relative one, with or without a `/`, is looked up under each `PATH` entry, because the child
+/// does not run in this process's directory. The launch spawns the kind's own program name on that
+/// `PATH`, so passing that name qualifies the binary a run executes; an absolute path qualifies
+/// that file, which a run executes only when its launch is given the same file. It is run once, as `program --version`, in a constructed environment holding that
 /// `PATH` alone and within a deadline, so it reads no operator config home and holds no
 /// credential.
 ///

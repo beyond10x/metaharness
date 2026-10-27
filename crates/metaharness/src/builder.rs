@@ -2445,7 +2445,9 @@ pub(crate) enum VersionProbe {
 /// Run with the plan's own constructed environment, so the probe reads no operator config home and
 /// holds no credential. `2.1.304 (Claude Code)` and `codex-cli 0.153.4` each reduce to their first
 /// token that starts with a digit, as `doctor` reduces them. A child still running at the deadline
-/// is killed and reaped.
+/// is killed and reaped. Its stdout is read on a thread of its own, so the deadline also bounds a
+/// read that a process the child left behind keeps open, and a child that fills the pipe before it
+/// exits is drained rather than left blocked.
 pub(crate) fn vendor_version(
     program: &std::path::Path,
     env: &BTreeMap<String, String>,
@@ -2464,6 +2466,16 @@ pub(crate) fn vendor_version(
         return VersionProbe::Unreadable;
     };
     let started = std::time::Instant::now();
+    let (sender, receiver) = std::sync::mpsc::channel();
+    if let Some(mut pipe) = child.stdout.take() {
+        std::thread::spawn(move || {
+            let mut read = String::new();
+            let outcome = pipe.read_to_string(&mut read).map(|_| read);
+            let _ = sender.send(outcome);
+        });
+    } else {
+        drop(sender);
+    }
     let status = loop {
         match child.try_wait() {
             Ok(Some(status)) => break status,
@@ -2480,13 +2492,17 @@ pub(crate) fn vendor_version(
             }
         }
     };
-    let mut stdout = String::new();
-    if !status.success()
-        || child
-            .stdout
-            .take()
-            .is_none_or(|mut pipe| pipe.read_to_string(&mut stdout).is_err())
-    {
+    let remaining = deadline.saturating_sub(started.elapsed());
+    let stdout = match receiver.recv_timeout(remaining) {
+        Ok(Ok(stdout)) => stdout,
+        Err(std::sync::mpsc::RecvTimeoutError::Timeout) => {
+            return VersionProbe::TimedOut(deadline);
+        }
+        Ok(Err(_)) | Err(std::sync::mpsc::RecvTimeoutError::Disconnected) => {
+            return VersionProbe::Unreadable;
+        }
+    };
+    if !status.success() {
         return VersionProbe::Unreadable;
     }
     stdout
