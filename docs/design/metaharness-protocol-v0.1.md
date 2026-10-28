@@ -5512,8 +5512,23 @@ clap. They reached the launch, which took the socket and dropped the other witho
   unknown `--model-wire`. They live in the core crate's `b10x_launch` and `b10x_credential`, not in
   an adapter crate, and lifting them changes those functions. That is left to a later story.
 
-**Review.** Pending when this was written. The adversary's findings are recorded here when they
-arrive.
+**Review.** Adversary pass 1 (`review-result:d170-u1-adversary-1`) found four things, and three
+changed the code:
+
+- An empty string for a path key (`frame`, `hooks`, `driver`, `catalogue`, `cwd`, `retain-dir`,
+  `spec`, `substrate`, `cgroup-root`, `prices`) or an empty item of `plugin-dir` or `context` read as
+  the empty path, which clap's path parser refuses. The document now refuses it as `BadValue`
+  naming the key, so point 2's "same spec" holds for those values too.
+- `check_spec` admitted settings the kind's launch reads nowhere, against the story's outcome that
+  a setting is refused and never dropped in silence. It now refuses, through `dropped_by_kind`,
+  `--hooks` and `--driver` on Claude and Codex (both belong to the b10x loop) and
+  `--max-budget-usd` and `--effort` on b10x (the loop has no spend ceiling and reads no effort).
+  Each is a `Refusal::Launch` naming the flag and the kind.
+- `--actor` is still admitted on Codex and b10x, whose launches read none of it. `aep drive`
+  passes `--actor` to Codex today, so refusing it would break that caller.
+  `story:actor-reaches-every-launch` decides whether the launches carry it or `check_spec` refuses it.
+- The acceptance 5 tests build only with `--features clap`. A workspace run unifies the feature,
+  so the gate runs them; a crate-targeted run does not, unless it names the feature.
 
 Event wire, frame wire and command wire: unchanged. `RunSpec`'s serde form is unchanged.
 ### Amendment a65 — the `--version` probe waits a minute, and an exited binary is drained for five seconds (2026-10-28)

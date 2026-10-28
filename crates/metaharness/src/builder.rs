@@ -1999,6 +1999,7 @@ pub fn check_spec(spec: &RunSpec) -> Result<(), Refusal> {
 /// so a caller hears it before anything starts (amendment a64). The reasons stay in the adapter
 /// (invariant 2) and its launch keeps the check.
 fn adapter_spec_refusals(spec: &RunSpec) -> Result<(), Refusal> {
+    dropped_by_kind(spec)?;
     match spec.kind {
         Kind::Claude => {
             metaharness_claude::guard_endpoint_credential(spec)
@@ -2012,6 +2013,54 @@ fn adapter_spec_refusals(spec: &RunSpec) -> Result<(), Refusal> {
                 })?;
         }
         Kind::B10x => {}
+    }
+    Ok(())
+}
+
+/// A setting the kind's launch reads nowhere, refused rather than dropped in silence (a64, after
+/// adversary pass 1 of story:run-spec-document). `--hooks` and `--driver` belong to the native
+/// loop; `--effort` and `--max-budget-usd` reach only the vendor CLIs. `--actor` is not here: the
+/// Codex launch reads none of it yet `aep drive` passes it, which story:actor-reaches-every-launch
+/// settles.
+fn dropped_by_kind(spec: &RunSpec) -> Result<(), Refusal> {
+    let refuse = |flag: &str, why: &str| {
+        Err(Refusal::Launch {
+            detail: format!(
+                "{flag} is not taken by the {} harness: {why}; the launch would drop it without \
+                 a word",
+                spec.kind.as_str()
+            ),
+        })
+    };
+    match spec.kind {
+        Kind::Claude | Kind::Codex => {
+            if spec.hooks.is_some() {
+                return refuse(
+                    "--hooks",
+                    "it names the b10x loop's hook file, and a vendor CLI has its own hooks",
+                );
+            }
+            if spec.driver.is_some() {
+                return refuse(
+                    "--driver",
+                    "it stages a program into the b10x loop's confinement, native arm only",
+                );
+            }
+        }
+        Kind::B10x => {
+            if spec.max_budget_usd.is_some() {
+                return refuse(
+                    "--max-budget-usd",
+                    "the loop has no spend ceiling to pass it to; bound the run with --max-turns",
+                );
+            }
+            if spec.effort.is_some() {
+                return refuse(
+                    "--effort",
+                    "only Claude Code and Codex read a reasoning effort",
+                );
+            }
+        }
     }
     Ok(())
 }
