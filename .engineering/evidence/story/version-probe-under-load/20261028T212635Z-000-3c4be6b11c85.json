@@ -1,0 +1,13 @@
+{
+  "at": "2026-10-28T21:26:35Z",
+  "actor": "human:timo",
+  "artifact": "story:version-probe-under-load",
+  "kind": "story",
+  "revision": 5,
+  "change": {
+    "change": "evidence",
+    "kind": "verification",
+    "source": "cargo test -p metaharness --lib claude_version_tests",
+    "reference": "base ca82f28b + tests: 3 failed (TimedOut at 5 s) vs e83f017a: 150 passed"
+  }
+}
