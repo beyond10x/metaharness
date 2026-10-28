@@ -20,7 +20,7 @@ was amended and the amendment is named here.
 ### Changed
 
 - ESS 0.75.0 is the specification toolchain: both `ess-inputs.yaml` manifests require it and CI installs `ess-cli` from its tag commit `b593d356`, up from 0.70.0 (`077e4ee1`). `spec/conformance.json` regenerates byte-identical, 117 scenarios.
-- `check_spec` now refuses, before anything starts, what the adapters refused from the spec alone only at launch (a64). These are Codex's `--max-turns` and `--max-budget-usd`, and a `--model-endpoint` beside `--credentials operator-login` or `api-key` on Claude and Codex. Each refusal is in the adapter's words and mapped as the launch maps it, and the launches keep their checks. `check_spec` also refuses `--substrate` beside `--substrate-embedded`. The command line already refused the pair, but the builder took the socket and dropped the other without a word.
+- `check_spec` now refuses, before anything starts, what the adapters refused from the spec alone only at launch (a64). These are Codex's `--max-turns` and `--max-budget-usd`, and a `--model-endpoint` beside `--credentials operator-login` or `api-key` on Claude and Codex. Each refusal is in the adapter's words and mapped as the launch maps it, and the launches keep their checks. `check_spec` also refuses `--substrate` beside `--substrate-embedded`. The command line already refused the pair, but the builder took the socket and dropped the other without a word. It refuses a setting the kind's launch reads nowhere: `--hooks` and `--driver` on Claude and Codex, `--max-budget-usd` and `--effort` on b10x. A run-spec document refuses an empty path as the command line does.
 
 ## [0.22.0] — 2026-10-27
 

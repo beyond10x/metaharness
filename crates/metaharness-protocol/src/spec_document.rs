@@ -99,6 +99,9 @@ impl fmt::Display for RunSpecDocumentError {
 
 impl std::error::Error for RunSpecDocumentError {}
 
+const EMPTY_PATH: &str = "takes a path, and this is the empty string, which names no file; the \
+                          command line refuses the same value";
+
 const KINDS: [(&str, Kind); 3] = [
     ("claude", Kind::Claude),
     ("codex", Kind::Codex),
@@ -397,8 +400,13 @@ impl Settings<'_> {
         }
     }
 
+    /// A path, refused when empty as clap's path parser refuses `--<key> ""`, so a document and
+    /// its argv read to the same spec (a64; adversary pass 1, story:run-spec-document).
     fn path(&self, key: &str) -> Result<Option<PathBuf>, RunSpecDocumentError> {
-        Ok(self.string(key)?.map(PathBuf::from))
+        match self.string(key)? {
+            Some(text) if text.is_empty() => Err(Self::bad(key, EMPTY_PATH.to_owned())),
+            other => Ok(other.map(PathBuf::from)),
+        }
     }
 
     fn flag(&self, key: &str) -> Result<Option<bool>, RunSpecDocumentError> {
@@ -459,9 +467,13 @@ impl Settings<'_> {
     }
 
     fn paths(&self, key: &str) -> Result<Option<Vec<PathBuf>>, RunSpecDocumentError> {
-        Ok(self
-            .strings(key)?
-            .map(|items| items.into_iter().map(PathBuf::from).collect()))
+        let Some(items) = self.strings(key)? else {
+            return Ok(None);
+        };
+        if let Some(index) = items.iter().position(String::is_empty) {
+            return Err(Self::bad(key, format!("item {index}: {EMPTY_PATH}")));
+        }
+        Ok(Some(items.into_iter().map(PathBuf::from).collect()))
     }
 
     /// `--plugin`'s own spelling, `<repo>@<name>@<pin>`, refused as the flag refuses it.
