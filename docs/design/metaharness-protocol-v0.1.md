@@ -2937,7 +2937,7 @@ rather than claiming *no layer*.
 **6. `--strict-version` refuses an off-pin Codex binary before anything is written or spawned.** The
 Codex launch never read the flag. It now runs a33's guard, made generic (`guard_strict_version`):
 `codex` resolved on the child's own `PATH`, its `--version` read with the plan's environment within
-5 seconds, and a refusal by name, exit 2, when the version is not pinned, not readable or late; a
+5 seconds *(a65: 60 seconds, plus at most 5 seconds of draining after the binary exits)*, and a refusal by name, exit 2, when the version is not pinned, not readable or late; a
 runner that launches no executable is refused under the flag. Observed: 0.153.4 admitted, codex-cli
 0.160.0 refused with nothing reaching the fixture provider. a33's recorded race — the probe and the
 spawn resolve the binary separately — holds here too; H9 still reads the record's version.
@@ -5441,11 +5441,15 @@ runtime, and its start time on a loaded machine is not bounded by the binary.
    whole minute after the binary exited (the case of `qualify_adv1`'s
    `a_version_whose_child_keeps_stdout_open_still_meets_the_deadline`). Once the binary has exited,
    the read waits for end of file at most `VERSION_DRAIN_GRACE`, 5 seconds, longer and never past
-   the deadline, then takes what the binary wrote: what it printed before exiting is already in the
-   pipe, and output a leftover process writes later is not its answer. Before, that case read as
-   timed out; it now reads the version printed before the exit.
+   the deadline, then takes what the pipe delivered by then: what the binary printed before exiting
+   is already in the pipe. Before, that case read as timed out; it now reads the version printed
+   before the exit. *Corrected after adversary pass 1:* the pipe cannot tell the binary's bytes from
+   a leftover's, so output a leftover writes inside the grace is read with them, as the base read
+   everything up to end of file; the version is the first token that starts with a digit.
 3. The reader keeps at most 64 KiB of stdout and drains the rest, so a child that writes without
-   end is neither left blocked on the pipe nor buffered without bound. Stdout that is not UTF-8 is
+   end is neither left blocked on the pipe nor buffered without bound. *Corrected after adversary
+   pass 1:* when the cap is reached, the last token is dropped unless whitespace follows it, so a
+   version cut by the cap is no version rather than a prefix of one. Stdout that is not UTF-8 is
    decoded lossily instead of reading as unreadable; the version token is ASCII either way.
 
 Not changed: a non-zero exit is unreadable, a version printed only on stderr is unread, and the

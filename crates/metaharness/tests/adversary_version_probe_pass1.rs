@@ -87,7 +87,9 @@ mod adversary_version_probe_pass1 {
     /// a65 point 2: "what it printed before exiting is already in the pipe, and output a leftover
     /// process writes later is not its answer." The binary prints a banner with no version and
     /// exits; a process it left behind prints a pinned version one second later, inside the drain
-    /// grace. That later output is not the binary's answer, so its version is unknown.
+    /// grace. Pass 1 asserted that later output is not the binary's answer; the decision after it
+    /// (story:version-probe-under-load, a65 point 2 as corrected) is that the pipe cannot tell the
+    /// two apart and output inside the grace is read, so this case asserts the read version.
     #[test]
     fn adv_output_a_leftover_writes_after_the_binary_exited_is_not_its_answer() {
         let fake = Fake::new(&format!(
@@ -97,9 +99,12 @@ mod adversary_version_probe_pass1 {
         let (found, took) =
             qualified_within(fake, Duration::from_secs(12)).expect("qualify answered within 12 s");
         assert_eq!(
-            found.version, None,
-            "a65 point 2: the version a leftover printed {took:?} after the binary exited was \
-             read as the binary's answer"
+            found.version.as_deref(),
+            Some(pinned()),
+            "story:version-probe-under-load: decided after adversary pass 1 (a65 point 2 as \
+             corrected): the pipe cannot tell a leftover's bytes from the binary's, so output that \
+             arrives within the drain grace is read, as the base read to end of file; after \
+             {took:?}"
         );
     }
 
