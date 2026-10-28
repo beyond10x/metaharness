@@ -72,7 +72,7 @@ pub use hook::{
 pub use launch::{
     CONFIG_LAYER_PATHS, CodexLogin, CredentialCopy, HOOK_TIMEOUT_SECONDS, LOOPBACK_ENV_KEY,
     LaunchContext, LaunchPlan, LaunchRefusal, LoopbackParams, PERSONALITY, child_path, config_path,
-    hook_program_path, plan_launch,
+    guard_endpoint_credential, hook_program_path, plan_launch, unsupported_options,
 };
 pub use rollout::{RECORD_SILENCES, RolloutReader};
 pub use seam::{

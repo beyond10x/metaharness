@@ -754,20 +754,7 @@ pub fn plan_launch(spec: &RunSpec, context: &LaunchContext) -> Result<LaunchPlan
         }
     }
 
-    // `loopback` is exempt: under it the declared endpoint is not the child's provider base at
-    // all — it is the **proxy's upstream**, one hop further out — and the child holds a
-    // placeholder either way. The row exists to stop an operator credential travelling to a
-    // foreign host, and a loopback run has no credential in the child to travel.
-    if let Some(endpoint) = &spec.model_endpoint
-        && !matches!(
-            spec.credentials,
-            CredentialSource::None | CredentialSource::Loopback
-        )
-    {
-        return Err(LaunchRefusal::EndpointWithCredential {
-            endpoint: endpoint.clone(),
-        });
-    }
+    guard_endpoint_credential(spec)?;
     guard_loopback(spec, context)?;
 
     let config_home = context.scratch_root.join(CONFIG_HOME);
@@ -915,8 +902,43 @@ fn guard_loopback(spec: &RunSpec, context: &LaunchContext) -> Result<(), LaunchR
     }
 }
 
+/// A model endpoint beside a credential the child would hold, refused from the spec alone.
+///
+/// Public because `metaharness::check_spec` raises it before anything starts (design amendment
+/// a64); [`plan_launch`] keeps the check.
+///
+/// # Errors
+///
+/// [`LaunchRefusal::EndpointWithCredential`] when `--model-endpoint` is declared with
+/// `--credentials operator-login` or `api-key`.
+pub fn guard_endpoint_credential(spec: &RunSpec) -> Result<(), LaunchRefusal> {
+    // `loopback` is exempt: under it the declared endpoint is not the child's provider base at
+    // all — it is the **proxy's upstream**, one hop further out — and the child holds a
+    // placeholder either way. The row exists to stop an operator credential travelling to a
+    // foreign host, and a loopback run has no credential in the child to travel.
+    if let Some(endpoint) = &spec.model_endpoint
+        && !matches!(
+            spec.credentials,
+            CredentialSource::None | CredentialSource::Loopback
+        )
+    {
+        return Err(LaunchRefusal::EndpointWithCredential {
+            endpoint: endpoint.clone(),
+        });
+    }
+    Ok(())
+}
+
 /// The spec fields `codex exec` cannot carry, refused by name.
-fn unsupported_options(spec: &RunSpec) -> Result<(), LaunchRefusal> {
+///
+/// Public because `metaharness::check_spec` raises these before anything starts (design
+/// amendment a64); [`plan_launch`] keeps the check.
+///
+/// # Errors
+///
+/// [`LaunchRefusal::UnsupportedOption`] naming `--max-turns`, `--max-budget-usd`, `--catalogue`
+/// or `--tool-surface owned`, in that order.
+pub fn unsupported_options(spec: &RunSpec) -> Result<(), LaunchRefusal> {
     if spec.max_turns.is_some() {
         return Err(LaunchRefusal::UnsupportedOption {
             option: "--max-turns",

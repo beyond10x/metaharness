@@ -89,6 +89,9 @@ types:
   - name: metaharness.session.AuditVerdict
     kind: enum
     variants: [ok, gap, no-verdict]
+  - name: metaharness.session.RunSpecDocumentRefusal
+    kind: enum
+    variants: [malformed, not-an-object, duplicate-key, unknown-key, missing-kind, bad-value, kind-refuses-key]
 
 commands:
   - name: metaharness.session.PollSteering

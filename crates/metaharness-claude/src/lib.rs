@@ -60,8 +60,8 @@ pub use hook::{
 pub use launch::{
     CredentialCopy, ENDPOINT_KEY_POSTURE, HOOK_COMMAND_PLUGIN_VARIABLES, HOOK_TIMEOUT_SECONDS,
     LaunchContext, LaunchPlan, LaunchRefusal, LoopbackParams, SCRATCH_PATH_NAMES_PLUGIN_VARIABLE,
-    ScratchFile, catalogue_path, child_path, guard_native_frame, hook_program_path,
-    mcp_config_path, plan_launch, settings_path,
+    ScratchFile, catalogue_path, child_path, guard_endpoint_credential, guard_native_frame,
+    hook_program_path, mcp_config_path, plan_launch, settings_path,
 };
 pub use marketplace::{
     INSTALLED_PLUGINS, KNOWN_MARKETPLACES, MARKETPLACES_HOME, MarketplaceMatch, MarketplaceRefusal,

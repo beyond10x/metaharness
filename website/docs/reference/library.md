@@ -61,6 +61,17 @@ The builder's `with_…` methods and the CLI's flags are **two spellings of the 
 neither can grow a knob the other cannot express.
 :::
 
+### A run-spec document
+
+A caller that holds a run's settings as data, such as a section of its own run file, reads them
+with `RunSpec::from_document(&serde_json::Value)` or `RunSpec::from_document_str(&str)`. Both are
+in `metaharness-protocol` and need no `clap` feature. The keys are the `run` verb's long flags
+without their dashes, plus `kind` and `auditor-args`. Values use the flag's own words
+(`"hermetic": "strict"`), with JSON booleans for boolean flags and arrays for repeatable ones. An
+absent key takes `RunSpec::new`'s value. An unknown key, or a value of the wrong type, is a
+`RunSpecDocumentError` that names the key. `check_spec` then refuses what the kind does not take,
+such as `max-turns` on `codex`, before anything starts (design amendment a64).
+
 ## Starting
 
 | Method | Use |
