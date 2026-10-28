@@ -1,6 +1,6 @@
 # Golden b10x sample — recorded loop wire (adapter contract CT-2)
 
-These are the bytes the released `b10x-harness` 0.21.0 binary wrote during one controlled run
+These are the bytes the released `b10x-harness` 0.22.0 binary wrote during one controlled run
 against harness's deterministic local OpenAI Responses endpoint. This is `provider_emulated`
 evidence, never `vendor_live`: it tests the adapter against the real loop record without claiming
 that a live provider was contacted.
@@ -9,12 +9,12 @@ that a live provider was contacted.
 
 | fact | value |
 |---|---|
-| captured | 2026-10-27 |
-| binary | `b10x-harness 0.21.0`, the released archive `b10x-harness-0.21.0-x86_64-unknown-linux-gnu.tar.gz` (sha256 `c717b60309a4efc5c5a10f23862192b67d3a6797733b42b11c7013f7f6101f07`, matching the release's `SHA256SUMS`), executable sha256 `a043210fada2950d7829e774bcea8d89b8b043ec0fd39e36379e4ae264d624db`, released from commit `ef6df52e015f986026fb1517c7880f9ebfa596d0` (annotated tag `0.21.0`) |
+| captured | 2026-10-28 |
+| binary | `b10x-harness 0.22.0`, the released archive `b10x-harness-0.22.0-x86_64-unknown-linux-gnu.tar.gz` (sha256 `7db31b78b0c23a988d32697355a721c4f347d5d987d6ed7c2e48e285b178d3ce`, matching the release's `SHA256SUMS`), executable sha256 `8e94916f5ccc7cdb69cbcd33f21896a0559598b377dc1d23556d1b3e68eb49af`, released from commit `3eca074aea09574775ed340bb618e5322acaaf22` (annotated tag `0.22.0`) |
 | endpoint | harness's deterministic `crates/harness-cli/tests/fixtures/fake_responses.py` at that commit, `flat-tool` scenario, bound to `127.0.0.1` inside a network namespace whose only interface is `lo` |
 | run shape | constructed child environment (`PATH`, `LANG`, `TMPDIR` only; no `HOME`), workspace `/scratch/run/work` holding one `README.md`, **no credential flag** (`credential_source: "none"`; the emulator recorded `has_authorization: false` on both requests), `--no-session`, `--json`, one `file_read` call |
 | reviewed | no credential, account identifier, machine path or endpoint address occurs in the committed bytes; the `started` line's `cwd` is the neutral `/scratch/run/work`; `profiles: []` proves the capture did not apply an ambient permission profile |
-| replaces | the 0.20.0 capture of 2026-10-26 (`684c99f5e8c7e1d22d7b29f717b71856db81766a`), which differs from this one only in the opening line's two `captured_at` stamps and the `environment.workspace` digest; before it the 0.19.0 capture of 2026-10-26 (`13d72c06a78f92fcc6027c9317dd314c6a6ce34e`), which differed from the 0.20.0 one only in those two stamps; the 0.18.0 capture of 2026-10-22 (`330e2cde6299e4e55b05664001e73903959a076f`), which differed from the 0.19.0 one only in those stamps and the `environment.workspace` digest, the 0.15.1 capture of 2026-10-20 (`f0870131e58df3e1119860d0a255f46589026d62`), the 0.15.0 capture of 2026-10-20, whose `started` line named no working directory, and the 0.9.1 capture of 2026-08-31 (`b62612091374b205245ce9a5c16b27217279a567`) |
+| replaces | the 0.21.0 capture of 2026-10-27 (`ef6df52e015f986026fb1517c7880f9ebfa596d0`), which differs from this one only in the opening line's two `captured_at` stamps and the `environment.workspace` digest; before it the 0.20.0 capture of 2026-10-26 (`684c99f5e8c7e1d22d7b29f717b71856db81766a`), which differed from the 0.21.0 one only in the opening line's two `captured_at` stamps and the `environment.workspace` digest; before it the 0.19.0 capture of 2026-10-26 (`13d72c06a78f92fcc6027c9317dd314c6a6ce34e`), which differed from the 0.20.0 one only in those two stamps; the 0.18.0 capture of 2026-10-22 (`330e2cde6299e4e55b05664001e73903959a076f`), which differed from the 0.19.0 one only in those stamps and the `environment.workspace` digest, the 0.15.1 capture of 2026-10-20 (`f0870131e58df3e1119860d0a255f46589026d62`), the 0.15.0 capture of 2026-10-20, whose `started` line named no working directory, and the 0.9.1 capture of 2026-08-31 (`b62612091374b205245ce9a5c16b27217279a567`) |
 
 `loop.jsonl` is the raw `--json` record. `version.txt` is the version banner captured from the
 same binary; the loop record has no version field of its own, so CT-3 pairs these two capture
@@ -28,12 +28,12 @@ canonical root the loop's file tools act in as `cwd`, so the replay's `cwd` is
 
 From 0.15.1 the recorded `cwd` is the workspace's canonical path, so a workspace in an ordinary
 scratch directory would put the recording machine's path into the committed bytes. The 0.15.1,
-0.18.0, 0.19.0, 0.20.0 and 0.21.0 captures therefore ran inside one `unshare --user --map-root-user --net --mount`
+0.18.0, 0.19.0, 0.20.0, 0.21.0 and 0.22.0 captures therefore ran inside one `unshare --user --map-root-user --net --mount`
 namespace, after `ip link set lo up`, in a private root that holds the workspace at
 `/scratch/run/work`:
 
 1. Build `b10x-harness` at the pinned revision (`HARNESS_REVISION`), or take the released archive
-   of that tag and check it against the release's `SHA256SUMS`, as the 0.18.0 to 0.21.0 captures did.
+   of that tag and check it against the release's `SHA256SUMS`, as the 0.18.0 to 0.22.0 captures did.
 2. Make an empty directory `<root>` and bind-mount the host's `/usr`, `/dev`, `/proc` and `/etc`
    into it (`mount --rbind`), with `bin`, `lib` and `lib64` as links to `usr/bin`, `usr/lib` and
    `usr/lib`. Copy the binary to `<root>/opt/b10x/bin/b10x-harness` and harness's

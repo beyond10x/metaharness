@@ -289,13 +289,14 @@ impl HarnessSeam for B10xSeam {
                     // standing claim behind the hardcoded `[]` was that `b10x-harness` has no MCP
                     // client at all; 0.12.1 has one — `--mcp-profile` and `--mcp-registry`
                     // (`b10x-harness run --help`, read 2026-09-15) — and its `started` record
-                    // carries an `mcp` field, which the 0.21.0 capture in `fixtures/golden/` holds
+                    // carries an `mcp` field, which the 0.22.0 capture in `fixtures/golden/` holds
                     // as `[]`. So the harness can now report servers and this asserts it reported
                     // none.
                     //
                     // It is deliberately **not** read here yet: the 2026-09-15 run on 0.12.1 and
                     // the 2026-10-20 runs on 0.15.0 and 0.15.1 and the emulator runs on 0.18.0
-                    // (2026-10-22), 0.19.0 and 0.20.0 (2026-10-26) observed the field only as
+                    // (2026-10-22), 0.19.0 and 0.20.0 (2026-10-26), 0.21.0 (2026-10-27) and 0.22.0
+                    // (2026-10-28) observed the field only as
                     // `[]`, so the shape of an element is unestablished, and inventing one would be
                     // the guess this adapter refuses to make elsewhere.
                     // What closes it is a run that publishes a profile, recorded the way the
@@ -437,7 +438,7 @@ impl HarnessSeam for B10xSeam {
                     cache_read_input_tokens: number("cached_input_tokens"),
                     // **Read from the record since the 0.12.1 observation.** It was a hardcoded
                     // `None` because the golden fixture, then a 0.9.1 recording, carried no such
-                    // field — and the 0.21.0 capture there carries none either, because harness's
+                    // field — and the 0.22.0 capture there carries none either, because harness's
                     // Responses emulator reports no cache-write counter. The paid run on
                     // 2026-09-15 saw `cache_creation_input_tokens` 2183 and
                     // 132 on the two `usage` lines of a two-turn run, so `None` here stopped being
@@ -1405,7 +1406,7 @@ mod caller_tests {
     const NOTHING: Vec<Emission> = Vec::new();
 
     fn caller() -> Box<dyn HarnessSeam> {
-        super::B10xSeams::new(Some("0.21.0".to_owned()), Some("m".to_owned())).build(
+        super::B10xSeams::new(Some("0.22.0".to_owned()), Some("m".to_owned())).build(
             TranscriptRef {
                 path: None,
                 digest: None,
