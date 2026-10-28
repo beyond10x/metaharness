@@ -2461,8 +2461,10 @@ pub(crate) enum VersionProbe {
 /// is killed and reaped. Its stdout is read on a thread of its own, so a child that fills the pipe
 /// before it exits is drained rather than left blocked. Once the child has exited, the read waits
 /// for end of file at most [`VERSION_DRAIN_GRACE`] longer (and never past `deadline`), then takes
-/// what the child wrote: a process the child left behind that keeps the pipe open holds the probe
-/// for the grace, not for the deadline.
+/// what the pipe delivered by then: a process the child left behind that keeps the pipe open holds
+/// the probe for the grace, not for the deadline, and what it wrote inside the grace is read with
+/// the child's own output. At most [`VERSION_STDOUT_MAX`] bytes are kept; a token the cap cuts is
+/// dropped.
 pub(crate) fn vendor_version(
     program: &std::path::Path,
     env: &BTreeMap<String, String>,
@@ -2507,8 +2509,11 @@ pub(crate) fn vendor_version(
         drop(sender);
     }
     let mut stdout = Vec::new();
-    let keep = |chunk: Vec<u8>, stdout: &mut Vec<u8>| {
+    // Whether bytes past the cap were read and dropped: then the last token kept may be cut.
+    let mut capped = false;
+    let keep = |chunk: Vec<u8>, stdout: &mut Vec<u8>, capped: &mut bool| {
         let room = VERSION_STDOUT_MAX.saturating_sub(stdout.len());
+        *capped |= chunk.len() > room;
         stdout.extend_from_slice(&chunk[..chunk.len().min(room)]);
     };
     let mut eof = false;
@@ -2523,7 +2528,7 @@ pub(crate) fn vendor_version(
             Ok(None) => {
                 // Drain while waiting, so a child that fills the pipe is never left blocked on it.
                 match receiver.recv_timeout(std::time::Duration::from_millis(10)) {
-                    Ok(Ok(chunk)) => keep(chunk, &mut stdout),
+                    Ok(Ok(chunk)) => keep(chunk, &mut stdout, &mut capped),
                     Ok(Err(_)) => {
                         let _ = child.kill();
                         let _ = child.wait();
@@ -2548,16 +2553,31 @@ pub(crate) fn vendor_version(
     while !eof {
         let remaining = drain_until.saturating_duration_since(std::time::Instant::now());
         match receiver.recv_timeout(remaining) {
-            Ok(Ok(chunk)) => keep(chunk, &mut stdout),
+            Ok(Ok(chunk)) => keep(chunk, &mut stdout, &mut capped),
             Ok(Err(_)) => return VersionProbe::Unreadable,
             Err(RecvTimeoutError::Disconnected) => eof = true,
-            // The grace is over and something the child left behind still holds the pipe: what
-            // the child wrote before it exited is its answer.
+            // The grace is over and something the child left behind still holds the pipe:
+            // what the pipe delivered by then is read (a65 point 2).
             Err(RecvTimeoutError::Timeout) => break,
         }
     }
     if !status.success() {
         return VersionProbe::Unreadable;
+    }
+    version_token(stdout, capped)
+}
+
+/// The version token in what a `--version` printed: the first word that starts with a digit, as
+/// `doctor` reads it. When `capped` (bytes past [`VERSION_STDOUT_MAX`] were dropped), the last word
+/// kept may be cut, so it is dropped unless whitespace ends what was kept: a prefix of a version is
+/// no version (a65 point 3).
+fn version_token(mut stdout: Vec<u8>, capped: bool) -> VersionProbe {
+    if capped && !stdout.last().is_some_and(u8::is_ascii_whitespace) {
+        let end = stdout
+            .iter()
+            .rposition(u8::is_ascii_whitespace)
+            .map_or(0, |at| at + 1);
+        stdout.truncate(end);
     }
     String::from_utf8_lossy(&stdout)
         .split_whitespace()
