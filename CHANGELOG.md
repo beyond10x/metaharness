@@ -5,6 +5,10 @@ was amended and the amendment is named here.
 
 ## [Unreleased]
 
+### Changed
+
+- ESS 0.72.0 is the specification toolchain: both `ess-inputs.yaml` manifests require it and CI installs `ess-cli` from its tag commit `5556839c`, up from 0.70.0 (`077e4ee1`). `spec/conformance.json` regenerates byte-identical, 117 scenarios.
+
 ## [0.22.0] — 2026-10-27
 
 ### Added
