@@ -77,7 +77,8 @@ mod qualify_adv1 {
     }
 
     /// `qualify`'s doc: "It is run once, as `program --version`, ... within a deadline". The
-    /// deadline is five seconds. A `--version` that exits at once but leaves a background child
+    /// deadline is a minute since a65, and an exited binary is drained for five seconds more at
+    /// most. A `--version` that exits at once but leaves a background child
     /// holding its stdout (an updater, a daemon a wrapper starts) must not hold `qualify` past it.
     #[test]
     fn a_version_whose_child_keeps_stdout_open_still_meets_the_deadline() {
@@ -95,7 +96,7 @@ mod qualify_adv1 {
         let answer = receive.recv_timeout(Duration::from_secs(12));
         assert!(
             answer.is_ok(),
-            "qualify did not return within 12 s (deadline 5 s); still blocked after {:?}",
+            "qualify did not return within 12 s (drain grace 5 s after exit, a65, story:version-probe-under-load); still blocked after {:?}",
             started.elapsed()
         );
     }

@@ -2424,9 +2424,22 @@ fn list_declared_copy_memory_files(
 }
 
 /// How long `--strict-version` waits for a vendor binary's `--version` before it kills the child
-/// and refuses (design amendments a33 and a34). `--version` answers in well under a second; a binary
-/// that does not exit in this long is not one a strict run should start.
-pub(crate) const VERSION_PROBE_DEADLINE: std::time::Duration = std::time::Duration::from_secs(5);
+/// and refuses (design amendments a33, a34 and a65). `--version` answers in well under a second on
+/// an idle machine; Claude Code's starts a Node runtime, which took more than five seconds at load
+/// average 33 to 63 (the takt 0.17.0 trial, finding F4), so the deadline is a minute. A binary that
+/// does not exit in this long is not one a strict run should start.
+pub(crate) const VERSION_PROBE_DEADLINE: std::time::Duration = std::time::Duration::from_secs(60);
+
+/// How long the probe keeps reading a binary's stdout after the binary itself has exited (a65).
+///
+/// What the binary printed before it exited is already in the pipe; only a process it left behind
+/// can hold the pipe open past its exit, and that process's output is not the binary's answer. So
+/// an exited binary costs at most this long more, not the rest of [`VERSION_PROBE_DEADLINE`].
+pub(crate) const VERSION_DRAIN_GRACE: std::time::Duration = std::time::Duration::from_secs(5);
+
+/// The most stdout bytes the probe keeps (a65). The rest is read and discarded, so a child that
+/// writes without end is drained rather than left blocked, and holds no unbounded buffer.
+const VERSION_STDOUT_MAX: usize = 64 * 1024;
 
 /// What asking a vendor binary for its `--version` produced.
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -2440,20 +2453,23 @@ pub(crate) enum VersionProbe {
 }
 
 /// The version a vendor binary reports for `--version`, read without a model call and within
-/// `deadline` (a33; the Codex launch since a34).
+/// `deadline` (a33; the Codex launch since a34; a65).
 ///
 /// Run with the plan's own constructed environment, so the probe reads no operator config home and
 /// holds no credential. `2.1.304 (Claude Code)` and `codex-cli 0.153.4` each reduce to their first
 /// token that starts with a digit, as `doctor` reduces them. A child still running at the deadline
-/// is killed and reaped. Its stdout is read on a thread of its own, so the deadline also bounds a
-/// read that a process the child left behind keeps open, and a child that fills the pipe before it
-/// exits is drained rather than left blocked.
+/// is killed and reaped. Its stdout is read on a thread of its own, so a child that fills the pipe
+/// before it exits is drained rather than left blocked. Once the child has exited, the read waits
+/// for end of file at most [`VERSION_DRAIN_GRACE`] longer (and never past `deadline`), then takes
+/// what the child wrote: a process the child left behind that keeps the pipe open holds the probe
+/// for the grace, not for the deadline.
 pub(crate) fn vendor_version(
     program: &std::path::Path,
     env: &BTreeMap<String, String>,
     deadline: std::time::Duration,
 ) -> VersionProbe {
     use std::io::Read as _;
+    use std::sync::mpsc::RecvTimeoutError;
     let Ok(mut child) = std::process::Command::new(program)
         .arg("--version")
         .env_clear()
@@ -2466,16 +2482,36 @@ pub(crate) fn vendor_version(
         return VersionProbe::Unreadable;
     };
     let started = std::time::Instant::now();
-    let (sender, receiver) = std::sync::mpsc::channel();
+    // Chunks as they are read; the sender is dropped at end of file, so `Disconnected` is EOF.
+    let (sender, receiver) = std::sync::mpsc::channel::<std::io::Result<Vec<u8>>>();
     if let Some(mut pipe) = child.stdout.take() {
         std::thread::spawn(move || {
-            let mut read = String::new();
-            let outcome = pipe.read_to_string(&mut read).map(|_| read);
-            let _ = sender.send(outcome);
+            let mut buffer = [0_u8; 4096];
+            loop {
+                match pipe.read(&mut buffer) {
+                    Ok(0) => break,
+                    Ok(read) => {
+                        if sender.send(Ok(buffer[..read].to_vec())).is_err() {
+                            break;
+                        }
+                    }
+                    Err(error) if error.kind() == std::io::ErrorKind::Interrupted => {}
+                    Err(error) => {
+                        let _ = sender.send(Err(error));
+                        break;
+                    }
+                }
+            }
         });
     } else {
         drop(sender);
     }
+    let mut stdout = Vec::new();
+    let keep = |chunk: Vec<u8>, stdout: &mut Vec<u8>| {
+        let room = VERSION_STDOUT_MAX.saturating_sub(stdout.len());
+        stdout.extend_from_slice(&chunk[..chunk.len().min(room)]);
+    };
+    let mut eof = false;
     let status = loop {
         match child.try_wait() {
             Ok(Some(status)) => break status,
@@ -2484,7 +2520,22 @@ pub(crate) fn vendor_version(
                 let _ = child.wait();
                 return VersionProbe::TimedOut(deadline);
             }
-            Ok(None) => std::thread::sleep(std::time::Duration::from_millis(10)),
+            Ok(None) => {
+                // Drain while waiting, so a child that fills the pipe is never left blocked on it.
+                match receiver.recv_timeout(std::time::Duration::from_millis(10)) {
+                    Ok(Ok(chunk)) => keep(chunk, &mut stdout),
+                    Ok(Err(_)) => {
+                        let _ = child.kill();
+                        let _ = child.wait();
+                        return VersionProbe::Unreadable;
+                    }
+                    Err(RecvTimeoutError::Timeout) => {}
+                    Err(RecvTimeoutError::Disconnected) => {
+                        eof = true;
+                        std::thread::sleep(std::time::Duration::from_millis(10));
+                    }
+                }
+            }
             Err(_) => {
                 let _ = child.kill();
                 let _ = child.wait();
@@ -2492,20 +2543,23 @@ pub(crate) fn vendor_version(
             }
         }
     };
-    let remaining = deadline.saturating_sub(started.elapsed());
-    let stdout = match receiver.recv_timeout(remaining) {
-        Ok(Ok(stdout)) => stdout,
-        Err(std::sync::mpsc::RecvTimeoutError::Timeout) => {
-            return VersionProbe::TimedOut(deadline);
+    let exited = std::time::Instant::now();
+    let drain_until = (exited + VERSION_DRAIN_GRACE).min(started + deadline);
+    while !eof {
+        let remaining = drain_until.saturating_duration_since(std::time::Instant::now());
+        match receiver.recv_timeout(remaining) {
+            Ok(Ok(chunk)) => keep(chunk, &mut stdout),
+            Ok(Err(_)) => return VersionProbe::Unreadable,
+            Err(RecvTimeoutError::Disconnected) => eof = true,
+            // The grace is over and something the child left behind still holds the pipe: what
+            // the child wrote before it exited is its answer.
+            Err(RecvTimeoutError::Timeout) => break,
         }
-        Ok(Err(_)) | Err(std::sync::mpsc::RecvTimeoutError::Disconnected) => {
-            return VersionProbe::Unreadable;
-        }
-    };
+    }
     if !status.success() {
         return VersionProbe::Unreadable;
     }
-    stdout
+    String::from_utf8_lossy(&stdout)
         .split_whitespace()
         .find(|word| word.starts_with(|character: char| character.is_ascii_digit()))
         .map_or(VersionProbe::Unreadable, |version| {
@@ -4746,6 +4800,56 @@ mod claude_version_tests {
             refusal.contains("--strict-version") && refusal.contains("did not exit"),
             "{refusal}"
         );
+    }
+
+    /// A pinned binary whose `--version` takes seven seconds, as Claude Code's Node start did at load
+    /// average 33 to 63 in the takt 0.17.0 trial (finding F4), is read under the launch's own
+    /// deadline and admitted, not refused as timed out (design amendment a65,
+    /// story:version-probe-under-load).
+    #[test]
+    fn a_pinned_version_that_answers_after_seven_seconds_is_read_under_the_launch_deadline() {
+        let dir = tempfile::tempdir().expect("a directory");
+        let pinned = metaharness_claude::PINNED_VERSIONS[0];
+        let program = fake_claude(
+            dir.path(),
+            &format!("sleep 7\necho '{pinned} (Claude Code)'"),
+        );
+        let probed = probe(&program, super::VERSION_PROBE_DEADLINE);
+        assert_eq!(
+            probed,
+            VersionProbe::Reported(pinned.to_string()),
+            "story:version-probe-under-load: a slow answer within the deadline is read"
+        );
+        assert!(claude_version_refusal(&probed, "claude").is_none());
+    }
+
+    /// The deadline is long enough for a loaded machine and still bounded: a minute, not unbounded
+    /// (design amendment a65, story:version-probe-under-load).
+    #[test]
+    fn the_launch_version_deadline_is_one_minute() {
+        assert_eq!(super::VERSION_PROBE_DEADLINE, Duration::from_secs(60));
+    }
+
+    /// A binary that prints its version and exits, leaving a background child that holds its stdout
+    /// open, is read once it has exited and the drain grace has passed, and does not hold the probe
+    /// for the whole launch deadline (design amendment a65, story:version-probe-under-load).
+    #[test]
+    fn an_exited_binary_whose_child_holds_stdout_is_read_after_the_drain_grace() {
+        let dir = tempfile::tempdir().expect("a directory");
+        let pinned = metaharness_claude::PINNED_VERSIONS[0];
+        let program = fake_claude(
+            dir.path(),
+            &format!("echo '{pinned} (Claude Code)'\nsleep 30 &\nexit 0"),
+        );
+        let started = Instant::now();
+        let probed = probe(&program, super::VERSION_PROBE_DEADLINE);
+        assert!(
+            started.elapsed() < super::VERSION_DRAIN_GRACE + Duration::from_secs(5),
+            "story:version-probe-under-load: the probe waited {:?} on a pipe a child of the exited \
+             binary holds",
+            started.elapsed()
+        );
+        assert_eq!(probed, VersionProbe::Reported(pinned.to_string()));
     }
 
     /// The launch's managed-settings check reports exactly the candidates that exist — a file, or a
