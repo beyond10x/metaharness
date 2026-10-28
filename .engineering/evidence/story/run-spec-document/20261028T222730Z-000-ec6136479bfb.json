@@ -1,0 +1,13 @@
+{
+  "at": "2026-10-28T22:27:30Z",
+  "actor": "human:timo",
+  "artifact": "story:run-spec-document",
+  "kind": "story",
+  "revision": 10,
+  "change": {
+    "change": "evidence",
+    "kind": "verification",
+    "source": "cargo test -p metaharness --test check_spec_per_kind and -p metaharness-protocol --test run_spec_document, base ca82f28b vs unit 9109f336",
+    "reference": "base: 4 of 5 check_spec_per_kind cases FAILED (Codex max-turns/max-budget-usd, endpoint+credential, substrate pair) vs 9109f336: 5 passed, run_spec_document 11 passed (15 with clap); scratch mh-d170/u1/red-b.log, green2.log"
+  }
+}

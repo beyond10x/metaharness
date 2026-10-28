@@ -2,7 +2,7 @@
 format: aep.planning-md/3
 id: story:b10x-harness-pin-0-22
 kind: story
-status: active
+status: implemented
 title: metaharness admits b10x-harness 0.22.0 and runs its specification checks under ESS 0.75.0
 summary: 'Pin-only hop: harness 3eca074a (0.22.0, llm 0.16.0), ESS 0.75.0'
 relations:
@@ -11,15 +11,38 @@ scope:
 - confidence: cited
   path: Cargo.lock
 - confidence: cited
+  path: crates/metaharness-aep-eval/src/lib.rs
+- confidence: cited
   path: crates/metaharness-b10x/Cargo.toml
+- confidence: cited
+  path: crates/metaharness-b10x/fixtures
 - confidence: cited
   path: crates/metaharness-b10x/src/lib.rs
 - confidence: cited
+  path: crates/metaharness-b10x/src/seam.rs
+- confidence: cited
+  path: crates/metaharness-b10x/src/vectors.rs
+- confidence: cited
+  path: crates/metaharness-cli/tests/b10x_harness_pin.rs
+- confidence: cited
+  path: crates/metaharness-cli/tests/invariants_w8u6.rs
+- confidence: cited
   path: crates/metaharness-tools/Cargo.toml
-revision: 7
+- confidence: cited
+  path: crates/metaharness/fixtures/golden/contract-result-b10x.json
+- confidence: cited
+  path: crates/metaharness/tests/invariants_w8u6.rs
+- confidence: cited
+  path: spec/conformance.json
+- confidence: cited
+  path: spec/domains/trace.yaml
+- confidence: cited
+  path: website/docs/harnesses/b10x.md
+revision: 9
 transitions:
 - {from: "draft", to: "proposed", at: "2026-10-28T21:16:55Z", actor: "human:timo", revision: 6}
 - {from: "proposed", to: "active", at: "2026-10-28T21:16:56Z", actor: "human:timo", revision: 7}
+- {from: "active", to: "implemented", at: "2026-10-28T22:30:52Z", actor: "human:timo", revision: 9, decided_on: {"recorded":{"test_result":1,"review_outcome":1,"verification":1}}}
 ---
 ## Outcome
 

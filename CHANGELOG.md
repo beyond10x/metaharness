@@ -5,6 +5,8 @@ was amended and the amendment is named here.
 
 ## [Unreleased]
 
+## [0.23.0] — 2026-10-28
+
 ### Added
 
 - `metaharness project --from claude-code-session <session>.jsonl` reads a Claude Code session as stored on disk, with the sub-agent transcripts under `<session>/subagents/`, through the new `metaharness_claude::SessionReader` (amendment a63, story:session-jsonl-adapter). The reader shares the `stream-json` reader's message mapping, emits one `usage` per request, and opens each sub-agent's block with a `VENDOR_SUBAGENT` warning that names the spawning call. `SourceKind` gains `claude-code-session`, and `spec/conformance.json` regenerates from 117 to 120 scenarios.

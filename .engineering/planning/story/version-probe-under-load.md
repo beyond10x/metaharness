@@ -2,18 +2,23 @@
 format: aep.planning-md/3
 id: story:version-probe-under-load
 kind: story
-status: active
+status: implemented
 title: The --version probe reads a binary that answers slowly under load
 summary: 'Takt 0.17.0 trial F4: the 5 s VERSION_PROBE_DEADLINE refused pinned binaries at load 33-63; raise it to 60 s'
 scope:
 - confidence: cited
   path: crates/metaharness/src/builder.rs
-- confidence: inferred
-  path: crates/metaharness/src/qualify.rs
-revision: 5
+- confidence: cited
+  path: crates/metaharness/tests/adversary_version_probe_pass1.rs
+- confidence: cited
+  path: crates/metaharness/tests/qualify_adv1.rs
+- confidence: cited
+  path: docs/design/metaharness-protocol-v0.1.md
+revision: 7
 transitions:
 - {from: "draft", to: "proposed", at: "2026-10-28T21:16:55Z", actor: "human:timo", revision: 4}
 - {from: "proposed", to: "active", at: "2026-10-28T21:16:55Z", actor: "human:timo", revision: 5}
+- {from: "active", to: "implemented", at: "2026-10-28T22:30:52Z", actor: "human:timo", revision: 7, decided_on: {"recorded":{"test_result":1,"review_outcome":1,"verification":1}}}
 ---
 ## Outcome
 

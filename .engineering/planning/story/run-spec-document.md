@@ -2,30 +2,43 @@
 format: aep.planning-md/3
 id: story:run-spec-document
 kind: story
-status: active
+status: implemented
 title: A session request is a RunSpec document, parsed with unknown keys refused and checked per harness kind
 summary: Public parse of a metaharness run settings mapping into RunSpec; unknown keys and bad values refused by name; Codex max-turns and max-budget-usd refused in check_spec
 relations:
 - decomposes: epic:loom-agent-work-through-metaharness
 scope:
 - confidence: cited
+  path: crates/metaharness-claude/src/launch.rs
+- confidence: cited
+  path: crates/metaharness-claude/src/lib.rs
+- confidence: cited
   path: crates/metaharness-codex/src/launch.rs
+- confidence: cited
+  path: crates/metaharness-codex/src/lib.rs
 - confidence: cited
   path: crates/metaharness-protocol/src/lib.rs
 - confidence: cited
-  path: crates/metaharness-protocol/src/spec.rs
+  path: crates/metaharness-protocol/src/spec_document.rs
+- confidence: cited
+  path: crates/metaharness-protocol/tests/run_spec_document.rs
 - confidence: cited
   path: crates/metaharness/src/builder.rs
+- confidence: cited
+  path: crates/metaharness/tests/check_spec_per_kind.rs
+- confidence: cited
+  path: docs/design/metaharness-protocol-v0.1.md
 - confidence: cited
   path: spec/conformance.json
 - confidence: inferred
   path: spec/domains/session.yaml
-- confidence: inferred
-  path: spec/ess-inputs.yaml
-revision: 10
+- confidence: cited
+  path: website/docs/reference/library.md
+revision: 12
 transitions:
 - {from: "draft", to: "proposed", at: "2026-10-28T21:16:54Z", actor: "human:timo", revision: 9}
 - {from: "proposed", to: "active", at: "2026-10-28T21:16:55Z", actor: "human:timo", revision: 10}
+- {from: "active", to: "implemented", at: "2026-10-28T22:43:17Z", actor: "human:timo", revision: 12, decided_on: {"recorded":{"test_result":1,"review_outcome":1,"verification":1}}}
 ---
 ## Outcome
 

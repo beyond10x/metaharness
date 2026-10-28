@@ -1,0 +1,13 @@
+{
+  "at": "2026-10-28T22:30:51Z",
+  "actor": "human:timo",
+  "artifact": "story:version-probe-under-load",
+  "kind": "story",
+  "revision": 6,
+  "change": {
+    "change": "evidence",
+    "kind": "test_result",
+    "source": "full gate (Taskfile check, each step via the wave wrapper) on wave/d170 c084f46",
+    "reference": "6 steps exit 0; cargo test --workspace 132 suites, 1463 passed, 0 failed, 54 ignored; 2026-10-28T22:28Z-22:30Z; scratch mh-d170/logs/gate1.log"
+  }
+}
