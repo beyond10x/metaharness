@@ -26,7 +26,11 @@
 //! sub-agent file, which is why the links are collected across every file before any event is
 //! written. Each sub-agent's events are appended after the session's own, opened by one
 //! [`warning_code::VENDOR_SUBAGENT`] warning naming the sub-agent, the spawning call and the file
-//! (amendment a63).
+//! (amendment a63). The blocks follow their spawning calls depth-first by spawn position, never
+//! the files' names (a63 point 9). A record a sub-agent file copies from a file read before it
+//! (same `uuid`, or the same calls under any `uuid`) is read once, at its first occurrence, and the
+//! block it was dropped from counts it. A result naming a sub-agent that has no file is followed
+//! by one [`warning_code::VENDOR_SUBAGENT_MISSING`] warning.
 //!
 //! **Total by construction**, as [`crate::TranscriptReader`] is: every record becomes at least one
 //! event, an unmapped one becomes `opaque`, unknown fields are ignored and no clock is read.
@@ -153,6 +157,11 @@ impl SessionReader {
     /// `opaque` event inside a sub-agent block carries its own line of the sub-agent file, which
     /// the block's warning names.
     ///
+    /// The blocks are written depth-first by spawn position: a block follows the file that
+    /// requests its spawning call, the block of an earlier call before a later one's, and each
+    /// block is followed by the blocks it spawned. Blocks whose call no file requests follow those,
+    /// by sub-agent id. The order `subagents` arrives in moves nothing.
+    ///
     /// The first event is `session.started` only when some record of the session file carries the
     /// session envelope's `sessionId`; a file with none is not a session file, and the caller
     /// refuses it by that rule.
@@ -161,12 +170,25 @@ impl SessionReader {
         let parent = lines(session);
         let children: Vec<Vec<Line<'_>>> = subagents.iter().map(|file| lines(&file.text)).collect();
         let links = spawning_calls(parent.iter().chain(children.iter().flatten()));
+        let calls: Vec<Option<String>> = subagents
+            .iter()
+            .map(|file| {
+                links
+                    .get(&file.agent_id)
+                    .cloned()
+                    .or_else(|| file.meta_call.clone())
+            })
+            .collect();
+        let present: BTreeSet<&str> = subagents
+            .iter()
+            .map(|file| file.agent_id.as_str())
+            .collect();
 
-        let mut seen_requests = BTreeSet::new();
+        let mut state = ReadState::default();
         let mut out = Vec::new();
         let mut opening = self.opening(&parent);
         for line in &parent {
-            let mut emissions = map_line(line, &mut seen_requests);
+            let mut emissions = self.file_line(line, &present, &mut state);
             if !emissions.is_empty()
                 && let Some(started) = opening.take()
             {
@@ -178,23 +200,67 @@ impl SessionReader {
                     .map(|emission| (line.number, emission)),
             );
         }
+        state.close_file();
 
         let last = parent.last().map_or(0, |line| line.number);
-        for (file, lines) in subagents.iter().zip(&children) {
-            let call = links
-                .get(&file.agent_id)
-                .cloned()
-                .or_else(|| file.meta_call.clone());
-            out.push((last, Emission::untimed(header(file, call.as_deref()))));
-            for line in lines {
-                out.extend(
-                    map_line(line, &mut seen_requests)
-                        .into_iter()
-                        .map(|emission| (last, emission)),
-                );
+        for index in block_order(&parent, &children, subagents, &calls) {
+            let mut block = Vec::new();
+            for line in &children[index] {
+                block.extend(self.file_line(line, &present, &mut state));
             }
+            let dropped = state.close_file();
+            out.push((
+                last,
+                Emission::untimed(header(&subagents[index], calls[index].as_deref(), dropped)),
+            ));
+            out.extend(block.into_iter().map(|emission| (last, emission)));
         }
         out
+    }
+
+    /// One line of one file, as [`map_line`] reads it, unless it is a copy of a record an earlier
+    /// file already gave; followed by the warning a spawn without its sub-agent file owes.
+    fn file_line(
+        &self,
+        line: &Line<'_>,
+        present: &BTreeSet<&str>,
+        state: &mut ReadState,
+    ) -> Vec<Emission> {
+        let Some(record) = &line.record else {
+            return map_line(line, &mut state.requests);
+        };
+        if state.is_copy(record) {
+            return Vec::new();
+        }
+        let mut emissions = map_line(line, &mut state.requests);
+        if let Some((agent, call)) = spawn_link(record)
+            && !present.contains(agent)
+            && state.missing.insert(agent.to_owned())
+        {
+            emissions.push(Emission::untimed(Event::Warning {
+                code: warning_code::VENDOR_SUBAGENT_MISSING.to_owned(),
+                message: format!(
+                    "sub-agent `{agent}` spawned by call `{call}` has no file: `{}` is absent",
+                    self.subagent_path(agent)
+                ),
+            }));
+        }
+        emissions
+    }
+
+    /// Where a sub-agent's file would be, relative to the session file's directory, as
+    /// [`read_subagents`] names the ones it finds.
+    fn subagent_path(&self, agent: &str) -> String {
+        let stem = self
+            .transcript
+            .path
+            .as_deref()
+            .and_then(|path| Path::new(path).file_stem())
+            .map_or_else(
+                || "<session>".to_owned(),
+                |stem| stem.to_string_lossy().into_owned(),
+            );
+        format!("{stem}/subagents/agent-{agent}.jsonl")
     }
 
     /// The opening, assembled from the session file's envelope; `None` when no record carries
@@ -267,25 +333,7 @@ fn lines(text: &str) -> Vec<Line<'_>> {
 fn spawning_calls<'a>(lines: impl Iterator<Item = &'a Line<'a>>) -> BTreeMap<String, String> {
     let mut by_agent = BTreeMap::new();
     for record in lines.filter_map(|line| line.record.as_ref()) {
-        let Some(agent) = record
-            .get("toolUseResult")
-            .and_then(|result| result.get("agentId"))
-            .and_then(Value::as_str)
-        else {
-            continue;
-        };
-        let call = record
-            .get("message")
-            .and_then(|message| message.get("content"))
-            .and_then(Value::as_array)
-            .and_then(|blocks| {
-                blocks.iter().find_map(|block| {
-                    (block.get("type").and_then(Value::as_str) == Some("tool_result"))
-                        .then(|| block.get("tool_use_id").and_then(Value::as_str))
-                        .flatten()
-                })
-            });
-        if let Some(call) = call {
+        if let Some((agent, call)) = spawn_link(record) {
             by_agent
                 .entry(agent.to_owned())
                 .or_insert_with(|| call.to_owned());
@@ -294,17 +342,205 @@ fn spawning_calls<'a>(lines: impl Iterator<Item = &'a Line<'a>>) -> BTreeMap<Str
     by_agent
 }
 
+/// The sub-agent a result record names as spawned, beside the call the result answers.
+fn spawn_link(record: &Record) -> Option<(&str, &str)> {
+    let agent = record
+        .get("toolUseResult")
+        .and_then(|result| result.get("agentId"))
+        .and_then(Value::as_str)?;
+    let call = content_blocks(record).iter().find_map(|block| {
+        (block.get("type").and_then(Value::as_str) == Some("tool_result"))
+            .then(|| block.get("tool_use_id").and_then(Value::as_str))
+            .flatten()
+    })?;
+    Some((agent, call))
+}
+
+/// The content blocks of a record's `message`; empty when it has none.
+fn content_blocks(record: &Record) -> &[Value] {
+    record
+        .get("message")
+        .and_then(|message| message.get("content"))
+        .and_then(Value::as_array)
+        .map_or(&[], Vec::as_slice)
+}
+
+/// What a record is told apart by when another file copies it.
+#[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord)]
+enum Key {
+    /// The envelope's `uuid`.
+    Uuid(String),
+    /// A `tool_use` block's `id`.
+    Call(String),
+    /// A `tool_result` block's `tool_use_id`.
+    Result(String),
+}
+
+/// The keys a record is known by: its `uuid`, where it has one, and its call keys (ADV-SJ-2).
+fn record_keys(record: &Record) -> (Option<Key>, Vec<Key>) {
+    let calls: Vec<Key> = content_blocks(record)
+        .iter()
+        .filter_map(|block| match block.get("type").and_then(Value::as_str) {
+            Some("tool_use") => block
+                .get("id")
+                .and_then(Value::as_str)
+                .map(|id| Key::Call(id.to_owned())),
+            Some("tool_result") => block
+                .get("tool_use_id")
+                .and_then(Value::as_str)
+                .map(|id| Key::Result(id.to_owned())),
+            _ => None,
+        })
+        .collect();
+    (str_field(record, "uuid").map(Key::Uuid), calls)
+}
+
+/// What reading carries from one file to the next.
+#[derive(Default)]
+struct ReadState {
+    /// Every `requestId` already billed, across files.
+    requests: BTreeSet<String>,
+    /// The keys of every record the files read before this one gave.
+    earlier: BTreeSet<Key>,
+    /// The keys of the records the file being read has given so far.
+    this_file: BTreeSet<Key>,
+    /// The records of the file being read that were copies, and so dropped.
+    dropped: usize,
+    /// Every sub-agent already named as missing.
+    missing: BTreeSet<String>,
+}
+
+impl ReadState {
+    /// Whether the record copies one an earlier file gave; a copy is counted and not read.
+    ///
+    /// A copy is a record whose `uuid` an earlier file gave, or, whatever its `uuid`, one that
+    /// names calls and every one of them an earlier file gave: a call id names one call, and 56
+    /// of 426 call ids repeated across files on local sessions read 2026-10-28 were repeated under
+    /// a new `uuid`. A record with neither (no `uuid` seen, no call) is never a copy: nothing tells
+    /// it apart.
+    fn is_copy(&mut self, record: &Record) -> bool {
+        let (uuid, calls) = record_keys(record);
+        let seen_uuid = uuid.as_ref().is_some_and(|key| self.earlier.contains(key));
+        let seen_calls = !calls.is_empty() && calls.iter().all(|key| self.earlier.contains(key));
+        if seen_uuid || seen_calls {
+            self.dropped += 1;
+            return true;
+        }
+        self.this_file.extend(uuid);
+        self.this_file.extend(calls);
+        false
+    }
+
+    /// Ends the file being read; returns how many copies it dropped.
+    fn close_file(&mut self) -> usize {
+        self.earlier.append(&mut self.this_file);
+        std::mem::take(&mut self.dropped)
+    }
+}
+
+/// The order the sub-agent blocks are written in, as indices into `subagents`: depth-first by
+/// spawn position (ADV-SJ-3).
+///
+/// A block's parent is the file that requests its spawning call, and among one parent's blocks
+/// the earlier call goes first; each block is followed by the blocks it spawned before the next
+/// sibling's. Blocks whose call no file requests follow, by sub-agent id, each with the blocks it
+/// spawned; blocks caught in a cycle of links come last, the same way. Nothing here depends on the
+/// order `subagents` arrives in.
+fn block_order(
+    parent: &[Line<'_>],
+    children: &[Vec<Line<'_>>],
+    subagents: &[SubagentFile],
+    calls: &[Option<String>],
+) -> Vec<usize> {
+    let mut by_id: Vec<usize> = (0..subagents.len()).collect();
+    by_id.sort_by(|left, right| {
+        let (left, right) = (&subagents[*left], &subagents[*right]);
+        left.agent_id
+            .cmp(&right.agent_id)
+            .then_with(|| left.path.cmp(&right.path))
+    });
+
+    // Where each call is requested: the session first, then the sub-agent files by id; the first
+    // place wins.
+    let mut requested: BTreeMap<&str, (Option<usize>, u64)> = BTreeMap::new();
+    let files = std::iter::once((None, parent)).chain(
+        by_id
+            .iter()
+            .map(|index| (Some(*index), children[*index].as_slice())),
+    );
+    for (file, lines) in files {
+        for line in lines {
+            let Some(record) = &line.record else { continue };
+            for block in content_blocks(record) {
+                if block.get("type").and_then(Value::as_str) == Some("tool_use")
+                    && let Some(id) = block.get("id").and_then(Value::as_str)
+                {
+                    requested.entry(id).or_insert((file, line.number));
+                }
+            }
+        }
+    }
+
+    let mut spawned: BTreeMap<Option<usize>, Vec<(u64, usize)>> = BTreeMap::new();
+    let mut roots = Vec::new();
+    for (rank, index) in by_id.iter().enumerate() {
+        match calls[*index]
+            .as_deref()
+            .and_then(|call| requested.get(call))
+        {
+            Some((file, line)) if *file != Some(*index) => {
+                spawned.entry(*file).or_default().push((*line, rank));
+            }
+            _ => roots.push(*index),
+        }
+    }
+    for siblings in spawned.values_mut() {
+        siblings.sort_unstable();
+    }
+
+    // The blocks `file` spawned, last first, so a stack pops them in call order.
+    let spawned_by = |file: Option<usize>| -> Vec<usize> {
+        spawned
+            .get(&file)
+            .into_iter()
+            .flatten()
+            .rev()
+            .map(|(_, rank)| by_id[*rank])
+            .collect()
+    };
+    let mut order = Vec::with_capacity(subagents.len());
+    let mut visited = vec![false; subagents.len()];
+    let starts = std::iter::once(spawned_by(None))
+        .chain(roots.into_iter().map(|index| vec![index]))
+        .chain(by_id.iter().map(|index| vec![*index]));
+    for mut stack in starts {
+        while let Some(index) = stack.pop() {
+            if std::mem::replace(&mut visited[index], true) {
+                continue;
+            }
+            order.push(index);
+            stack.extend(spawned_by(Some(index)));
+        }
+    }
+    order
+}
+
 /// The warning that opens a sub-agent's block, in the grammar
 /// [`warning_code::VENDOR_SUBAGENT`] states.
-fn header(file: &SubagentFile, call: Option<&str>) -> Event {
+fn header(file: &SubagentFile, call: Option<&str>, dropped: usize) -> Event {
     let spawned = match call {
         Some(call) => format!("spawned by call `{call}`"),
         None => "spawned by no recorded call".to_owned(),
     };
+    let copies = match dropped {
+        0 => String::new(),
+        1 => "; 1 record already read from an earlier file dropped".to_owned(),
+        many => format!("; {many} records already read from an earlier file dropped"),
+    };
     Event::Warning {
         code: warning_code::VENDOR_SUBAGENT.to_owned(),
         message: format!(
-            "sub-agent `{}` {spawned}, read from `{}` (sha256:{})",
+            "sub-agent `{}` {spawned}, read from `{}` (sha256:{}){copies}",
             file.agent_id,
             file.path,
             file.digest.as_str()
@@ -611,6 +847,170 @@ mod tests {
             read.iter().all(|(line, _)| *line == 1),
             "every event of a one-line session cites its line: {read:?}"
         );
+    }
+
+    /// ADV-SJ-5: a spawn whose sub-agent file is absent leaves a mark. The result naming the
+    /// sub-agent is followed by one warning naming the spawning call and the missing id, at the
+    /// result's line; a sub-agent that has its file gets no such warning.
+    #[test]
+    fn a_spawn_whose_subagent_file_is_absent_is_named_by_a_warning() {
+        let result = |call: &str, agent: &str| {
+            format!(
+                "{{\"type\":\"user\",{ENVELOPE},\"message\":{{\"role\":\"user\",\"content\":[{{\"type\":\"tool_result\",\"tool_use_id\":\"{call}\",\"content\":\"done\"}}]}},\"toolUseResult\":{{\"agentId\":\"{agent}\"}}}}\n"
+            )
+        };
+        let session = format!("{}{}", result("call-a", "a"), result("call-gone", "gone"));
+        let a = subagent(
+            "a",
+            "{\"type\":\"user\",\"message\":{\"role\":\"user\",\"content\":\"go\"}}\n",
+            None,
+        );
+        let read = events(&session, &[a]);
+        let missing: Vec<(u64, String)> = read
+            .iter()
+            .filter_map(|(line, event)| match event {
+                Event::Warning { code, message }
+                    if code == warning_code::VENDOR_SUBAGENT_MISSING =>
+                {
+                    Some((*line, message.clone()))
+                }
+                _ => None,
+            })
+            .collect();
+        assert_eq!(
+            missing,
+            [(
+                2,
+                "sub-agent `gone` spawned by call `call-gone` has no file: \
+                 `session/subagents/agent-gone.jsonl` is absent"
+                    .to_owned()
+            )],
+            "{read:?}"
+        );
+        let result_at = read
+            .iter()
+            .position(|(_, event)| matches!(event, Event::ToolResult { call_id, .. } if call_id == "call-gone"))
+            .expect("the result");
+        assert!(
+            matches!(&read[result_at + 1].1, Event::Warning { code, .. } if code == warning_code::VENDOR_SUBAGENT_MISSING),
+            "the warning follows the result that names the sub-agent: {read:?}"
+        );
+    }
+
+    /// ADV-SJ-2: a record copied into a second file is read once, at its first occurrence, and the
+    /// block it was dropped from says how many copies it dropped. Without a `uuid` the copy is
+    /// told by its call ids.
+    #[test]
+    fn a_record_copied_into_a_later_file_is_read_once_and_its_block_counts_it() {
+        let spawn = |call: &str, agent: &str| {
+            format!(
+                "{{\"type\":\"assistant\",{ENVELOPE},\"requestId\":\"r-{call}\",\"message\":{{\"model\":\"m\",\"content\":[{{\"type\":\"tool_use\",\"id\":\"{call}\",\"name\":\"Agent\",\"input\":{{}}}}]}}}}\n\
+                 {{\"type\":\"user\",{ENVELOPE},\"message\":{{\"role\":\"user\",\"content\":[{{\"type\":\"tool_result\",\"tool_use_id\":\"{call}\",\"content\":\"done\"}}]}},\"toolUseResult\":{{\"agentId\":\"{agent}\"}}}}\n"
+            )
+        };
+        let with_uuid = "{\"type\":\"assistant\",\"uuid\":\"u-1\",\"requestId\":\"r-x\",\"message\":{\"model\":\"m\",\"content\":[{\"type\":\"tool_use\",\"id\":\"call-x\",\"name\":\"Read\",\"input\":{}}],\"usage\":{\"input_tokens\":1,\"output_tokens\":1}}}\n";
+        let without_uuid = "{\"type\":\"user\",\"message\":{\"role\":\"user\",\"content\":[{\"type\":\"tool_result\",\"tool_use_id\":\"call-x\",\"content\":\"read\"}]}}\n";
+        let session = format!("{}{}", spawn("call-a", "a"), spawn("call-b", "b"));
+        let copied = format!("{with_uuid}{without_uuid}");
+        let a = subagent("a", &copied, None);
+        let b = subagent("b", &copied, None);
+        let read = events(&session, &[b, a]);
+        let calls = read
+            .iter()
+            .filter(|(_, event)| matches!(event, Event::ToolRequested { call_id, .. } if call_id == "call-x"))
+            .count();
+        let results = read
+            .iter()
+            .filter(|(_, event)| matches!(event, Event::ToolResult { call_id, .. } if call_id == "call-x"))
+            .count();
+        assert_eq!((calls, results), (1, 1), "{read:?}");
+        let found = headers(&read);
+        assert_eq!(found.len(), 2, "{found:?}");
+        assert!(
+            found[0].starts_with("sub-agent `a` spawned by call `call-a`")
+                && !found[0].contains("dropped"),
+            "{}",
+            found[0]
+        );
+        assert!(
+            found[1].starts_with("sub-agent `b` spawned by call `call-b`")
+                && found[1].ends_with("; 2 records already read from an earlier file dropped"),
+            "{}",
+            found[1]
+        );
+    }
+
+    /// ADV-SJ-2, the copies the `uuid` misses: on local sessions read 2026-10-28, 56 of 426 call
+    /// ids repeated across files were repeated under a different `uuid`. A call id names one call,
+    /// so a later record whose every call an earlier file already gave is a copy whatever its
+    /// `uuid`; a record that names a call no earlier file gave is read.
+    #[test]
+    fn a_copy_under_a_new_uuid_is_told_by_its_calls() {
+        let spawn = |call: &str, agent: &str| {
+            format!(
+                "{{\"type\":\"assistant\",{ENVELOPE},\"requestId\":\"r-{call}\",\"message\":{{\"model\":\"m\",\"content\":[{{\"type\":\"tool_use\",\"id\":\"{call}\",\"name\":\"Agent\",\"input\":{{}}}}]}}}}\n\
+                 {{\"type\":\"user\",{ENVELOPE},\"message\":{{\"role\":\"user\",\"content\":[{{\"type\":\"tool_result\",\"tool_use_id\":\"{call}\",\"content\":\"done\"}}]}},\"toolUseResult\":{{\"agentId\":\"{agent}\"}}}}\n"
+            )
+        };
+        let call = |uuid: &str, id: &str| {
+            format!(
+                "{{\"type\":\"assistant\",\"uuid\":\"{uuid}\",\"requestId\":\"r-{id}\",\"message\":{{\"model\":\"m\",\"content\":[{{\"type\":\"tool_use\",\"id\":\"{id}\",\"name\":\"Read\",\"input\":{{}}}}]}}}}\n"
+            )
+        };
+        let session = format!("{}{}", spawn("call-a", "a"), spawn("call-b", "b"));
+        let a = subagent("a", &call("u-1", "call-x"), None);
+        let b = subagent(
+            "b",
+            &format!("{}{}", call("u-2", "call-x"), call("u-3", "call-y")),
+            None,
+        );
+        let read = events(&session, &[a, b]);
+        let requested: Vec<&str> = read
+            .iter()
+            .filter_map(|(_, event)| match event {
+                Event::ToolRequested { call_id, name, .. } if name == "Read" => {
+                    Some(call_id.as_str())
+                }
+                _ => None,
+            })
+            .collect();
+        assert_eq!(requested, ["call-x", "call-y"], "{read:?}");
+        assert!(
+            headers(&read)[1].ends_with("; 1 record already read from an earlier file dropped"),
+            "{:?}",
+            headers(&read)
+        );
+    }
+
+    /// ADV-SJ-3: blocks follow their spawning calls depth-first by spawn position, whatever the
+    /// file names: a nested block follows its parent's block, and two blocks spawned by one file
+    /// keep the order of their calls.
+    #[test]
+    fn subagent_blocks_are_placed_depth_first_by_spawn_position() {
+        let spawn = |call: &str, agent: &str| {
+            format!(
+                "{{\"type\":\"assistant\",{ENVELOPE},\"requestId\":\"r-{call}\",\"message\":{{\"model\":\"m\",\"content\":[{{\"type\":\"tool_use\",\"id\":\"{call}\",\"name\":\"Agent\",\"input\":{{}}}}]}}}}\n\
+                 {{\"type\":\"user\",{ENVELOPE},\"message\":{{\"role\":\"user\",\"content\":[{{\"type\":\"tool_result\",\"tool_use_id\":\"{call}\",\"content\":\"done\"}}]}},\"toolUseResult\":{{\"agentId\":\"{agent}\"}}}}\n"
+            )
+        };
+        let go = "{\"type\":\"user\",\"message\":{\"role\":\"user\",\"content\":\"go\"}}\n";
+        let session = format!("{}{}", spawn("call-z", "z"), spawn("call-c", "c"));
+        let z = subagent("z", &spawn("call-a", "a"), None);
+        let a = subagent("a", go, None);
+        let c = subagent("c", go, None);
+        let orphan = subagent("0", go, None);
+        let order = |files: Vec<SubagentFile>| {
+            headers(&events(&session, &files))
+                .into_iter()
+                .map(|message| message.split('`').nth(1).unwrap_or_default().to_owned())
+                .collect::<Vec<_>>()
+        };
+        let expected = ["z", "a", "c", "0"];
+        assert_eq!(
+            order(vec![orphan.clone(), a.clone(), c.clone(), z.clone()]),
+            expected
+        );
+        assert_eq!(order(vec![z, c, a, orphan]), expected);
     }
 
     /// The sub-agent files beside a session are found, in name order, with their meta links.

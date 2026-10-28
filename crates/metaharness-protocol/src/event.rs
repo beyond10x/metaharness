@@ -111,8 +111,18 @@ pub mod warning_code {
     /// This line opens each block and names the sub-agent, the parent's spawning call and the
     /// file, in that order and in backticks: `` sub-agent `<id>` spawned by call `<call id>`, read
     /// from `<file>` (sha256:<digest>) ``, or `` … spawned by no recorded call … `` when the
-    /// session records none. A block runs to the next such warning or to the end of the stream.
+    /// session records none. When the file repeats records a file read before it, the copies are
+    /// dropped and the message ends `` ; <n> records already read from an earlier file dropped ``
+    /// (amendment a63 point 9). A block runs to the next such warning or to the end of the stream.
     pub const VENDOR_SUBAGENT: &str = "VENDOR_SUBAGENT";
+    /// A result names a sub-agent the session spawned, and no file of that sub-agent is beside
+    /// the session (amendment a63 point 9).
+    ///
+    /// It follows the events of the result that names the sub-agent, once per sub-agent, and
+    /// names the sub-agent, the spawning call and the file that is absent, in that order and in
+    /// backticks: `` sub-agent `<id>` spawned by call `<call id>` has no file: `<file>` is absent ``.
+    /// It opens no block: the sub-agent's events are not in the record.
+    pub const VENDOR_SUBAGENT_MISSING: &str = "VENDOR_SUBAGENT_MISSING";
 }
 
 /// Where a decision was taken.

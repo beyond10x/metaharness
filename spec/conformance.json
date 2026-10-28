@@ -176,9 +176,9 @@
     }
   },
   "provenance": {
-    "contract_digest": "51265a4e24c5857296799231b90ada379b64caae816a7a98a3da19b47d489b55",
+    "contract_digest": "dcad72f980cf6cdd771946886dfb1f95153cd8acd05a3f00c2c195f28372395a",
     "scenario_initial_state": "empty",
-    "spec_digest": "4d7c36ea723cad4dece4a10f439f20ce1f50722242620cfbf5c9ec788447a52f",
+    "spec_digest": "4afebf556b80d140e7d1ee982c031511dfa283354f99972b53822206f087fa81",
     "specification_version": "v1",
     "suite_version": "ess-conformance/35",
     "system": "metaharness"
@@ -22474,7 +22474,7 @@
             "format": "\"trace-ir-summary/1\"",
             "input_tokens": "null",
             "is_error": "null",
-            "last_timestamp_ms": "1793178005900",
+            "last_timestamp_ms": "1793178008000",
             "model": "\"claude-opus-5\"",
             "models": "[{\"cache_creation_input_tokens\":null,\"cache_read_input_tokens\":null,\"cost_usd\":null,\"input_tokens\":null,\"name\":\"claude-opus-5\",\"output_tokens\":null},{\"cache_creation_input_tokens\":null,\"cache_read_input_tokens\":null,\"cost_usd\":null,\"input_tokens\":null,\"name\":\"claude-haiku-4-5\",\"output_tokens\":null}]",
             "output_tokens": "null",

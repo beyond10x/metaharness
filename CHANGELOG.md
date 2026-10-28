@@ -8,6 +8,12 @@ was amended and the amendment is named here.
 ### Added
 
 - `metaharness project --from claude-code-session <session>.jsonl` reads a Claude Code session as stored on disk, with the sub-agent transcripts under `<session>/subagents/`, through the new `metaharness_claude::SessionReader` (amendment a63, story:session-jsonl-adapter). The reader shares the `stream-json` reader's message mapping, emits one `usage` per request, and opens each sub-agent's block with a `VENDOR_SUBAGENT` warning that names the spawning call. `SourceKind` gains `claude-code-session`, and `spec/conformance.json` regenerates from 117 to 120 scenarios.
+- `warning_code::VENDOR_SUBAGENT_MISSING`: a session's result names a sub-agent that has no file beside the session; the warning follows that result once per sub-agent and names the call and the absent file (amendment a63 point 9).
+
+### Fixed
+
+- `claude-code-session` corrections after the adversary (amendment a63 point 9): sub-agent blocks follow their spawning calls depth-first by spawn position instead of file-name order; a record a sub-agent file copies from a file read before it (same `uuid`, or the same calls under any `uuid`) is read once and the block's `VENDOR_SUBAGENT` warning counts the copies dropped; a session file that is not UTF-8 is decoded lossily like its sub-agent files, so a cut inside a character is `opaque` at its line instead of refusing the whole session.
+- `trace-ir-summary/1`'s `last_timestamp_ms` is the latest stamp of any node, not the last in document order, so a session summary ends at the session's own last record and not at an earlier sub-agent's. The pinned `claude-code-session` summary moves from `1793178005900` to `1793178008000`.
 
 ### Changed
 

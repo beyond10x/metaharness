@@ -223,7 +223,9 @@ impl FromStr for VendorSource {
 /// # Errors
 ///
 /// [`Refusal::Io`] when the file cannot be read; [`Refusal::ProjectionSource`] when it is not
-/// UTF-8, or when the reader's first event is not `session.started` — the one rule by which a
+/// UTF-8 (except a Claude Code session, which is decoded lossily as its sub-agent files are, so a
+/// line holding bytes that are not UTF-8 is `opaque` at its line), or when the reader's first
+/// event is not `session.started` — the one rule by which a
 /// record of another format is told apart, because the readers raise no error of their own and the
 /// wrong reader makes `opaque` nodes.
 pub fn project_vendor_record(
@@ -233,11 +235,19 @@ pub fn project_vendor_record(
     let bytes = std::fs::read(path).map_err(|error| Refusal::Io {
         detail: format!("{} could not be read: {error}", path.display()),
     })?;
-    let text = std::str::from_utf8(&bytes).map_err(|error| Refusal::ProjectionSource {
-        source: source.as_str().to_owned(),
-        path: Some(path.to_path_buf()),
-        detail: format!("the record is not UTF-8: {error}"),
-    })?;
+    // A session file is decoded as its sub-agent files are (ADV-SJ-4): a session cut inside a
+    // multi-byte character is read up to the cut, and the cut line is `opaque` at its line.
+    let text = match source {
+        VendorSource::ClaudeCodeSession => String::from_utf8_lossy(&bytes),
+        _ => std::borrow::Cow::Borrowed(std::str::from_utf8(&bytes).map_err(|error| {
+            Refusal::ProjectionSource {
+                source: source.as_str().to_owned(),
+                path: Some(path.to_path_buf()),
+                detail: format!("the record is not UTF-8: {error}"),
+            }
+        })?),
+    };
+    let text = text.as_ref();
 
     let transcript = TranscriptRef {
         path: path

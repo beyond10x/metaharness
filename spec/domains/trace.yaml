@@ -654,8 +654,7 @@ commands:
         # are the opening model and the sub-agent's request model, with no
         # per-model figure; tool_calls are the session's two calls and the
         # sub-agent's one, in document order, and only the Bash result states
-        # is_error; the timestamps are the first node's and the last node's, the
-        # sub-agent's last record; unk 1 is the VENDOR_SUBAGENT warning.
+        # is_error; unk 1 is the VENDOR_SUBAGENT warning.
         payload:
           metaharness.trace.SessionSummarized:
             format: '"trace-ir-summary/1"'
@@ -674,7 +673,7 @@ commands:
             duration_ms: 'null'
             duration_api_ms: 'null'
             first_timestamp_ms: '1793178000000'
-            last_timestamp_ms: '1793178005900'
+            last_timestamp_ms: '1793178008000'
             is_error: 'null'
             stop_reason: 'null'
             tool_calls: '[{"answered":true,"call_id":"toolu_fixture_01","error":false,"name":"Bash"},{"answered":true,"call_id":"toolu_fixture_02","error":null,"name":"Agent"},{"answered":true,"call_id":"toolu_fixture_11","error":null,"name":"Read"}]'

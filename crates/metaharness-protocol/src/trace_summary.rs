@@ -97,7 +97,9 @@ pub struct TraceIrSummary {
     pub duration_api_ms: Option<u64>,
     /// The first node `timestamp_ms` that is not `null`, in document order.
     pub first_timestamp_ms: Option<i64>,
-    /// The last node `timestamp_ms` that is not `null`, in document order.
+    /// The latest node `timestamp_ms` that is not `null`: where the document's order is not the
+    /// clock's (a session's sub-agent blocks follow its own records), the record ends at its latest
+    /// stamp, not its last one (ADV-SJ-1).
     pub last_timestamp_ms: Option<i64>,
     /// The terminal node's `is_error`.
     pub is_error: Option<bool>,
@@ -207,7 +209,7 @@ pub fn summarize(document: &TraceIrDocument) -> TraceIrSummary {
         duration_ms: count(terminal, "duration_ms"),
         duration_api_ms: count(terminal, "duration_api_ms"),
         first_timestamp_ms: stamps().next(),
-        last_timestamp_ms: stamps().next_back(),
+        last_timestamp_ms: stamps().max(),
         is_error: terminal.and_then(|node| node["is_error"].as_bool()),
         stop_reason: text(terminal, "stop_reason"),
         tool_calls,
@@ -480,8 +482,10 @@ mod tests {
         assert_eq!(summary.first_timestamp_ms, Some(10));
         assert_eq!(
             summary.last_timestamp_ms,
-            Some(20),
-            "the last stated timestamp in document order, not the largest"
+            Some(30),
+            "the latest stated timestamp, not the last in document order: a document whose \
+             order is not the clock's (a session's sub-agent blocks follow its own records) \
+             ends at its latest record (ADV-SJ-1)"
         );
     }
 

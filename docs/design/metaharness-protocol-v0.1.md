@@ -3827,7 +3827,7 @@ node 0 when its family is `session_start`.
 | `duration_ms` | integer or `null` | `run_outcome`, the terminal node | `duration_ms` | the same |
 | `duration_api_ms` | integer or `null` | `run_outcome`, the terminal node | `duration_api_ms` | the same |
 | `first_timestamp_ms` | integer or `null` | any node | the node's own `timestamp_ms`, the first non-`null` one in document order | no node carries a parsed timestamp |
-| `last_timestamp_ms` | integer or `null` | any node | the node's own `timestamp_ms`, the last non-`null` one in document order | the same |
+| `last_timestamp_ms` | integer or `null` | any node | the node's own `timestamp_ms`, the latest non-`null` one, whatever its place in document order (a63 point 9) | the same |
 | `is_error` | boolean or `null` | `run_outcome`, the terminal node | `is_error` | no terminal node, or the vendor did not say |
 | `stop_reason` | string or `null` | `run_outcome`, the terminal node | `stop_reason` | the same |
 | `tool_calls` | list | `tool_call`, every node in order; `tool_result` | see below | never; `[]` when there is no `tool_call` node |
@@ -5357,7 +5357,7 @@ parent's `Agent` result carries `toolUseResult.agentId`, and the meta file carri
 the local sessions checked, both named the same call for every sub-agent. A nested sub-agent's
 spawning call is in a sibling sub-agent file, so links are collected across all files first. The
 reader takes the result's link first and the meta file's second. Each sub-agent's events are
-appended after the session's own, in file-name order, and each block opens with one `warning`
+appended after the session's own, in the order point 9 states, and each block opens with one `warning`
 whose code is `VENDOR_SUBAGENT`. Its message has a fixed shape: ``sub-agent `<id>` spawned by call
 `<call id>`, read from `<session>/subagents/<file>` (sha256:<digest of that file>)``. When neither
 link exists it says `spawned by no recorded call`. Every node of a block cites the session file's
@@ -5382,5 +5382,45 @@ types the protocol has no word for (`attachment`, `api-request`, `queue-operatio
 `system/compact_boundary` and others) are `opaque`. Mapping any of them is a later story's
 measurement.
 
-Event wire: one new warning code, `VENDOR_SUBAGENT`. No new event name, no field change, and no
-frame wire change.
+**9. Corrections after the adversary (2026-10-28).** The adversary read 528 local sessions through
+the first cut and found five defects; each is corrected here and held by a named case.
+
+- *The summary's end* (ADV-SJ-1). Sub-agent blocks follow the session's own records, so the last
+  stamp in document order was a sub-agent's, earlier than the session's last record in 329 of 528
+  documents. `trace-ir-summary/1`'s `last_timestamp_ms` is the **latest** stamp of any node, not the
+  last in document order (§ the summary's field table). For a document in clock order the two are
+  the same number. The pinned `claude-code-session` summary moves from `1793178005900` to
+  `1793178008000`, the session's own last record.
+- *Copied records* (ADV-SJ-2). A sub-agent file can repeat records of a file read before it (426
+  call ids in 9 of 528 sessions, each copy with its `requestId`), so a request was billed once and
+  its call listed twice. A record whose `uuid` an earlier file already gave is dropped, and so is
+  a record, under any `uuid`, whose every call key (`tool_use` id, `tool_result` `tool_use_id`) an
+  earlier file already gave: a call id names one call, and 56 of the 426 ids were repeated under a
+  new `uuid`. The first occurrence is kept. Copies are told apart across files only; repeats
+  inside one file are read as written. The block it was dropped from says how many, appended to
+  its warning: ``; <n> records already read from an earlier file dropped`` (`1 record` for one).
+  The suffix is absent when nothing was dropped, so the point 5 shape is unchanged for every other
+  block.
+- *Block order* (ADV-SJ-3). File-name order put a nested block before the call that spawned it
+  whenever the child's random id sorted first (237 blocks). Blocks are written depth-first by spawn
+  position: a block's parent is the file that requests its spawning call, among one parent's blocks
+  the earlier call goes first, and each block is followed by the blocks it spawned before its next
+  sibling. Blocks whose call no file requests follow, by sub-agent id, each with what it spawned;
+  blocks caught in a cycle of links come last, the same way. The order the files are found in
+  moves nothing.
+- *A spawn without its file* (ADV-SJ-5). 296 spawn results named a sub-agent with no file and left
+  no mark. The result's events are now followed, once per sub-agent, by one `warning` whose code is
+  `VENDOR_SUBAGENT_MISSING`: ``sub-agent `<id>` spawned by call `<call id>` has no file:
+  `<session>/subagents/agent-<id>.jsonl` is absent``. It cites the result's line and opens no block.
+- *A cut inside a character* (ADV-SJ-4). A session file whose bytes are not UTF-8 was refused whole
+  while a sub-agent file was decoded lossily. The session file is now decoded the same way, so a
+  session cut inside a multi-byte character is read up to the cut and the cut line is `opaque` at
+  its line, its digest over the decoded line. `transcript_digest` stays over the bytes. The other
+  three `--from` formats still refuse a record that is not UTF-8.
+
+Not corrected here: peak memory is about 4.8 times the input (6.95 GB resident on a 1.46 GB session
+with its sub-agent files, ADV-SJ-6), because the reader holds every file's text and every event
+before it frames one. Streaming the read is a later change.
+
+Event wire: two new warning codes, `VENDOR_SUBAGENT` and `VENDOR_SUBAGENT_MISSING`. No new event
+name, no field change, and no frame wire change.
