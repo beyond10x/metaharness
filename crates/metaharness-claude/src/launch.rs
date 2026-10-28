@@ -917,20 +917,7 @@ pub fn plan_launch(spec: &RunSpec, context: &LaunchContext) -> Result<LaunchPlan
         });
     }
 
-    // `loopback` is exempt: under it the declared endpoint is not the child's base URL at all —
-    // it is the **proxy's upstream**, one hop further out — and the child holds a placeholder
-    // either way. The row exists to stop an operator credential travelling to a foreign host, and
-    // a loopback run has no credential in the child to travel.
-    if let Some(endpoint) = &spec.model_endpoint
-        && !matches!(
-            spec.credentials,
-            CredentialSource::None | CredentialSource::Loopback
-        )
-    {
-        return Err(LaunchRefusal::EndpointWithCredential {
-            endpoint: endpoint.clone(),
-        });
-    }
+    guard_endpoint_credential(spec)?;
     guard_loopback(spec, context)?;
 
     let config_home = context.scratch_root.join(CONFIG_HOME);
@@ -1129,6 +1116,33 @@ fn scratch_registry_files(
         });
     }
     Ok(files)
+}
+
+/// A model endpoint beside a credential the child would hold, refused from the spec alone.
+///
+/// Public because `metaharness::check_spec` raises it before anything starts (design amendment
+/// a64); [`plan_launch`] keeps the check.
+///
+/// # Errors
+///
+/// [`LaunchRefusal::EndpointWithCredential`] when `--model-endpoint` is declared with
+/// `--credentials operator-login` or `api-key`.
+pub fn guard_endpoint_credential(spec: &RunSpec) -> Result<(), LaunchRefusal> {
+    // `loopback` is exempt: under it the declared endpoint is not the child's base URL at all —
+    // it is the **proxy's upstream**, one hop further out — and the child holds a placeholder
+    // either way. The row exists to stop an operator credential travelling to a foreign host, and
+    // a loopback run has no credential in the child to travel.
+    if let Some(endpoint) = &spec.model_endpoint
+        && !matches!(
+            spec.credentials,
+            CredentialSource::None | CredentialSource::Loopback
+        )
+    {
+        return Err(LaunchRefusal::EndpointWithCredential {
+            endpoint: endpoint.clone(),
+        });
+    }
+    Ok(())
 }
 
 /// The mode this run asked for against the mode table this adapter publishes.

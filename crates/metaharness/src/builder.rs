@@ -1846,17 +1846,25 @@ fn resolve_frame(in_memory: Option<Frame>, spec: &RunSpec) -> Result<Option<Fram
     Ok(Some(frame))
 }
 
-/// Everything a spec can be refused for, in one place, so both faces refuse identically.
+/// Everything a spec can be refused for, in one place, so every face refuses identically: the
+/// builder, the CLI and a caller that read a run-spec document (design amendment a64).
 ///
 /// `spec.frame` is deliberately not here: since amendment a5 a frame document is resolved, not
 /// refused, and its failures ([`Refusal::FrameUnreadable`], [`Refusal::FrameInvalid`]) can only
 /// be raised by the resolution itself.
 ///
+/// The per-kind refusals an adapter decides from the spec alone are raised here too, in the
+/// adapter's words and mapped as its launch maps them (a64): Codex's `--max-turns`,
+/// `--max-budget-usd`, `--catalogue` and `--tool-surface owned`
+/// ([`metaharness_codex::unsupported_options`]), and a model endpoint beside a credential the child
+/// would hold, on Claude and Codex (`guard_endpoint_credential` in each). Each launch keeps its own
+/// check.
+///
 /// # Errors
 ///
 /// [`Refusal::NoAdapter`], [`Refusal::ToolSurfaceOwned`], [`Refusal::CatalogueNotCarried`],
 /// [`Refusal::CatalogueNeedsOwnedSurface`] or [`Refusal::CatalogueWithAllowProgram`], among the
-/// others below.
+/// others below, and [`Refusal::Launch`] carrying an adapter's refusal.
 pub fn check_spec(spec: &RunSpec) -> Result<(), Refusal> {
     // A declaration about a directory nobody named (amendment a27). Refused on every kind rather
     // than ignored: a flag that is read nowhere is a run that differs from what was asked for and
@@ -1935,6 +1943,16 @@ pub fn check_spec(spec: &RunSpec) -> Result<(), Refusal> {
     if confinement_asked_for && spec.kind != Kind::B10x {
         return Err(Refusal::ConfinementUnsupported { kind: spec.kind });
     }
+    // Two drivers for one confinement. The command line refuses the pair (`conflicts_with`); the
+    // builder and a run-spec document reach here without clap, and the launch would take the
+    // socket and drop the other in silence (amendment a64).
+    if spec.substrate.is_some() && spec.substrate_embedded {
+        return Err(Refusal::Launch {
+            detail: "--substrate names a daemon socket and --substrate-embedded holds the driver \
+                     in this process: two drivers for one confinement. Name one"
+                .to_owned(),
+        });
+    }
     // A dialect and a subscription token are the b10x loop's, because it is the only harness with
     // a choice of wire and the only one metaharness points at a credential rather than copying
     // one. Refused by name on the others rather than accepted and dropped: a flag that is read
@@ -1971,6 +1989,29 @@ pub fn check_spec(spec: &RunSpec) -> Result<(), Refusal> {
         && spec.kind != Kind::B10x
     {
         return Err(Refusal::ScopeUnsupported { kind: spec.kind });
+    }
+    // Last, so every refusal above keeps the variant it had; Codex's `--catalogue` and owned
+    // surface are already refused above by name.
+    adapter_spec_refusals(spec)
+}
+
+/// What the adapter refuses from the spec alone, in its words and mapped as its launch maps them,
+/// so a caller hears it before anything starts (amendment a64). The reasons stay in the adapter
+/// (invariant 2) and its launch keeps the check.
+fn adapter_spec_refusals(spec: &RunSpec) -> Result<(), Refusal> {
+    match spec.kind {
+        Kind::Claude => {
+            metaharness_claude::guard_endpoint_credential(spec)
+                .map_err(Refusal::from_claude_launch)?;
+        }
+        Kind::Codex => {
+            metaharness_codex::unsupported_options(spec)
+                .and_then(|()| metaharness_codex::guard_endpoint_credential(spec))
+                .map_err(|refusal| Refusal::Launch {
+                    detail: refusal.to_string(),
+                })?;
+        }
+        Kind::B10x => {}
     }
     Ok(())
 }

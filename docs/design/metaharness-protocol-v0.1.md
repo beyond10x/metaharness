@@ -5425,6 +5425,97 @@ before it frames one. Streaming the read is a later change.
 Event wire: two new warning codes, `VENDOR_SUBAGENT` and `VENDOR_SUBAGENT_MISSING`. No new event
 name, no field change, and no frame wire change.
 
+### Amendment a64 — a session request is a run-spec document, and `check_spec` refuses what the kind does not take (2026-10-28)
+
+`story:run-spec-document`. The consumer is a caller that holds a run's settings as data: takt's
+run file has a `harness` section, which takt reads through Loom, and Loom takes the `metaharness`
+crate without `clap`. Until now `RunSpec` had two spellings, the builder and the flags (D11). A
+caller holding a mapping had to spell an argv, or rely on the Rust field names `Serialize` writes,
+and with no `deny_unknown_fields` those drop an unknown key in silence.
+
+**1. The document.** `RunSpec::from_document_str(&str)` and
+`RunSpec::from_document(&serde_json::Value)` are in `metaharness-protocol`. They add no dependency
+(invariant 1) and need no `clap`. A document is a JSON object, and its keys are
+`RunSpec::DOCUMENT_KEYS`: the run verb's long flags without their dashes, `kind` (the positional)
+and `auditor-args`, the arguments after `--`. With `auditor-args` the document can express every
+field the command line can. Values take the flag's own vocabulary:
+
+- an enum flag takes its word as clap derives it (`hermetic: "strict"`, `credentials: "api-key"`);
+- a boolean flag takes a JSON boolean, and a repeatable flag an array of strings;
+- `max-turns` takes a JSON whole number in `u32`;
+- every other flag takes a string. `plugin` items use `--plugin`'s `<repo>@<name>@<pin>` spelling
+  and are refused as the flag refuses them.
+
+An absent key takes `RunSpec::new(kind)`'s value. The one exception is `catalogue` without
+`tool-surface`, which implies `owned`, as `default_value_if` does on the command line. `null` is
+refused: a caller asks for a default by leaving the key out. `max-budget-usd` takes a string,
+because the flag's value is passed on as written. A JSON number there is refused, and the refusal
+gives the quoted spelling. There is no format tag: the document is a mapping embedded in a
+caller's file.
+
+**2. The refusals.** `RunSpecDocumentError` implements `Display` and `std::error::Error`. Its
+variants are:
+
+- `Malformed { detail }`: the text is not one JSON value;
+- `NotAnObject { found }`;
+- `DuplicateKey { key }`, raised from text only, because a parsed value has already kept one of
+  the two values;
+- `UnknownKey { key }`;
+- `MissingKind`;
+- `BadValue { key, detail }`.
+
+Unknown keys are checked before `kind`, so a misspelt `kind` is reported as the key it is. A
+document reads every key on every kind; whether the kind takes a key is `check_spec`'s question.
+ESS `metaharness.session.RunSpecDocumentRefusal` names these six and `kind-refuses-key`, the
+`check_spec` refusal below. It is a declared type that no command emits yet, as `Qualification`
+is.
+
+**3. Anti-drift.** `crates/metaharness-protocol/tests/run_spec_document.rs` runs three checks under
+the `clap` feature:
+
+- the key list equals the run verb's arguments, each long flag by its long name and each
+  positional by its id;
+- every word clap admits for a value-enum argument reads to the same spec through the command line
+  and through the document;
+- a document naming all 41 keys, and the argv it spells, read to the same spec.
+
+A unit test in the crate holds each word table to the words clap derives, so the document admits no
+word the command line refuses. The other cases build without `clap`, which is how an embedder links
+the crate.
+
+**4. `check_spec`.** The per-kind refusals an adapter decides from the spec alone are now raised by
+`check_spec`, last, in the adapter's words. Each is mapped as the launch maps it: Codex's as
+`Refusal::Launch { detail }`, Claude's through `Refusal::from_claude_launch`. Two adapter checks
+are public now:
+
+- Codex's `unsupported_options`, which refuses `--max-turns` and `--max-budget-usd`. Its
+  `--catalogue` and owned-surface refusals are unreachable from `check_spec`, which raises its own
+  variants for both earlier.
+- `guard_endpoint_credential` in each of the two adapters, taken out of `plan_launch` unchanged. It
+  refuses a model endpoint beside a credential the child would hold.
+
+Both launches still call them. `check_spec` also refuses `--substrate` beside
+`--substrate-embedded`. clap refuses the pair, but the builder and a document do not pass through
+clap. They reached the launch, which took the socket and dropped the other without a word.
+
+**5. What the survey left at launch, and why.**
+
+- `NoPrompt` (both adapters): the prompt can arrive as `Input::Prompt` after a caller's
+  `check_spec`.
+- `DecisionModeUnverified` (both): it depends on the spec alone, but every mode is `delivered` on
+  both descriptors, so a lifted check would be a branch no spec reaches.
+- Every refusal that reads the launch context: the scratch root and cwd, the ancestor walk, the
+  loopback proxy, credential files and environment keys, plugin and marketplace installs, the
+  catalogue copy and tool server, the context files read, and the argv and environment guards.
+- The b10x launch's spec-only refusals: a missing `--model-endpoint` or `--model`,
+  `--credentials operator-login` and `loopback`, the subscription-token and secret pairings, and an
+  unknown `--model-wire`. They live in the core crate's `b10x_launch` and `b10x_credential`, not in
+  an adapter crate, and lifting them changes those functions. That is left to a later story.
+
+**Review.** Pending when this was written. The adversary's findings are recorded here when they
+arrive.
+
+Event wire, frame wire and command wire: unchanged. `RunSpec`'s serde form is unchanged.
 ### Amendment a65 — the `--version` probe waits a minute, and an exited binary is drained for five seconds (2026-10-28)
 
 `story:version-probe-under-load`, finding F4 of the takt 0.17.0 trial: at load average 33 to 63 a

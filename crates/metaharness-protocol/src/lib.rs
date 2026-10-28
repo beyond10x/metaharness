@@ -38,6 +38,7 @@ mod plugin;
 mod projection;
 mod seam;
 mod spec;
+mod spec_document;
 mod trace_ir;
 mod trace_summary;
 
@@ -87,6 +88,7 @@ pub use spec::{
     context_matches_declaration, context_path, oversized_argument, render_context_files,
     with_context_files,
 };
+pub use spec_document::RunSpecDocumentError;
 pub use trace_ir::{
     AdapterRef, AssistantRequest, CLOSED_FAMILY, IR_ADAPTER, IR_FORMAT, MetaharnessBlock,
     StreamClose, TraceIrDocument, TraceIrEvent, UNK_FAMILY, UNK_REASON, parse_timestamp_ms,
