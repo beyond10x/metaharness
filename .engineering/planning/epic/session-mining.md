@@ -2,14 +2,17 @@
 format: aep.planning-md/3
 id: epic:session-mining
 kind: epic
-status: draft
+status: active
 title: Mine recorded agent sessions into composition and protocol proposals
 tags:
 - trace
 refs:
 - provider: atlas
   reference: adr-0088
-revision: 1
+revision: 3
+transitions:
+- {from: "draft", to: "proposed", at: "2026-10-28T10:35:40Z", actor: "human:timo", revision: 2}
+- {from: "proposed", to: "active", at: "2026-10-28T10:35:40Z", actor: "human:timo", revision: 3}
 ---
 ## Status
 
