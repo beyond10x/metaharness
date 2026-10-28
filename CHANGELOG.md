@@ -12,6 +12,7 @@ was amended and the amendment is named here.
 
 ### Fixed
 
+- The `--version` probe of `--strict-version` (Claude and Codex) and `qualify` waits 60 s instead of 5 s, so a pinned binary that answers slowly on a loaded machine is admitted rather than refused as timed out (takt 0.17.0 trial finding F4, at load average 33 to 63). Once the binary has exited, its stdout is drained for at most 5 s more, so a process it left behind holding the pipe no longer holds the probe; a binary that never exits is still killed and refused by name (amendment a65, story:version-probe-under-load).
 - `claude-code-session` corrections after the adversary (amendment a63 point 9): sub-agent blocks follow their spawning calls depth-first by spawn position instead of file-name order; a record a sub-agent file copies from a file read before it (same `uuid`, or the same calls under any `uuid`) is read once and the block's `VENDOR_SUBAGENT` warning counts the copies dropped; a session file that is not UTF-8 is decoded lossily like its sub-agent files, so a cut inside a character is `opaque` at its line instead of refusing the whole session.
 - `trace-ir-summary/1`'s `last_timestamp_ms` is the latest stamp of any node, not the last in document order, so a session summary ends at the session's own last record and not at an earlier sub-agent's. The pinned `claude-code-session` summary moves from `1793178005900` to `1793178008000`.
 

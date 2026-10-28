@@ -2745,7 +2745,7 @@ read the flag; the off-pin version was first seen in the opening record, after t
 prompt. It now resolves the binary on the child's own `PATH`, the way the spawn does, reads its
 `--version` with the plan's environment (no model call, no operator config home), and refuses before
 any file is written for the child when the version is not pinned or not readable. The probe has a
-deadline of 5 seconds: a binary whose `--version` has not exited by then is killed and reaped, and
+deadline of 5 seconds *(a65: a minute, plus at most 5 seconds of draining after the binary exits)*: a binary whose `--version` has not exited by then is killed and reaped, and
 the run is refused by name (*"its --version did not exit within 5000 ms and was killed"*). A runner
 that launches no executable reports no version, and strict refuses, as the b10x launch does.
 Observed: 2.1.303 refused under both credential-free modes, nothing reaching the stub. **Recorded,
@@ -5424,3 +5424,29 @@ before it frames one. Streaming the read is a later change.
 
 Event wire: two new warning codes, `VENDOR_SUBAGENT` and `VENDOR_SUBAGENT_MISSING`. No new event
 name, no field change, and no frame wire change.
+
+### Amendment a65 — the `--version` probe waits a minute, and an exited binary is drained for five seconds (2026-10-28)
+
+`story:version-probe-under-load`, finding F4 of the takt 0.17.0 trial: at load average 33 to 63 a
+pinned Claude Code binary did not answer `--version` within the 5 seconds a33 gave it, so
+`--strict-version` refused a binary that was only slow. Claude Code's `--version` starts a Node
+runtime, and its start time on a loaded machine is not bounded by the binary.
+
+1. `VERSION_PROBE_DEADLINE` is 60 seconds, up from 5, for every caller: `--strict-version` on the
+   Claude and Codex launches (a33, a34) and `qualify`. A binary that has not exited by then is still
+   killed, reaped and refused by name. The probe stays on the launch path: `--strict-version` reads
+   the binary it is about to start, and a cache keyed on a path would read a binary that may have
+   been replaced since.
+2. The deadline alone would let a process the binary left behind hold the stdout pipe for the
+   whole minute after the binary exited (the case of `qualify_adv1`'s
+   `a_version_whose_child_keeps_stdout_open_still_meets_the_deadline`). Once the binary has exited,
+   the read waits for end of file at most `VERSION_DRAIN_GRACE`, 5 seconds, longer and never past
+   the deadline, then takes what the binary wrote: what it printed before exiting is already in the
+   pipe, and output a leftover process writes later is not its answer. Before, that case read as
+   timed out; it now reads the version printed before the exit.
+3. The reader keeps at most 64 KiB of stdout and drains the rest, so a child that writes without
+   end is neither left blocked on the pipe nor buffered without bound. Stdout that is not UTF-8 is
+   decoded lossily instead of reading as unreadable; the version token is ASCII either way.
+
+Not changed: a non-zero exit is unreadable, a version printed only on stderr is unread, and the
+refusal texts are the same.
