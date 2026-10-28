@@ -1728,6 +1728,14 @@ fn vendor_emissions(source: &str, relative: &str, record: &[u8], text: &str) -> 
     };
     let attestation = HermeticAttestation::none(HermeticMode::Off);
     match source {
+        "claude-code-session" => {
+            let subagents = metaharness::read_subagents(&repository_root().join(relative)).unwrap();
+            metaharness::SessionReader::new(transcript, attestation)
+                .read(text, &subagents)
+                .into_iter()
+                .map(|(_, emission)| emission)
+                .collect()
+        }
         "claude-code-stream-json" => {
             let mut seam = metaharness::ClaudeSeams.build(transcript, attestation, Seam::None);
             read_record(
@@ -1763,6 +1771,11 @@ fn vendor_emissions(source: &str, relative: &str, record: &[u8], text: &str) -> 
     }
 }
 
+/// The committed synthetic Claude Code session, whose sub-agent file sits beside it
+/// (story:session-jsonl-adapter).
+const SESSION_FIXTURE: &str =
+    "crates/metaharness-claude/fixtures/golden/session/5e551011-0000-4000-8000-000000000001.jsonl";
+
 /// `metaharness.trace.NormalizeRecord`: a committed golden vendor record through its production
 /// reader, framed by the production `EventStream`, then `project_document`. The recorded
 /// `metaharness.event/1` stream needs no reader, and that is observed from its first line rather
@@ -1770,6 +1783,7 @@ fn vendor_emissions(source: &str, relative: &str, record: &[u8], text: &str) -> 
 fn normalize(input: &Value) -> Observed {
     let source = input["source"].as_str().unwrap();
     let relative = match source {
+        "claude-code-session" => SESSION_FIXTURE,
         "claude-code-stream-json" => "crates/metaharness-claude/fixtures/golden/transcript.jsonl",
         "codex-rollout" => "crates/metaharness-codex/fixtures/golden/rollout.jsonl",
         "harness-json" => "crates/metaharness-b10x/fixtures/golden/loop.jsonl",
@@ -1813,8 +1827,13 @@ fn normalize(input: &Value) -> Observed {
     let opening = &document.events[0].kind;
     let opening_family = opening["event"].as_str().unwrap().to_owned();
     let adapter = opening["adapter"].as_str().unwrap_or_default().to_owned();
+    // The two Claude readers write the same adapter id; what tells their openings apart is
+    // observed on the node: `stream-json` opens with the vendor's `system/init`, which lists the
+    // offered tools, and a session file records no such list, so its opening states none.
+    let offered_tools_stated = !opening["offered_tools"].is_null();
     let outcome = match (adapter.as_str(), already_wire) {
         (_, true) => "event-stream-projected",
+        ("claude", false) if !offered_tools_stated => "claude-session-normalized",
         ("claude", false) => "claude-transcript-normalized",
         ("codex", false) => "codex-rollout-normalized",
         ("b10x", false) => "harness-record-normalized",
@@ -1859,6 +1878,7 @@ fn project_vendor_record(input: &Value) -> Observed {
         metaharness::VendorSource::HarnessJson => {
             "crates/metaharness-b10x/fixtures/golden/loop.jsonl"
         }
+        metaharness::VendorSource::ClaudeCodeSession => SESSION_FIXTURE,
     };
     let path = repository_root().join(relative);
     let document = match metaharness::project_vendor_record(&path, vendor) {
@@ -1879,11 +1899,14 @@ fn project_vendor_record(input: &Value) -> Observed {
     let block = &rendered["metaharness"];
     let opening = &rendered["events"][0]["kind"];
     let adapter = opening["adapter"].as_str().unwrap_or_default().to_owned();
-    let outcome = match adapter.as_str() {
-        "claude" => "claude-transcript-projected",
-        "codex" => "codex-rollout-projected",
-        "b10x" => "harness-record-projected",
-        other => panic!("the opening node names an undeclared adapter {other}"),
+    // The two Claude readers share an adapter id, so the Claude outcome is named from the
+    // document's own `metaharness.source` as well; both are read off the render, never the input.
+    let outcome = match (adapter.as_str(), block["source"].as_str()) {
+        ("claude", Some("claude-code-session")) => "claude-session-projected",
+        ("claude", _) => "claude-transcript-projected",
+        ("codex", _) => "codex-rollout-projected",
+        ("b10x", _) => "harness-record-projected",
+        (other, _) => panic!("the opening node names an undeclared adapter {other}"),
     };
     // The adapter's own committed expectation for the same record, through the wire-case writer:
     // the census a replay owes is the census the reader owes, and nothing more.
@@ -1932,6 +1955,7 @@ fn summarize_record(input: &Value) -> Observed {
                 metaharness::VendorSource::HarnessJson => {
                     "crates/metaharness-b10x/fixtures/golden/loop.jsonl"
                 }
+                metaharness::VendorSource::ClaudeCodeSession => SESSION_FIXTURE,
             };
             metaharness::project_vendor_record(&repository_root().join(relative), vendor)
         }
@@ -1957,6 +1981,7 @@ fn summarize_record(input: &Value) -> Observed {
         "claude-code-stream-json" => "claude-transcript-summarized",
         "codex-rollout" => "codex-rollout-summarized",
         "harness-json" => "harness-record-summarized",
+        "claude-code-session" => "claude-session-summarized",
         "metaharness.event/1" => "event-stream-summarized",
         other => panic!("the summary names an undeclared source {other}"),
     };
@@ -2425,7 +2450,7 @@ fn ess_generated_scenarios_drive_production_targets() {
     if external.is_none() {
         assert_eq!(
             scenarios.len(),
-            117,
+            120,
             "review and update coverage deliberately"
         );
         assert_eq!(

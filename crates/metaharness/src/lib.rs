@@ -108,7 +108,9 @@ pub use spawn::{HookChannel, SpawnRunner, SpawnedProcess};
 pub use spawn_codex::{CodexHookChannel, CodexProcess, CodexSpawnRunner};
 // The seam's neutral traits live in the protocol crate and each vendor's half in that vendor's
 // adapter crate; all of them are re-exported here so an embedder needs one import.
-pub use metaharness_claude::{ClaudeSeam, ClaudeSeams};
+pub use metaharness_claude::{
+    ClaudeSeam, ClaudeSeams, SessionReader, SubagentFile, read_subagents,
+};
 pub use metaharness_codex::{CodexSeam, CodexSeams};
 pub use metaharness_protocol::{HarnessSeam, SeamFactory};
 pub use spawn_codex_vectors::spawn_vectors as codex_spawn_vectors;

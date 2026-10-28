@@ -5,6 +5,10 @@ was amended and the amendment is named here.
 
 ## [Unreleased]
 
+### Added
+
+- `metaharness project --from claude-code-session <session>.jsonl` reads a Claude Code session as stored on disk, with the sub-agent transcripts under `<session>/subagents/`, through the new `metaharness_claude::SessionReader` (amendment a63, story:session-jsonl-adapter). The reader shares the `stream-json` reader's message mapping, emits one `usage` per request, and opens each sub-agent's block with a `VENDOR_SUBAGENT` warning that names the spawning call. `SourceKind` gains `claude-code-session`, and `spec/conformance.json` regenerates from 117 to 120 scenarios.
+
 ### Changed
 
 - ESS 0.72.0 is the specification toolchain: both `ess-inputs.yaml` manifests require it and CI installs `ess-cli` from its tag commit `5556839c`, up from 0.70.0 (`077e4ee1`). `spec/conformance.json` regenerates byte-identical, 117 scenarios.

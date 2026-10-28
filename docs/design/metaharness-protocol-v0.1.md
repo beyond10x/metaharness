@@ -5317,3 +5317,70 @@ and Loom's pin hop removes it. No pin moves: moving `PINNED_VERSIONS` to 0.164.0
 
 Event wire: the warning code `version_outside_pin`, which Codex already emitted, is a named constant,
 and Claude emits it too. No frame wire change.
+
+### Amendment a63 — `project --from claude-code-session` reads a Claude Code session as stored on disk (2026-10-28)
+
+`story:session-jsonl-adapter`, the first part of `epic:session-mining` (Atlas ADR 0088). Its first
+consumer is the decider corpus. a28 named the on-disk session a different format from `stream-json`
+and left it out of scope.
+
+**1. The source kind.** `--from claude-code-session` reads `<session>.jsonl` through
+`metaharness_claude::SessionReader`, and `SourceKind` in `spec/domains/trace.yaml` gains the same
+name. a28's rules hold: the document's `metaharness.source` is the name, its `transcript_digest` is
+over the session file's bytes, the attestation claims nothing, every `tool.requested` carries
+`Seam::None`, nobody closes the stream, and a file whose reader does not open with
+`session.started` is refused, exit 2.
+
+**2. The reader shares the message mapping.** The `user` and `assistant` records of a session file
+carry the same inner `message` as `stream-json`. `transcript.rs` exposes that mapping once
+(`assistant_blocks`, `message_usage`, `user_message`), and both readers call it. The envelope
+differs, and the session reader reads its own spellings: `requestId`, `toolUseResult` and `isMeta`,
+which marks text the harness added (origin `synthetic`). The reader is total by construction, as
+D4 requires. Every record yields at least one event, a record with no mapping is `opaque` with its
+digest and line, unknown fields are ignored, and no clock is read.
+
+**3. The opening is assembled, and nothing ends.** A session file has no `system/init` and no
+`result` record. `session.started` is emitted before the first record's own events and is filled
+from the first record carrying `sessionId`, `version`, `cwd` and `permissionMode`, and from the
+first assistant `message.model`. Every other field is `None`, because the file does not say. No
+`sessionId` anywhere means no opening, and the verb refuses the file. A session file has no
+`session.ended`, so a summary of it states no turns, no token totals and no cost.
+
+**4. One usage per request.** The vendor writes one record per content block and repeats the
+response's `usage` on each. On local sessions read 2026-10-28, 1,329 of 1,329 requests written over
+more than one record repeated one identical block. `usage` is emitted on the first record of each
+`requestId`.
+
+**5. Sub-agents.** Claude Code stores each sub-agent as `<session>/subagents/agent-<id>.jsonl`,
+optionally with `agent-<id>.meta.json`. Two links to the spawning call are in the files: the
+parent's `Agent` result carries `toolUseResult.agentId`, and the meta file carries `toolUseId`. On
+the local sessions checked, both named the same call for every sub-agent. A nested sub-agent's
+spawning call is in a sibling sub-agent file, so links are collected across all files first. The
+reader takes the result's link first and the meta file's second. Each sub-agent's events are
+appended after the session's own, in file-name order, and each block opens with one `warning`
+whose code is `VENDOR_SUBAGENT`. Its message has a fixed shape: ``sub-agent `<id>` spawned by call
+`<call id>`, read from `<session>/subagents/<file>` (sha256:<digest of that file>)``. When neither
+link exists it says `spawned by no recorded call`. Every node of a block cites the session file's
+last line, as an event a reader owes at end of record does (a28), so `source_line` stays a line of
+the one file the document names. An `opaque` event inside a block carries its own line of the
+sub-agent file, which the block's warning names.
+
+**6. Unpinned.** The session file is not a format any pinned binary was qualified on. The reader
+was written against the field names of local sessions recorded by Claude Code 2.1.294 to 2.1.309,
+and it emits no `version_outside_pin` warning (invariant 4: labelled unverified).
+
+**7. The specification.** `NormalizeRecord`, `ProjectVendorRecord` and `SummarizeRecord` each gain a
+`claude-code-session` outcome over the hand-written fixture under
+`crates/metaharness-claude/fixtures/golden/session/`. The suite moves from 117 to 120 scenarios. The
+two Claude readers write one adapter id, so the target tells them apart by observation: under
+`NormalizeRecord` by whether the opening states `offered_tools`, under `ProjectVendorRecord` by the
+document's `metaharness.source`.
+
+**8. Open.** The link is a warning's message, not a typed field: putting it in a field means
+changing the event wire, which every consumer verifies, so it is left to a later decision. Record
+types the protocol has no word for (`attachment`, `api-request`, `queue-operation`,
+`system/compact_boundary` and others) are `opaque`. Mapping any of them is a later story's
+measurement.
+
+Event wire: one new warning code, `VENDOR_SUBAGENT`. No new event name, no field change, and no
+frame wire change.

@@ -136,7 +136,8 @@ pub struct ProjectArgs {
     pub events: Vec<std::path::PathBuf>,
     /// Read every record given as a vendor record of this format, through the adapter's own
     /// reader, instead of as a `metaharness.event/1` stream (design amendment a28):
-    /// `claude-code-stream-json`, `codex-rollout` or `harness-json`.
+    /// `claude-code-stream-json`, `codex-rollout`, `harness-json` or `claude-code-session` (a Claude
+    /// Code session as stored on disk, with the sub-agent files beside it, amendment a63).
     ///
     /// A string the library parses rather than a `clap` enum, so an unknown name is refused once,
     /// by the library, in the same words on both faces (design D11).

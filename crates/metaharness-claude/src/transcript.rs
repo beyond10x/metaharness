@@ -27,7 +27,7 @@ use serde_json::{Map, Value};
 use crate::ADAPTER_ID;
 
 /// One vendor record, already parsed.
-type Record = Map<String, Value>;
+pub(crate) type Record = Map<String, Value>;
 
 /// The vendor's own words for a credential that aged out, read from the 2.1.239 binary.
 ///
@@ -296,64 +296,9 @@ impl TranscriptReader {
             return Vec::new();
         };
         let request_id = str_field(record, "request_id");
-        let mut events = Vec::new();
-        for block in blocks(message) {
-            events.push(self.content_block(block, request_id.as_ref(), source_line));
-        }
-        if let Some(reported) = message.get("usage") {
-            events.push(Event::Usage {
-                request_id,
-                model: str_field(message, "model"),
-                usage: usage(reported),
-            });
-        }
+        let mut events = assistant_blocks(message, request_id.as_ref(), self.seam, source_line);
+        events.extend(message_usage(message, request_id));
         events
-    }
-
-    /// One content block. An unrecognised block is `opaque` rather than skipped: a block that
-    /// produced nothing has vanished as surely as a record that did.
-    fn content_block(&self, block: &Value, request_id: Option<&String>, source_line: u64) -> Event {
-        let kind = block
-            .get("type")
-            .and_then(Value::as_str)
-            .unwrap_or_default();
-        match kind {
-            "text" => Event::Text {
-                text: text_of(block, "text"),
-                request_id: request_id.cloned(),
-            },
-            "thinking" => Event::Thinking {
-                text: text_of(block, "thinking"),
-                request_id: request_id.cloned(),
-            },
-            "tool_use" => Event::ToolRequested {
-                // Left empty here on purpose, exactly as `operations` is: what a call touches is
-                // resolved by whoever holds the run's published rendering, and an adapter that
-                // answered for itself would be a second owner of one rule (design § 8.4 O6).
-                subjects: Vec::new(),
-                // Left empty here on purpose: the resolution needs the adapter\'s *published*
-                // rendering, which the loop holds and an adapter must not (design § 8.4 O6).
-                operations: Vec::new(),
-                call_id: block
-                    .get("id")
-                    .and_then(Value::as_str)
-                    .unwrap_or_default()
-                    .to_string(),
-                name: block
-                    .get("name")
-                    .and_then(Value::as_str)
-                    .unwrap_or_default()
-                    .to_string(),
-                input: block.get("input").cloned().unwrap_or(Value::Null),
-                // The record this reader is holding is a call the vendor already dispatched, so
-                // nothing about it can block. The *blocking* `tool.requested` is the seam's, and
-                // its `deadline_ms` is armed when the embedder is handed it (design § 7.7 rule 5).
-                decision_required: false,
-                deadline_ms: None,
-                seam: self.seam,
-            },
-            _ => opaque_value(block, Some("assistant"), Some(kind), source_line),
-        }
     }
 
     /// The credential aged out mid-run, in the vendor's own words.
@@ -524,6 +469,83 @@ fn rate_limit(record: &Record) -> Vec<Event> {
     }]
 }
 
+/// The content blocks of one assistant `message`, in order, as events.
+///
+/// **The message mapping both envelopes share.** `stream-json` and the on-disk session file
+/// (`crate::session`) carry the same inner `message`; only the envelope around it differs, so the
+/// envelope's spelling of the request id is read by the caller and handed in.
+pub(crate) fn assistant_blocks(
+    message: &Record,
+    request_id: Option<&String>,
+    seam: Seam,
+    source_line: u64,
+) -> Vec<Event> {
+    blocks(message)
+        .iter()
+        .map(|block| content_block(block, request_id, seam, source_line))
+        .collect()
+}
+
+/// The `usage` event one assistant `message` owes, where it reports usage.
+pub(crate) fn message_usage(message: &Record, request_id: Option<String>) -> Option<Event> {
+    message.get("usage").map(|reported| Event::Usage {
+        request_id,
+        model: str_field(message, "model"),
+        usage: usage(reported),
+    })
+}
+
+/// One content block. An unrecognised block is `opaque` rather than skipped: a block that
+/// produced nothing has vanished as surely as a record that did.
+fn content_block(
+    block: &Value,
+    request_id: Option<&String>,
+    seam: Seam,
+    source_line: u64,
+) -> Event {
+    let kind = block
+        .get("type")
+        .and_then(Value::as_str)
+        .unwrap_or_default();
+    match kind {
+        "text" => Event::Text {
+            text: text_of(block, "text"),
+            request_id: request_id.cloned(),
+        },
+        "thinking" => Event::Thinking {
+            text: text_of(block, "thinking"),
+            request_id: request_id.cloned(),
+        },
+        "tool_use" => Event::ToolRequested {
+            // Left empty here on purpose, exactly as `operations` is: what a call touches is
+            // resolved by whoever holds the run's published rendering, and an adapter that
+            // answered for itself would be a second owner of one rule (design § 8.4 O6).
+            subjects: Vec::new(),
+            // Left empty here on purpose: the resolution needs the adapter\'s *published*
+            // rendering, which the loop holds and an adapter must not (design § 8.4 O6).
+            operations: Vec::new(),
+            call_id: block
+                .get("id")
+                .and_then(Value::as_str)
+                .unwrap_or_default()
+                .to_string(),
+            name: block
+                .get("name")
+                .and_then(Value::as_str)
+                .unwrap_or_default()
+                .to_string(),
+            input: block.get("input").cloned().unwrap_or(Value::Null),
+            // The record this reader is holding is a call the vendor already dispatched, so
+            // nothing about it can block. The *blocking* `tool.requested` is the seam's, and
+            // its `deadline_ms` is armed when the embedder is handed it (design § 7.7 rule 5).
+            decision_required: false,
+            deadline_ms: None,
+            seam,
+        },
+        _ => opaque_value(block, Some("assistant"), Some(kind), source_line),
+    }
+}
+
 /// One user record: tool results, and text the *harness* put in the conversation.
 fn user(record: &Record, source_line: u64) -> Vec<Event> {
     let Some(message) = record.get("message").and_then(Value::as_object) else {
@@ -546,6 +568,19 @@ fn user(record: &Record, source_line: u64) -> Vec<Event> {
     let tool_use_result = record
         .get("tool_use_result")
         .filter(|value| !value.is_null());
+    user_message(message, origin, tool_use_result, source_line)
+}
+
+/// One user `message` as events: the half of the shared message mapping a user record owes.
+///
+/// `origin` and the per-tool result sibling are envelope facts, read by the caller in its own
+/// envelope's spelling and handed in.
+pub(crate) fn user_message(
+    message: &Record,
+    origin: &str,
+    tool_use_result: Option<&Value>,
+    source_line: u64,
+) -> Vec<Event> {
     match message.get("content") {
         Some(Value::String(text)) => vec![Event::Injection {
             text: text.clone(),
@@ -804,7 +839,7 @@ fn blocks(message: &Record) -> &[Value] {
         .map_or(&[], Vec::as_slice)
 }
 
-fn opaque(
+pub(crate) fn opaque(
     raw: &str,
     vendor_type: Option<String>,
     vendor_subtype: Option<String>,
@@ -835,7 +870,7 @@ fn opaque_value(
     )
 }
 
-fn str_field(record: &Record, key: &str) -> Option<String> {
+pub(crate) fn str_field(record: &Record, key: &str) -> Option<String> {
     record
         .get(key)
         .and_then(Value::as_str)

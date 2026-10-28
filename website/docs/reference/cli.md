@@ -290,7 +290,7 @@ published here.
 | Flag | Verb | Meaning |
 |---|---|---|
 | `<EVENTS>...` | `project` | The event stream(s), positional: one, or two under `--html`. |
-| `--from <FORMAT>` | `project` | Read every record given as a vendor record of this format through the adapter's production reader: `claude-code-stream-json`, `codex-rollout` or `harness-json`. Any other name is refused by name; a record that is not the declared format is refused with exit 2 (design amendment a28). |
+| `--from <FORMAT>` | `project` | Read every record given as a vendor record of this format through the adapter's production reader: `claude-code-stream-json`, `codex-rollout`, `harness-json` or `claude-code-session`, a Claude Code session as stored on disk, read with the sub-agent files under `<session>/subagents/` (design amendment a63). Any other name is refused by name; a record that is not the declared format is refused with exit 2 (design amendment a28). |
 | `--out <FILE>` | `project` | Write the `trace-ir/1` document, or under `--to trace-ir-summary` its summary, here instead of to stdout. |
 | `--html <FILE>` | `project` | Render one or two runs as a static two-column page at this path. |
 | `--events <FILE>` | `audit` | The event stream that went with the transcript. |

@@ -52,3 +52,8 @@ paths in release executables. This is a further path redaction, not a new captur
 record order, tool calls and identifiers remain as recorded. Expected streams were regenerated.
 Use workspace feature resolution when regenerating: it matches the released CLI and avoids
 changing floating-point serialization through a different dependency feature selection.
+
+## The exception: `session/`
+
+`session/` is **hand-written**, not recorded. It holds a Claude Code session as stored on disk, read
+by `SessionReader` (design amendment a63), and it says what it is in its own `README.md`.

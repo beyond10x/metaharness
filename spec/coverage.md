@@ -12,14 +12,14 @@ ess verify conform synthesize --path spec --scenarios spec --suite-format 5 --st
 ```
 
 `--scenarios spec` selects the authored scenarios `spec/ess-inputs.yaml` lists;
-without it ESS selects none and writes the 111 generated ones only.
+without it ESS selects none and writes the 114 generated ones only.
 `task check` validates both manifests, checks suite drift, and executes the
 production target in `crates/metaharness-aep/src/drive/ess_conformance.rs`.
 CI installs ESS 0.72.0 from commit
 `5556839c4bed92f6693b75966cd2727583432539`. Use that compiler locally.
 
-The committed count is **117 selected scenarios** (111 generated, 6 authored):
-117 passed, zero failed, skipped, unsupported or synthesis refusals. Unknown suite versions, steps,
+The committed count is **120 selected scenarios** (114 generated, 6 authored):
+120 passed, zero failed, skipped, unsupported or synthesis refusals. Unknown suite versions, steps,
 bindings, shapes and predicates fail closed. The target handles only the
 constructs this suite uses; extending the specification may require extending it.
 
@@ -35,7 +35,7 @@ constructs this suite uses; extending the specification may require extending it
 | Workspace and file containment | The production name predicate and owned tool server operate on a selected directory; an outside symlink is refused. This does not prove process or cgroup isolation. |
 | Context files (`metaharness.workspace.DeclareContextFiles`, amendment a35) | Each probe is a real start of all three kinds over `ScriptedRunner` in a git work tree the target made, whose `.git` is a gitfile naming a sibling git directory. Every refusal production raises (no `--cwd`, an empty path, absolute, `..`, a path that is not UTF-8, symbolic link, not a regular file, not there, not text, untracked, count cap, byte cap: twelve, one outcome each) must come from every kind before the spawn with the same reason, and the target maps the refusal type exhaustively, so a thirteenth fails to compile; the accepted probe reads `session.started.context_files` off each run and compares every digest with the tree's bytes. No vendor process or model starts. |
 | Accounting | Real finite and uncapped policy functions execute. A resumed narrowing (amendment a46) goes through `spending::policy` over a launch record carrying the remembered terms. Ledger views read files written by SpendBudget and AdmissionBudget, including persisted invocation count. |
-| Session format (`trace-ir/1`, domain `metaharness.trace`) | The production projection `project_document` and the three production readers run over committed inputs only: one framed event per wire kind, classified by the node the writer emits; completeness over three marker shapes built through the production `EventStream`; the digest over the framed bytes beside the vendor's reference; the two recorded `evals/aep/runs` streams retained as rendered documents whose view is read back from disk and re-projected; the three golden vendor records normalized through `ClaudeSeams`, `RolloutReader` and `B10xSeams`; the same three records through the verb's own library entry, `metaharness::project_vendor_record` (`metaharness project --from`, amendment a28), with the source name, the record digest, the unclaimed attestation and the census against the adapter's expected stream read off the rendered document, and the event stream's name refused as a `--from`; the same three records and the recorded `decomposer-clean` stream summarized to `trace-ir-summary/1` (`metaharness project --to trace-ir-summary`, amendment a42), every summary field pinned as its rendered JSON text, `null` included. No vendor process or model starts. |
+| Session format (`trace-ir/1`, domain `metaharness.trace`) | The production projection `project_document` and the four production readers run over committed inputs only: one framed event per wire kind, classified by the node the writer emits; completeness over three marker shapes built through the production `EventStream`; the digest over the framed bytes beside the vendor's reference; the two recorded `evals/aep/runs` streams retained as rendered documents whose view is read back from disk and re-projected; the four golden vendor records normalized through `ClaudeSeams`, `RolloutReader`, `B10xSeams` and `SessionReader` (the hand-written Claude Code session with its sub-agent file, amendment a63); the same four records through the verb's own library entry, `metaharness::project_vendor_record` (`metaharness project --from`, amendment a28), with the source name, the record digest, the unclaimed attestation and the census against the adapter's expected stream read off the rendered document, and the event stream's name refused as a `--from`; the same four records and the recorded `decomposer-clean` stream summarized to `trace-ir-summary/1` (`metaharness project --to trace-ir-summary`, amendment a42), every summary field pinned as its rendered JSON text, `null` included. No vendor process or model starts. |
 
 The immutable Recorded entities expose existing observations: a closed stream and
 snapshots of retained finite/admission ledgers. They add no running-session
@@ -316,7 +316,7 @@ Hardening evidence, 2026-10-20, each defect restored and rerun green:
   each killed by two scenarios of the command. Other classes were not claimed.
 
 Two boundaries are stated rather than claimed. The suite does not claim that a
-record other than the three goldens opens with `session.started` under its reader;
+record other than the four goldens opens with `session.started` under its reader;
 a record that does not is refused by the verb (a28 point 4), and
 `crates/metaharness-cli/tests/project.rs` pins every reader over every record that
 is not its own, the recorded event stream included. The verb's exit code (0, or 2
@@ -659,3 +659,19 @@ from 116 to 117 scenarios (111 generated, 6 authored), zero refused:
 
 Every other scenario is unchanged when compared as JSON values. The
 specification and contract digests change.
+
+Amendment a63 (story:session-jsonl-adapter) adds `claude-code-session` to
+`SourceKind`: a Claude Code session as stored on disk, read with the sub-agent
+files beside it by `metaharness_claude::SessionReader`. Its input is the
+hand-written session under `crates/metaharness-claude/fixtures/golden/session/`
+and its one sub-agent file. ESS 0.72.0 regenerates the suite from 117 to 120
+scenarios (114 generated, 6 authored), zero refused:
+
+- `claude-session-normalized`, `claude-session-projected` and
+  `claude-session-summarized` are new.
+
+Every other scenario is unchanged when compared as JSON values. The two Claude
+readers write the same adapter id, so the target names the session's
+`NormalizeRecord` outcome from its opening node, which states no offered tools,
+and its `ProjectVendorRecord` outcome from the document's `metaharness.source`.
+No guard-negate mutation audit was run for the three new guards.

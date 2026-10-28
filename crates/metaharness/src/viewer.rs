@@ -140,7 +140,7 @@ pub fn project_file(path: &Path) -> Result<TraceIrDocument, Refusal> {
 
 /// A vendor record format `project --from` reads through its adapter's production reader.
 ///
-/// Three names, spelled as `spec/domains/trace.yaml`'s `SourceKind` spells them, so the verb, the
+/// Four names, spelled as `spec/domains/trace.yaml`'s `SourceKind` spells them, so the verb, the
 /// domain and the document's `metaharness.source` say one thing. The event stream is not among
 /// them on purpose: it is what `project` reads without `--from`, and a name that meant *no reader*
 /// would make the flag optional in disguise.
@@ -152,14 +152,18 @@ pub enum VendorSource {
     CodexRollout,
     /// A `b10x-harness --json` record, through `metaharness_b10x::B10xSeams`.
     HarnessJson,
+    /// A Claude Code session as stored on disk, with the sub-agent files beside it, through
+    /// `metaharness_claude::SessionReader` (amendment a63).
+    ClaudeCodeSession,
 }
 
 impl VendorSource {
-    /// The three, in the order the readers are listed.
-    pub const ALL: [VendorSource; 3] = [
+    /// The four, in the order the readers are listed.
+    pub const ALL: [VendorSource; 4] = [
         VendorSource::ClaudeCodeStreamJson,
         VendorSource::CodexRollout,
         VendorSource::HarnessJson,
+        VendorSource::ClaudeCodeSession,
     ];
 
     /// The name, which is also what a projected document's `metaharness.source` carries.
@@ -169,12 +173,13 @@ impl VendorSource {
             VendorSource::ClaudeCodeStreamJson => "claude-code-stream-json",
             VendorSource::CodexRollout => "codex-rollout",
             VendorSource::HarnessJson => "harness-json",
+            VendorSource::ClaudeCodeSession => "claude-code-session",
         }
     }
 
     /// Every name `--from` admits.
     #[must_use]
-    pub fn names() -> [&'static str; 3] {
+    pub fn names() -> [&'static str; 4] {
         Self::ALL.map(Self::as_str)
     }
 }
@@ -182,7 +187,7 @@ impl VendorSource {
 impl FromStr for VendorSource {
     type Err = Refusal;
 
-    /// By name, and refused by name: the refusal carries the three admitted spellings.
+    /// By name, and refused by name: the refusal carries the admitted spellings.
     fn from_str(name: &str) -> Result<Self, Refusal> {
         Self::ALL
             .into_iter()
@@ -278,6 +283,23 @@ pub fn project_vendor_record(
                 |seam| seam.finish(),
             )
         }
+        VendorSource::ClaudeCodeSession => {
+            // The sub-agent files beside the session are part of the record (amendment a63). The
+            // reader cites every event at a line of the session file, so the document still names
+            // one file; each sub-agent block's opening warning names its own file and digest.
+            let subagents =
+                metaharness_claude::read_subagents(path).map_err(|error| Refusal::Io {
+                    detail: format!(
+                        "the sub-agent files beside {} could not be read: {error}",
+                        path.display()
+                    ),
+                })?;
+            metaharness_claude::SessionReader::new(transcript, attestation)
+                .read(text, &subagents)
+                .into_iter()
+                .map(|(line, emission)| (emission, usize::try_from(line).unwrap_or(usize::MAX)))
+                .unzip()
+        }
     };
 
     // The rule. Not a format sniff on the first line — that would be a second copy of each
@@ -365,7 +387,9 @@ fn not_a_record_of(source: VendorSource, first: Option<&Event>) -> String {
 /// The adapter id a source's reader writes into `session.started.adapter`.
 const fn adapter_id(source: VendorSource) -> &'static str {
     match source {
-        VendorSource::ClaudeCodeStreamJson => metaharness_claude::ADAPTER_ID,
+        VendorSource::ClaudeCodeStreamJson | VendorSource::ClaudeCodeSession => {
+            metaharness_claude::ADAPTER_ID
+        }
         VendorSource::CodexRollout => metaharness_codex::ADAPTER_ID,
         VendorSource::HarnessJson => metaharness_b10x::ADAPTER_ID,
     }
@@ -1169,7 +1193,7 @@ mod tests {
     }
 
     /// a28 point 1 — a name `--from` does not admit is refused by name, and the refusal carries
-    /// the three it does. The event stream's own name is the case worth pinning: it is a
+    /// the ones it does. The event stream's own name is the case worth pinning: it is a
     /// `SourceKind` of the domain and still not a `--from`.
     #[test]
     fn an_unknown_vendor_source_is_refused_naming_the_three_admitted_ones() {

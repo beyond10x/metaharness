@@ -42,7 +42,7 @@
     },
     "counts": {
       "authored": 6,
-      "generated": 111,
+      "generated": 114,
       "outside": 0,
       "refused": 0
     },
@@ -115,17 +115,20 @@
       "metaharness.trace.NameDigest/outcome/stream-digest-alone",
       "metaharness.trace.NameDigest/outcome/stream-digest-beside-vendor-digest",
       "metaharness.trace.NodeCount/invariant/at/metaharness.trace.RetainedProjection/projection.counts",
+      "metaharness.trace.NormalizeRecord/outcome/claude-session-normalized",
       "metaharness.trace.NormalizeRecord/outcome/claude-transcript-normalized",
       "metaharness.trace.NormalizeRecord/outcome/codex-rollout-normalized",
       "metaharness.trace.NormalizeRecord/outcome/event-stream-projected",
       "metaharness.trace.NormalizeRecord/outcome/harness-record-normalized",
       "metaharness.trace.ProjectRecordedRun/outcome/decomposer-clean-recorded",
       "metaharness.trace.ProjectRecordedRun/outcome/plan-reviewer-clean-recorded",
+      "metaharness.trace.ProjectVendorRecord/outcome/claude-session-projected",
       "metaharness.trace.ProjectVendorRecord/outcome/claude-transcript-projected",
       "metaharness.trace.ProjectVendorRecord/outcome/codex-rollout-projected",
       "metaharness.trace.ProjectVendorRecord/outcome/event-stream-is-not-a-from",
       "metaharness.trace.ProjectVendorRecord/outcome/harness-record-projected",
       "metaharness.trace.RetainedDocument/invariant/at/metaharness.trace.RetainedProjection/projection",
+      "metaharness.trace.SummarizeRecord/outcome/claude-session-summarized",
       "metaharness.trace.SummarizeRecord/outcome/claude-transcript-summarized",
       "metaharness.trace.SummarizeRecord/outcome/codex-rollout-summarized",
       "metaharness.trace.SummarizeRecord/outcome/event-stream-summarized",
@@ -173,9 +176,9 @@
     }
   },
   "provenance": {
-    "contract_digest": "cbc0728049fce9e564d123d17ae3e96bd7cd10f910a096979752d0dde8964551",
+    "contract_digest": "51265a4e24c5857296799231b90ada379b64caae816a7a98a3da19b47d489b55",
     "scenario_initial_state": "empty",
-    "spec_digest": "604995d5445626e56ec2e8feb7710d2c202851c6f491ecdfc0cf8d5e7601ffcd",
+    "spec_digest": "4d7c36ea723cad4dece4a10f439f20ce1f50722242620cfbf5c9ec788447a52f",
     "specification_version": "v1",
     "suite_version": "ess-conformance/35",
     "system": "metaharness"
@@ -18621,6 +18624,289 @@
         }
       ]
     },
+    "metaharness.trace.NormalizeRecord/outcome/claude-session-normalized": {
+      "purpose": "`metaharness.trace.NormalizeRecord` answers `claude-session-normalized` for an input that satisfies that branch's guard",
+      "source": [
+        {
+          "kind": "type",
+          "name": "metaharness.trace.Adapter"
+        },
+        {
+          "kind": "type",
+          "name": "metaharness.trace.NodeFamily"
+        },
+        {
+          "kind": "type",
+          "name": "metaharness.trace.SourceKind"
+        },
+        {
+          "kind": "command",
+          "name": "metaharness.trace.NormalizeRecord"
+        },
+        {
+          "kind": "outcome",
+          "name": {
+            "command": "metaharness.trace.NormalizeRecord",
+            "outcome": "claude-session-normalized"
+          }
+        },
+        {
+          "kind": "event",
+          "name": "metaharness.boundaries.CallDecided"
+        },
+        {
+          "kind": "event",
+          "name": "metaharness.boundaries.FileRead"
+        },
+        {
+          "kind": "event",
+          "name": "metaharness.boundaries.FrameRead"
+        },
+        {
+          "kind": "event",
+          "name": "metaharness.observations.NativeStatusClassified"
+        },
+        {
+          "kind": "event",
+          "name": "metaharness.observations.PresenceRead"
+        },
+        {
+          "kind": "event",
+          "name": "metaharness.observations.ToolOutcomeRead"
+        },
+        {
+          "kind": "event",
+          "name": "metaharness.session.AuditedRunExited"
+        },
+        {
+          "kind": "event",
+          "name": "metaharness.session.ClosureRecorded"
+        },
+        {
+          "kind": "event",
+          "name": "metaharness.session.CompletionClassified"
+        },
+        {
+          "kind": "event",
+          "name": "metaharness.session.PollingObserved"
+        },
+        {
+          "kind": "event",
+          "name": "metaharness.session.StreamClassified"
+        },
+        {
+          "kind": "event",
+          "name": "metaharness.spending.AdmissionRecorded"
+        },
+        {
+          "kind": "event",
+          "name": "metaharness.spending.FiniteLedgerRecorded"
+        },
+        {
+          "kind": "event",
+          "name": "metaharness.trace.CompletenessVerified"
+        },
+        {
+          "kind": "event",
+          "name": "metaharness.trace.DigestNamed"
+        },
+        {
+          "kind": "event",
+          "name": "metaharness.trace.FamilyClassified"
+        },
+        {
+          "kind": "event",
+          "name": "metaharness.trace.ProjectionRecorded"
+        },
+        {
+          "kind": "event",
+          "name": "metaharness.trace.RecordNormalized"
+        },
+        {
+          "kind": "event",
+          "name": "metaharness.trace.SessionSummarized"
+        },
+        {
+          "kind": "event",
+          "name": "metaharness.trace.UnkClassified"
+        },
+        {
+          "kind": "event",
+          "name": "metaharness.trace.VendorRecordProjected"
+        },
+        {
+          "kind": "event",
+          "name": "metaharness.trace.VendorSourceRefused"
+        },
+        {
+          "kind": "event",
+          "name": "metaharness.workspace.ContextFilesRecorded"
+        },
+        {
+          "kind": "event",
+          "name": "metaharness.workspace.ProcessWritePlanned"
+        },
+        {
+          "kind": "event",
+          "name": "metaharness.workspace.ScratchCwdAttested"
+        }
+      ],
+      "steps": [
+        {
+          "command": "metaharness.trace.NormalizeRecord",
+          "input": {
+            "source": {
+              "kind": "literal",
+              "value": "claude-code-session"
+            }
+          },
+          "step": "execute_command"
+        },
+        {
+          "outcome": {
+            "command": "metaharness.trace.NormalizeRecord",
+            "outcome": "claude-session-normalized"
+          },
+          "step": "expect_outcome"
+        },
+        {
+          "event": "metaharness.trace.RecordNormalized",
+          "payload": {
+            "adapter": "claude",
+            "opening_family": "session_start",
+            "reader_applied": true
+          },
+          "shape": {
+            "adapter": {
+              "holds": "enum",
+              "variants": [
+                "claude",
+                "codex",
+                "b10x"
+              ]
+            },
+            "opening_family": {
+              "holds": "enum",
+              "variants": [
+                "session_start",
+                "run_outcome",
+                "assistant_text",
+                "assistant_thinking",
+                "thinking_estimate",
+                "synthetic_injection",
+                "tool_call",
+                "tool_result",
+                "rate_limit",
+                "opaque",
+                "unk",
+                "stream_closed"
+              ]
+            },
+            "reader_applied": {
+              "holds": "primitive",
+              "kind": "boolean"
+            }
+          },
+          "step": "expect_event"
+        },
+        {
+          "event": "metaharness.boundaries.CallDecided",
+          "step": "expect_no_event"
+        },
+        {
+          "event": "metaharness.boundaries.FileRead",
+          "step": "expect_no_event"
+        },
+        {
+          "event": "metaharness.boundaries.FrameRead",
+          "step": "expect_no_event"
+        },
+        {
+          "event": "metaharness.observations.NativeStatusClassified",
+          "step": "expect_no_event"
+        },
+        {
+          "event": "metaharness.observations.PresenceRead",
+          "step": "expect_no_event"
+        },
+        {
+          "event": "metaharness.observations.ToolOutcomeRead",
+          "step": "expect_no_event"
+        },
+        {
+          "event": "metaharness.session.AuditedRunExited",
+          "step": "expect_no_event"
+        },
+        {
+          "event": "metaharness.session.ClosureRecorded",
+          "step": "expect_no_event"
+        },
+        {
+          "event": "metaharness.session.CompletionClassified",
+          "step": "expect_no_event"
+        },
+        {
+          "event": "metaharness.session.PollingObserved",
+          "step": "expect_no_event"
+        },
+        {
+          "event": "metaharness.session.StreamClassified",
+          "step": "expect_no_event"
+        },
+        {
+          "event": "metaharness.spending.AdmissionRecorded",
+          "step": "expect_no_event"
+        },
+        {
+          "event": "metaharness.spending.FiniteLedgerRecorded",
+          "step": "expect_no_event"
+        },
+        {
+          "event": "metaharness.trace.CompletenessVerified",
+          "step": "expect_no_event"
+        },
+        {
+          "event": "metaharness.trace.DigestNamed",
+          "step": "expect_no_event"
+        },
+        {
+          "event": "metaharness.trace.FamilyClassified",
+          "step": "expect_no_event"
+        },
+        {
+          "event": "metaharness.trace.ProjectionRecorded",
+          "step": "expect_no_event"
+        },
+        {
+          "event": "metaharness.trace.SessionSummarized",
+          "step": "expect_no_event"
+        },
+        {
+          "event": "metaharness.trace.UnkClassified",
+          "step": "expect_no_event"
+        },
+        {
+          "event": "metaharness.trace.VendorRecordProjected",
+          "step": "expect_no_event"
+        },
+        {
+          "event": "metaharness.trace.VendorSourceRefused",
+          "step": "expect_no_event"
+        },
+        {
+          "event": "metaharness.workspace.ContextFilesRecorded",
+          "step": "expect_no_event"
+        },
+        {
+          "event": "metaharness.workspace.ProcessWritePlanned",
+          "step": "expect_no_event"
+        },
+        {
+          "event": "metaharness.workspace.ScratchCwdAttested",
+          "step": "expect_no_event"
+        }
+      ]
+    },
     "metaharness.trace.NormalizeRecord/outcome/claude-transcript-normalized": {
       "purpose": "`metaharness.trace.NormalizeRecord` answers `claude-transcript-normalized` for an input that satisfies that branch's guard",
       "source": [
@@ -20337,6 +20623,319 @@
         }
       ]
     },
+    "metaharness.trace.ProjectVendorRecord/outcome/claude-session-projected": {
+      "purpose": "`metaharness.trace.ProjectVendorRecord` answers `claude-session-projected` for an input that satisfies that branch's guard",
+      "source": [
+        {
+          "kind": "type",
+          "name": "metaharness.trace.Adapter"
+        },
+        {
+          "kind": "type",
+          "name": "metaharness.trace.NodeFamily"
+        },
+        {
+          "kind": "type",
+          "name": "metaharness.trace.SourceKind"
+        },
+        {
+          "kind": "command",
+          "name": "metaharness.trace.ProjectVendorRecord"
+        },
+        {
+          "kind": "outcome",
+          "name": {
+            "command": "metaharness.trace.ProjectVendorRecord",
+            "outcome": "claude-session-projected"
+          }
+        },
+        {
+          "kind": "event",
+          "name": "metaharness.boundaries.CallDecided"
+        },
+        {
+          "kind": "event",
+          "name": "metaharness.boundaries.FileRead"
+        },
+        {
+          "kind": "event",
+          "name": "metaharness.boundaries.FrameRead"
+        },
+        {
+          "kind": "event",
+          "name": "metaharness.observations.NativeStatusClassified"
+        },
+        {
+          "kind": "event",
+          "name": "metaharness.observations.PresenceRead"
+        },
+        {
+          "kind": "event",
+          "name": "metaharness.observations.ToolOutcomeRead"
+        },
+        {
+          "kind": "event",
+          "name": "metaharness.session.AuditedRunExited"
+        },
+        {
+          "kind": "event",
+          "name": "metaharness.session.ClosureRecorded"
+        },
+        {
+          "kind": "event",
+          "name": "metaharness.session.CompletionClassified"
+        },
+        {
+          "kind": "event",
+          "name": "metaharness.session.PollingObserved"
+        },
+        {
+          "kind": "event",
+          "name": "metaharness.session.StreamClassified"
+        },
+        {
+          "kind": "event",
+          "name": "metaharness.spending.AdmissionRecorded"
+        },
+        {
+          "kind": "event",
+          "name": "metaharness.spending.FiniteLedgerRecorded"
+        },
+        {
+          "kind": "event",
+          "name": "metaharness.trace.CompletenessVerified"
+        },
+        {
+          "kind": "event",
+          "name": "metaharness.trace.DigestNamed"
+        },
+        {
+          "kind": "event",
+          "name": "metaharness.trace.FamilyClassified"
+        },
+        {
+          "kind": "event",
+          "name": "metaharness.trace.ProjectionRecorded"
+        },
+        {
+          "kind": "event",
+          "name": "metaharness.trace.RecordNormalized"
+        },
+        {
+          "kind": "event",
+          "name": "metaharness.trace.SessionSummarized"
+        },
+        {
+          "kind": "event",
+          "name": "metaharness.trace.UnkClassified"
+        },
+        {
+          "kind": "event",
+          "name": "metaharness.trace.VendorRecordProjected"
+        },
+        {
+          "kind": "event",
+          "name": "metaharness.trace.VendorSourceRefused"
+        },
+        {
+          "kind": "event",
+          "name": "metaharness.workspace.ContextFilesRecorded"
+        },
+        {
+          "kind": "event",
+          "name": "metaharness.workspace.ProcessWritePlanned"
+        },
+        {
+          "kind": "event",
+          "name": "metaharness.workspace.ScratchCwdAttested"
+        }
+      ],
+      "steps": [
+        {
+          "command": "metaharness.trace.ProjectVendorRecord",
+          "input": {
+            "source": {
+              "kind": "literal",
+              "value": "claude-code-session"
+            }
+          },
+          "step": "execute_command"
+        },
+        {
+          "outcome": {
+            "command": "metaharness.trace.ProjectVendorRecord",
+            "outcome": "claude-session-projected"
+          },
+          "step": "expect_outcome"
+        },
+        {
+          "event": "metaharness.trace.VendorRecordProjected",
+          "payload": {
+            "adapter": "claude",
+            "byte_stable": true,
+            "census_as_expected": true,
+            "digest_over_record": true,
+            "hermetic_mode": "off",
+            "imposed": 0.0,
+            "opening_family": "session_start",
+            "source": "claude-code-session",
+            "stream_complete": false
+          },
+          "shape": {
+            "adapter": {
+              "holds": "enum",
+              "variants": [
+                "claude",
+                "codex",
+                "b10x"
+              ]
+            },
+            "byte_stable": {
+              "holds": "primitive",
+              "kind": "boolean"
+            },
+            "census_as_expected": {
+              "holds": "primitive",
+              "kind": "boolean"
+            },
+            "digest_over_record": {
+              "holds": "primitive",
+              "kind": "boolean"
+            },
+            "hermetic_mode": {
+              "holds": "primitive",
+              "kind": "string"
+            },
+            "imposed": {
+              "holds": "primitive",
+              "kind": "integer"
+            },
+            "opening_family": {
+              "holds": "enum",
+              "variants": [
+                "session_start",
+                "run_outcome",
+                "assistant_text",
+                "assistant_thinking",
+                "thinking_estimate",
+                "synthetic_injection",
+                "tool_call",
+                "tool_result",
+                "rate_limit",
+                "opaque",
+                "unk",
+                "stream_closed"
+              ]
+            },
+            "source": {
+              "holds": "primitive",
+              "kind": "string"
+            },
+            "stream_complete": {
+              "holds": "primitive",
+              "kind": "boolean"
+            }
+          },
+          "step": "expect_event"
+        },
+        {
+          "event": "metaharness.boundaries.CallDecided",
+          "step": "expect_no_event"
+        },
+        {
+          "event": "metaharness.boundaries.FileRead",
+          "step": "expect_no_event"
+        },
+        {
+          "event": "metaharness.boundaries.FrameRead",
+          "step": "expect_no_event"
+        },
+        {
+          "event": "metaharness.observations.NativeStatusClassified",
+          "step": "expect_no_event"
+        },
+        {
+          "event": "metaharness.observations.PresenceRead",
+          "step": "expect_no_event"
+        },
+        {
+          "event": "metaharness.observations.ToolOutcomeRead",
+          "step": "expect_no_event"
+        },
+        {
+          "event": "metaharness.session.AuditedRunExited",
+          "step": "expect_no_event"
+        },
+        {
+          "event": "metaharness.session.ClosureRecorded",
+          "step": "expect_no_event"
+        },
+        {
+          "event": "metaharness.session.CompletionClassified",
+          "step": "expect_no_event"
+        },
+        {
+          "event": "metaharness.session.PollingObserved",
+          "step": "expect_no_event"
+        },
+        {
+          "event": "metaharness.session.StreamClassified",
+          "step": "expect_no_event"
+        },
+        {
+          "event": "metaharness.spending.AdmissionRecorded",
+          "step": "expect_no_event"
+        },
+        {
+          "event": "metaharness.spending.FiniteLedgerRecorded",
+          "step": "expect_no_event"
+        },
+        {
+          "event": "metaharness.trace.CompletenessVerified",
+          "step": "expect_no_event"
+        },
+        {
+          "event": "metaharness.trace.DigestNamed",
+          "step": "expect_no_event"
+        },
+        {
+          "event": "metaharness.trace.FamilyClassified",
+          "step": "expect_no_event"
+        },
+        {
+          "event": "metaharness.trace.ProjectionRecorded",
+          "step": "expect_no_event"
+        },
+        {
+          "event": "metaharness.trace.RecordNormalized",
+          "step": "expect_no_event"
+        },
+        {
+          "event": "metaharness.trace.SessionSummarized",
+          "step": "expect_no_event"
+        },
+        {
+          "event": "metaharness.trace.UnkClassified",
+          "step": "expect_no_event"
+        },
+        {
+          "event": "metaharness.trace.VendorSourceRefused",
+          "step": "expect_no_event"
+        },
+        {
+          "event": "metaharness.workspace.ContextFilesRecorded",
+          "step": "expect_no_event"
+        },
+        {
+          "event": "metaharness.workspace.ProcessWritePlanned",
+          "step": "expect_no_event"
+        },
+        {
+          "event": "metaharness.workspace.ScratchCwdAttested",
+          "step": "expect_no_event"
+        }
+      ]
+    },
     "metaharness.trace.ProjectVendorRecord/outcome/claude-transcript-projected": {
       "purpose": "`metaharness.trace.ProjectVendorRecord` answers `claude-transcript-projected` for an input that satisfies that branch's guard",
       "source": [
@@ -21721,6 +22320,359 @@
           },
           "step": "expect_view",
           "view": "metaharness.trace.RetainedProjection"
+        }
+      ]
+    },
+    "metaharness.trace.SummarizeRecord/outcome/claude-session-summarized": {
+      "purpose": "`metaharness.trace.SummarizeRecord` answers `claude-session-summarized` for an input that satisfies that branch's guard",
+      "source": [
+        {
+          "kind": "type",
+          "name": "metaharness.trace.SourceKind"
+        },
+        {
+          "kind": "command",
+          "name": "metaharness.trace.SummarizeRecord"
+        },
+        {
+          "kind": "outcome",
+          "name": {
+            "command": "metaharness.trace.SummarizeRecord",
+            "outcome": "claude-session-summarized"
+          }
+        },
+        {
+          "kind": "event",
+          "name": "metaharness.boundaries.CallDecided"
+        },
+        {
+          "kind": "event",
+          "name": "metaharness.boundaries.FileRead"
+        },
+        {
+          "kind": "event",
+          "name": "metaharness.boundaries.FrameRead"
+        },
+        {
+          "kind": "event",
+          "name": "metaharness.observations.NativeStatusClassified"
+        },
+        {
+          "kind": "event",
+          "name": "metaharness.observations.PresenceRead"
+        },
+        {
+          "kind": "event",
+          "name": "metaharness.observations.ToolOutcomeRead"
+        },
+        {
+          "kind": "event",
+          "name": "metaharness.session.AuditedRunExited"
+        },
+        {
+          "kind": "event",
+          "name": "metaharness.session.ClosureRecorded"
+        },
+        {
+          "kind": "event",
+          "name": "metaharness.session.CompletionClassified"
+        },
+        {
+          "kind": "event",
+          "name": "metaharness.session.PollingObserved"
+        },
+        {
+          "kind": "event",
+          "name": "metaharness.session.StreamClassified"
+        },
+        {
+          "kind": "event",
+          "name": "metaharness.spending.AdmissionRecorded"
+        },
+        {
+          "kind": "event",
+          "name": "metaharness.spending.FiniteLedgerRecorded"
+        },
+        {
+          "kind": "event",
+          "name": "metaharness.trace.CompletenessVerified"
+        },
+        {
+          "kind": "event",
+          "name": "metaharness.trace.DigestNamed"
+        },
+        {
+          "kind": "event",
+          "name": "metaharness.trace.FamilyClassified"
+        },
+        {
+          "kind": "event",
+          "name": "metaharness.trace.ProjectionRecorded"
+        },
+        {
+          "kind": "event",
+          "name": "metaharness.trace.RecordNormalized"
+        },
+        {
+          "kind": "event",
+          "name": "metaharness.trace.SessionSummarized"
+        },
+        {
+          "kind": "event",
+          "name": "metaharness.trace.UnkClassified"
+        },
+        {
+          "kind": "event",
+          "name": "metaharness.trace.VendorRecordProjected"
+        },
+        {
+          "kind": "event",
+          "name": "metaharness.trace.VendorSourceRefused"
+        },
+        {
+          "kind": "event",
+          "name": "metaharness.workspace.ContextFilesRecorded"
+        },
+        {
+          "kind": "event",
+          "name": "metaharness.workspace.ProcessWritePlanned"
+        },
+        {
+          "kind": "event",
+          "name": "metaharness.workspace.ScratchCwdAttested"
+        }
+      ],
+      "steps": [
+        {
+          "command": "metaharness.trace.SummarizeRecord",
+          "input": {
+            "source": {
+              "kind": "literal",
+              "value": "claude-code-session"
+            }
+          },
+          "step": "execute_command"
+        },
+        {
+          "outcome": {
+            "command": "metaharness.trace.SummarizeRecord",
+            "outcome": "claude-session-summarized"
+          },
+          "step": "expect_outcome"
+        },
+        {
+          "event": "metaharness.trace.SessionSummarized",
+          "payload": {
+            "adapter": "\"claude\"",
+            "byte_stable": true,
+            "cache_creation_input_tokens": "null",
+            "cache_read_input_tokens": "null",
+            "cost_usd": "null",
+            "duration_api_ms": "null",
+            "duration_ms": "null",
+            "first_timestamp_ms": "1793178000000",
+            "format": "\"trace-ir-summary/1\"",
+            "input_tokens": "null",
+            "is_error": "null",
+            "last_timestamp_ms": "1793178005900",
+            "model": "\"claude-opus-5\"",
+            "models": "[{\"cache_creation_input_tokens\":null,\"cache_read_input_tokens\":null,\"cost_usd\":null,\"input_tokens\":null,\"name\":\"claude-opus-5\",\"output_tokens\":null},{\"cache_creation_input_tokens\":null,\"cache_read_input_tokens\":null,\"cost_usd\":null,\"input_tokens\":null,\"name\":\"claude-haiku-4-5\",\"output_tokens\":null}]",
+            "output_tokens": "null",
+            "source": "\"claude-code-session\"",
+            "stop_reason": "null",
+            "tokens_basis": "null",
+            "tool_calls": "[{\"answered\":true,\"call_id\":\"toolu_fixture_01\",\"error\":false,\"name\":\"Bash\"},{\"answered\":true,\"call_id\":\"toolu_fixture_02\",\"error\":null,\"name\":\"Agent\"},{\"answered\":true,\"call_id\":\"toolu_fixture_11\",\"error\":null,\"name\":\"Read\"}]",
+            "transcript_digest": "\"8fd72ffe845f4879bbf387da0462090dc05d9c74ca2b4873c1e3942ef2759524\"",
+            "turns": "null",
+            "unk": "1"
+          },
+          "shape": {
+            "adapter": {
+              "holds": "primitive",
+              "kind": "string"
+            },
+            "byte_stable": {
+              "holds": "primitive",
+              "kind": "boolean"
+            },
+            "cache_creation_input_tokens": {
+              "holds": "primitive",
+              "kind": "string"
+            },
+            "cache_read_input_tokens": {
+              "holds": "primitive",
+              "kind": "string"
+            },
+            "cost_usd": {
+              "holds": "primitive",
+              "kind": "string"
+            },
+            "duration_api_ms": {
+              "holds": "primitive",
+              "kind": "string"
+            },
+            "duration_ms": {
+              "holds": "primitive",
+              "kind": "string"
+            },
+            "first_timestamp_ms": {
+              "holds": "primitive",
+              "kind": "string"
+            },
+            "format": {
+              "holds": "primitive",
+              "kind": "string"
+            },
+            "input_tokens": {
+              "holds": "primitive",
+              "kind": "string"
+            },
+            "is_error": {
+              "holds": "primitive",
+              "kind": "string"
+            },
+            "last_timestamp_ms": {
+              "holds": "primitive",
+              "kind": "string"
+            },
+            "model": {
+              "holds": "primitive",
+              "kind": "string"
+            },
+            "models": {
+              "holds": "primitive",
+              "kind": "string"
+            },
+            "output_tokens": {
+              "holds": "primitive",
+              "kind": "string"
+            },
+            "source": {
+              "holds": "primitive",
+              "kind": "string"
+            },
+            "stop_reason": {
+              "holds": "primitive",
+              "kind": "string"
+            },
+            "tokens_basis": {
+              "holds": "primitive",
+              "kind": "string"
+            },
+            "tool_calls": {
+              "holds": "primitive",
+              "kind": "string"
+            },
+            "transcript_digest": {
+              "holds": "primitive",
+              "kind": "string"
+            },
+            "turns": {
+              "holds": "primitive",
+              "kind": "string"
+            },
+            "unk": {
+              "holds": "primitive",
+              "kind": "string"
+            }
+          },
+          "step": "expect_event"
+        },
+        {
+          "event": "metaharness.boundaries.CallDecided",
+          "step": "expect_no_event"
+        },
+        {
+          "event": "metaharness.boundaries.FileRead",
+          "step": "expect_no_event"
+        },
+        {
+          "event": "metaharness.boundaries.FrameRead",
+          "step": "expect_no_event"
+        },
+        {
+          "event": "metaharness.observations.NativeStatusClassified",
+          "step": "expect_no_event"
+        },
+        {
+          "event": "metaharness.observations.PresenceRead",
+          "step": "expect_no_event"
+        },
+        {
+          "event": "metaharness.observations.ToolOutcomeRead",
+          "step": "expect_no_event"
+        },
+        {
+          "event": "metaharness.session.AuditedRunExited",
+          "step": "expect_no_event"
+        },
+        {
+          "event": "metaharness.session.ClosureRecorded",
+          "step": "expect_no_event"
+        },
+        {
+          "event": "metaharness.session.CompletionClassified",
+          "step": "expect_no_event"
+        },
+        {
+          "event": "metaharness.session.PollingObserved",
+          "step": "expect_no_event"
+        },
+        {
+          "event": "metaharness.session.StreamClassified",
+          "step": "expect_no_event"
+        },
+        {
+          "event": "metaharness.spending.AdmissionRecorded",
+          "step": "expect_no_event"
+        },
+        {
+          "event": "metaharness.spending.FiniteLedgerRecorded",
+          "step": "expect_no_event"
+        },
+        {
+          "event": "metaharness.trace.CompletenessVerified",
+          "step": "expect_no_event"
+        },
+        {
+          "event": "metaharness.trace.DigestNamed",
+          "step": "expect_no_event"
+        },
+        {
+          "event": "metaharness.trace.FamilyClassified",
+          "step": "expect_no_event"
+        },
+        {
+          "event": "metaharness.trace.ProjectionRecorded",
+          "step": "expect_no_event"
+        },
+        {
+          "event": "metaharness.trace.RecordNormalized",
+          "step": "expect_no_event"
+        },
+        {
+          "event": "metaharness.trace.UnkClassified",
+          "step": "expect_no_event"
+        },
+        {
+          "event": "metaharness.trace.VendorRecordProjected",
+          "step": "expect_no_event"
+        },
+        {
+          "event": "metaharness.trace.VendorSourceRefused",
+          "step": "expect_no_event"
+        },
+        {
+          "event": "metaharness.workspace.ContextFilesRecorded",
+          "step": "expect_no_event"
+        },
+        {
+          "event": "metaharness.workspace.ProcessWritePlanned",
+          "step": "expect_no_event"
+        },
+        {
+          "event": "metaharness.workspace.ScratchCwdAttested",
+          "step": "expect_no_event"
         }
       ]
     },

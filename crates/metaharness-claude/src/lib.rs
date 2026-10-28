@@ -49,6 +49,7 @@ mod hook;
 mod launch;
 mod marketplace;
 mod seam;
+mod session;
 mod transcript;
 mod vectors;
 
@@ -67,6 +68,7 @@ pub use marketplace::{
     PLUGIN_CACHE_HOME, PLUGIN_REGISTRY_HOME, ScratchEntry, resolve_marketplace, scratch_registry,
 };
 pub use seam::{HookInput, capabilities, parse_hook_input, render_hook_response, render_operation};
+pub use session::{SessionReader, SubagentFile, read_subagents};
 pub use transcript::TranscriptReader;
 pub use vectors::{CONTRACT_OBLIGATIONS, conformance_vectors};
 

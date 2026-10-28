@@ -103,6 +103,16 @@ pub mod warning_code {
     /// vendor emits it on completion and kill as well as on start, and only the start is on the
     /// wire elsewhere as a `tool.result` — so dropping it lets a reader take absence for fact.
     pub const VENDOR_BACKGROUND_TASKS: &str = "VENDOR_BACKGROUND_TASKS";
+    /// The events that follow are a sub-agent's, read from its own file beside the session
+    /// (amendment a63).
+    ///
+    /// Claude Code stores a session's sub-agents as separate transcripts under
+    /// `<session>/subagents/`, and the reader appends each one after the session's own events.
+    /// This line opens each block and names the sub-agent, the parent's spawning call and the
+    /// file, in that order and in backticks: `` sub-agent `<id>` spawned by call `<call id>`, read
+    /// from `<file>` (sha256:<digest>) ``, or `` … spawned by no recorded call … `` when the
+    /// session records none. A block runs to the next such warning or to the end of the stream.
+    pub const VENDOR_SUBAGENT: &str = "VENDOR_SUBAGENT";
 }
 
 /// Where a decision was taken.
