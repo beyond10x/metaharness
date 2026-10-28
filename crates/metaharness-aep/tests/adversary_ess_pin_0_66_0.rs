@@ -39,7 +39,7 @@ fn reference_model(extra: &[&std::ffi::OsStr]) -> (Value, String) {
         ])
         .arg(&report)
         .output()
-        .expect("ESS 0.74.0 is a gate prerequisite");
+        .expect("ESS 0.75.0 is a gate prerequisite");
     let text = format!(
         "{}{}",
         String::from_utf8_lossy(&output.stdout),

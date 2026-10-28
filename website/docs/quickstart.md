@@ -33,8 +33,8 @@ The workspace gate is one task, run from the checkout root:
 task check
 ```
 
-It needs [go-task](https://taskfile.dev), Rust 1.98 or newer and the `ess` CLI of ESS 0.74.0 on
-your `PATH`: `spec/ess-inputs.yaml` declares `requires: ess 0.74.0` and the gate validates with
+It needs [go-task](https://taskfile.dev), Rust 1.98 or newer and the `ess` CLI of ESS 0.75.0 on
+your `PATH`: `spec/ess-inputs.yaml` declares `requires: ess 0.75.0` and the gate validates with
 `--strict-requires`. It runs these steps, in this order (`Taskfile.yml`, task `check`):
 
 ```text
