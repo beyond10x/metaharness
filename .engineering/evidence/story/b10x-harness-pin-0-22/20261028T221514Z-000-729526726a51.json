@@ -1,0 +1,13 @@
+{
+  "at": "2026-10-28T22:15:14Z",
+  "actor": "human:timo",
+  "artifact": "story:b10x-harness-pin-0-22",
+  "kind": "story",
+  "revision": 7,
+  "change": {
+    "change": "evidence",
+    "kind": "verification",
+    "source": "metaharness run b10x --strict-version on the released 0.21.0 and 0.22.0 archives",
+    "reference": "0.21.0: exit 2 refused (old pin admitted it) vs 0.22.0: admitted, session.started harness_version 0.22.0; scratch mh-d170/u3/strict-0.2x.0.*"
+  }
+}
