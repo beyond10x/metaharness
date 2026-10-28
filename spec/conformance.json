@@ -176,9 +176,9 @@
     }
   },
   "provenance": {
-    "contract_digest": "dcad72f980cf6cdd771946886dfb1f95153cd8acd05a3f00c2c195f28372395a",
+    "contract_digest": "5d5f45857f3bda8d0273d4f0bb2ee298fce90904207ab264072cd5742d72fd15",
     "scenario_initial_state": "empty",
-    "spec_digest": "4afebf556b80d140e7d1ee982c031511dfa283354f99972b53822206f087fa81",
+    "spec_digest": "0f48b15cd676de665b4bd08232b12fec7e0f3ac33ffc51a1c2c691116424bf96",
     "specification_version": "v1",
     "suite_version": "ess-conformance/35",
     "system": "metaharness"
@@ -23894,7 +23894,7 @@
             "stop_reason": "null",
             "tokens_basis": "\"sum-of-requests\"",
             "tool_calls": "[{\"answered\":true,\"call_id\":\"call_b10x_001\",\"error\":false,\"name\":\"file_read\"}]",
-            "transcript_digest": "\"3430a15724061aac514a8b06b8221d5d6215cb05be1e656851287a78c79fbfa7\"",
+            "transcript_digest": "\"7233a1372855faba1711bfe3d932cf58722e0aba90feef902e5059137c3e160b\"",
             "turns": "2",
             "unk": "2"
           },

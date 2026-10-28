@@ -18,6 +18,7 @@ was amended and the amendment is named here.
 ### Changed
 
 - ESS 0.75.0 is the specification toolchain: both `ess-inputs.yaml` manifests require it and CI installs `ess-cli` from its tag commit `b593d356`, up from 0.70.0 (`077e4ee1`). `spec/conformance.json` regenerates byte-identical, 117 scenarios.
+- The harness crates and the `b10x-harness` release `metaharness run b10x --strict-version` admits move to Harness `0.22.0` (`3eca074aea09574775ed340bb618e5322acaaf22`, annotated tag `bcceb554`), which adds `--substrate-adopt`, moves Substrate to `0.14.0` and llm to `0.16.0`, and pins ESS 0.75.0. A 0.21.0 binary now reads H9 `gap` and `--strict-version` refuses it before the spawn. The adapter passes no `--substrate-adopt`. The workspace lock holds no `llm-*` crate, because the three harness crates it compiles take none. The golden loop record and the caller-seam samples are captured again from the released, checksum-verified 0.22.0 archive against harness's emulator; they differ from the 0.21.0 captures only in the `captured_at` stamps and the `environment.workspace` digest, and the replays move only in `harness_version`. `spec/conformance.json` regenerates for the new `transcript_digest`, still 120 scenarios (story:b10x-harness-pin-0-22).
 
 ## [0.22.0] — 2026-10-27
 

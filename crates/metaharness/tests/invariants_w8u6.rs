@@ -40,10 +40,11 @@ fn the_lock_resolves_no_secret_store_client() {
 
 /// Brief item 4: one harness revision and one tools source. Wave 8 pinned the 0.18.0 commit and
 /// tools tag 0.4.0; the 0.19.0 admission (2026-10-26) moved both to 13d72c06 and tag 0.5.0, the
-/// 0.20.0 admission (2026-10-26, amendment a60) moved the harness to 684c99f5, and the 0.21.0
-/// admission (2026-10-27, Substrate 0.13.0) moved it to ef6df52e.
+/// 0.20.0 admission (2026-10-26, amendment a60) moved the harness to 684c99f5, the 0.21.0
+/// admission (2026-10-27, Substrate 0.13.0) moved it to ef6df52e, and the 0.22.0 admission
+/// (2026-10-28, llm 0.16.0, Substrate 0.14.0) moved it to 3eca074a.
 #[test]
-fn the_lock_names_harness_ef6df52e_and_tools_0_5_0_and_nothing_else() {
+fn the_lock_names_harness_3eca074a_and_tools_0_5_0_and_nothing_else() {
     let sources: std::collections::BTreeSet<&str> = LOCK
         .lines()
         .filter_map(|line| line.strip_prefix("source = \"git+"))
@@ -59,7 +60,7 @@ fn the_lock_names_harness_ef6df52e_and_tools_0_5_0_and_nothing_else() {
     assert_eq!(
         harness,
         [
-            &"https://github.com/beyond10x/harness?rev=ef6df52e015f986026fb1517c7880f9ebfa596d0#ef6df52e015f986026fb1517c7880f9ebfa596d0\""
+            &"https://github.com/beyond10x/harness?rev=3eca074aea09574775ed340bb618e5322acaaf22#3eca074aea09574775ed340bb618e5322acaaf22\""
         ],
     );
     assert_eq!(
