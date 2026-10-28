@@ -2545,7 +2545,7 @@ fn ess_suite_matches_the_current_specification() {
         .args(["--suite-format", "5", "--strict-requires", "--out"])
         .arg(&output)
         .output()
-        .expect("ESS 0.72.0 is a gate prerequisite");
+        .expect("ESS 0.74.0 is a gate prerequisite");
     assert!(
         status.status.success(),
         "{}",
@@ -2555,7 +2555,7 @@ fn ess_suite_matches_the_current_specification() {
     assert_eq!(
         fresh,
         suite(),
-        "regenerate spec/conformance.json with ESS 0.72.0"
+        "regenerate spec/conformance.json with ESS 0.74.0"
     );
 }
 
@@ -2676,7 +2676,7 @@ fn the_reference_model_closes_every_terminal_record_shape_as_production_does() {
         .args(["--report-format", "2", "--report-out"])
         .arg(&report)
         .output()
-        .expect("ESS 0.72.0 is a gate prerequisite");
+        .expect("ESS 0.74.0 is a gate prerequisite");
     let text = format!(
         "{}{}",
         String::from_utf8_lossy(&output.stdout),
