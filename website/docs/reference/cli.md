@@ -160,7 +160,10 @@ to be started by; `catalogue-unreadable` for a path that is not a regular file, 
 past 4 MiB or is not UTF-8; `catalogue-not-tool-contract` or `catalogue-malformed` for a file that
 is not a catalogue, and `catalogue-malformed` as well for one whose scratch copy would be past
 4 MiB or would not read back as the same catalogue; `catalogue-copy-differs` when the copy written
-into the scratch tree reads back as anything but the checked catalogue. `mcp-serve --catalogue <FILE>` serves the same catalogue on
+into the scratch tree reads back as anything but the checked catalogue; on `codex`,
+`catalogue-name-reserved` for an entry published as `mcp` or under `mcp__` and
+`catalogue-name-duplicate` for two entries published under one name, which the app-server would
+refuse at `thread/start`. `mcp-serve --catalogue <FILE>` serves the same catalogue on
 its own, and refuses `--allow-program` beside it with the same code.
 
 `catalogue-copy-differs` is the one catalogue refusal that comes after something has started. It

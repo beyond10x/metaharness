@@ -5606,7 +5606,8 @@ All of these keys exist at both pins.
 
 No hook is installed, because every tool offered is a client tool and is decided where it is
 called (point 4). `approval_policy = "never"`, the sandbox, the personality and the provider are as
-on the exec route.
+on the exec route. *Corrected below (review corrections, 1): the catalogue's tools are client
+tools; code mode's are vendor tools with no effect of their own.*
 
 **3. The conversation.** Newline-delimited JSON-RPC on the child's stdin and stdout, without a
 `jsonrpc` field (`app-server-protocol/src/rpc.rs:46-56`):
@@ -5696,7 +5697,8 @@ for the names, which are read from the record.
   there, and `clock__curr_time` reads the wall clock.
 
 So `offered_tools` is the catalogue the model calls, not everything it was offered, and on this
-route the launch attestation says so among its `ambient_inputs`.
+route the launch attestation says so among its `ambient_inputs`. *Replaced below (review
+corrections, 2): `offered_tools` names the code-mode tools too.*
 
 **7. Refusals.** `check_spec` raises `catalogue-not-carried` for b10x only. `--tool-surface owned`
 on Codex is admitted with a catalogue and refused without one, as before (`ToolSurfaceOwned`). The
@@ -5717,3 +5719,45 @@ declared and not handed over, or handed over undeclared (`CatalogueUnread`, as o
 
 Event wire, frame wire and command wire are unchanged. The Codex `LaunchContext` gains
 `dynamic_tools`, and `LaunchPlan` gains `app_server`.
+
+#### a66 § review corrections (2026-10-29)
+
+An adversary pass and a security pass on the unit found the following; each is now a case in
+`crates/metaharness-codex/tests/{adversary,security}_d193_codex_catalogue.rs` and
+`crates/metaharness/tests/adversary_d193_codex_catalogue.rs`.
+
+1. **Code mode stays, and H8 says what is true.** At `rust-v0.160.0` `exec` runs its script in a
+   separate V8 process with no file system, network or process access and refuses imports; `wait`
+   waits on a cell; `request_user_input_async` posts a message and returns accepted. None performs an
+   effect except through the catalogue's entries, and each such call is still an `item/tool/call`
+   the frame decides, so the route stays admitted. H8 no longer says every offered tool is a client
+   tool: the catalogue's tools are client tools, and the code-mode tools are vendor tools with no
+   effect of their own. The scratch config's opening comment says the same.
+2. **`offered_tools` names what was offered.** On the `owned_tool` seam it is the record's
+   `session_meta.dynamic_tools`, then `exec`, `wait` and `request_user_input_async` where the
+   record does not list them (`metaharness_codex::APP_SERVER_VENDOR_TOOLS`). The rollout lists no
+   built-in, so those three come from the launch's declaration and not the record, and the launch
+   attestation says so in its `ambient_inputs`. A model whose entry asks for neither code mode nor
+   `request_user_input_async` was offered fewer; the list is then an upper bound. A record that shows
+   `exec` called now shows a tool the list names (invariant 3).
+3. **A code-mode cell keeps its script.** A `custom_tool_call` carries its body in `input`, not
+   `arguments`; `tool.requested.input` is that text, verbatim. On the exec route this moves one
+   line of the `golden-rollout` expectation: the 0.145.0 record's `exec` cell, which read
+   `"input": ""`, now carries its script.
+4. **Only this run's thread ends its input.** `turn/completed` closes stdin only when its
+   `threadId` is the thread `thread/start` opened (`v2/turn.rs:549-552`).
+5. **The retained client half is what reached the child.** A message is written to
+   `rollout.stdin.jsonl` after it was written to the child's stdin; a write to a closed or dead
+   child is not recorded, and an answer to a child that has exited performs nothing.
+6. **A reused request id is refused.** An `item/tool/call` whose JSON-RPC id is held by a call not
+   yet answered is answered `success: false` at once and performs nothing; it is still presented,
+   under a key of its own (`rpc-<id>#<n>`), so no decision is routed to the other call. A `callId`
+   the seam already holds is presented under that key too.
+7. **A catalogue `thread/start` would refuse is refused before the spawn.** An entry published as
+   `mcp` or under `mcp__` (`thread_processor.rs:362`) is `catalogue-name-reserved`, and two entries
+   under one name (`:365-371`) are `catalogue-name-duplicate`, both before the scratch tree, the
+   spawn and the credential copy. The rest of `validate_dynamic_tools` is a40 § 3's rendering rule,
+   or concerns namespaces and deferred tools this route never sends; its input-schema parse is not
+   checked here.
+8. **Invariant 2** names `spawn_codex_app_server.rs` (`CodexAppServerRunner`) as the second Codex
+   spawn runner under the same declared exception.

@@ -823,8 +823,9 @@ pub fn plan_launch(spec: &RunSpec, context: &LaunchContext) -> Result<LaunchPlan
     guard_arguments(&args)?;
     guard_argument_lengths(&args, &context.context_files)?;
     let env = build_env(spec, context, &config_home)?;
-    // No hook on the app-server route: every tool it offers is a client tool, decided where it
-    // is called (amendment a66 § 2).
+    // No hook on the app-server route: the catalogue's tools are client tools, decided where
+    // each is called, and the code-mode tools no config removes have no effect of their own
+    // (amendment a66 § 2 and § review corrections).
     let hook = if app_server {
         Value::Null
     } else {
@@ -1301,9 +1302,9 @@ fn build_hook(hook_path: &Path) -> Result<Value, LaunchRefusal> {
 /// The app-server route's opening words (design amendment a66 § 2).
 const APP_SERVER_PREAMBLE: &str = "# metaharness scratch CODEX_HOME for codex app-server. Generated per run; edited by\n\
      # nobody.\n\n\
-     # Every tool this run offers is a client tool metaharness serves and decides where it is\n\
-     # called (item/tool/call, design amendment a66). `never` keeps a vendor prompt nobody is\n\
-     # there to answer from turning a call away first.\n\
+     # The catalogue's tools are client tools metaharness serves and decides where each is\n\
+     # called (item/tool/call, design amendment a66); code mode's tools reach nothing else.\n\
+     # `never` keeps a vendor prompt nobody is there to answer from turning a call away first.\n\
      approval_policy = \"never\"\n";
 
 /// The tables the app-server route writes in place of the hook tables (design amendment a66 § 2).
@@ -1595,9 +1596,12 @@ fn attest(
             HermeticRow::H8,
             if spec.catalogue.is_some() {
                 "the argv is app-server --strict-config --listen stdio://, so a config key the \
-                 binary does not know fails the start; no hook is installed, because every tool \
-                 offered is a client tool (dynamicTools at thread/start, environments: []) and \
-                 each call is decided where it is made, at item/tool/call (design amendment a66); \
+                 binary does not know fails the start; no hook is installed: the catalogue's \
+                 tools are client tools (dynamicTools at thread/start, environments: []), each \
+                 call decided where it is made, at item/tool/call, and the code-mode tools a \
+                 model's catalogue entry adds (exec, wait, request_user_input_async) are vendor \
+                 tools with no effect of their own, every catalogue call made from inside them \
+                 still an item/tool/call (design amendment a66 § review corrections); \
                  approval_policy = \"never\" in the scratch config, so no vendor prompt can turn a \
                  call away before the seam sees it"
             } else {
@@ -1898,8 +1902,10 @@ fn ambient_inputs(spec: &RunSpec) -> Vec<String> {
              removes: on 0.160.0 a code-mode model is offered `exec` and `wait`, through which it \
              reaches the catalogue's entries and `clock__curr_time`, and a model that names it is \
              offered `request_user_input_async`. The rollout lists none of them, so \
-             offered_tools is the catalogue, not everything the model was offered (design \
-             amendment a66 § 6)"
+             session.started.offered_tools is the record's dynamic_tools followed by `exec`, \
+             `wait` and `request_user_input_async` from this launch's declared vendor \
+             additions, not from the record; a model whose entry asks for neither was offered \
+             fewer (design amendment a66 § 6 and § review corrections)"
                 .to_string(),
         );
     }

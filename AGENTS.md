@@ -66,9 +66,11 @@ Each is a claim that can be checked. Breaking one is a design change, not a refa
    and the trait is what the run loop holds: `crates/metaharness/src/spawn.rs` (`SpawnRunner` —
    Claude Code, record and calls down one pipe) and `crates/metaharness/src/spawn_codex.rs`
    (`CodexSpawnRunner` — `codex exec`, whose record is the `$CODEX_HOME/sessions/…/rollout-*.jsonl`
-   file it discovers and tails), with their recorded vectors `spawn_vectors.rs` and
-   `spawn_codex_vectors.rs`. Nothing else vendor-specific is admitted here; a third vendor's launch
-   is an argument for moving both of these out, not for adding a third beside them.
+   file it discovers and tails) and `crates/metaharness/src/spawn_codex_app_server.rs`
+   (`CodexAppServerRunner` — `codex app-server`, the same vendor and the same trait), with their
+   recorded vectors `spawn_vectors.rs`, `spawn_codex_vectors.rs` and
+   `spawn_codex_app_server_vectors.rs`. Nothing else vendor-specific is admitted here; a third
+   vendor's launch is an argument for moving these out, not for adding another beside them.
 3. **Absence of evidence is not a property.** Hermeticity, tool restriction and denial behaviour are
    asserted from the run's own record — never from configuration, a directory layout or a flag that
    was passed. A run that pinned nothing is *nobody found out*, not *nothing moved*; that confusion

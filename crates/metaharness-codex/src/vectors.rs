@@ -1242,8 +1242,9 @@ fn vector_app_server_conversation() -> VectorOutcome {
 }
 
 /// C2 — **the offered tools on the app-server route** (amendment a66 § 5-6): an opening record
-/// whose `dynamic_tools` names the catalogue's entries becomes `session.started.offered_tools`
-/// under the owned-tool seam, and the same record under the hook seam claims nothing, because the
+/// whose `dynamic_tools` names the catalogue's entries becomes `session.started.offered_tools`,
+/// followed by the vendor tools the launch declares (a66 § review corrections), under the
+/// owned-tool seam, and the same record under the hook seam claims nothing, because the
 /// exec route's built-ins are not in it.
 fn vector_dynamic_tools_offered() -> VectorOutcome {
     let id = "c2-dynamic-tools-offered";
@@ -1270,7 +1271,7 @@ fn vector_dynamic_tools_offered() -> VectorOutcome {
         "hook": offered(Seam::Hook),
     });
     let expected = json!({
-        "owned_tool": ["fs_read", "fs_stat"],
+        "owned_tool": ["fs_read", "fs_stat", "exec", "wait", "request_user_input_async"],
         "hook": null,
     });
     compare(id, ConformanceTier::C2, &expected.to_string(), &observed)

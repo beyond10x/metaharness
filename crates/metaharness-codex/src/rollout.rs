@@ -124,7 +124,8 @@ enum OfferedTools {
     /// Nowhere: the record lists no built-in tool, so the field stays absent.
     Absent,
     /// The opening record's `dynamic_tools`, because the launch removed every built-in tool a
-    /// config key reaches and the catalogue is what the model calls.
+    /// config key reaches, then the vendor tools no config key removes, from the launch's
+    /// declaration ([`crate::APP_SERVER_VENDOR_TOOLS`]).
     DynamicTools,
 }
 
@@ -155,10 +156,13 @@ impl RolloutReader {
     /// adds (a66 § 6).
     ///
     /// Its `session_meta.dynamic_tools` (`codex-rs/protocol/src/protocol.rs:3176` at
-    /// `rust-v0.160.0`) then become `session.started.offered_tools`. The record lists no built-in
-    /// tool either way, so a reader that cannot vouch for the launch keeps the field absent.
+    /// `rust-v0.160.0`) then become `session.started.offered_tools`, followed by
+    /// [`crate::APP_SERVER_VENDOR_TOOLS`] where the record does not already list them: `exec`,
+    /// `wait` and `request_user_input_async`, which the record never lists and the launch declares
+    /// (a66 § review corrections). The record lists no built-in tool either way, so a reader that
+    /// cannot vouch for the launch keeps the field absent.
     #[must_use]
-    pub fn offering_only_dynamic_tools(mut self) -> Self {
+    pub fn on_the_app_server_route(mut self) -> Self {
         self.offered = OfferedTools::DynamicTools;
         self
     }
@@ -422,9 +426,10 @@ impl RolloutReader {
             cwd: payload["cwd"].as_str().map(ToString::to_string),
             // Absent unless the launch removed every built-in a config key reaches (amendment a66
             // § 5): the record lists no built-in tool, so only that launch makes `dynamic_tools`
-            // the list.
+            // the list, followed by the vendor tools that launch declares no config removes
+            // (a66 § review corrections).
             offered_tools: if self.offered == OfferedTools::DynamicTools {
-                dynamic_tool_names(payload)
+                dynamic_tool_names(payload).map(with_declared_vendor_tools)
             } else {
                 None
             },
@@ -461,11 +466,9 @@ impl RolloutReader {
             "function_call" | "custom_tool_call" => {
                 let call_id = payload["call_id"].as_str().unwrap_or_default().to_string();
                 let name = payload["name"].as_str().unwrap_or_default().to_string();
-                // `arguments` is a JSON-encoded string on the wire; decoded when it parses,
-                // carried verbatim when it does not — never dropped either way.
-                let raw = payload["arguments"].as_str().unwrap_or_default();
-                let input = serde_json::from_str::<Value>(raw)
-                    .unwrap_or_else(|_| Value::String(raw.to_string()));
+                // `arguments` is a JSON-encoded string on the wire; a custom tool's body is
+                // `input` (a66 § review corrections). Never dropped either way.
+                let input = call_input(payload);
                 let mut events = self.observations.call(&call_id, &name, payload);
                 events.push(Event::ToolRequested {
                     // Left empty here on purpose, exactly as `operations` is: what a call touches is
@@ -674,6 +677,39 @@ fn dynamic_tool_names(payload: &Value) -> Option<Vec<String>> {
             .filter_map(|tool| tool["name"].as_str().map(ToString::to_string))
             .collect(),
     )
+}
+
+/// The offered tools on the app-server route: the record's `dynamic_tools`, then each vendor tool
+/// the launch declares a model's catalogue entry adds and no config key removes
+/// ([`crate::APP_SERVER_VENDOR_TOOLS`]) that the record did not already list (amendment a66
+/// § review corrections).
+///
+/// The rollout lists no built-in tool, so those names are the launch's declaration and not the
+/// record's; the launch attestation says so among its `ambient_inputs`. A record that shows the
+/// model calling `exec` then shows a tool the list names.
+fn with_declared_vendor_tools(mut names: Vec<String>) -> Vec<String> {
+    for tool in crate::APP_SERVER_VENDOR_TOOLS {
+        if !names.iter().any(|name| name == tool) {
+            names.push(tool.to_owned());
+        }
+    }
+    names
+}
+
+/// A call record's input: `arguments` for a `function_call`, decoded when it parses and carried
+/// verbatim when it does not; for a `custom_tool_call`, whose free-form body is `input` (a
+/// code-mode `exec` cell's script, an `apply_patch` body), that text verbatim. Never dropped.
+fn call_input(payload: &Value) -> Value {
+    if let Some(raw) = payload["arguments"].as_str() {
+        return serde_json::from_str::<Value>(raw)
+            .unwrap_or_else(|_| Value::String(raw.to_owned()));
+    }
+    if payload["type"].as_str() == Some("custom_tool_call")
+        && let Some(raw) = payload["input"].as_str()
+    {
+        return Value::String(raw.to_owned());
+    }
+    Value::String(String::new())
 }
 
 /// The text of a message-ish payload, wherever this pin has seen it live.

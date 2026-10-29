@@ -316,13 +316,32 @@ impl AppServerProcess {
                     arguments,
                     line,
                 } => {
+                    // A request id the server reuses while a call under it is still unanswered
+                    // is refused at once and performs nothing: an answer carrying that id could
+                    // be taken for either call, so no decision is applied to it (a66 § review
+                    // corrections). The call is still handed to the run loop, which records it.
+                    let reused = self
+                        .calls
+                        .values()
+                        .any(|call| !call.answered && call.request_id == request_id);
+                    if reused {
+                        self.send(&metaharness_codex::tool_call_answer(
+                            &request_id,
+                            &format!(
+                                "metaharness refused this call, so nothing was done: its request \
+                                 id {request_id} is already held by a call that has not been \
+                                 answered"
+                            ),
+                            false,
+                        ));
+                    }
                     self.calls.insert(
                         key,
                         ToolCall {
                             request_id,
                             tool,
                             arguments,
-                            answered: false,
+                            answered: reused,
                             waited: 0,
                         },
                     );
@@ -337,28 +356,43 @@ impl AppServerProcess {
         }
     }
 
-    /// Write one message to the child, and retain it. A child whose stdin is closed or broken has
-    /// stopped reading; what it did instead is on its stdout and in its exit status.
+    /// Write one message to the child, and retain it once it was written. A child whose stdin is
+    /// closed or broken has stopped reading; what it did instead is on its stdout and in its exit
+    /// status. The retained client half is the record of what reached the child, so a message
+    /// that did not is not in it (a66 § review corrections).
     fn send(&mut self, message: &Value) {
         let line = message.to_string();
-        if let Some(log) = self.stdin_log.as_mut() {
-            let _ = writeln!(log, "{line}");
-        }
         let Some(stdin) = self.stdin.as_mut() else {
             return;
         };
         let written = writeln!(stdin, "{line}").and_then(|()| stdin.flush());
         if written.is_err() {
             self.stdin = None;
+            return;
+        }
+        if let Some(log) = self.stdin_log.as_mut() {
+            let _ = writeln!(log, "{line}");
         }
     }
 
     /// Answer one call as the decision allows.
+    ///
+    /// A child that has exited, or whose stdin is closed, can read no answer, so nothing is
+    /// performed for it and nothing is sent.
     fn answer(&mut self, key: &str, decision: &Decision) {
         let Some(call) = self.calls.get(key).cloned() else {
             return;
         };
         if call.answered {
+            return;
+        }
+        if self.child_finished() {
+            self.stdin = None;
+        }
+        if self.stdin.is_none() {
+            if let Some(held) = self.calls.get_mut(key) {
+                held.answered = true;
+            }
             return;
         }
         let (text, success) = match decision {
