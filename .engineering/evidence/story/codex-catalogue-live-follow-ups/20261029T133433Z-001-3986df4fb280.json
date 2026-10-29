@@ -1,0 +1,12 @@
+{
+  "at": "2026-10-29T13:34:33Z",
+  "actor": "human:timo",
+  "artifact": "story:codex-catalogue-live-follow-ups",
+  "kind": "story",
+  "revision": 5,
+  "change": {
+    "change": "evidence",
+    "kind": "test_result",
+    "source": "crates/metaharness/tests/caller_catalogue.rs::two_entries_under_one_name_are_refused_on_claude_and_codex_before_the_spawn"
+  }
+}

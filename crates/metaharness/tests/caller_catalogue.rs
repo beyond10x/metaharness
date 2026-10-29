@@ -13,10 +13,10 @@ use metaharness::protocol::{
     NodeRef, Operation, OperationSet, RunSpec, StepRef, SubjectScope, ToolSurface, WorkflowRef,
 };
 use metaharness::{
-    CATALOGUE_MALFORMED, CATALOGUE_NEEDS_OWNED_SURFACE, CATALOGUE_NOT_CARRIED,
-    CATALOGUE_NOT_TOOL_CONTRACT, CATALOGUE_UNREADABLE, CATALOGUE_WITH_ALLOW_PROGRAM, ClaudeSeams,
-    Input, ManualClock, Metaharness, Refusal, ScriptStep, ScriptedLog, ScriptedRunner,
-    ScriptedSeams, check_spec, warning,
+    CATALOGUE_MALFORMED, CATALOGUE_NAME_DUPLICATE, CATALOGUE_NEEDS_OWNED_SURFACE,
+    CATALOGUE_NOT_CARRIED, CATALOGUE_NOT_TOOL_CONTRACT, CATALOGUE_UNREADABLE,
+    CATALOGUE_WITH_ALLOW_PROGRAM, ClaudeSeams, Input, ManualClock, Metaharness, Refusal,
+    ScriptStep, ScriptedLog, ScriptedRunner, ScriptedSeams, check_spec, warning,
 };
 use metaharness_tools::{CallerCatalogue, Catalogue, LocalOperations, Server, Verbs};
 use serde_json::{Value, json};
@@ -421,6 +421,36 @@ fn a_malformed_catalogue_is_refused_by_name_before_the_spawn() {
         assert!(
             words.starts_with(&format!("{CATALOGUE_MALFORMED}: ")),
             "{name}: {words}"
+        );
+    }
+}
+
+/// `story:codex-catalogue-live-follow-ups` (amendment a67): two entries under one published name
+/// are refused on Claude and on Codex, before the spawn, when the catalogue is read. The
+/// `tool-contract/1` checks refuse a rendering two operations share (`b10x-tool-contract` 0.5.0,
+/// `validate.rs:195`), so the document is `catalogue-malformed` on every kind, and Codex's own
+/// `catalogue-name-duplicate` is never reached from a catalogue file.
+#[test]
+fn two_entries_under_one_name_are_refused_on_claude_and_codex_before_the_spawn() {
+    let dir = tempfile::tempdir().expect("a directory");
+    let text = std::fs::read_to_string(fixture())
+        .expect("the fixture")
+        .replace("mcp: fs_stat", "mcp: fs_read");
+    let path = written(dir.path(), "duplicate.yaml", &text);
+    for kind in [Kind::Claude, Kind::Codex] {
+        let refusal = refused_before_the_spawn(builder(kind).with_catalogue(&path));
+        let words = refusal.to_string();
+        assert!(
+            words.starts_with(&format!("{CATALOGUE_MALFORMED}: ")),
+            "{kind:?}: {words}"
+        );
+        assert!(
+            words.contains("fs.stat: renderings: mcp name fs_read is also used by fs.read"),
+            "{kind:?}: {words}"
+        );
+        assert!(
+            !words.starts_with(&format!("{CATALOGUE_NAME_DUPLICATE}: ")),
+            "{kind:?}: {words}"
         );
     }
 }
