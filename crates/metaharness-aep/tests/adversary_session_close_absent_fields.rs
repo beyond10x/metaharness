@@ -149,7 +149,7 @@ fn interpreted(spec: &Path, scenarios: &Path) -> (Value, String) {
         .args(["--report-format", "2", "--report-out"])
         .arg(&report)
         .output()
-        .expect("ESS 0.75.0 is a gate prerequisite");
+        .expect("ESS 0.76.0 is a gate prerequisite");
     let text = format!(
         "{}{}",
         String::from_utf8_lossy(&output.stdout),
