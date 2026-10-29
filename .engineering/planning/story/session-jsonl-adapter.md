@@ -2,15 +2,16 @@
 format: aep.planning-md/3
 id: story:session-jsonl-adapter
 kind: story
-status: active
+status: implemented
 title: metaharness project normalizes a Claude Code session as stored on disk
 summary: A reader in metaharness-claude maps an on-disk Claude Code session and its sub-agent files into trace-ir/1, total by construction; first consumer is the decider corpus.
 relations:
 - decomposes: epic:session-mining
-revision: 3
+revision: 4
 transitions:
 - {from: "draft", to: "proposed", at: "2026-10-28T10:35:40Z", actor: "human:timo", revision: 2}
 - {from: "proposed", to: "active", at: "2026-10-28T10:35:40Z", actor: "human:timo", revision: 3}
+- {from: "active", to: "implemented", at: "2026-10-29T08:23:29Z", actor: "human:timo", revision: 4, decided_on: {"recorded":{"test_result":1}}}
 ---
 ## Outcome
 
