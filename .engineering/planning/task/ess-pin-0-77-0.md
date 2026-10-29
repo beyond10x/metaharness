@@ -2,16 +2,17 @@
 format: aep.planning-md/3
 id: task:ess-pin-0-77-0
 kind: task
-status: active
+status: implemented
 title: Move the specification toolchain to ESS 0.77.0
 summary: Both manifests require ess 0.77.0, CI installs ess-cli at f692aabb, conformance.json byte-identical
 owner: metaharness
 relations:
 - decomposes: story:ess-specification-and-hardening
-revision: 3
+revision: 4
 transitions:
 - {from: "draft", to: "proposed", at: "2026-10-29T20:41:35Z", actor: "human:timo", revision: 2}
 - {from: "proposed", to: "active", at: "2026-10-29T20:41:35Z", actor: "human:timo", revision: 3}
+- {from: "active", to: "implemented", at: "2026-10-29T20:46:16Z", actor: "human:timo", revision: 4, decided_on: {"recorded":{"test_result":1}}}
 ---
 ## Purpose
 

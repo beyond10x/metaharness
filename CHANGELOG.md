@@ -5,6 +5,8 @@ was amended and the amendment is named here.
 
 ## [Unreleased]
 
+## [0.24.1] — 2026-10-29
+
 ### Added
 
 - `docs/research/2026-10-29-codex-catalogue-live-follow-ups.md`: six live runs of 0.24.0's `run codex --catalogue` on a ChatGPT login, at 0.153.4 and 0.160.0. With the `sleep_tool` and `[agents]` switches the model is offered `exec`, `wait` and `request_user_input_async` beside the catalogue and nothing else. `request_user_input_async` waits for nobody and performs no effect. `exec` wrote no file, started no process and opened no connection when the prompt asked for each (amendment a67, story:codex-catalogue-live-follow-ups).

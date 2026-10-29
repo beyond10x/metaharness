@@ -1,0 +1,12 @@
+{
+  "at": "2026-10-29T20:46:16Z",
+  "actor": "human:timo",
+  "artifact": "task:ess-pin-0-77-0",
+  "kind": "task",
+  "revision": 3,
+  "change": {
+    "change": "evidence",
+    "kind": "test_result",
+    "source": "task check on integration/d221 at 2020231 with ESS 0.77.0: 6 steps exit 0, 138 test binaries, 1511 passed, 0 failed, 54 ignored"
+  }
+}
