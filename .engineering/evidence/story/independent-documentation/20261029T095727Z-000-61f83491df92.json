@@ -1,0 +1,13 @@
+{
+  "at": "2026-10-29T09:57:27Z",
+  "actor": "human:timo",
+  "artifact": "story:independent-documentation",
+  "kind": "story",
+  "revision": 9,
+  "change": {
+    "change": "evidence",
+    "kind": "verification",
+    "source": "live check 2026-10-29: b10x-site.json commit 9855ebe, 12 pages 200, 13 legacy routes redirect",
+    "reference": "https://beyond10x.github.io/metaharness/.well-known/b10x-site.json"
+  }
+}

@@ -36,7 +36,7 @@ scope:
   path: crates/metaharness/src/run.rs
 - confidence: inferred
   path: docs/design/metaharness-protocol-v0.1.md
-revision: 16
+revision: 17
 transitions:
 - {from: "draft", to: "proposed", at: "2026-10-21T12:00:26Z", actor: "human:timo", revision: 14, decided_on: {"recorded":{"review_outcome":4}}}
 - {from: "proposed", to: "active", at: "2026-10-21T12:00:26Z", actor: "human:timo", revision: 15, decided_on: {"recorded":{"review_outcome":4}}}
@@ -151,3 +151,13 @@ reaches the harness verb, which refuses it); a FIFO swapped in between the stat 
 block the open. Both, with the review's s8-3, s8-4 and s7-5, are `story:catalogue-road-leftovers`
 (draft). One document is one tool-contract family, so a session cannot get two families
 (`story:several-tool-contract-families-per-session`, draft, unscheduled).
+
+## Re-check for wave D193 (2026-10-29)
+
+Re-checked against `origin/main` at `9855ebe` (release 0.23.0) and dropped from wave D193 as blocked.
+What is delivered is unchanged: Claude carries a caller's catalogue, b10x refuses it by name. The
+part still open is the Codex arm. It is `story:codex-catalogue-on-app-server`, which is still `draft`, and
+its own Scheduling says that implementation "needs the orchestrator's word: it adds a second Codex
+launch route and a live probe that spends". Its acceptance is that live probe at Codex 0.153.4. A spending
+run is outside the D193 grant, so the decision goes to `decision-blocker:codex-catalogue-live-probe`.
+This story stays `active` until that decision is taken.

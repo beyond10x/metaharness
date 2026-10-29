@@ -2,7 +2,7 @@
 format: aep.planning-md/3
 id: story:independent-documentation
 kind: story
-status: active
+status: implemented
 title: Publish independent Mantle-style Metaharness documentation
 scope:
 - confidence: cited
@@ -23,10 +23,11 @@ scope:
   path: crates/metaharness-docs
 - confidence: cited
   path: website
-revision: 7
+revision: 9
 transitions:
 - {from: "draft", to: "proposed", at: "2026-10-03T19:49:37Z", actor: "human:timo", revision: 4}
 - {from: "proposed", to: "active", at: "2026-10-03T19:49:37Z", actor: "human:timo", revision: 5}
+- {from: "active", to: "implemented", at: "2026-10-29T09:55:52Z", actor: "human:timo", revision: 9, decided_on: {"recorded":{"test_result":1,"review_outcome":3}}}
 ---
 ## Acceptance
 Metaharness publishes a Mantle-style site from its own main at /metaharness/, preserving all 13 documentation pages and existing deep links, with exact source provenance, while Atlas and Website stop owning its documentation content and retain working redirects.
@@ -54,3 +55,18 @@ Site unit 50c97895f864b84d7a573d8db03d89185050d8cd preserves all 13 pages (13,05
 
 ## Adversarial closure
 The site builder now stages replacements and accepts only a complete owned output inventory, preserving unrelated files and symlinks on refusal. Asset validation checks poster/background URLs and refuses unsupported srcset, inline CSS and stylesheet asset references through Rust tokenization. Final package verification: 11 unit and 6 publication tests pass; the independent adversary reran 9 boundary tests, all green. Trusted runtime probes do not execute candidate scripts and reject altered lock/bootstrap data. Agentic Principles PR 16 merged as b016a34be831af0695f4cc159e0d537b98d38312 with the exact source pin preserved. Stale Gates hooks were refreshed through the supported installer; policy baselines were not changed.
+
+## Closure (wave D193, 2026-10-29)
+
+Re-checked against `origin/main` at `9855ebe` and found done, so it was dropped from wave D193 and moved to
+`implemented` here. Live checks on 2026-10-29:
+
+- `https://beyond10x.github.io/metaharness/.well-known/b10x-site.json` reports `schema:
+  b10x-project-site/v1`, `repository: metaharness`, `baseUrl: /metaharness/` and `commit:
+  9855ebef0f7b0a0437cf8c35dc763d3f5ac2e695`, which is the head of `main`.
+- `website/docs/` holds the 13 pages. Each of the 12 non-index pages answers 200 under
+  `/metaharness/docs/<page>/`.
+- Each former `/docs/metaharness/<page>/` route and `/docs/metaharness/` itself serve Website's
+  "Documentation moved" page, which redirects to the matching `/metaharness/docs/` route.
+- Website's `sources.yaml` records metaharness as published from its own repository and main commit, with
+  Website keeping only discovery and the redirects.
