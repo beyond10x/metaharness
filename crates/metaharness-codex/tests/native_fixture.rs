@@ -282,6 +282,7 @@ fn launch(root: &Path, endpoint: &str, mode: Mode) -> LaunchPlan {
         loopback: None,
         // A fresh namespace on this machine, where no `/etc/codex` layer exists (a34).
         config_layers: Vec::new(),
+        dynamic_tools: Vec::new(),
     };
     let plan = plan_launch(&spec, &context).unwrap();
     assert_eq!(plan.credential_copies, []);

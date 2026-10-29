@@ -54,7 +54,7 @@ mod server;
 
 pub use caller::{
     CATALOGUE_BYTES_MAX, CATALOGUE_MALFORMED, CATALOGUE_NOT_TOOL_CONTRACT, CATALOGUE_UNREADABLE,
-    CallerCatalogue, CatalogueEntry, CatalogueError, render_scratch_copy,
+    CallerCatalogue, CatalogueEntry, CatalogueError, EntryNaming, render_scratch_copy,
 };
 pub use harness_catalogue::{
     Catalogue, DESCRIBE_VERB, INVOKE_VERB, LocalOperations, Operations, SEARCH_VERB, Verbs,

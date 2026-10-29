@@ -36,13 +36,13 @@ use serde_json::Value;
 use crate::process::{HarnessProcess, LaunchPlanView, ProcessRunner, copy_credentials};
 
 /// How long one poll of the child's stream waits before the channel is looked at again.
-const POLL: Duration = Duration::from_millis(20);
+pub(crate) const POLL: Duration = Duration::from_millis(20);
 
 /// How many idle polls pass before an unanswered hook request is reported as a block.
-const BLOCK_GRACE_POLLS: u32 = 100;
+pub(crate) const BLOCK_GRACE_POLLS: u32 = 100;
 
 /// How many lines may sit between the reader threads and the run loop before they wait.
-const STREAM_QUEUE: usize = 256;
+pub(crate) const STREAM_QUEUE: usize = 256;
 
 /// How often the rollout tail looks for new bytes, and for the session file before it exists.
 const TAIL_POLL: Duration = Duration::from_millis(25);
@@ -52,7 +52,7 @@ const TAIL_POLL: Duration = Duration::from_millis(25);
 /// `$CODEX_HOME/sessions/YYYY/MM/DD/rollout-<ISO8601>-<uuid7>.jsonl`, verified against 2,437 local
 /// files. The runner walks the tree rather than reconstructing today's date, because a run that
 /// crosses midnight would otherwise look for its own record in yesterday's directory.
-const SESSIONS_DIR: &str = "sessions";
+pub(crate) const SESSIONS_DIR: &str = "sessions";
 
 /// One hook process, waiting.
 #[derive(Debug, Clone)]
@@ -292,13 +292,13 @@ pub(crate) fn stdout_path(transcript: &Path) -> PathBuf {
 }
 
 /// Everything the rollout tail needs, gathered so the thread takes one argument.
-struct RolloutTail {
-    sessions: PathBuf,
-    transcript: PathBuf,
-    sender: SyncSender<String>,
-    error_slot: Arc<Mutex<Option<String>>>,
-    done: Arc<Mutex<bool>>,
-    found: Arc<Mutex<Option<PathBuf>>>,
+pub(crate) struct RolloutTail {
+    pub(crate) sessions: PathBuf,
+    pub(crate) transcript: PathBuf,
+    pub(crate) sender: SyncSender<String>,
+    pub(crate) error_slot: Arc<Mutex<Option<String>>>,
+    pub(crate) done: Arc<Mutex<bool>>,
+    pub(crate) found: Arc<Mutex<Option<PathBuf>>>,
 }
 
 /// Follow the session rollout, retaining every line and handing every line on.
@@ -307,7 +307,7 @@ struct RolloutTail {
 /// while it is read — so this is a poll and not a stream. It stops when the process says the child
 /// is gone **and** the file has stopped growing, because a child that has exited may still have
 /// its last records in flight.
-fn spawn_rollout_tail(tail: RolloutTail) {
+pub(crate) fn spawn_rollout_tail(tail: RolloutTail) {
     std::thread::spawn(move || {
         let mut file = match std::fs::File::create(&tail.transcript) {
             Ok(file) => Some(file),
@@ -469,7 +469,7 @@ fn spawn_stdout_retainer(
 }
 
 /// Retain the child's stderr whole.
-fn spawn_stderr_reader(stderr: std::process::ChildStderr, into: Arc<Mutex<String>>) {
+pub(crate) fn spawn_stderr_reader(stderr: std::process::ChildStderr, into: Arc<Mutex<String>>) {
     std::thread::spawn(move || {
         for line in BufReader::new(stderr).lines() {
             let Ok(line) = line else { break };
@@ -481,7 +481,7 @@ fn spawn_stderr_reader(stderr: std::process::ChildStderr, into: Arc<Mutex<String
     });
 }
 
-fn record(slot: &Arc<Mutex<Option<String>>>, message: String) {
+pub(crate) fn record(slot: &Arc<Mutex<Option<String>>>, message: String) {
     if let Ok(mut held) = slot.lock()
         && held.is_none()
     {
@@ -511,7 +511,7 @@ pub struct CodexProcess {
 
 /// Whether the child has been waited for, and what it said.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
-enum Exited {
+pub(crate) enum Exited {
     /// Nobody has waited for it yet.
     NotYet,
     /// The actual OS status, retained intact even when `try_wait` observed it first.

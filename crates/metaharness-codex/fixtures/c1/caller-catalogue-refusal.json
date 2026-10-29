@@ -1,6 +1,0 @@
-{
-  "refusal": {
-    "code": "UNSUPPORTED_CONTROL",
-    "display": "the run asked for --catalogue and the pinned codex exec has no way to express it: the switches that take its built-in tools away have not been driven in this build, so the catalogue could be offered beside them rather than instead of them, and a rollout lists no tools, so session.started's offered_tools could not show which; `dynamicTools` at thread/start belongs to the app-server, which this build does not launch. It is refused rather than dropped, because an option that was set and ignored is a run that is not the one that was asked for"
-  }
-}

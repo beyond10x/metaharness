@@ -95,6 +95,40 @@ pub fn hook_request_line(key: &str, raw: &str) -> String {
     .to_string()
 }
 
+/// The value [`HOOK_ENVELOPE`] carries on a client tool call from the app-server route (design
+/// amendment a66).
+const DYNAMIC_TOOL_CALL: &str = "dynamic_tool_call";
+
+/// The key a decision line for a client tool call carries, in place of `call_id`.
+const DYNAMIC_DECISION: &str = "dynamic_call";
+
+/// One `item/tool/call` from the app-server, as a line the seam will read (design amendment a66).
+///
+/// `params` is the request's `params` as the vendor sent them: `{threadId, turnId, callId,
+/// namespace, tool, arguments}` (`app-server-protocol/src/protocol/v2/item.rs:1657` at
+/// `rust-v0.160.0`). `key` is the name the decision is routed back under.
+#[must_use]
+pub fn dynamic_tool_call_line(key: &str, params: &Value) -> String {
+    serde_json::json!({
+        HOOK_ENVELOPE: DYNAMIC_TOOL_CALL,
+        "key": key,
+        "call": params,
+    })
+    .to_string()
+}
+
+/// The key and the decision a decision line for a client tool call carries, or `None` when the
+/// line is not one (design amendment a66).
+///
+/// The other half of [`CodexSeam`]'s decision line, published here so the runner that answers
+/// the call reads the envelope this crate wrote and no other party spells it.
+#[must_use]
+pub fn dynamic_decision(line: &Value) -> Option<(String, Decision)> {
+    let key = line.get(DYNAMIC_DECISION)?.as_str()?.to_string();
+    let decision = serde_json::from_value(line.get("decision")?.clone()).ok()?;
+    Some((key, decision))
+}
+
 /// The codex seam: rollout records and live hook requests in, hook responses out.
 pub struct CodexSeam {
     reader: RolloutReader,
@@ -105,6 +139,9 @@ pub struct CodexSeam {
     /// Held here and not in the runner because the runner never parses a payload — it carries the
     /// hook's stdin verbatim and the adapter decides what it means.
     routes: BTreeMap<String, String>,
+    /// Which client tool call is waiting under which key, on the app-server route (a66): the
+    /// vendor's `callId` mapped to the name the runner answers the JSON-RPC request under.
+    dynamic: BTreeMap<String, String>,
 }
 
 impl std::fmt::Debug for CodexSeam {
@@ -115,12 +152,25 @@ impl std::fmt::Debug for CodexSeam {
 
 impl CodexSeam {
     /// A seam over the retained record and the attestation that goes into `session.started`.
+    ///
+    /// Under [`Seam::OwnedTool`], the app-server route (design amendment a66), the reader takes the
+    /// opening record's `dynamic_tools` for the offered tools: that launch removed every built-in
+    /// tool a config key reaches, so the client tools are the catalogue the model calls. A model
+    /// catalogue can still add code mode's `exec` and `wait` and `request_user_input_async`, which
+    /// the rollout does not list and the launch attestation reports (a66 § 6). Under any other
+    /// seam the reader keeps `offered_tools` absent, as a rollout lists no built-in tools.
     #[must_use]
     pub fn new(transcript: TranscriptRef, attestation: HermeticAttestation, seam: Seam) -> Self {
+        let reader = RolloutReader::new(transcript, attestation);
         Self {
-            reader: RolloutReader::new(transcript, attestation),
+            reader: if seam == Seam::OwnedTool {
+                reader.offering_only_dynamic_tools()
+            } else {
+                reader
+            },
             seam,
             routes: BTreeMap::new(),
+            dynamic: BTreeMap::new(),
         }
     }
 
@@ -131,6 +181,47 @@ impl CodexSeam {
     #[must_use]
     pub fn routes(&self) -> &BTreeMap<String, String> {
         &self.routes
+    }
+
+    /// Every client tool call this seam is holding on the app-server route, as the vendor's
+    /// `callId` → the key its answer is routed under (design amendment a66).
+    #[must_use]
+    pub fn dynamic_routes(&self) -> &BTreeMap<String, String> {
+        &self.dynamic
+    }
+
+    /// The `tool.requested` a client tool call owes, or `None` when the line is not one (design
+    /// amendment a66 § 4).
+    ///
+    /// Presented under the vendor's `callId`, which the rollout's `function_call` record for the
+    /// same call carries too (`core/src/tools/handlers/dynamic.rs:174-205` passes the model's id
+    /// through), and decision-bearing: the call waits for the answer metaharness writes.
+    fn dynamic_tool_call(&mut self, line: &str) -> Option<Vec<Emission>> {
+        let value = serde_json::from_str::<Value>(line).ok()?;
+        if value.get(HOOK_ENVELOPE).and_then(Value::as_str) != Some(DYNAMIC_TOOL_CALL) {
+            return None;
+        }
+        let key = value.get("key").and_then(Value::as_str)?.to_string();
+        let call = value.get("call").cloned().unwrap_or(Value::Null);
+        let call_id = call["callId"]
+            .as_str()
+            .filter(|id| !id.is_empty())
+            .map_or_else(|| key.clone(), ToString::to_string);
+        self.dynamic.insert(call_id.clone(), key);
+        Some(vec![Emission::untimed(Event::ToolRequested {
+            // Resolved by the run, which holds the catalogue (design § 8.4 O6).
+            subjects: Vec::new(),
+            operations: Vec::new(),
+            call_id,
+            name: crate::app_server::dynamic_tool_name(&call),
+            input: call
+                .get("arguments")
+                .cloned()
+                .unwrap_or_else(|| serde_json::json!({})),
+            decision_required: true,
+            deadline_ms: None,
+            seam: self.seam,
+        })])
     }
 
     /// The `tool.requested` a blocked hook process owes, or `None` when the line is not one.
@@ -201,7 +292,10 @@ impl CodexSeam {
 
 impl HarnessSeam for CodexSeam {
     fn push_line(&mut self, line: &str) -> Vec<Emission> {
-        if let Some(emissions) = self.hook_request(line) {
+        if let Some(emissions) = self
+            .dynamic_tool_call(line)
+            .or_else(|| self.hook_request(line))
+        {
             // A blocked hook never waits behind the held opening record (amendment a34): its
             // request releases the record at once, as it stands, and the call follows it onto the
             // run loop's ordinary path — admitted, decided or deadlined, abandoned on a halt.
@@ -223,6 +317,15 @@ impl HarnessSeam for CodexSeam {
     }
 
     fn decision_line(&self, call_id: &str, decision: &Decision) -> String {
+        // A client tool call on the app-server route (a66) is answered by the runner, which
+        // performs the call or refuses it as the decision says; the decision travels whole.
+        if let Some(key) = self.dynamic.get(call_id) {
+            return serde_json::json!({
+                DYNAMIC_DECISION: key,
+                "decision": decision,
+            })
+            .to_string();
+        }
         // The rendezvous name, or the call id itself when this seam is holding no such call. The
         // fallback is deliberate and it is not a guess: a decision for a call no hook published
         // reaches no hook process, parks, and is never delivered — which is the honest outcome for
@@ -657,5 +760,88 @@ mod tests {
             })
             .is_some()
         );
+    }
+
+    fn owned_seam() -> CodexSeam {
+        CodexSeam::new(
+            TranscriptRef {
+                path: None,
+                digest: None,
+                bytes: None,
+            },
+            HermeticAttestation::none(HermeticMode::Off),
+            Seam::OwnedTool,
+        )
+    }
+
+    const DYNAMIC_META: &str = r#"{"timestamp":"2026-10-29T10:00:00.000Z","type":"session_meta","payload":{"id":"01a1-fixture","cli_version":"0.160.0","cwd":"/scratch/work","dynamic_tools":[{"type":"function","name":"fs_read","description":"Read a file.","inputSchema":{"type":"object"}},{"type":"function","name":"fs_stat","description":"Describe a path.","inputSchema":{"type":"object"}}]}}"#;
+    const DYNAMIC_TURN: &str = r#"{"timestamp":"2026-10-29T10:00:01.000Z","type":"turn_context","payload":{"turn_id":"t1","model":"a-model","personality":"pragmatic"}}"#;
+
+    fn offered(seam: &mut CodexSeam) -> Option<Vec<String>> {
+        let mut emitted = seam.push_line(DYNAMIC_META);
+        emitted.extend(seam.push_line(DYNAMIC_TURN));
+        emitted
+            .iter()
+            .find_map(|emission| match &emission.event {
+                Event::SessionStarted { offered_tools, .. } => Some(offered_tools.clone()),
+                _ => None,
+            })
+            .expect("session.started")
+    }
+
+    /// Amendment a66 § 5: on the app-server route the opening record's `dynamic_tools` are the
+    /// offered tools, because that launch removed every built-in a config key reaches.
+    #[test]
+    fn on_the_owned_tool_seam_the_dynamic_tools_are_the_offered_tools() {
+        assert_eq!(
+            offered(&mut owned_seam()),
+            Some(vec!["fs_read".to_owned(), "fs_stat".to_owned()])
+        );
+    }
+
+    /// Under the hook seam the same record says nothing about the built-ins the exec route
+    /// offers, so the field stays absent.
+    #[test]
+    fn on_the_hook_seam_dynamic_tools_do_not_become_the_offered_tools() {
+        assert_eq!(offered(&mut seam()), None);
+    }
+
+    /// Amendment a66 § 4: a client tool call is decision-bearing, under the vendor's `callId`,
+    /// and the decision line names the key the runner answers it under.
+    #[test]
+    fn a_client_tool_call_is_held_under_its_call_id_and_answered_under_its_key() {
+        let mut seam = owned_seam();
+        let params = serde_json::json!({"threadId": "th-1", "turnId": "tu-1", "callId": "call-7",
+            "namespace": null, "tool": "fs_read", "arguments": {"path": "README.md"}});
+        let emitted = seam.push_line(&dynamic_tool_call_line("rpc-0", &params));
+        let [emission] = emitted.as_slice() else {
+            panic!("{emitted:?}");
+        };
+        let Event::ToolRequested {
+            call_id,
+            name,
+            input,
+            decision_required,
+            seam: carried,
+            ..
+        } = &emission.event
+        else {
+            panic!("{emission:?}");
+        };
+        assert_eq!(call_id, "call-7");
+        assert_eq!(name, "fs_read");
+        assert_eq!(input, &serde_json::json!({"path": "README.md"}));
+        assert!(decision_required);
+        assert_eq!(*carried, Seam::OwnedTool);
+        assert_eq!(seam.dynamic_routes()["call-7"], "rpc-0");
+
+        let deny = Decision::Deny {
+            reason: "outside the frame".to_owned(),
+        };
+        let line: Value = serde_json::from_str(&seam.decision_line("call-7", &deny)).expect("JSON");
+        assert_eq!(dynamic_decision(&line), Some(("rpc-0".to_owned(), deny)));
+        let hook: Value = serde_json::from_str(&seam.decision_line("call-other", &Decision::Allow))
+            .expect("JSON");
+        assert_eq!(dynamic_decision(&hook), None, "a call no client tool holds");
     }
 }

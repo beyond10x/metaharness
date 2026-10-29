@@ -1,6 +1,6 @@
 //! `story:caller-supplied-catalogue-on-every-kind` (design amendment a40): a caller's
-//! `tool-contract/1` catalogue is read once before anything runs, carried on Claude, and refused
-//! by name on Codex and b10x.
+//! `tool-contract/1` catalogue is read once before anything runs, carried on Claude and, since
+//! amendment a66, on Codex over `codex app-server`, and refused by name on b10x.
 //!
 //! Every start here hands in a scripted runner: no vendor process, no credential, no network, no
 //! model. The Claude run below reads the vendor's own stream-json shape through the adapter's real
@@ -125,37 +125,201 @@ fn a_catalogue_with_the_native_surface_named_is_refused_rather_than_one_ignored(
     assert_eq!(refusal, Refusal::CatalogueNeedsOwnedSurface);
 }
 
+/// Only b10x still refuses a catalogue: Codex carries one over `codex app-server` since
+/// amendment a66 (`story:codex-catalogue-on-app-server`).
 #[test]
-fn codex_and_b10x_refuse_a_catalogue_by_name_before_the_spawn() {
-    for kind in [Kind::Codex, Kind::B10x] {
-        let refusal = refused_before_the_spawn(builder(kind).with_catalogue(fixture()));
-        assert_eq!(refusal, Refusal::CatalogueNotCarried { kind }, "{kind:?}");
-        let words = refusal.to_string();
-        assert!(
-            words.starts_with(&format!("{CATALOGUE_NOT_CARRIED}: ")),
-            "{kind:?}: {words}"
-        );
-        assert!(words.contains("--catalogue"), "{kind:?}: {words}");
-        assert_eq!(
-            refusal.code(),
-            None,
-            "a launch-condition code, not a protocol one"
-        );
-    }
+fn b10x_refuses_a_catalogue_by_name_before_the_spawn() {
+    let kind = Kind::B10x;
+    let refusal = refused_before_the_spawn(builder(kind).with_catalogue(fixture()));
+    assert_eq!(
+        refusal,
+        Refusal::CatalogueNotCarried { kind },
+        "story:codex-catalogue-on-app-server: b10x alone refuses a catalogue"
+    );
+    let words = refusal.to_string();
+    assert!(
+        words.starts_with(&format!("{CATALOGUE_NOT_CARRIED}: ")),
+        "{words}"
+    );
+    assert!(words.contains("--catalogue"), "{words}");
+    assert_eq!(
+        refusal.code(),
+        None,
+        "a launch-condition code, not a protocol one"
+    );
 }
 
 #[test]
 fn the_kind_refusal_names_the_catalogue_and_not_the_surface_it_implied() {
-    for kind in [Kind::Codex, Kind::B10x] {
-        let mut spec = RunSpec::new(kind);
-        spec.catalogue = Some(fixture());
-        spec.tool_surface = ToolSurface::Owned;
-        assert_eq!(
-            check_spec(&spec),
-            Err(Refusal::CatalogueNotCarried { kind }),
-            "{kind:?}"
-        );
+    let mut spec = RunSpec::new(Kind::B10x);
+    spec.catalogue = Some(fixture());
+    spec.tool_surface = ToolSurface::Owned;
+    assert_eq!(
+        check_spec(&spec),
+        Err(Refusal::CatalogueNotCarried { kind: Kind::B10x }),
+        "story:codex-catalogue-on-app-server: b10x alone refuses a catalogue"
+    );
+
+    // Codex admits the catalogue and the owned surface it implies, and still refuses the bare
+    // owned surface, which would put the three verbs on a route nothing designed.
+    spec.kind = Kind::Codex;
+    assert_eq!(
+        check_spec(&spec),
+        Ok(()),
+        "story:codex-catalogue-on-app-server: Codex carries a catalogue"
+    );
+    spec.catalogue = None;
+    assert_eq!(
+        check_spec(&spec),
+        Err(Refusal::ToolSurfaceOwned { kind: Kind::Codex }),
+        "story:codex-catalogue-on-app-server: the bare owned surface is still refused"
+    );
+}
+
+/// The records a Codex app-server run hands its seam: the rollout's opening, which lists the
+/// client tools, then each `item/tool/call` as the runner carries it, then the turn's end.
+fn codex_app_server_stream(offered: &[String]) -> Vec<ScriptStep> {
+    let meta = json!({"timestamp": "2026-10-29T10:00:00.000Z", "type": "session_meta",
+        "payload": {"id": "th-fixture", "cli_version": "0.160.0", "cwd": "/w",
+            "dynamic_tools": offered
+                .iter()
+                .map(|name| json!({"type": "function", "name": name, "description": "d",
+                    "inputSchema": {"type": "object"}}))
+                .collect::<Vec<_>>()}});
+    let call = |key: &str, call_id: &str, tool: &str| {
+        metaharness_codex::dynamic_tool_call_line(
+            key,
+            &json!({"threadId": "th-fixture", "turnId": "tu-1", "callId": call_id,
+                "namespace": null, "tool": tool, "arguments": {"path": "README.md"}}),
+        )
+    };
+    vec![
+        ScriptStep::line(meta.to_string()),
+        ScriptStep::line(
+            r#"{"timestamp":"2026-10-29T10:00:01.000Z","type":"turn_context","payload":{"turn_id":"tu-1","model":"m","personality":"pragmatic"}}"#,
+        ),
+        ScriptStep::line(call("rpc-1", "call-1", "fs_read")),
+        // The rollout's record of the same call, under the same id: described, never decided.
+        ScriptStep::line(
+            r#"{"timestamp":"2026-10-29T10:00:02.000Z","type":"response_item","payload":{"type":"function_call","call_id":"call-1","name":"fs_read","arguments":"{\"path\":\"README.md\"}"}}"#,
+        ),
+        ScriptStep::line(call("rpc-2", "call-2", "fs_stat")),
+        ScriptStep::line(call("rpc-3", "call-3", "shell")),
+        ScriptStep::line(
+            r#"{"timestamp":"2026-10-29T10:00:05.000Z","type":"event_msg","payload":{"type":"task_complete","turn_id":"tu-1"}}"#,
+        ),
+    ]
+}
+
+/// One Codex run end to end through the production seam (amendment a66): the app-server launch,
+/// the opening and the catalogue copy the runner reads, the offered tools from the record, and
+/// each client call resolved by its bare name and decided by the frame.
+#[test]
+fn a_codex_run_carries_the_catalogue_over_the_app_server_and_denies_what_is_outside_it() {
+    let caller = CallerCatalogue::read(&fixture()).expect("the fixture reads");
+    let offered = caller.offered_tools_as(metaharness_tools::EntryNaming::Bare);
+    assert_eq!(offered, ["fs_read", "fs_stat"]);
+
+    let log = ScriptedLog::new();
+    let mut runner = ScriptedRunner::new(codex_app_server_stream(&offered), log.clone());
+    let mut run = builder(Kind::Codex)
+        .with_catalogue(fixture())
+        .with_decisions(DecisionMode::Frame)
+        .with_frame(frame_admitting(OperationSet::of([Operation::FileRead])))
+        .start_with_clock(
+            Input::Prompt("read the readme".to_owned()),
+            &mut runner,
+            &mut metaharness::CodexSeams,
+            Box::new(ManualClock::new()),
+        )
+        .expect("story:codex-catalogue-on-app-server: a Codex run with a catalogue starts");
+    run.drain().expect("drains");
+
+    // The launch: the app-server and not exec, with the opening and the checked copy beside it.
+    let argv = log.launched().pop().expect("one launch");
+    assert_eq!(
+        argv[1..],
+        metaharness_codex::APP_SERVER_ARGS,
+        "story:codex-catalogue-on-app-server: the app-server is launched"
+    );
+    let scratch = run.scratch_root().expect("a scratch root").to_path_buf();
+    let directory = metaharness_codex::app_server_dir(&scratch);
+    let copied = CallerCatalogue::read(&metaharness_codex::catalogue_copy_path(&directory))
+        .expect("the scratch copy reads");
+    assert_eq!(copied, caller);
+    let opening: Value = serde_json::from_str(
+        &std::fs::read_to_string(metaharness_codex::opening_path(&directory)).expect("written"),
+    )
+    .expect("JSON");
+    assert_eq!(opening["thread_start"]["environments"], json!([]));
+    let names: Vec<&str> = opening["thread_start"]["dynamicTools"]
+        .as_array()
+        .expect("tools")
+        .iter()
+        .filter_map(|tool| tool["name"].as_str())
+        .collect();
+    assert_eq!(names, offered);
+    assert!(
+        !scratch.join("hooks").exists(),
+        "no hook program on this route"
+    );
+
+    // The record: the client tools, and nothing the launch removed.
+    let (offered_tools, _) = opened_with(run.events());
+    assert_eq!(
+        offered_tools,
+        Some(offered.clone()),
+        "story:codex-catalogue-on-app-server: offered_tools lists the catalogue"
+    );
+
+    // Each call by its bare name: the entry the build performs resolves, the rest do not. The
+    // rollout's record of the first call is described too, under the same id.
+    assert_eq!(
+        requested(run.events()),
+        vec![
+            (
+                "fs_read".to_owned(),
+                vec!["file.read".to_owned()],
+                vec!["file:README.md".to_owned()]
+            ),
+            (
+                "fs_read".to_owned(),
+                vec!["file.read".to_owned()],
+                vec!["file:README.md".to_owned()]
+            ),
+            ("fs_stat".to_owned(), Vec::new(), Vec::new()),
+            ("shell".to_owned(), Vec::new(), Vec::new()),
+        ]
+    );
+    let decisions = decided(run.events());
+    assert_eq!(decisions.len(), 3, "{decisions:?}");
+    assert_eq!(decisions[0], &Decision::Allow);
+    for denied in &decisions[1..] {
+        assert!(matches!(denied, Decision::Deny { .. }), "{decisions:?}");
     }
+
+    // Each decision went to the runner under the key its answer is written for.
+    let routed: Vec<(String, String)> = log
+        .written()
+        .iter()
+        .filter_map(|line| serde_json::from_str::<Value>(line).ok())
+        .filter_map(|line| metaharness_codex::dynamic_decision(&line))
+        .map(|(key, decision)| {
+            let word = serde_json::to_value(&decision).expect("JSON")["decision"]
+                .as_str()
+                .expect("a word")
+                .to_owned();
+            (key, word)
+        })
+        .collect();
+    assert_eq!(
+        routed,
+        [
+            ("rpc-1".to_owned(), "allow".to_owned()),
+            ("rpc-2".to_owned(), "deny".to_owned()),
+            ("rpc-3".to_owned(), "deny".to_owned()),
+        ]
+    );
 }
 
 /// `--allow-program` names what the served `run` may start, and a server handed a catalogue

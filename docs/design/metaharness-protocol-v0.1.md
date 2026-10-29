@@ -3393,7 +3393,7 @@ vendor's own tools away, put the catalogue in their place, and have the vendor's
 | kind | carried | why |
 |---|---|---|
 | `claude` | **yes** | `--tools ""` removes the built-in set (V11), `--mcp-config` with `--strict-mcp-config` names one server, and the opening record lists the tools the session has. § 7.5 strategy C, already built; the catalogue changes what that server publishes |
-| `codex` | **no — refused, `catalogue-not-carried`** | see below. **A finding, not a pass: the story's acceptance is not met for Codex** |
+| `codex` | **no — refused, `catalogue-not-carried`** | see below. **A finding, not a pass: the story's acceptance is not met for Codex.** *Replaced by amendment a66: Codex carries the catalogue over `codex app-server`.* |
 | `b10x` | **no — refused, `catalogue-not-carried`** | its published toolset is its policy (`spec.rs`, `Kind::B10x`), and the pinned loop (0.15.1) takes no catalogue file. Refused by name, which the story allows for this kind only |
 
 Codex is refused in this build for two reasons; neither is that the vendor cannot remove its
@@ -5560,3 +5560,160 @@ runtime, and its start time on a loaded machine is not bounded by the binary.
 
 Not changed: a non-zero exit is unreadable, a version printed only on stderr is unread, and the
 refusal texts are the same.
+
+### Amendment a66 — Codex carries a caller's catalogue over `codex app-server` (2026-10-29)
+
+`story:codex-catalogue-on-app-server`. Replaces a40 § 2's Codex row: a Codex run with `--catalogue`
+is launched and served, and only b10x still refuses with `catalogue-not-carried`. Sources are
+Codex's at tag `rust-v0.160.0` (`a956835`, `codex-rs/`), read and driven. The same lines at
+`rust-v0.153.4` were read, and the route was driven at that pin against the fixture provider only,
+with a 0.153.4 binary installed beside the 0.160.0 one: at 0.153.4 no run has reached a model
+(invariant 4). a40 § 2's citations hold at 0.160.0, at moved lines:
+`add_shell_tools` returns without an environment (`core/src/tools/spec_plan.rs:1083-1087`),
+`apply_patch` and `view_image` need one (`:1269`, `:1283`), `environments` and `dynamicTools` are
+`thread.rs:136-151`, `item/tool/call` is `common.rs:1796-1799`.
+
+**1. The route.** A Codex run that names a catalogue launches `codex app-server --strict-config
+--listen stdio://` (`cli/src/main.rs:562-575`; both flags exist at 0.153.4) instead of `codex
+exec`. A run without one is unchanged, byte for byte, and its C1 fixtures are untouched.
+`--strict-config` fails the start on a config key the binary does not know, where it would
+otherwise be dropped in silence.
+
+**2. The scratch config.** As the exec route's, without the hook tables, plus the switches that
+remove every tool an environment does not gate and a config key reaches:
+
+- `web_search = "disabled"` (`config/src/config_toml.rs:470`), read by the hosted tool
+  (`spec_plan.rs:622-651`) and the standalone one (`:1484-1490`);
+- `[tools.experimental_request_user_input] enabled = false`, on unless set
+  (`core/src/config/mod.rs:2705-2711`, `spec_plan.rs:1169`);
+- under `[features]`, `goals`, `multi_agent`, `image_generation`, `apps`, `plugins` and
+  `tool_suggest` set to false, all on by default (`features/src/lib.rs:1704`, `:1332`, `:1554`,
+  `:1368`, `:1458`, `:1446`);
+- `sleep_tool = false` under `[features]` (on by default, `features/src/lib.rs:978-983`; offered to
+  a model whose catalogue entry names `clock`, `spec_plan.rs:1234-1250`) and `[agents] enabled =
+  false` (`config/src/config_toml.rs:731-733`), the one key that overrides the multi-agent version
+  a model's catalogue entry names (`core/src/config/mod.rs:1586-1593`, `:1606-1613`). Both were
+  added after the live run, from what it met (point 6);
+- `[orchestrator.skills] enabled = false`, for 0.153.4. There the orchestrator's `skills` tool is
+  offered exactly when the thread has no local environment (`ext/skills/src/extension.rs:148-155`;
+  on unless set, `core/src/config/mod.rs:2656-2660`; attached by
+  `app-server/src/extensions.rs:116`, all at `rust-v0.153.4`). 0.160.0 keeps the key as a legacy
+  no-op (`config/src/config_toml.rs:142-143`) and attaches no orchestrator provider
+  (`app-server/src/extensions.rs:104-106`). Its replacement, `[cloud.skills]`, does not exist at
+  0.153.4, where `--strict-config` would refuse it.
+
+All of these keys exist at both pins.
+
+No hook is installed, because every tool offered is a client tool and is decided where it is
+called (point 4). `approval_policy = "never"`, the sandbox, the personality and the provider are as
+on the exec route.
+
+**3. The conversation.** Newline-delimited JSON-RPC on the child's stdin and stdout, without a
+`jsonrpc` field (`app-server-protocol/src/rpc.rs:46-56`):
+
+1. `initialize` with `clientInfo` and `capabilities.experimentalApi: true` (`protocol/v1.rs:46-53`),
+   then the `initialized` notification;
+2. `thread/start` with `cwd`, `model` when the run names one, `environments: []` and
+   `dynamicTools`: one `{"type": "function", "name", "description", "inputSchema"}` per entry,
+   with its `mcp` rendering, description and input schema, as the Claude route's server lists them.
+   Both fields are `#[experimental]`. `validate_dynamic_tools`
+   (`app-server/src/request_processors/thread_processor.rs:297`) admits every rendering a40 § 3
+   admits: `[A-Za-z0-9_-]`, at most 46 bytes, never prefixed `mcp`;
+3. `turn/start` with the thread's id and the prompt as the exec route composes it, context files
+   and execution context included;
+4. on `turn/completed`, stdin is closed and the app-server exits.
+
+A server request other than `item/tool/call` is answered with a JSON-RPC error, so nothing is
+approved by default.
+
+**4. A call.** `item/tool/call` (params `{threadId, turnId, callId, namespace, tool, arguments}`,
+`v2/item.rs:1657`) becomes `tool.requested` with `decision_required: true`, `seam: owned_tool`, the
+vendor's `callId` and the bare tool name. The run loop then handles it as it handles any seam's
+request: `ask` presents it with `decision_required: true`, `frame` and `observe` decide it at once,
+and a frame-mode run with no frame abstains under `seam: none`, as on Claude (amendment a3). The
+Codex runner applies the decision in process,
+through the `Server::with_catalogue` that the Claude route's `mcp-serve` runs, over
+`LocalOperations::unconfined(cwd, [])`, with the same argument checks (a40 § 5, a45):
+
+- `allow` and `abstain` perform the call: nothing beneath this seam would decide instead. An
+  `observe` run allows. `replace` performs the call with the replaced input;
+- `deny` performs nothing;
+- a name outside the catalogue, or any name with a namespace, is refused by the server by name and
+  performs nothing.
+
+The answer is `{contentItems: [{type: "inputText", text}], success}` (`v2/item.rs:1669-1680`), with
+`success: false` for a deny and for every refusal. Codex waits for the answer with no deadline
+(`core/src/tools/handlers/dynamic.rs:174-216`), so the decision deadline is metaharness's default,
+from `DEFAULT_VENDOR_HOOK_TIMEOUT_MS`. Interrupt and halt still end the child: `turn/interrupt` has
+not been driven.
+
+**5. The record.** The rollout is still the record, tailed as on the exec route. Its
+`session_meta` carries `dynamic_tools` (`protocol/src/protocol.rs:3176`), and on the `owned_tool`
+seam the reader maps their names to `session.started.offered_tools`. A rollout without the field
+keeps `None`. In direct tool mode the rollout's `function_call` for a dynamic tool carries the
+`callId` of the live `item/tool/call`: the handler passes the model's id through
+(`dynamic.rs:174-205`), so the record and the call share one id. A code-mode model (point 6)
+calls the entry from inside an `exec` cell: the rollout records the cell, a `function_call` named
+`exec` under the model's id, and the live `item/tool/call` carries `exec-<uuid>`, so the two share
+none, and the stream holds a `tool.requested` named `exec` beside the catalogue call it contained.
+A record keeps `seam: none` and is described, never decided. Catalogue
+resolution reads the name the vendor uses: `mcp__metaharness__<name>` on Claude, the bare `<name>`
+on Codex (`CallerCatalogue::resolve_as`, `EntryNaming`).
+
+**6. What else was offered.** The record lists the dynamic tools and no built-in, so what else the
+model was offered is read from the model request at the pin, not from each run. Invariant 3 holds
+for the names, which are read from the record.
+
+- Free and credential-free, against the fixture provider at 0.160.0. With `environments: []`
+  alone, the captured request had lost `exec_command`, `write_stdin`, `apply_patch` and
+  `view_image`, and still offered `request_user_input`, `get_goal`, `create_goal`, `update_goal`,
+  `tool_search` and `web_search` beside the dynamic tool. With point 2's switches, its `tools` was
+  the dynamic tool alone.
+- Free at 0.153.4: point 2's config passed `--strict-config`. Without the `[orchestrator.skills]`
+  table the request offered `skills` beside the dynamic tool; with it, the dynamic tool alone.
+- Live, on the ChatGPT login, at 0.160.0, one run
+  (`docs/research/2026-10-29-codex-0.160.0-app-server-catalogue.md`), before the `sleep_tool` and
+  `[agents]` switches existed: exit 0, the catalogue call served, decided by the frame and
+  answered. The model the login chose, `gpt-6.1-sol`, was not offered the catalogue alone. The
+  request had no top-level `tools`; an `additional_tools` input item carried `functions` (`exec`,
+  `wait`, `request_user_input_async`), `clock` (`sleep`) and `collaboration` (`followup_task`,
+  `interrupt_agent`, `list_agents`, `send_message`, `spawn_agent`, `wait_agent`). The entries were
+  reachable only inside `exec`, whose nested tools were `fs_read`, `fs_stat` and
+  `clock__curr_time`. No image generation, apps, web search or skills tool appeared.
+- These come from the model's entry in the vendor's model catalogue, not from the config: its
+  `tool_mode` (`code_mode_only`), `multi_agent_version` (`v2`) and `experimental_supported_tools`
+  (`send_user_message_async`, `clock`), read at `core/src/tools/mod.rs:75-96`,
+  `core/src/config/mod.rs:1606-1613` and `spec_plan.rs:1178-1250`. Given that entry as
+  `model_catalog_json`, the fixture provider reproduced the live set exactly. With `[agents]
+  enabled = false` and `sleep_tool = false`, `clock` and `collaboration` were gone and `functions`
+  stayed. That the two keys do the same on a login is unverified: no second live run was made.
+- No config key removes the rest at 0.160.0. `request_user_input_async` and `clock__curr_time` are
+  gated by the model's entry alone (`spec_plan.rs:1178-1202`, `:1225-1233`). Code mode is the
+  model's own: `features.code_mode_host = false` makes it unavailable
+  (`core/src/thread_manager.rs:558-564`), and a `code_mode_only` model then fails closed
+  (`core/src/tools/code_mode/mod.rs:108-118`) and can call no tool. Code mode reaches no effect the
+  catalogue does not: each nested call to an entry arrives as `item/tool/call` and is decided
+  there, and `clock__curr_time` reads the wall clock.
+
+So `offered_tools` is the catalogue the model calls, not everything it was offered, and on this
+route the launch attestation says so among its `ambient_inputs`.
+
+**7. Refusals.** `check_spec` raises `catalogue-not-carried` for b10x only. `--tool-surface owned`
+on Codex is admitted with a catalogue and refused without one, as before (`ToolSurfaceOwned`). The
+adapter's `unsupported_options` no longer refuses `--catalogue`. `plan_launch` refuses a catalogue
+declared and not handed over, or handed over undeclared (`CatalogueUnread`, as on Claude).
+`c1-caller-catalogue-refusal` is replaced by `c1-caller-catalogue`.
+
+**8. Vectors.** These vectors cover the route, and all are free:
+
+- C1 `c1-caller-catalogue`: the argv, the environment, the config, the credential copies and the
+  opening messages, with the exact `dynamicTools`.
+- C2 `c2-app-server-conversation`: the session driven through a scripted conversation, with the
+  seam's reading of `item/tool/call` and its decision line.
+- C2 `c2-dynamic-tools-offered`: `session_meta.dynamic_tools` read into `offered_tools`.
+- C3 `c3-app-server-round-trip`: the real runner against a `/bin/sh` app-server. A catalogue call
+  is performed and answered. A denied call and a call outside the catalogue are answered
+  `success: false`, and neither is performed.
+
+Event wire, frame wire and command wire are unchanged. The Codex `LaunchContext` gains
+`dynamic_tools`, and `LaunchPlan` gains `app_server`.

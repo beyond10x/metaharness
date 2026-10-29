@@ -35,6 +35,7 @@ fn plan(root: &Path) -> LaunchPlan {
         plugins: Vec::new(),
         loopback: None,
         config_layers: Vec::new(),
+        dynamic_tools: Vec::new(),
     };
     plan_launch(&spec, &context).unwrap_or_else(|refusal| panic!("{root:?}: {refusal}"))
 }

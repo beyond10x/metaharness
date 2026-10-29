@@ -1,8 +1,9 @@
-//! `--catalogue` through the built binary (design amendment a40).
+//! `--catalogue` through the built binary (design amendments a40 and a66).
 //!
-//! The exit code and the refusal's first words are read off the process. No vendor binary can
-//! run: `HOME` is a scratch directory and `PATH` is an empty scratch directory, so a refusal that
-//! failed to fire would end at "not found", never at a spawn.
+//! The exit code and the refusal's first words are read off the process. `HOME` is a scratch
+//! directory and `PATH` an empty one, but a vendor child's `PATH` is constructed and holds
+//! `/usr/bin`, so a refusal that failed to fire could reach a vendor binary installed there: every
+//! case here is refused before the spawn.
 
 use std::io::Write as _;
 use std::path::{Path, PathBuf};
@@ -161,12 +162,32 @@ fn run_b10x_with_a_catalogue_exits_2_naming_the_refusal() {
     refused_with(&outcome, "catalogue-not-carried");
 }
 
+/// Codex carries a catalogue now (amendment a66), so the kind is no longer the refusal: the
+/// surface the caller named is. Neither case may reach a spawn, because the child's `PATH` holds
+/// `/usr/bin` and a codex may be installed there.
 #[test]
-fn run_codex_with_a_catalogue_exits_2_naming_the_refusal() {
+fn run_codex_with_a_catalogue_on_the_native_surface_exits_2_naming_the_surface() {
+    let base = tempfile::tempdir().expect("a scratch directory");
+    let outcome = run_with(
+        base.path(),
+        "codex",
+        &fixture(),
+        &["--tool-surface", "native"],
+    );
+    assert!(
+        !outcome.stderr.contains("catalogue-not-carried"),
+        "story:codex-catalogue-on-app-server: codex carries a catalogue over codex app-server: {}",
+        outcome.stderr
+    );
+    refused_with(&outcome, "catalogue-needs-owned-surface");
+}
+
+#[test]
+fn run_codex_with_an_unreadable_catalogue_exits_2_naming_the_refusal() {
     let base = tempfile::tempdir().expect("a scratch directory");
     refused_with(
-        &run_with(base.path(), "codex", &fixture(), &[]),
-        "catalogue-not-carried",
+        &run_with(base.path(), "codex", &base.path().join("absent.yaml"), &[]),
+        "catalogue-unreadable",
     );
 }
 

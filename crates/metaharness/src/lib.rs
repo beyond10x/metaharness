@@ -59,6 +59,8 @@ mod run;
 mod scripted;
 mod spawn;
 mod spawn_codex;
+mod spawn_codex_app_server;
+mod spawn_codex_app_server_vectors;
 mod spawn_codex_vectors;
 mod spawn_vectors;
 mod vectors;
@@ -106,6 +108,7 @@ pub use scripted::{
 };
 pub use spawn::{HookChannel, SpawnRunner, SpawnedProcess};
 pub use spawn_codex::{CodexHookChannel, CodexProcess, CodexSpawnRunner};
+pub use spawn_codex_app_server::{AppServerProcess, CodexAppServerRunner};
 // The seam's neutral traits live in the protocol crate and each vendor's half in that vendor's
 // adapter crate; all of them are re-exported here so an embedder needs one import.
 pub use metaharness_claude::{
