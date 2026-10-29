@@ -5688,6 +5688,7 @@ for the names, which are read from the record.
   `model_catalog_json`, the fixture provider reproduced the live set exactly. With `[agents]
   enabled = false` and `sleep_tool = false`, `clock` and `collaboration` were gone and `functions`
   stayed. That the two keys do the same on a login is unverified: no second live run was made.
+  *Driven on a login by amendment a67.*
 - No config key removes the rest at 0.160.0. `request_user_input_async` and `clock__curr_time` are
   gated by the model's entry alone (`spec_plan.rs:1178-1202`, `:1225-1233`). Code mode is the
   model's own: `features.code_mode_host = false` makes it unavailable
@@ -5759,5 +5760,61 @@ An adversary pass and a security pass on the unit found the following; each is n
    spawn and the credential copy. The rest of `validate_dynamic_tools` is a40 § 3's rendering rule,
    or concerns namespaces and deferred tools this route never sends; its input-schema parse is not
    checked here.
+   *Corrected by amendment a67: two entries under one name are refused earlier, as
+   `catalogue-malformed`, when the catalogue is read, on every kind.*
 8. **Invariant 2** names `spawn_codex_app_server.rs` (`CodexAppServerRunner`) as the second Codex
    spawn runner under the same declared exception.
+
+### Amendment a67 — the Codex catalogue route on a login at both pins (2026-10-29)
+
+`story:codex-catalogue-live-follow-ups`. Evidence:
+`docs/research/2026-10-29-codex-catalogue-live-follow-ups.md`, six live runs of the released 0.24.0
+binary on the ChatGPT-subscription login, three at codex-cli 0.153.4 and three at 0.160.0. No code
+changes; one test holds point 4.
+
+1. **The two switches, on a login.** With `[features] sleep_tool = false` and `[agents] enabled =
+   false` (a66 § 2), no run's model request offered the `clock` or `collaboration` namespace, at
+   either pin. Each request's one `additional_tools` item held `functions`: `exec`, `wait`,
+   `request_user_input_async`; `exec`'s nested tools were the catalogue's and `clock__curr_time`.
+   The models the login chose (`gpt-6-astra` at 0.153.4, `gpt-6.1-sol` at 0.160.0) still name
+   `multi_agent_version: v2` and `clock` in the operator's model cache fetched the same hour, so
+   the switches removed them (inferred from that cache; a66 § 6's live run, without the switches,
+   offered both). a66 § 6's "unverified" is closed.
+2. **0.153.4 on a login.** As 0.160.0: the same three tools, no `skills` tool with
+   `[orchestrator.skills] enabled = false` under `--strict-config`, the catalogue call served and
+   decided by the frame, exit 0. Invariant 4 holds for the catalogue route at both pins.
+3. **`request_user_input_async` with no user.** It arrives at no client: the child sends no server
+   request, emits an `agentMessage` item (`phase: final_answer`, `delivery: async`, the questions
+   attached) and answers the model `{"accepted":true}` at once; the turn goes on and the run ends
+   as any other. `session.ended.final_answer` is the turn's last message, not the question. The
+   stream carries it as `tool.requested` and `tool.result` under `seam: none`, and the
+   notification only as an `opaque` record line. Nothing waits on an answer, so a headless run is
+   not held by it, and it performs no effect.
+4. **`exec` outside the catalogue.** A prompt that asked for a file write, a process and a
+   connection from inside `exec`, by every route the model could name (`require`, `import` of
+   `node:fs`, `node:net`, `node:child_process`, `Deno`, `Bun`, `fetch`, `WebSocket`,
+   `XMLHttpRequest`, `process`, `Function`, indirect `eval`, `tools.exec_command`, `tools.shell`,
+   `tools.apply_patch`, `tools.write_file`, a generic dispatcher), met `ReferenceError`,
+   `TypeError` or `unsupported import in exec` for each, at both pins. Under `strace -f`, the escape
+   runs executed only the programs the baseline runs did, connected only to the vendor's
+   endpoints, and wrote only under the scratch `CODEX_HOME`, its `tmp` and the trace root. A
+   listener on `127.0.0.1` received nothing and the workspace gained no file. a66 § review
+   corrections 1 is confirmed on a login; the route stays admitted.
+5. **The fix unit's open checks.**
+   - A name outside the catalogue on `item/tool/call` is refused and is not added to
+     `offered_tools`: unchanged, because the list says what the model was offered and the vendor
+     sends `item/tool/call` only from the handler it registers per dynamic tool
+     (`core/src/tools/spec_plan.rs:1426`, `handlers/dynamic.rs:174` at `rust-v0.160.0`).
+   - The vendor's input-schema parse at `thread/start` (`tools/src/json_schema.rs:26`) is not
+     repeated: every schema a catalogue entry gets is an object at the top, built from the shapes
+     a40 § 5 lists, and the vendor's parser takes unknown keys and refuses only a schema that does
+     not deserialise or is a single `null` type. Read, not driven.
+   - Two entries under one name: refused on every kind when the catalogue is read, as
+     `catalogue-malformed` (`fs.stat: renderings: mcp name fs_read is also used by fs.read`), by the
+     `tool-contract/1` checks (`b10x-tool-contract` 0.5.0, `validate.rs:195`). That refusal comes
+     before a66 § review corrections 7's, so `catalogue-name-duplicate` is not reached from a
+     catalogue file; 0.24.0's CHANGELOG and the CLI and Codex pages said it was, and are corrected.
+     The check in `start_codex` stays as a second guard.
+     `two_entries_under_one_name_are_refused_on_claude_and_codex_before_the_spawn` holds it.
+
+Event wire, frame wire and command wire are unchanged.

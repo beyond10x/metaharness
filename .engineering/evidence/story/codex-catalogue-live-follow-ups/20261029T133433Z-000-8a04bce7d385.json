@@ -1,0 +1,12 @@
+{
+  "at": "2026-10-29T13:34:33Z",
+  "actor": "human:timo",
+  "artifact": "story:codex-catalogue-live-follow-ups",
+  "kind": "story",
+  "revision": 5,
+  "change": {
+    "change": "evidence",
+    "kind": "verification",
+    "source": "docs/research/2026-10-29-codex-catalogue-live-follow-ups.md"
+  }
+}

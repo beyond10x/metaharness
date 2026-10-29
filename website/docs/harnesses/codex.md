@@ -62,14 +62,20 @@ With `--catalogue`, the run starts `codex app-server --strict-config --listen st
    performs nothing.
 4. `session.started.offered_tools` lists the catalogue's entries, then `exec`, `wait` and
    `request_user_input_async`, which the record does not list and the launch declares (below).
-5. A catalogue entry published as `mcp` or under `mcp__`, or two entries under one name, is
-   refused before the spawn (`catalogue-name-reserved`, `catalogue-name-duplicate`): the
-   app-server would refuse it at `thread/start`.
+5. A catalogue entry published as `mcp` or under `mcp__` is refused before the spawn
+   (`catalogue-name-reserved`): the app-server would refuse it at `thread/start`. Two entries
+   under one name are refused earlier, on every kind, when the catalogue is read
+   (`catalogue-malformed`).
 
 What the config cannot remove: a model whose entry in the vendor's model catalogue asks for code
 mode is offered `exec` and `wait`, and reaches the catalogue only from inside `exec`. A model that
 names `request_user_input_async` is offered it. A live run on 0.160.0 met both
-(`docs/research/2026-10-29-codex-0.160.0-app-server-catalogue.md`). The rollout records the `exec`
+(`docs/research/2026-10-29-codex-0.160.0-app-server-catalogue.md`). Six live runs at 0.153.4 and
+0.160.0 on a ChatGPT login offered `exec`, `wait` and `request_user_input_async` and nothing else
+besides the catalogue. In none of them did `exec` write a file, start a process or open a
+connection, though the prompt asked for each. `request_user_input_async` posts the question as an
+asynchronous message, answers the model `{"accepted":true}` and waits for nobody
+(`docs/research/2026-10-29-codex-catalogue-live-follow-ups.md`). The rollout records the `exec`
 cell as a call of its own, so the stream carries a `tool.requested` named `exec` under
 `seam: none` beside the catalogue call it made. The launch attestation lists these tools among its
 ambient inputs. They are vendor tools with no effect of their own: each catalogue call made from
