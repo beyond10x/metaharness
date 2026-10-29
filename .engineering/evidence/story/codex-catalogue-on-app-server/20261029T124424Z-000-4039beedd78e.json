@@ -1,0 +1,12 @@
+{
+  "at": "2026-10-29T12:44:24Z",
+  "actor": "human:timo",
+  "artifact": "story:codex-catalogue-on-app-server",
+  "kind": "story",
+  "revision": 4,
+  "change": {
+    "change": "evidence",
+    "kind": "test_result",
+    "source": "integration/d193 476b4fa targeted lanes: metaharness-codex 156, metaharness 181, metaharness-tools 66, metaharness-cli 27, all exit 0"
+  }
+}

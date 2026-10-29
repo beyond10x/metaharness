@@ -2,10 +2,12 @@
 format: aep.planning-md/3
 id: release-plan:release-0-23-1
 kind: release-plan
-status: draft
+status: archived
 title: 'Publish Metaharness 0.23.1: ESS 0.76.0'
 summary: Specification toolchain moves to ESS 0.76.0; no public surface change
-revision: 2
+revision: 3
+transitions:
+- {from: "draft", to: "archived", at: "2026-10-29T12:44:41Z", actor: "human:timo", revision: 3}
 ---
 ## Why this release
 

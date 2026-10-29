@@ -5,6 +5,17 @@ was amended and the amendment is named here.
 
 ## [Unreleased]
 
+## [0.24.0] — 2026-10-29
+
+### Breaking
+
+- `metaharness::Refusal` gains `CatalogueNameReserved` and `CatalogueNameDuplicate`; an exhaustive `match` on `Refusal` adds the two arms.
+- `metaharness_codex::LaunchContext` gains `dynamic_tools` and `LaunchPlan` gains `app_server`; a struct literal adds the fields.
+- `metaharness run codex --catalogue <FILE>` starts a session where it exited 2 with `catalogue-not-carried`; a caller that relied on that refusal for Codex now gets a run.
+- A Codex `custom_tool_call` (a code-mode `exec` cell) now carries its script in `tool.requested.input`, where it was `""`, on the exec route too.
+
+Loom's session executor, the one consumer that takes these crates (`metaharness` and `metaharness-b10x` at `0.23.0`), builds against this release unchanged.
+
 ### Added
 
 - `metaharness run codex --catalogue <FILE>` carries a caller's catalogue over `codex app-server --strict-config --listen stdio://` (amendment a66, story:codex-catalogue-on-app-server). The thread starts with `environments: []` and the catalogue's entries as `dynamicTools`. The scratch config switches off every other tool a config key reaches: web search, `request_user_input`, goals, multi-agent, image generation, apps, plugins, tool suggestions, the sleep tool, the agents a model names (`[agents] enabled = false`) and, for 0.153.4, the orchestrator's skills tool. Each `item/tool/call` is `tool.requested` on the `owned_tool` seam, and metaharness decides and answers it in process through `Server::with_catalogue`, with the Claude route's argument checks. A denied call and a call outside the catalogue are answered `success: false` and perform nothing. `session.started.offered_tools` lists the catalogue from the rollout's `session_meta.dynamic_tools`, then `exec`, `wait` and `request_user_input_async`, which the rollout does not list and the launch declares (`metaharness_codex::APP_SERVER_VENDOR_TOOLS`), so a record that shows an `exec` cell called shows a tool the list names. A call whose JSON-RPC id is held by an unanswered call is answered `success: false` and performs nothing, and only `turn/completed` for the run's own thread closes the child's stdin (a66 § review corrections).
@@ -18,18 +29,11 @@ was amended and the amendment is named here.
 - `catalogue-not-carried` is raised for `b10x` only, and `--tool-surface owned` is admitted on `codex` beside `--catalogue` and still refused without one. A run without `--catalogue` is unchanged, and its C1 fixtures are byte-identical.
 - On the catalogue route the launch attestation names, among its `ambient_inputs`, the tools a model's own entry in the vendor's model catalogue adds and no config key removes: the live run's model was offered code mode's `exec` and `wait`, reaching the catalogue only from inside `exec`, and `request_user_input_async`. It says that `offered_tools` names these three from the launch's declaration, not from the record. H8 says the catalogue's tools are client tools and the code-mode tools are vendor tools with no effect of their own. The rollout records the `exec` cell as its own call, so such a run's stream carries a `tool.requested` named `exec` under `seam: none` (a66 § 5, § 6 and § review corrections).
 - `metaharness_codex::LaunchContext` gains `dynamic_tools` and `LaunchPlan` gains `app_server`. A caller that builds `LaunchContext` with a struct literal adds `dynamic_tools: Vec::new()`.
+- ESS 0.76.0 is the specification toolchain: both `ess-inputs.yaml` manifests require it and CI installs `ess-cli` from its tag commit `d5c00e9c`, up from 0.75.0 (`b593d356`). `spec/conformance.json` regenerates byte-identical, 120 scenarios (task:ess-pin-0-76-0).
 
 ### Fixed
 
 - A Codex rollout's `custom_tool_call` keeps its body: `tool.requested.input` is the record's `input` text, verbatim, where it was `""` because only `arguments` was read. A code-mode `exec` cell now carries its script on both routes; the exec route's `golden-rollout` expectation moves by that one line (a66 § review corrections).
-
-## [0.23.1] — 2026-10-29
-
-### Changed
-
-- ESS 0.76.0 is the specification toolchain: both `ess-inputs.yaml` manifests require it and CI installs `ess-cli` from its tag commit `d5c00e9c`, up from 0.75.0 (`b593d356`). `spec/conformance.json` regenerates byte-identical, 120 scenarios (task:ess-pin-0-76-0).
-
-No breaking change: no public Rust API, wire format or command-line surface moves, so a consumer pinned to `0.23.0` (Loom's session executor) takes `0.23.1` without a code change.
 
 ## [0.23.0] — 2026-10-28
 

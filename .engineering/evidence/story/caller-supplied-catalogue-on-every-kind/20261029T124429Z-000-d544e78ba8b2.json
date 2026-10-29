@@ -1,0 +1,12 @@
+{
+  "at": "2026-10-29T12:44:29Z",
+  "actor": "human:timo",
+  "artifact": "story:caller-supplied-catalogue-on-every-kind",
+  "kind": "story",
+  "revision": 18,
+  "change": {
+    "change": "evidence",
+    "kind": "verification",
+    "source": "Codex arm: story:codex-catalogue-on-app-server implemented in wave D193, live probe at 0.160.0 exit 0"
+  }
+}

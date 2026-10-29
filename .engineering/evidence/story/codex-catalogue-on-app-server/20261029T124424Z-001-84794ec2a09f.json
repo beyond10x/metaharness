@@ -1,0 +1,12 @@
+{
+  "at": "2026-10-29T12:44:24Z",
+  "actor": "human:timo",
+  "artifact": "story:codex-catalogue-on-app-server",
+  "kind": "story",
+  "revision": 4,
+  "change": {
+    "change": "evidence",
+    "kind": "verification",
+    "source": "live probe Codex 0.160.0 subscription login, exit 0, docs/research/2026-10-29-codex-0.160.0-app-server-catalogue.md"
+  }
+}

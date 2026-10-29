@@ -2,7 +2,7 @@
 format: aep.planning-md/3
 id: story:caller-supplied-catalogue-on-every-kind
 kind: story
-status: active
+status: implemented
 title: A caller supplies the tool catalogue on every kind
 summary: Loom hands metaharness run the catalogue a session may see; the model is offered that and nothing else, on Claude Code, Codex and harness, attested in session.started.
 owner: metaharness
@@ -36,10 +36,11 @@ scope:
   path: crates/metaharness/src/run.rs
 - confidence: inferred
   path: docs/design/metaharness-protocol-v0.1.md
-revision: 17
+revision: 19
 transitions:
 - {from: "draft", to: "proposed", at: "2026-10-21T12:00:26Z", actor: "human:timo", revision: 14, decided_on: {"recorded":{"review_outcome":4}}}
 - {from: "proposed", to: "active", at: "2026-10-21T12:00:26Z", actor: "human:timo", revision: 15, decided_on: {"recorded":{"review_outcome":4}}}
+- {from: "active", to: "implemented", at: "2026-10-29T12:44:29Z", actor: "human:timo", revision: 19, decided_on: {"recorded":{"test_result":1,"review_outcome":7,"verification":1,"ess_conformance_coverage_v1":1}}}
 ---
 # Story: a caller supplies the tool catalogue on every kind
 
@@ -161,3 +162,14 @@ its own Scheduling says that implementation "needs the orchestrator's word: it a
 launch route and a live probe that spends". Its acceptance is that live probe at Codex 0.153.4. A spending
 run is outside the D193 grant, so the decision goes to `decision-blocker:codex-catalogue-live-probe`.
 This story stays `active` until that decision is taken.
+
+## Closure (wave D193, 2026-10-29)
+
+The Codex arm landed as `story:codex-catalogue-on-app-server`, after D195 cleared
+`decision-blocker:codex-catalogue-live-probe` with option A. Claude carries the catalogue, Codex carries
+it over `codex app-server`, and b10x refuses it by name, which this story allows.
+
+One deviation, decided by the coordinator and recorded in that story's `## Delivered`: on Codex,
+`offered_tools` is the catalogue's names plus the vendor's code-mode tools `exec`, `wait` and
+`request_user_input_async`, and a `tool.requested` can name `exec`. The security review found that none
+of them performs an effect outside the catalogue (`review-result:d193-catalogue-security-1`).
