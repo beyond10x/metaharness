@@ -67,10 +67,10 @@ mod vectors;
 pub mod conformance;
 
 pub use app_server::{
-    APP_SERVER_ARGS, AppServerOpening, AppServerSession, DynamicTool, INITIALIZE_ID,
-    METHOD_NOT_FOUND, SessionAction, THREAD_START_ID, TOOL_CALL_METHOD, TURN_START_ID,
-    app_server_dir, call_key, catalogue_copy_path, dynamic_tool_name, opening_path,
-    tool_call_answer,
+    APP_SERVER_ARGS, APP_SERVER_VENDOR_TOOLS, AppServerOpening, AppServerSession, DynamicTool,
+    DynamicToolNameRefusal, INITIALIZE_ID, METHOD_NOT_FOUND, SessionAction, THREAD_START_ID,
+    TOOL_CALL_METHOD, TURN_START_ID, app_server_dir, call_key, catalogue_copy_path,
+    dynamic_tool_name, opening_path, refused_dynamic_tool_name, tool_call_answer,
 };
 pub use bridge::{
     CodexSeam, CodexSeams, dynamic_decision, dynamic_tool_call_line, hook_request_line,

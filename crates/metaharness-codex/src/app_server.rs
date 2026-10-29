@@ -35,6 +35,65 @@ pub const METHOD_NOT_FOUND: i64 = -32601;
 /// The method of a client tool call (`app-server-protocol/src/protocol/common.rs:1796-1799`).
 pub const TOOL_CALL_METHOD: &str = "item/tool/call";
 
+/// The vendor tools this launch declares a model's own catalogue entry adds on this route and no
+/// config key removes at 0.160.0 (design amendment a66 § 6 and § review corrections): code mode's
+/// `exec` and `wait` (`core/src/tools/mod.rs:75-96`) and `request_user_input_async`
+/// (`core/src/tools/spec_plan.rs:1178-1202`).
+///
+/// None of them is a client tool and none has an effect of its own: `exec` runs a script in a
+/// separate V8 process with no file system, network or process access, whose only reach is the
+/// catalogue's own entries, each still an `item/tool/call` the frame decides; `wait` waits on such
+/// a cell; `request_user_input_async` posts a message and returns. The rollout lists none of
+/// them, so `session.started.offered_tools` names them from this declaration, after the record's
+/// `dynamic_tools`, and the launch attestation says so.
+pub const APP_SERVER_VENDOR_TOOLS: [&str; 3] = ["exec", "wait", "request_user_input_async"];
+
+/// Why the app-server would refuse a catalogue's entries at `thread/start`, read from
+/// `validate_dynamic_tools` (`app-server/src/request_processors/thread_processor.rs:297` at
+/// `rust-v0.160.0`).
+///
+/// The two rules a checked catalogue can still break: the other rules (`[A-Za-z0-9_-]`, the
+/// length, no surrounding whitespace) are a40 § 3's own, and this route sends no namespace and
+/// defers no tool.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum DynamicToolNameRefusal {
+    /// `mcp`, or a name that starts with `mcp__`: reserved (`thread_processor.rs:362`).
+    Reserved {
+        /// The entry's published name.
+        name: String,
+    },
+    /// Two entries offered under one name (`thread_processor.rs:365-371`).
+    Duplicate {
+        /// The name offered twice.
+        name: String,
+    },
+}
+
+/// The first catalogue name the app-server would refuse at `thread/start`, in document order, or
+/// `None` when it would take them all.
+///
+/// Checked before the spawn, so a catalogue Codex cannot carry is refused by name and no child is
+/// started and no credential copied for it (a66 § review corrections).
+#[must_use]
+pub fn refused_dynamic_tool_name<'a>(
+    names: impl IntoIterator<Item = &'a str>,
+) -> Option<DynamicToolNameRefusal> {
+    let mut seen = std::collections::BTreeSet::new();
+    for name in names {
+        if name == "mcp" || name.starts_with("mcp__") {
+            return Some(DynamicToolNameRefusal::Reserved {
+                name: name.to_owned(),
+            });
+        }
+        if !seen.insert(name) {
+            return Some(DynamicToolNameRefusal::Duplicate {
+                name: name.to_owned(),
+            });
+        }
+    }
+    None
+}
+
 /// The directory under the scratch root the runner reads the opening and the catalogue copy from.
 const APP_SERVER_DIR: &str = "app-server";
 
@@ -152,7 +211,8 @@ pub enum SessionAction {
     Send(Value),
     /// A client tool call is waiting for an answer.
     ToolCall {
-        /// The name a decision for it is routed under.
+        /// The name a decision for it is routed under: unique within the session, even when the
+        /// server reuses a request id, so no decision reaches a call it was not given for.
         key: String,
         /// The JSON-RPC id the answer must carry.
         request_id: Value,
@@ -176,6 +236,8 @@ pub struct AppServerSession {
     opening: AppServerOpening,
     thread_id: Option<String>,
     closed: bool,
+    /// Every key a tool call has been given, so a reused request id gets a key of its own.
+    keys: std::collections::BTreeSet<String>,
 }
 
 impl AppServerSession {
@@ -186,6 +248,7 @@ impl AppServerSession {
             opening,
             thread_id: None,
             closed: false,
+            keys: std::collections::BTreeSet::new(),
         }
     }
 
@@ -210,9 +273,12 @@ impl AppServerSession {
     pub fn receive(&mut self, message: &Value) -> Vec<SessionAction> {
         let method = message.get("method").and_then(Value::as_str);
         match (message.get("id"), method) {
-            (Some(id), Some(method)) => Self::server_request(id, method, message),
+            (Some(id), Some(method)) => self.server_request(id, method, message),
             (Some(id), None) => self.response(id, message),
-            (None, Some("turn/completed")) if !self.closed => {
+            // Only this run's own thread ends its input (`TurnCompletedNotification { thread_id,
+            // turn }`, `app-server-protocol/src/protocol/v2/turn.rs:549-552` at `rust-v0.160.0`):
+            // another thread's turn ending leaves this run's calls answerable.
+            (None, Some("turn/completed")) if !self.closed && self.is_own_thread(message) => {
                 self.closed = true;
                 vec![SessionAction::CloseInput]
             }
@@ -220,7 +286,28 @@ impl AppServerSession {
         }
     }
 
-    fn server_request(id: &Value, method: &str, message: &Value) -> Vec<SessionAction> {
+    /// Whether a notification names the thread this session opened. `false` before the thread
+    /// is open and for a notification that names none.
+    fn is_own_thread(&self, message: &Value) -> bool {
+        self.thread_id.is_some()
+            && message["params"]["threadId"].as_str() == self.thread_id.as_deref()
+    }
+
+    /// The key a call with this request id is routed under: [`call_key`], or, when the server
+    /// has used the id before, that key with a counter, so two calls never share one.
+    fn fresh_key(&mut self, id: &Value) -> String {
+        let base = call_key(id);
+        let mut key = base.clone();
+        let mut reuse = 1_u32;
+        while self.keys.contains(&key) {
+            reuse += 1;
+            key = format!("{base}#{reuse}");
+        }
+        self.keys.insert(key.clone());
+        key
+    }
+
+    fn server_request(&mut self, id: &Value, method: &str, message: &Value) -> Vec<SessionAction> {
         if method != TOOL_CALL_METHOD {
             // Nothing is approved by default: a request this route does not serve is refused.
             return vec![SessionAction::Send(json!({
@@ -235,7 +322,7 @@ impl AppServerSession {
             }))];
         }
         let params = message.get("params").cloned().unwrap_or(Value::Null);
-        let key = call_key(id);
+        let key = self.fresh_key(id);
         vec![SessionAction::ToolCall {
             line: crate::bridge::dynamic_tool_call_line(&key, &params),
             key,
@@ -442,9 +529,70 @@ mod tests {
     #[test]
     fn turn_completed_closes_the_input_once() {
         let mut session = AppServerSession::new(opening());
-        let done = json!({"method": "turn/completed", "params": {"turn": {"status": "completed"}}});
+        let done = json!({"method": "turn/completed", "params": {"threadId": "th-1",
+            "turn": {"status": "completed"}}});
+        assert_eq!(
+            session.receive(&done),
+            [] as [SessionAction; 0],
+            "story:codex-catalogue-on-app-server: no thread is open yet, so it is not this run's"
+        );
+        let _ = session.receive(&json!({"id": 2, "result": {"thread": {"id": "th-1"}}}));
+        let unnamed =
+            json!({"method": "turn/completed", "params": {"turn": {"status": "completed"}}});
+        assert_eq!(session.receive(&unnamed), [] as [SessionAction; 0]);
         assert_eq!(session.receive(&done), [SessionAction::CloseInput]);
         assert_eq!(session.receive(&done), [] as [SessionAction; 0]);
+    }
+
+    /// a66 § review corrections: a request id the server uses twice gets a second key, so a
+    /// decision for one call never reaches the other.
+    #[test]
+    fn a_reused_request_id_gets_a_key_of_its_own() {
+        let mut session = AppServerSession::new(opening());
+        let call = |call_id: &str| {
+            json!({"id": 4, "method": "item/tool/call", "params": {"threadId": "th-1",
+                "turnId": "tu-1", "callId": call_id, "namespace": null, "tool": "fs_read",
+                "arguments": {}}})
+        };
+        let keys: Vec<String> = [call("call-a"), call("call-b"), call("call-c")]
+            .iter()
+            .flat_map(|message| session.receive(message))
+            .filter_map(|action| match action {
+                SessionAction::ToolCall { key, .. } => Some(key),
+                _ => None,
+            })
+            .collect();
+        assert_eq!(keys, ["rpc-4", "rpc-4#2", "rpc-4#3"]);
+    }
+
+    /// a66 § review corrections: the names `thread/start` refuses at 0.160.0
+    /// (`thread_processor.rs:362`, `:365-371`), each by name.
+    #[test]
+    fn the_names_thread_start_refuses_are_named() {
+        assert_eq!(refused_dynamic_tool_name(["fs_read", "fs_stat"]), None);
+        assert_eq!(
+            refused_dynamic_tool_name(["fs_read", "mcp"]),
+            Some(DynamicToolNameRefusal::Reserved {
+                name: "mcp".to_owned()
+            })
+        );
+        assert_eq!(
+            refused_dynamic_tool_name(["mcp__fs_read"]),
+            Some(DynamicToolNameRefusal::Reserved {
+                name: "mcp__fs_read".to_owned()
+            })
+        );
+        assert_eq!(
+            refused_dynamic_tool_name(["mcpx", "mcp_x"]),
+            None,
+            "only `mcp` and the `mcp__` prefix are reserved"
+        );
+        assert_eq!(
+            refused_dynamic_tool_name(["fs_read", "fs_read"]),
+            Some(DynamicToolNameRefusal::Duplicate {
+                name: "fs_read".to_owned()
+            })
+        );
     }
 
     #[test]

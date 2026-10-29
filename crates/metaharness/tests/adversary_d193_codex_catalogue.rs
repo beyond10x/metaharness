@@ -190,9 +190,8 @@ fn drive(
         let line = match process.poll_line() {
             Ok(ProcessPoll::Line(line)) => line,
             Ok(ProcessPoll::Idle) => continue,
-            Ok(ProcessPoll::Ended) => break,
             Err(error) if error.kind() == std::io::ErrorKind::WouldBlock => continue,
-            Err(_) => break,
+            Ok(ProcessPoll::Ended) | Err(_) => break,
         };
         for emission in seam.push_line(&line) {
             if let Event::ToolRequested {

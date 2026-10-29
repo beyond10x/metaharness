@@ -264,12 +264,16 @@ fn a_codex_run_carries_the_catalogue_over_the_app_server_and_denies_what_is_outs
         "no hook program on this route"
     );
 
-    // The record: the client tools, and nothing the launch removed.
+    // The record: the client tools, then the vendor tools the launch declares no config removes
+    // (a66 § review corrections), and nothing the launch removed.
     let (offered_tools, _) = opened_with(run.events());
+    let mut declared = offered.clone();
+    declared.extend(metaharness_codex::APP_SERVER_VENDOR_TOOLS.map(str::to_owned));
     assert_eq!(
         offered_tools,
-        Some(offered.clone()),
-        "story:codex-catalogue-on-app-server: offered_tools lists the catalogue"
+        Some(declared),
+        "story:codex-catalogue-on-app-server: offered_tools lists the catalogue, then exec, wait \
+         and request_user_input_async"
     );
 
     // Each call by its bare name: the entry the build performs resolves, the rest do not. The

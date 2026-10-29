@@ -60,7 +60,11 @@ With `--catalogue`, the run starts `codex app-server --strict-config --listen st
    it and answers it itself, through the server and argument checks the Claude route's
    `mcp-serve` uses. A denied call, or one outside the catalogue, is answered `success: false` and
    performs nothing.
-4. `session.started.offered_tools` lists the catalogue's entries.
+4. `session.started.offered_tools` lists the catalogue's entries, then `exec`, `wait` and
+   `request_user_input_async`, which the record does not list and the launch declares (below).
+5. A catalogue entry published as `mcp` or under `mcp__`, or two entries under one name, is
+   refused before the spawn (`catalogue-name-reserved`, `catalogue-name-duplicate`): the
+   app-server would refuse it at `thread/start`.
 
 What the config cannot remove: a model whose entry in the vendor's model catalogue asks for code
 mode is offered `exec` and `wait`, and reaches the catalogue only from inside `exec`. A model that
@@ -68,7 +72,8 @@ names `request_user_input_async` is offered it. A live run on 0.160.0 met both
 (`docs/research/2026-10-29-codex-0.160.0-app-server-catalogue.md`). The rollout records the `exec`
 cell as a call of its own, so the stream carries a `tool.requested` named `exec` under
 `seam: none` beside the catalogue call it made. The launch attestation lists these tools among its
-ambient inputs.
+ambient inputs. They are vendor tools with no effect of their own: each catalogue call made from
+inside `exec` is still an `item/tool/call` that metaharness decides.
 
 `--tool-surface native` beside `--catalogue` is refused (`catalogue-needs-owned-surface`), and
 `--tool-surface owned` without a catalogue is still refused on Codex.

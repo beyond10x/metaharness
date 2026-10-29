@@ -157,14 +157,16 @@ impl CodexSeam {
     /// opening record's `dynamic_tools` for the offered tools: that launch removed every built-in
     /// tool a config key reaches, so the client tools are the catalogue the model calls. A model
     /// catalogue can still add code mode's `exec` and `wait` and `request_user_input_async`, which
-    /// the rollout does not list and the launch attestation reports (a66 § 6). Under any other
-    /// seam the reader keeps `offered_tools` absent, as a rollout lists no built-in tools.
+    /// the rollout does not list, so the offered tools name them after the catalogue from the
+    /// launch's declaration ([`crate::APP_SERVER_VENDOR_TOOLS`], a66 § review corrections). Under
+    /// any other seam the reader keeps `offered_tools` absent, as a rollout lists no built-in
+    /// tools.
     #[must_use]
     pub fn new(transcript: TranscriptRef, attestation: HermeticAttestation, seam: Seam) -> Self {
         let reader = RolloutReader::new(transcript, attestation);
         Self {
             reader: if seam == Seam::OwnedTool {
-                reader.offering_only_dynamic_tools()
+                reader.on_the_app_server_route()
             } else {
                 reader
             },
@@ -203,9 +205,12 @@ impl CodexSeam {
         }
         let key = value.get("key").and_then(Value::as_str)?.to_string();
         let call = value.get("call").cloned().unwrap_or(Value::Null);
+        // The vendor's `callId`, unless this seam already holds a call under it: a reused id is
+        // presented under its own key, so a decision for the earlier call is never routed to this
+        // one (a66 § review corrections). The runner's keys are unique within the session.
         let call_id = call["callId"]
             .as_str()
-            .filter(|id| !id.is_empty())
+            .filter(|id| !id.is_empty() && !self.dynamic.contains_key(*id))
             .map_or_else(|| key.clone(), ToString::to_string);
         self.dynamic.insert(call_id.clone(), key);
         Some(vec![Emission::untimed(Event::ToolRequested {
@@ -790,13 +795,50 @@ mod tests {
     }
 
     /// Amendment a66 § 5: on the app-server route the opening record's `dynamic_tools` are the
-    /// offered tools, because that launch removed every built-in a config key reaches.
+    /// offered tools, because that launch removed every built-in a config key reaches, followed by
+    /// the vendor tools the launch declares no config removes (a66 § review corrections).
     #[test]
     fn on_the_owned_tool_seam_the_dynamic_tools_are_the_offered_tools() {
         assert_eq!(
             offered(&mut owned_seam()),
-            Some(vec!["fs_read".to_owned(), "fs_stat".to_owned()])
+            Some(
+                [
+                    "fs_read",
+                    "fs_stat",
+                    "exec",
+                    "wait",
+                    "request_user_input_async"
+                ]
+                .map(str::to_owned)
+                .to_vec()
+            ),
+            "story:codex-catalogue-on-app-server: the catalogue, then the declared vendor tools"
         );
+    }
+
+    /// a66 § review corrections: a `callId` the seam already holds is presented under the
+    /// runner's key, so a decision for the first call is never routed to the second.
+    #[test]
+    fn a_reused_call_id_is_presented_under_its_own_key() {
+        let mut seam = owned_seam();
+        let params = |path: &str| {
+            serde_json::json!({"threadId": "th-1", "turnId": "tu-1", "callId": "call-7",
+                "namespace": null, "tool": "fs_read", "arguments": {"path": path}})
+        };
+        let ids: Vec<String> = [
+            dynamic_tool_call_line("rpc-1", &params("README.md")),
+            dynamic_tool_call_line("rpc-2", &params("secret.txt")),
+        ]
+        .iter()
+        .flat_map(|line| seam.push_line(line))
+        .filter_map(|emission| match emission.event {
+            Event::ToolRequested { call_id, .. } => Some(call_id),
+            _ => None,
+        })
+        .collect();
+        assert_eq!(ids, ["call-7", "rpc-2"]);
+        assert_eq!(seam.dynamic_routes()["call-7"], "rpc-1");
+        assert_eq!(seam.dynamic_routes()["rpc-2"], "rpc-2");
     }
 
     /// Under the hook seam the same record says nothing about the built-ins the exec route

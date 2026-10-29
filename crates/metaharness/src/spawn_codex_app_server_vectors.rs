@@ -353,7 +353,14 @@ fn vector_app_server_round_trip() -> VectorOutcome {
             observed.requested
         ));
     }
-    if observed.offered != Some(vec!["fs_read".to_owned(), "fs_stat".to_owned()]) {
+    // The catalogue from the record, then the vendor tools the launch declares (a66 § review
+    // corrections).
+    let declared = ["fs_read", "fs_stat"]
+        .into_iter()
+        .chain(metaharness_codex::APP_SERVER_VENDOR_TOOLS)
+        .map(str::to_owned)
+        .collect::<Vec<_>>();
+    if observed.offered.as_ref() != Some(&declared) {
         faults.push(format!("session.started offered {:?}", observed.offered));
     }
     // The fake exits 0 only after it read to the end of its stdin, so a zero is the evidence

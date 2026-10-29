@@ -1228,6 +1228,25 @@ fn start_codex(
     if !refusals.is_empty() {
         return Err(Refusal::Control { refusals });
     }
+    // A catalogue the app-server would refuse at `thread/start` is refused here by name, before
+    // the scratch tree, the spawn and the credential copy (a66 § review corrections).
+    if let Some(refused) = catalogue.as_ref().and_then(|checked| {
+        metaharness_codex::refused_dynamic_tool_name(
+            checked
+                .entries()
+                .iter()
+                .map(|entry| entry.published.as_str()),
+        )
+    }) {
+        return Err(match refused {
+            metaharness_codex::DynamicToolNameRefusal::Reserved { name } => {
+                Refusal::CatalogueNameReserved { name }
+            }
+            metaharness_codex::DynamicToolNameRefusal::Duplicate { name } => {
+                Refusal::CatalogueNameDuplicate { name }
+            }
+        });
+    }
 
     let scratch = tempfile::TempDir::new()?;
     guard_scratch_path(scratch.path())?;
@@ -1313,7 +1332,7 @@ fn start_codex(
                 loopback.is_some(),
                 spec.strict_version,
             )?;
-            // Every tool offered is a client tool, decided where the app-server calls it.
+            // The catalogue's tools are client tools, decided where the app-server calls them.
             (directory, Seam::OwnedTool)
         } else {
             let channel = crate::spawn_codex::CodexHookChannel::create(scratch.path())?;
@@ -1444,7 +1463,7 @@ fn materialise_app_server(
 /// | its executable bit | a hook the vendor cannot execute fails as a hook that did not fire, which looks exactly like a run where nothing was attempted |
 ///
 /// The app-server route (amendment a66) installs no hook, so it passes no channel and the last
-/// two rows are skipped: every tool it offers is decided where the app-server calls it.
+/// two rows are skipped: each catalogue call is decided where the app-server makes it.
 fn materialise_codex(
     plan: &metaharness_codex::LaunchPlan,
     scratch_root: &std::path::Path,

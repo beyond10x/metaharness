@@ -276,6 +276,27 @@ pub enum Refusal {
         /// The kind that cannot carry it.
         kind: Kind,
     },
+    /// A Codex catalogue entry is published as `mcp` or under the `mcp__` prefix, which Codex's
+    /// app-server reserves and refuses at `thread/start` (`codex-rs/app-server/src/
+    /// request_processors/thread_processor.rs:362` at `rust-v0.160.0`; design amendment a66
+    /// § review corrections).
+    ///
+    /// Refused by name before the scratch tree, the spawn and the credential copy. Code
+    /// [`CATALOGUE_NAME_RESERVED`].
+    CatalogueNameReserved {
+        /// The entry's published name.
+        name: String,
+    },
+    /// Two Codex catalogue entries are published under one name, which Codex's app-server
+    /// refuses at `thread/start` (`thread_processor.rs:365-371` at `rust-v0.160.0`; design
+    /// amendment a66 § review corrections).
+    ///
+    /// Refused by name before the scratch tree, the spawn and the credential copy. Code
+    /// [`CATALOGUE_NAME_DUPLICATE`].
+    CatalogueNameDuplicate {
+        /// The name published twice.
+        name: String,
+    },
     /// `--catalogue` was given with `--tool-surface native` (design amendment a40).
     ///
     /// The catalogue is served by this binary's tool server, which only the owned surface starts.
@@ -319,6 +340,14 @@ pub enum Refusal {
 /// The stable code string [`Refusal::CatalogueNotCarried`] carries in its message (design
 /// amendment a40). A launch-condition code, like [`SCRATCH_PATH_NOT_UTF8`].
 pub const CATALOGUE_NOT_CARRIED: &str = "catalogue-not-carried";
+
+/// The stable code string [`Refusal::CatalogueNameReserved`] carries in its message (design
+/// amendment a66 § review corrections).
+pub const CATALOGUE_NAME_RESERVED: &str = "catalogue-name-reserved";
+
+/// The stable code string [`Refusal::CatalogueNameDuplicate`] carries in its message (design
+/// amendment a66 § review corrections).
+pub const CATALOGUE_NAME_DUPLICATE: &str = "catalogue-name-duplicate";
 
 /// The stable code string [`Refusal::CatalogueNeedsOwnedSurface`] carries in its message (design
 /// amendment a40).
@@ -714,6 +743,22 @@ impl fmt::Display for Refusal {
                  the catalogue it was handed is not the run that was asked for (design amendment \
                  a40). Nothing was started",
                 kind.as_str(),
+            ),
+            Refusal::CatalogueNameReserved { name } => write!(
+                f,
+                "{CATALOGUE_NAME_RESERVED}: --catalogue publishes an entry as `{name}` on codex, \
+                 and codex app-server reserves `mcp` and every name that starts with `mcp__`: \
+                 0.160.0 refuses it at thread/start (thread_processor.rs:362), so the run could \
+                 not offer this catalogue (design amendment a66 § review corrections). Rename \
+                 the entry's `mcp` rendering. Nothing was started"
+            ),
+            Refusal::CatalogueNameDuplicate { name } => write!(
+                f,
+                "{CATALOGUE_NAME_DUPLICATE}: --catalogue publishes two entries as `{name}` on \
+                 codex, and codex app-server refuses a name offered twice at thread/start \
+                 (thread_processor.rs:365-371 at 0.160.0), so the run could not offer this \
+                 catalogue (design amendment a66 § review corrections). Give each entry its own \
+                 `mcp` rendering. Nothing was started"
             ),
             Refusal::CatalogueNeedsOwnedSurface => write!(
                 f,
