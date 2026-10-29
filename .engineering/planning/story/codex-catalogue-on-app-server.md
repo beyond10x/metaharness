@@ -2,7 +2,7 @@
 format: aep.planning-md/3
 id: story:codex-catalogue-on-app-server
 kind: story
-status: draft
+status: active
 title: A Codex run carries a caller's catalogue on the app-server route
 summary: metaharness run codex --catalogue offers the catalogue's entries and nothing else, over the app-server protocol, instead of refusing.
 owner: metaharness
@@ -12,7 +12,10 @@ refs:
 relations:
 - decomposes: epic:loom-agent-work-through-metaharness
 - informed_by: review-result:adr0096-w5-catalogue-adversary-1
-revision: 1
+revision: 3
+transitions:
+- {from: "draft", to: "proposed", at: "2026-10-29T10:14:09Z", actor: "human:timo", revision: 2}
+- {from: "proposed", to: "active", at: "2026-10-29T10:14:10Z", actor: "human:timo", revision: 3}
 ---
 # Story: a Codex run carries a caller's catalogue on the app-server route
 
