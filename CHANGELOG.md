@@ -5,6 +5,14 @@ was amended and the amendment is named here.
 
 ## [Unreleased]
 
+## [0.23.1] — 2026-10-29
+
+### Changed
+
+- ESS 0.76.0 is the specification toolchain: both `ess-inputs.yaml` manifests require it and CI installs `ess-cli` from its tag commit `d5c00e9c`, up from 0.75.0 (`b593d356`). `spec/conformance.json` regenerates byte-identical, 120 scenarios (task:ess-pin-0-76-0).
+
+No breaking change: no public Rust API, wire format or command-line surface moves, so a consumer pinned to `0.23.0` (Loom's session executor) takes `0.23.1` without a code change.
+
 ## [0.23.0] — 2026-10-28
 
 ### Added
