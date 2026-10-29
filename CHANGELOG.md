@@ -9,6 +9,10 @@ was amended and the amendment is named here.
 
 - `docs/research/2026-10-29-codex-catalogue-live-follow-ups.md`: six live runs of 0.24.0's `run codex --catalogue` on a ChatGPT login, at 0.153.4 and 0.160.0. With the `sleep_tool` and `[agents]` switches the model is offered `exec`, `wait` and `request_user_input_async` beside the catalogue and nothing else. `request_user_input_async` waits for nobody and performs no effect. `exec` wrote no file, started no process and opened no connection when the prompt asked for each (amendment a67, story:codex-catalogue-live-follow-ups).
 
+### Changed
+
+- ESS 0.77.0 is the specification toolchain: both `ess-inputs.yaml` manifests require it and CI installs `ess-cli` from its tag commit `f692aabb`, up from 0.76.0 (`d5c00e9c`). `spec/conformance.json` regenerates byte-identical, 120 scenarios (task:ess-pin-0-77-0).
+
 ### Fixed
 
 - The CLI and Codex pages said two catalogue entries under one name are refused on `codex` as `catalogue-name-duplicate`. The file is refused earlier, as `catalogue-malformed`, on every kind, by the `tool-contract/1` checks. A test now holds that refusal on Claude and Codex (amendment a67).
