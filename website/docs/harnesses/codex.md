@@ -10,7 +10,7 @@ Pinned to **0.153.4** and **0.160.0**. Adapter class: `harness`.
 
 ```bash
 metaharness run codex --hermetic -p "…"
-metaharness conformance codex     # 24 vectors, 4 of which run a real process and the real hook
+metaharness conformance codex     # 27 vectors, 4 of which run a real process and the real hook
 metaharness doctor codex
 ```
 
@@ -39,6 +39,39 @@ inside a tag whose closing line the file does not contain (design amendment a35;
 `codex exec` 0.153.4 does not expand an `@path` mention: a relayed probe on 2026-10-20 saw no
 mention grow the input or reach the model. That probe has not been repeated on 0.160.0; the files
 are inlined either way.
+
+## A caller's catalogue {#a-callers-catalogue}
+
+```bash
+metaharness run codex --catalogue session.yaml -p "…"
+```
+
+With `--catalogue`, the run starts `codex app-server --strict-config --listen stdio://` instead of
+`codex exec` (design amendment a66). A run without it is unchanged.
+
+1. The thread starts with `environments: []`, so Codex has no shell, `apply_patch` or
+   `view_image`. The catalogue's entries go in as client tools (`dynamicTools`), under their `mcp`
+   renderings.
+2. The scratch config switches off every other tool a config key reaches: web search, goals,
+   multi-agent tools, image generation, apps, plugins, tool suggestions, `request_user_input`, the
+   sleep tool, and on 0.153.4 the orchestrator's skills tool. `--strict-config` refuses a key the
+   binary does not know.
+3. Each `item/tool/call` becomes `tool.requested` on the `owned_tool` seam. metaharness decides
+   it and answers it itself, through the server and argument checks the Claude route's
+   `mcp-serve` uses. A denied call, or one outside the catalogue, is answered `success: false` and
+   performs nothing.
+4. `session.started.offered_tools` lists the catalogue's entries.
+
+What the config cannot remove: a model whose entry in the vendor's model catalogue asks for code
+mode is offered `exec` and `wait`, and reaches the catalogue only from inside `exec`. A model that
+names `request_user_input_async` is offered it. A live run on 0.160.0 met both
+(`docs/research/2026-10-29-codex-0.160.0-app-server-catalogue.md`). The rollout records the `exec`
+cell as a call of its own, so the stream carries a `tool.requested` named `exec` under
+`seam: none` beside the catalogue call it made. The launch attestation lists these tools among its
+ambient inputs.
+
+`--tool-surface native` beside `--catalogue` is refused (`catalogue-needs-owned-surface`), and
+`--tool-surface owned` without a catalogue is still refused on Codex.
 
 ## The hermetic floor on Codex
 

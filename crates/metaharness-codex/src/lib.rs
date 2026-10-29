@@ -54,6 +54,7 @@
 //! 3. **The hook speaks Claude Code's tool vocabulary.** `tool_name` is `Bash`, where the rollout
 //!    calls the same call `exec` and the binary's model-facing list calls it `shell`.
 
+mod app_server;
 mod bridge;
 mod hook;
 mod launch;
@@ -65,7 +66,15 @@ mod vectors;
 #[cfg(feature = "conformance")]
 pub mod conformance;
 
-pub use bridge::{CodexSeam, CodexSeams, hook_request_line};
+pub use app_server::{
+    APP_SERVER_ARGS, AppServerOpening, AppServerSession, DynamicTool, INITIALIZE_ID,
+    METHOD_NOT_FOUND, SessionAction, THREAD_START_ID, TOOL_CALL_METHOD, TURN_START_ID,
+    app_server_dir, call_key, catalogue_copy_path, dynamic_tool_name, opening_path,
+    tool_call_answer,
+};
+pub use bridge::{
+    CodexSeam, CodexSeams, dynamic_decision, dynamic_tool_call_line, hook_request_line,
+};
 pub use hook::{
     HOOK_WAIT_SECONDS, HookChannelPaths, PathNotUtf8, hook_program, shell_quote, shell_quote_path,
 };

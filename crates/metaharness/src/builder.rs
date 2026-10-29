@@ -155,7 +155,8 @@ impl Metaharness {
     /// the CLI's default does; a later [`Metaharness::with_tool_surface`] still wins, and naming
     /// `native` after this is refused at start rather than resolved. The file is read and checked
     /// at start, before the frame and before anything is spawned, and every way it is not a
-    /// catalogue is a refusal by name. Only Claude Code carries one; codex and b10x refuse it.
+    /// catalogue is a refusal by name. Claude Code carries one over MCP and Codex over `codex
+    /// app-server` (amendment a66); b10x refuses it.
     #[must_use]
     pub fn with_catalogue(mut self, path: impl Into<PathBuf>) -> Self {
         self.spec.catalogue = Some(path.into());
@@ -394,6 +395,13 @@ impl Metaharness {
                 &mut crate::spawn::SpawnRunner::new(),
                 &mut metaharness_claude::ClaudeSeams,
             ),
+            // A caller's catalogue is carried over `codex app-server`, which this runner speaks
+            // on the child's stdin and stdout (amendment a66); every other codex run is `exec`.
+            Kind::Codex if self.spec.catalogue.is_some() => self.start_with(
+                input,
+                &mut crate::spawn_codex_app_server::CodexAppServerRunner::new(),
+                &mut metaharness_codex::CodexSeams,
+            ),
             Kind::Codex => self.start_with(
                 input,
                 &mut crate::spawn_codex::CodexSpawnRunner::new(),
@@ -497,7 +505,7 @@ impl Metaharness {
         // resolution, the scratch root, the cwd, the ancestor walk and the control refusals.
         match spec.kind {
             Kind::Claude => start_claude(spec, credentials, frame, catalogue, runner, seams, clock),
-            Kind::Codex => start_codex(spec, credentials, frame, runner, seams, clock),
+            Kind::Codex => start_codex(spec, credentials, frame, catalogue, runner, seams, clock),
             Kind::B10x => start_b10x(spec, frame, runner, seams, clock),
         }
     }
@@ -1210,6 +1218,7 @@ fn start_codex(
     spec: RunSpec,
     credentials: Option<PathBuf>,
     frame: Option<Frame>,
+    catalogue: Option<CallerCatalogue>,
     runner: &mut dyn ProcessRunner,
     seams: &mut dyn SeamFactory,
     clock: Box<dyn Clock>,
@@ -1257,6 +1266,22 @@ fn start_codex(
                 .map(PathBuf::from)
                 .collect::<Vec<_>>(),
         ),
+        // The catalogue's entries as client tools (amendment a66): under the published name, with
+        // the description and input schema the Claude route's server lists for each.
+        dynamic_tools: catalogue
+            .as_ref()
+            .map(|catalogue| {
+                catalogue
+                    .entries()
+                    .iter()
+                    .map(|entry| metaharness_codex::DynamicTool {
+                        name: entry.published.clone(),
+                        description: entry.description.clone(),
+                        input_schema: entry.input_schema.clone(),
+                    })
+                    .collect()
+            })
+            .unwrap_or_default(),
     };
     let mut plan =
         metaharness_codex::plan_launch(&spec, &context).map_err(|refusal| Refusal::Launch {
@@ -1273,17 +1298,35 @@ fn start_codex(
         &metaharness_codex::PINNED_VERSIONS,
     )?;
 
-    let channel = crate::spawn_codex::CodexHookChannel::create(scratch.path())?;
-    materialise_codex(&plan, scratch.path(), &channel)?;
+    // The exec route's hook channel, or the app-server route's opening and catalogue copy
+    // (amendment a66). The plan has an opening exactly when a catalogue was handed over.
+    let (decision_channel, seam) =
+        if let (Some(opening), Some(checked)) = (&plan.app_server, &catalogue) {
+            materialise_codex(&plan, scratch.path(), None)?;
+            let directory = metaharness_codex::app_server_dir(scratch.path());
+            materialise_app_server(&directory, opening, checked)?;
+            // The runner's server reads the copy and never the caller's file, so it is read back
+            // here, as on the Claude route (amendment a40).
+            verify_catalogue_copy(
+                &metaharness_codex::catalogue_copy_path(&directory),
+                checked,
+                loopback.is_some(),
+                spec.strict_version,
+            )?;
+            // Every tool offered is a client tool, decided where the app-server calls it.
+            (directory, Seam::OwnedTool)
+        } else {
+            let channel = crate::spawn_codex::CodexHookChannel::create(scratch.path())?;
+            materialise_codex(&plan, scratch.path(), Some(&channel))?;
+            (channel.root().to_path_buf(), Seam::Hook)
+        };
+    let app_server = plan.app_server.is_some();
 
     let transcript = TranscriptRef {
         path: Some(transcript_path.display().to_string()),
         digest: None,
         bytes: None,
     };
-    // Always the hook: `--tool-surface owned` is refused by the codex launch plan by name, so
-    // there is no second value this could take.
-    let seam = Seam::Hook;
     let bridge = seams.build(transcript.clone(), plan.attestation.clone(), seam);
 
     let copies: Vec<CredentialCopyView<'_>> = plan
@@ -1300,7 +1343,7 @@ fn start_codex(
         env: &plan.env,
         cwd: &plan.cwd,
         credential_copies: &copies,
-        decision_channel: channel.root(),
+        decision_channel: &decision_channel,
         transcript: &transcript_path,
     };
     let process = runner.start(&view)?;
@@ -1345,18 +1388,50 @@ fn start_codex(
         launch,
         // The raw wire: the copied rollout, the thin `--json` stdout retained beside it, and
         // the hook inputs. Named file by file for the same reason as the claude list — the
-        // scratch `CODEX_HOME` holds a copied `auth.json` that must never travel.
-        wire: vec![
-            crate::spawn_codex::stdout_path(&transcript_path),
-            transcript_path,
-            metaharness_codex::HookChannelPaths::under(scratch.path()).requests,
-        ],
+        // scratch `CODEX_HOME` holds a copied `auth.json` that must never travel. On the
+        // app-server route the stdout is the server's half of the JSON-RPC conversation and the
+        // hook inputs are replaced by the client's half (amendment a66).
+        wire: if app_server {
+            vec![
+                crate::spawn_codex::stdout_path(&transcript_path),
+                transcript_path.clone(),
+                crate::spawn_codex_app_server::stdin_path(&transcript_path),
+            ]
+        } else {
+            vec![
+                crate::spawn_codex::stdout_path(&transcript_path),
+                transcript_path,
+                metaharness_codex::HookChannelPaths::under(scratch.path()).requests,
+            ]
+        },
         scratch: Some(scratch),
         // Handed over rather than kept here: the run is what the port is scoped to, so the thing
         // that ends the run closes it (LP-4).
         loopback: loopback.map(|started| started.handle),
-        catalogue: None,
+        // Resolution reads the entries the app-server offered by their bare names (a66 § 5).
+        catalogue,
     }))
+}
+
+/// Write what the app-server runner reads and the launch plan decided: the opening messages and
+/// the catalogue's scratch copy, which its server reads (amendment a66).
+fn materialise_app_server(
+    directory: &std::path::Path,
+    opening: &metaharness_codex::AppServerOpening,
+    checked: &CallerCatalogue,
+) -> Result<(), Refusal> {
+    std::fs::create_dir_all(directory)?;
+    std::fs::write(
+        metaharness_codex::opening_path(directory),
+        serde_json::to_string_pretty(&opening.to_value()).map_err(|error| Refusal::Io {
+            detail: format!("the app-server opening could not be rendered: {error}"),
+        })?,
+    )?;
+    std::fs::write(
+        metaharness_codex::catalogue_copy_path(directory),
+        metaharness_tools::render_scratch_copy(&checked.document_value()),
+    )?;
+    Ok(())
 }
 
 /// Perform the I/O the codex launch plan names and deliberately does not do.
@@ -1367,10 +1442,13 @@ fn start_codex(
 /// | `$CODEX_HOME/config.toml`, **the seam included** | the plan decides its contents; writing it is I/O. 0.145.0 reads its hooks out of `[hooks]` in this file and reads no standalone `hooks.json` at all |
 /// | the `PreToolUse` executable at the path the hook definition names | **the definition without the file is a seam that is never consulted** |
 /// | its executable bit | a hook the vendor cannot execute fails as a hook that did not fire, which looks exactly like a run where nothing was attempted |
+///
+/// The app-server route (amendment a66) installs no hook, so it passes no channel and the last
+/// two rows are skipped: every tool it offers is decided where the app-server calls it.
 fn materialise_codex(
     plan: &metaharness_codex::LaunchPlan,
     scratch_root: &std::path::Path,
-    channel: &crate::spawn_codex::CodexHookChannel,
+    channel: Option<&crate::spawn_codex::CodexHookChannel>,
 ) -> Result<(), Refusal> {
     install_plugins(&plan.plugin_installs)?;
     std::fs::create_dir_all(&plan.config_home)?;
@@ -1385,6 +1463,9 @@ fn materialise_codex(
         plan.config.as_bytes(),
     )?;
 
+    let Some(channel) = channel else {
+        return Ok(());
+    };
     let program_path = metaharness_codex::hook_program_path(scratch_root);
     if let Some(parent) = program_path.parent() {
         std::fs::create_dir_all(parent)?;
@@ -1855,7 +1936,7 @@ fn resolve_frame(in_memory: Option<Frame>, spec: &RunSpec) -> Result<Option<Fram
 ///
 /// The per-kind refusals an adapter decides from the spec alone are raised here too, in the
 /// adapter's words and mapped as its launch maps them (a64): Codex's `--max-turns`,
-/// `--max-budget-usd`, `--catalogue` and `--tool-surface owned`
+/// `--max-budget-usd` and `--tool-surface owned` without a catalogue
 /// ([`metaharness_codex::unsupported_options`]), and a model endpoint beside a credential the child
 /// would hold, on Claude and Codex (`guard_endpoint_credential` in each). Each launch keeps its own
 /// check.
@@ -1897,12 +1978,14 @@ pub fn check_spec(spec: &RunSpec) -> Result<(), Refusal> {
     }
     // Strategy C is built (`metaharness mcp-serve`), so what is left is a question about the
     // *vendor*: can its built-in tools be taken away and ours put in their place? Claude Code can
-    // (`--tools ""` plus `--mcp-config`). Codex cannot — `dynamicTools` is an app-server surface
-    // `codex exec` does not expose, which its own launch already explains. And b10x publishes this
-    // very catalogue in-process, so there is nothing to replace and the flag would mean nothing.
+    // (`--tools ""` plus `--mcp-config`). Codex can over `codex app-server`, with no environment
+    // and the catalogue's entries as client tools (amendment a66), and only for a caller's
+    // catalogue: the bare owned surface would put the three verbs there, which nothing has
+    // designed. And b10x publishes this very catalogue in-process, so there is nothing to replace
+    // and the flag would mean nothing.
     //
-    // A caller's catalogue rides on that surface (amendment a40), so it is refused first and by its
-    // own name: the caller declared a catalogue, not a surface, and the sentence says which.
+    // A caller's catalogue rides on that surface (amendment a40), so on b10x it is refused first and
+    // by its own name: the caller declared a catalogue, not a surface, and the sentence says which.
     //
     // `--allow-program` names what the served `run` may start, and a server handed a catalogue
     // publishes that catalogue's entries and nothing else. No entry is performed as `run`: the
@@ -1910,7 +1993,7 @@ pub fn check_spec(spec: &RunSpec) -> Result<(), Refusal> {
     // `file_edit` only (harness `f087013`, `crates/harness-catalogue/src/local.rs:118-124`). The
     // programs would be accepted and do nothing, so the pair is refused before the file is read.
     if spec.catalogue.is_some() {
-        if spec.kind != Kind::Claude {
+        if spec.kind == Kind::B10x {
             return Err(Refusal::CatalogueNotCarried { kind: spec.kind });
         }
         if spec.tool_surface != ToolSurface::Owned {
@@ -1922,7 +2005,9 @@ pub fn check_spec(spec: &RunSpec) -> Result<(), Refusal> {
             });
         }
     }
-    if spec.tool_surface == ToolSurface::Owned && spec.kind != Kind::Claude {
+    let owned_carried =
+        spec.kind == Kind::Claude || (spec.kind == Kind::Codex && spec.catalogue.is_some());
+    if spec.tool_surface == ToolSurface::Owned && !owned_carried {
         return Err(Refusal::ToolSurfaceOwned { kind: spec.kind });
     }
     // A marketplace is Claude Code's; codex and the b10x loop have none, and a declaration this
@@ -1990,8 +2075,8 @@ pub fn check_spec(spec: &RunSpec) -> Result<(), Refusal> {
     {
         return Err(Refusal::ScopeUnsupported { kind: spec.kind });
     }
-    // Last, so every refusal above keeps the variant it had; Codex's `--catalogue` and owned
-    // surface are already refused above by name.
+    // Last, so every refusal above keeps the variant it had; Codex's bare owned surface is already
+    // refused above by name.
     adapter_spec_refusals(spec)
 }
 

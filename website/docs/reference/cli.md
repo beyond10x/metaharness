@@ -120,8 +120,8 @@ login is refused by name — see [the codex adapter](../harnesses/codex.md).
 |---|---|---|
 | `--frame <FILE>` | — | A sealed `metaharness.frame/1` document. See [frames](../frames.md). |
 | `--decisions <MODE>` | `frame` | `frame` (the adapter decides from the admitted set) or `ask` (the embedder decides; one round trip per call). |
-| `--tool-surface <SURFACE>` | `native` | `native`, or `owned` — which this build **refuses** on `codex` and `b10x`. |
-| `--catalogue <FILE>` | *(none)* | A caller's `tool-contract/1` document whose entries are the run's whole tool set. **`claude` only**; implies `--tool-surface owned`. See below. |
+| `--tool-surface <SURFACE>` | `native` | `native`, or `owned` — which this build **refuses** on `b10x`, and on `codex` without `--catalogue`. |
+| `--catalogue <FILE>` | *(none)* | A caller's `tool-contract/1` document whose entries are the run's tool set. `claude` and `codex`; implies `--tool-surface owned`. See below. |
 
 The frame is a **path**, not a parsed value, on purpose: resolving it is the library's job, and
 parsing it in the binary would put protocol logic in the CLI.
@@ -139,6 +139,12 @@ as `\u` escapes, and it is read back before the spawn. A leading byte-order mark
 dropped before it is parsed. A live launch with a catalogue has not been driven; the vector that
 pins it is synthetic (design amendment a40).
 
+On `codex` the run starts `codex app-server` with no environment and the entries as client tools,
+and answers each `item/tool/call` itself through the same server and checks, with the same scratch
+copy (design amendment a66). One live run on 0.160.0 served a catalogue call to exit 0; the model
+was also offered code mode's `exec` and `wait` and `request_user_input_async`, which no config key
+removes ([the Codex page](../harnesses/codex.md#a-callers-catalogue)).
+
 A `tools/call` to an entry answers `isError` and performs nothing when its arguments are not an
 object, carry a key that is not one of the entry's input fields, or leave out (or give as null) a
 field the entry requires. The answer names the entry and the field. A field the entry does not
@@ -147,7 +153,7 @@ given a value that the performing `b10x-harness` entry does not declare, such as
 `timeout_ms` at 0.18.0, 0.19.0 and 0.20.0, is refused by the harness by name, and nothing is done (design amendment
 a50 § 2).
 
-Refused before the spawn with exit 2, by name: `catalogue-not-carried` on `codex` and `b10x`;
+Refused before the spawn with exit 2, by name: `catalogue-not-carried` on `b10x`;
 `catalogue-needs-owned-surface` beside `--tool-surface native`; `catalogue-with-allow-program`
 beside `--allow-program`, because a server handed a catalogue publishes no `run` for the programs
 to be started by; `catalogue-unreadable` for a path that is not a regular file, cannot be read, is

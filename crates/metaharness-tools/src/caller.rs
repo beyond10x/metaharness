@@ -491,6 +491,28 @@ fn json_kind(value: &Value) -> &'static str {
     }
 }
 
+/// The name a vendor gives a catalogue entry it offers.
+///
+/// Claude Code reaches the entries through an MCP server and prefixes each:
+/// `mcp__metaharness__<published>`. Codex's app-server offers them as client tools under the bare
+/// published name (design amendment a66).
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum EntryNaming {
+    /// `mcp__metaharness__<published>`.
+    McpPrefixed,
+    /// `<published>`.
+    Bare,
+}
+
+impl EntryNaming {
+    fn name(self, published: &str) -> String {
+        match self {
+            Self::McpPrefixed => prefixed(published),
+            Self::Bare => published.to_owned(),
+        }
+    }
+}
+
 /// A caller's `tool-contract/1` document, read and checked, with the entries it publishes.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct CallerCatalogue {
@@ -640,9 +662,15 @@ impl CallerCatalogue {
     /// the launch asked for. A reader compares the two; nothing here asserts it.
     #[must_use]
     pub fn offered_tools(&self) -> Vec<String> {
+        self.offered_tools_as(EntryNaming::McpPrefixed)
+    }
+
+    /// The names a vendor offers the entries under, by its naming, in document order.
+    #[must_use]
+    pub fn offered_tools_as(&self, naming: EntryNaming) -> Vec<String> {
         self.entries
             .iter()
-            .map(|entry| prefixed(&entry.published))
+            .map(|entry| naming.name(&entry.published))
             .collect()
     }
 
@@ -682,7 +710,13 @@ impl CallerCatalogue {
     /// entry nothing in this run performs.
     #[must_use]
     pub fn resolve(&self, tool: &str) -> Resolved {
-        self.performed_as(tool)
+        self.resolve_as(tool, EntryNaming::McpPrefixed)
+    }
+
+    /// [`CallerCatalogue::resolve`] for a vendor that names the entries by `naming`.
+    #[must_use]
+    pub fn resolve_as(&self, tool: &str, naming: EntryNaming) -> Resolved {
+        self.performed_as(tool, naming)
             .and_then(harness_catalogue::operation_of)
             .map_or(Resolved::Unknown, |operation| {
                 Resolved::Operations(vec![operation.to_owned()])
@@ -693,10 +727,16 @@ impl CallerCatalogue {
     /// read from the call's own arguments, and nothing for a call that resolves to no operation.
     #[must_use]
     pub fn subjects_of(&self, tool: &str, input: &Value) -> Vec<String> {
-        if matches!(self.resolve(tool), Resolved::Unknown) {
+        self.subjects_as(tool, input, EntryNaming::McpPrefixed)
+    }
+
+    /// [`CallerCatalogue::subjects_of`] for a vendor that names the entries by `naming`.
+    #[must_use]
+    pub fn subjects_as(&self, tool: &str, input: &Value, naming: EntryNaming) -> Vec<String> {
+        if matches!(self.resolve_as(tool, naming), Resolved::Unknown) {
             return Vec::new();
         }
-        self.performed_as(tool)
+        self.performed_as(tool, naming)
             .map(|entry| {
                 harness_catalogue::subjects_of(entry, input)
                     .into_iter()
@@ -712,10 +752,10 @@ impl CallerCatalogue {
     }
 
     /// The harness entry a vendor-named call is performed as, when it is one.
-    fn performed_as(&self, tool: &str) -> Option<&'static str> {
+    fn performed_as(&self, tool: &str, naming: EntryNaming) -> Option<&'static str> {
         self.entries
             .iter()
-            .find(|entry| prefixed(&entry.published) == tool)
+            .find(|entry| naming.name(&entry.published) == tool)
             .and_then(|entry| harness_catalogue::harness_operation(&entry.contract_name))
     }
 }

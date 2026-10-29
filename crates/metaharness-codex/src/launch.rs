@@ -274,6 +274,14 @@ pub struct LaunchContext {
     /// driven on 0.160.0). A list that is not exactly the declared one is
     /// [`LaunchRefusal::ContextFilesUnread`].
     pub context_files: Vec<DeclaredContextFile>,
+    /// The caller's catalogue entries, **as the caller read and checked them**, when the run
+    /// named `--catalogue` (design amendment a66).
+    ///
+    /// The same division as [`LaunchContext::context_files`]: the caller reads the file and
+    /// refuses it by name when it is not a catalogue, and this function decides the launch that
+    /// offers its entries. Empty when the run named none; a run that named one and arrives with
+    /// none, or the reverse, is [`LaunchRefusal::CatalogueUnread`].
+    pub dynamic_tools: Vec<crate::DynamicTool>,
 }
 
 /// The machine-level config layers codex-cli 0.153.4 and 0.160.0 name on Linux, read from each
@@ -398,7 +406,12 @@ pub struct LaunchPlan {
     /// JSON rather than TOML because it is a value a test reads and a number
     /// `metaharness::vendor_hook_timeout_ms` derives the decision deadline from;
     /// [`LaunchPlan::config`] is where it is rendered into the form the vendor parses.
+    ///
+    /// `Value::Null` on the app-server route, which installs no hook (design amendment a66).
     pub hook: Value,
+    /// The opening messages of the `codex app-server` conversation, when the run named a
+    /// catalogue (design amendment a66), and `None` on the `codex exec` route.
+    pub app_server: Option<crate::AppServerOpening>,
     /// What metaharness imposed and what it could not.
     ///
     /// **Not evidence.** It is metaharness's own claim about its own actions; the independent
@@ -549,6 +562,15 @@ pub enum LaunchRefusal {
         /// The path as it was handed over.
         path: PathBuf,
     },
+    /// The run named a catalogue and the caller handed this plan no entries, or handed entries to
+    /// a run that named none (design amendment a66).
+    ///
+    /// Refused rather than planned either way: the first would launch with no tool at all, the
+    /// second offer a catalogue nobody declared.
+    CatalogueUnread {
+        /// Whether the run named one. `false` is the reverse: entries handed over undeclared.
+        declared: bool,
+    },
 }
 
 impl LaunchRefusal {
@@ -583,6 +605,7 @@ fn context_words(refusal: &LaunchRefusal, f: &mut fmt::Formatter<'_>) -> fmt::Re
 }
 
 impl fmt::Display for LaunchRefusal {
+    #[allow(clippy::too_many_lines)]
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
             LaunchRefusal::WrongKind { asked_for } => write!(
@@ -683,7 +706,22 @@ impl fmt::Display for LaunchRefusal {
                 context_words(self, f)
             }
             LaunchRefusal::PathNotUtf8 { path } => not_utf8_words(path, f),
+            LaunchRefusal::CatalogueUnread { declared } => {
+                f.write_str(catalogue_unread_words(*declared))
+            }
         }
+    }
+}
+
+/// [`LaunchRefusal::CatalogueUnread`]'s words: declared and not handed over, or the reverse.
+fn catalogue_unread_words(declared: bool) -> &'static str {
+    if declared {
+        "the run named a --catalogue and the caller handed this plan no entries; the caller \
+         reads and checks the file and fills LaunchContext.dynamic_tools before planning, or the \
+         app-server would be launched with no tool to offer (design amendment a66)"
+    } else {
+        "the caller handed this plan catalogue entries and the run named no --catalogue; a \
+         catalogue nobody declared is refused rather than offered (design amendment a66)"
     }
 }
 
@@ -766,14 +804,32 @@ pub fn plan_launch(spec: &RunSpec, context: &LaunchContext) -> Result<LaunchPlan
             read: context.context_files.len(),
         });
     }
+    // A catalogue is carried over `codex app-server` (amendment a66), and only one the caller
+    // read and handed over.
+    let app_server = spec.catalogue.is_some();
+    if app_server == context.dynamic_tools.is_empty() {
+        return Err(LaunchRefusal::CatalogueUnread {
+            declared: app_server,
+        });
+    }
     // Inline, ahead of the task, and nothing when no file was declared (amendment a35).
     let prompt =
         spec.with_agent_execution_context(&with_context_files(prompt, &context.context_files));
-    let args = build_args(spec, &prompt);
+    let args = if app_server {
+        crate::APP_SERVER_ARGS.map(str::to_owned).to_vec()
+    } else {
+        build_args(spec, &prompt)
+    };
     guard_arguments(&args)?;
     guard_argument_lengths(&args, &context.context_files)?;
     let env = build_env(spec, context, &config_home)?;
-    let hook = build_hook(&hook_program_path(&context.scratch_root))?;
+    // No hook on the app-server route: every tool it offers is a client tool, decided where it
+    // is called (amendment a66 § 2).
+    let hook = if app_server {
+        Value::Null
+    } else {
+        build_hook(&hook_program_path(&context.scratch_root))?
+    };
 
     Ok(LaunchPlan {
         program: ADAPTER_ID.to_string(),
@@ -784,6 +840,14 @@ pub fn plan_launch(spec: &RunSpec, context: &LaunchContext) -> Result<LaunchPlan
         credential_copies,
         config: build_config(spec, context, &hook),
         hook,
+        app_server: app_server.then(|| {
+            crate::AppServerOpening::new(
+                &context.cwd,
+                spec.model.as_deref(),
+                &context.dynamic_tools,
+                &prompt,
+            )
+        }),
         attestation: attest(spec, context, &config_home, &plugin_installs),
         plugin_installs,
     })
@@ -936,8 +1000,9 @@ pub fn guard_endpoint_credential(spec: &RunSpec) -> Result<(), LaunchRefusal> {
 ///
 /// # Errors
 ///
-/// [`LaunchRefusal::UnsupportedOption`] naming `--max-turns`, `--max-budget-usd`, `--catalogue`
-/// or `--tool-surface owned`, in that order.
+/// [`LaunchRefusal::UnsupportedOption`] naming `--max-turns`, `--max-budget-usd` or
+/// `--tool-surface owned` without a `--catalogue`, in that order. A catalogue is carried over
+/// `codex app-server` (design amendment a66), and the owned surface it implies with it.
 pub fn unsupported_options(spec: &RunSpec) -> Result<(), LaunchRefusal> {
     if spec.max_turns.is_some() {
         return Err(LaunchRefusal::UnsupportedOption {
@@ -963,23 +1028,11 @@ pub fn unsupported_options(spec: &RunSpec) -> Result<(), LaunchRefusal> {
     // meets it — `PLUGIN_HOME`, the attestation's `loaded_by`, and Q19 — instead of being refused
     // as if it were impossible.
     //
-    // Ahead of the owned surface, because a catalogue implies that surface and the sentence must
-    // name what the caller declared (design amendment a40). The switches that take the built-in
-    // tools away exist at rust-v0.153.4 (`codex-rs/features/src/lib.rs:899-902`,
-    // `codex-rs/core/src/tools/spec_plan.rs:1078-1080`); a40 § 2 cites them. They are unchanged at
-    // rust-v0.160.0 (`codex-rs/features/src/lib.rs:967-970`, `spec_plan.rs:1083-1085`). None has
-    // been driven.
-    if spec.catalogue.is_some() {
-        return Err(LaunchRefusal::UnsupportedOption {
-            option: "--catalogue",
-            why: "the switches that take its built-in tools away have not been driven in this \
-                  build, so the catalogue could be offered beside them rather than instead of \
-                  them, and a rollout lists no tools, so session.started's offered_tools could \
-                  not show which; `dynamicTools` at thread/start belongs to the app-server, \
-                  which this build does not launch",
-        });
-    }
-    if spec.tool_surface == ToolSurface::Owned {
+    // `--catalogue` **was** refused here too (a40): the switches that take the built-in tools
+    // away had not been driven and `codex exec` cannot offer client tools. Amendment a66 drove
+    // them at 0.160.0 and carries the catalogue over `codex app-server`, so only the owned surface
+    // without a catalogue is left: this build serves no three verbs to codex.
+    if spec.tool_surface == ToolSurface::Owned && spec.catalogue.is_none() {
         return Err(LaunchRefusal::UnsupportedOption {
             option: "--tool-surface owned",
             why: "strategy C needs `dynamicTools` at thread/start, which is an app-server surface \
@@ -1245,6 +1298,47 @@ fn build_hook(hook_path: &Path) -> Result<Value, LaunchRefusal> {
     Ok(Value::Object(group))
 }
 
+/// The app-server route's opening words (design amendment a66 § 2).
+const APP_SERVER_PREAMBLE: &str = "# metaharness scratch CODEX_HOME for codex app-server. Generated per run; edited by\n\
+     # nobody.\n\n\
+     # Every tool this run offers is a client tool metaharness serves and decides where it is\n\
+     # called (item/tool/call, design amendment a66). `never` keeps a vendor prompt nobody is\n\
+     # there to answer from turning a call away first.\n\
+     approval_policy = \"never\"\n";
+
+/// The tables the app-server route writes in place of the hook tables (design amendment a66 § 2).
+///
+/// Each switch is on unless it is set (`core/src/config/mod.rs:2705-2711`;
+/// `features/src/lib.rs:1704`, `:1332`, `:1554`, `:1368`, `:1458`, `:1446` at rust-v0.160.0), and
+/// none is gated by an environment. Two are offered because the model's catalogue entry asks for
+/// them, which is what a live run on a login met (a66 § 6): `sleep_tool` is on by default
+/// (`features/src/lib.rs:978-983`) and offered to a model that lists `clock`
+/// (`core/src/tools/spec_plan.rs:1234-1250`), and the multi-agent version the model names is
+/// overridden only by `[agents] enabled = false` (`core/src/config/mod.rs:1586-1593`,
+/// `:1606-1613`). The `[orchestrator.skills]` table is for 0.153.4, whose orchestrator skills tool
+/// is offered exactly when the thread has no environment (`ext/skills/src/extension.rs:148-155`,
+/// on unless set at `core/src/config/mod.rs:2656-2660`, attached by
+/// `app-server/src/extensions.rs:116` at rust-v0.153.4); 0.160.0 keeps the key as a legacy no-op
+/// (`config/src/config_toml.rs:142-143`) and attaches no such provider
+/// (`app-server/src/extensions.rs:104-106`).
+const APP_SERVER_TABLES: &str = "\n\
+     # H5: the MCP surface is exactly what this launch gave, which is nothing.\n\
+     [mcp_servers]\n\n\
+     [tools.experimental_request_user_input]\n\
+     enabled = false\n\n\
+     [features]\n\
+     goals = false\n\
+     multi_agent = false\n\
+     image_generation = false\n\
+     apps = false\n\
+     plugins = false\n\
+     tool_suggest = false\n\
+     sleep_tool = false\n\n\
+     [agents]\n\
+     enabled = false\n\n\
+     [orchestrator.skills]\n\
+     enabled = false\n";
+
 /// The `config.toml` the scratch home carries, seam and all.
 ///
 /// Rendered by hand rather than through a TOML serializer, because the whole document is four
@@ -1259,15 +1353,20 @@ fn build_hook(hook_path: &Path) -> Result<Value, LaunchRefusal> {
 /// leave the vendor's own precedence deciding which brain answered — a fact this design says must
 /// be checkable rather than resolved by a rule nobody here owns.
 fn build_config(spec: &RunSpec, context: &LaunchContext, hook: &Value) -> String {
-    let mut document = String::from(
+    // The app-server route (amendment a66 § 2) shares everything below but the opening words,
+    // the switches that take away the tools no environment gates, and the hook tables.
+    let app_server = spec.catalogue.is_some();
+    let mut document = String::from(if app_server {
+        APP_SERVER_PREAMBLE
+    } else {
         "# metaharness scratch CODEX_HOME. Generated per run; edited by nobody.\n\n\
          # The seam is the only thing that may refuse a call. `codex exec` on 0.145.0 has no\n\
          # --ask-for-approval flag, so the posture is a config key or nothing, and the operator\'s\n\
          # own default is `on-request` — which in a headless run means a call can be turned away\n\
          # by a prompt nobody is there to answer, before the hook ever sees it. `never` makes the\n\
          # hook the one thing that decides, so a denial is attributable to metaharness.\n\
-         approval_policy = \"never\"\n",
-    );
+         approval_policy = \"never\"\n"
+    });
     let _ = writeln!(
         document,
         "\n# The vendor's own floor beneath the seam, and Claude Code has no counterpart for it\n\
@@ -1285,6 +1384,16 @@ fn build_config(spec: &RunSpec, context: &LaunchContext, hook: &Value) -> String
     let _ = writeln!(document, "personality = {}", quote(PERSONALITY));
     if let Some(effort) = &spec.effort {
         let _ = writeln!(document, "\nmodel_reasoning_effort = {}", quote(effort));
+    }
+    if app_server {
+        // A top-level key, so before the first table. Read by the hosted search tool and the
+        // standalone one alike (`core/src/tools/spec_plan.rs:622-651`, `:1484-1490` at
+        // rust-v0.160.0); neither is gated by an environment.
+        document.push_str(
+            "\n# The tools no environment gates, switched off: every one a config key reaches\n\
+             # (design amendment a66 § 2).\n\
+             web_search = \"disabled\"\n",
+        );
     }
     if let Some(loopback) = &context.loopback {
         // The loopback door (LP-4). The child's provider is metaharness's own port, and the key it
@@ -1326,6 +1435,10 @@ fn build_config(spec: &RunSpec, context: &LaunchContext, hook: &Value) -> String
              wire_api = \"responses\"",
             quote(&base)
         );
+    }
+    if app_server {
+        document.push_str(APP_SERVER_TABLES);
+        return document;
     }
     document.push_str(
         "\n# H5: the MCP surface is exactly what this launch gave, which is nothing.\n\
@@ -1480,11 +1593,20 @@ fn attest(
         ),
         control_imposed(
             HermeticRow::H8,
-            "neither --ephemeral, --ignore-user-config nor \
-             --dangerously-bypass-approvals-and-sandbox is in the argv, and \
-             --dangerously-bypass-hook-trust is, which is what makes a hook in a fresh CODEX_HOME \
-             fire at all; approval_policy = \"never\" in the scratch config, so no vendor prompt \
-             can turn a call away before the seam sees it",
+            if spec.catalogue.is_some() {
+                "the argv is app-server --strict-config --listen stdio://, so a config key the \
+                 binary does not know fails the start; no hook is installed, because every tool \
+                 offered is a client tool (dynamicTools at thread/start, environments: []) and \
+                 each call is decided where it is made, at item/tool/call (design amendment a66); \
+                 approval_policy = \"never\" in the scratch config, so no vendor prompt can turn a \
+                 call away before the seam sees it"
+            } else {
+                "neither --ephemeral, --ignore-user-config nor \
+                 --dangerously-bypass-approvals-and-sandbox is in the argv, and \
+                 --dangerously-bypass-hook-trust is, which is what makes a hook in a fresh \
+                 CODEX_HOME fire at all; approval_policy = \"never\" in the scratch config, so no \
+                 vendor prompt can turn a call away before the seam sees it"
+            },
         ),
     ];
     let mut unavailable = vec![control_unavailable(
@@ -1770,12 +1892,27 @@ fn ambient_inputs(spec: &RunSpec) -> Vec<String> {
          not say is not evidence that it did not happen (design § 2.5)"
             .to_string(),
     ];
-    if !needs_call_seam(spec) {
+    if spec.catalogue.is_some() {
         inputs.push(
-            "this run needs no call-level decision, so the installed PreToolUse hook adjudicates \
-             from the frame alone and an embedder is never asked"
+            "the model's own entry in the vendor's model catalogue can add tools no config key \
+             removes: on 0.160.0 a code-mode model is offered `exec` and `wait`, through which it \
+             reaches the catalogue's entries and `clock__curr_time`, and a model that names it is \
+             offered `request_user_input_async`. The rollout lists none of them, so \
+             offered_tools is the catalogue, not everything the model was offered (design \
+             amendment a66 § 6)"
                 .to_string(),
         );
+    }
+    if !needs_call_seam(spec) {
+        inputs.push(if spec.catalogue.is_some() {
+            "this run needs no call-level decision, so metaharness answers each catalogue call \
+             from the frame alone and an embedder is never asked"
+                .to_string()
+        } else {
+            "this run needs no call-level decision, so the installed PreToolUse hook adjudicates \
+             from the frame alone and an embedder is never asked"
+                .to_string()
+        });
     }
     inputs
 }
@@ -1826,6 +1963,7 @@ mod tests {
             // endpoint is by construction a port something really bound.
             loopback: None,
             config_layers: Vec::new(),
+            dynamic_tools: Vec::new(),
         }
     }
 
@@ -2468,6 +2606,25 @@ mod tests {
         );
     }
 
+    /// Amendment a66 § 6: a live run on a login was offered code mode's `exec` and `wait` and
+    /// `request_user_input_async` beside the catalogue, which no config key removes, so the
+    /// attestation reports them on the catalogue route and nowhere else.
+    #[test]
+    fn the_catalogue_route_reports_the_tools_a_model_catalogue_adds() {
+        let names_them = |plan: &LaunchPlan| {
+            plan.attestation
+                .ambient_inputs
+                .iter()
+                .any(|input| input.contains("`exec` and `wait`"))
+        };
+        let (spec, context) = catalogue_world();
+        assert!(
+            names_them(&plan_launch(&spec, &context).expect("plans")),
+            "story:codex-catalogue-on-app-server: offered_tools is not claimed to be the whole offer"
+        );
+        assert!(!names_them(&plan()), "the exec route is unchanged");
+    }
+
     /// The declaration that trades two rows for real work (amendment a6).
     #[test]
     fn an_operator_named_cwd_plans_and_gives_up_h7_and_h11_by_name() {
@@ -2734,26 +2891,206 @@ mod tests {
         assert_eq!(refusal.code(), Some(RefusalCode::UnsupportedControl));
     }
 
-    /// A caller-supplied catalogue is refused by name, and ahead of the owned surface it implies,
-    /// so the sentence names the declaration the caller made (design amendment a40).
+    /// A caller's catalogue (design amendment a66) with the owned surface it implies and the
+    /// entries the caller read, as the builder hands them over.
+    fn catalogue_world() -> (RunSpec, LaunchContext) {
+        let mut spec = spec();
+        spec.catalogue = Some(PathBuf::from("/operator/session-catalogue.yaml"));
+        spec.tool_surface = ToolSurface::Owned;
+        spec.model = Some("a-model".to_string());
+        let schema = json!({
+            "type": "object",
+            "properties": {"path": {"type": "string"}},
+            "required": ["path"],
+            "additionalProperties": false,
+        });
+        let mut context = context();
+        context.dynamic_tools = vec![
+            crate::DynamicTool {
+                name: "fs_read".to_string(),
+                description: "Read a file.".to_string(),
+                input_schema: schema.clone(),
+            },
+            crate::DynamicTool {
+                name: "fs_stat".to_string(),
+                description: "Describe a path.".to_string(),
+                input_schema: schema,
+            },
+        ];
+        (spec, context)
+    }
+
+    /// `story:codex-catalogue-on-app-server`: `--catalogue` is no longer an option this adapter
+    /// refuses. The owned surface without one still is.
     #[test]
-    fn a_caller_catalogue_is_refused_by_name_ahead_of_the_surface_it_implies() {
-        let mut declared = spec();
-        declared.catalogue = Some(PathBuf::from("/operator/session-catalogue.yaml"));
-        declared.tool_surface = ToolSurface::Owned;
-        let refusal = plan_launch(&declared, &context()).expect_err("refused");
-        assert!(
-            matches!(
-                refusal,
-                LaunchRefusal::UnsupportedOption {
-                    option: "--catalogue",
-                    ..
-                }
-            ),
-            "{refusal:?}"
+    fn a_caller_catalogue_is_no_longer_refused_and_the_bare_owned_surface_still_is() {
+        let (declared, _) = catalogue_world();
+        assert_eq!(
+            unsupported_options(&declared),
+            Ok(()),
+            "story:codex-catalogue-on-app-server: a catalogue is carried over the app-server"
         );
-        assert_eq!(refusal.code(), Some(RefusalCode::UnsupportedControl));
-        assert!(refusal.to_string().contains("offered_tools"), "{refusal}");
+        let mut owned = spec();
+        owned.tool_surface = ToolSurface::Owned;
+        assert!(matches!(
+            unsupported_options(&owned),
+            Err(LaunchRefusal::UnsupportedOption {
+                option: "--tool-surface owned",
+                ..
+            })
+        ));
+    }
+
+    /// Amendment a66 § 1: the catalogue route is `codex app-server` over stdio, with the config
+    /// checked strictly, and the prompt travels as a message rather than an argument.
+    #[test]
+    fn a_catalogue_run_launches_the_app_server_and_not_exec() {
+        let (spec, context) = catalogue_world();
+        let plan = plan_launch(&spec, &context).expect("the catalogue run plans");
+        assert_eq!(plan.program, "codex");
+        assert_eq!(
+            plan.args,
+            ["app-server", "--strict-config", "--listen", "stdio://"]
+        );
+        assert!(
+            !plan.args.iter().any(|arg| arg.contains("do the thing")),
+            "the prompt is a turn/start message, not an argument"
+        );
+        assert_eq!(plan.hook, Value::Null, "no hook on this route");
+        assert_eq!(plan.env["CODEX_HOME"], "/scratch/run-1/codex-home");
+    }
+
+    /// Amendment a66 § 2: every switch that takes away a tool no environment gates, before the
+    /// first table, and no hook table.
+    #[test]
+    fn the_catalogue_config_switches_off_every_tool_an_environment_does_not_gate() {
+        let (spec, context) = catalogue_world();
+        let plan = plan_launch(&spec, &context).expect("plans");
+        let parsed: toml::Table = toml::from_str(&plan.config).expect("the config is TOML");
+        assert_eq!(parsed["web_search"].as_str(), Some("disabled"));
+        assert_eq!(parsed["approval_policy"].as_str(), Some("never"));
+        assert_eq!(
+            parsed["tools"]["experimental_request_user_input"]["enabled"].as_bool(),
+            Some(false)
+        );
+        for feature in [
+            "goals",
+            "multi_agent",
+            "image_generation",
+            "apps",
+            "plugins",
+            "tool_suggest",
+            "sleep_tool",
+        ] {
+            assert_eq!(
+                parsed["features"][feature].as_bool(),
+                Some(false),
+                "{feature}"
+            );
+        }
+        assert!(
+            parsed["mcp_servers"]
+                .as_table()
+                .is_some_and(toml::Table::is_empty)
+        );
+        assert_eq!(
+            parsed["agents"]["enabled"].as_bool(),
+            Some(false),
+            "story:codex-catalogue-on-app-server: the multi-agent tools a model names are \
+             removed by this key alone"
+        );
+        assert_eq!(
+            parsed["orchestrator"]["skills"]["enabled"].as_bool(),
+            Some(false),
+            "story:codex-catalogue-on-app-server: 0.153.4 offers its skills tool to a thread \
+             with no environment unless this is set"
+        );
+        assert!(!parsed.contains_key("hooks"), "{}", plan.config);
+    }
+
+    /// The exec route's config carries none of the app-server switches: it is the C1 fixtures'
+    /// text, unchanged.
+    #[test]
+    fn the_exec_config_carries_none_of_the_app_server_switches() {
+        let plan = plan();
+        assert_eq!(plan.args[0], "exec");
+        assert!(plan.app_server.is_none());
+        for absent in [
+            "web_search",
+            "[features]",
+            "experimental_request_user_input",
+            "[orchestrator.skills]",
+            "[agents]",
+        ] {
+            assert!(!plan.config.contains(absent), "{absent}: {}", plan.config);
+        }
+    }
+
+    /// Amendment a66 § 3: the opening messages, with the exact dynamic tools.
+    #[test]
+    fn the_opening_offers_exactly_the_catalogue_and_no_environment() {
+        let (spec, context) = catalogue_world();
+        let plan = plan_launch(&spec, &context).expect("plans");
+        let opening = plan
+            .app_server
+            .expect("the app-server route has an opening");
+        assert_eq!(opening.initialize["capabilities"]["experimentalApi"], true);
+        assert_eq!(opening.initialize["clientInfo"]["name"], "metaharness");
+        assert_eq!(opening.thread_start["environments"], json!([]));
+        assert_eq!(opening.thread_start["cwd"], "/scratch/run-1/work");
+        assert_eq!(opening.thread_start["model"], "a-model");
+        let tools = opening.thread_start["dynamicTools"]
+            .as_array()
+            .expect("dynamicTools");
+        assert_eq!(tools.len(), 2);
+        assert_eq!(tools[0]["type"], "function");
+        assert_eq!(tools[0]["name"], "fs_read");
+        assert_eq!(tools[0]["description"], "Read a file.");
+        assert_eq!(
+            tools[0]["inputSchema"],
+            context.dynamic_tools[0].input_schema
+        );
+        assert_eq!(tools[1]["name"], "fs_stat");
+        let input = opening.turn_input.as_array().expect("the turn's input");
+        assert_eq!(input.len(), 1);
+        assert_eq!(input[0]["type"], "text");
+        assert!(
+            input[0]["text"]
+                .as_str()
+                .is_some_and(|text| text.contains("do the thing")),
+            "{input:?}"
+        );
+    }
+
+    /// A catalogue declared and not handed over, or handed over undeclared, is refused rather
+    /// than launched with the wrong tools (amendment a66 § 7).
+    #[test]
+    fn a_catalogue_declared_and_not_handed_over_or_the_reverse_is_refused() {
+        let (declared, _) = catalogue_world();
+        assert_eq!(
+            plan_launch(&declared, &context()).expect_err("nothing handed over"),
+            LaunchRefusal::CatalogueUnread { declared: true }
+        );
+        let (_, handed) = catalogue_world();
+        let refusal = plan_launch(&spec(), &handed).expect_err("handed over undeclared");
+        assert_eq!(refusal, LaunchRefusal::CatalogueUnread { declared: false });
+        assert!(refusal.to_string().contains("--catalogue"), "{refusal}");
+    }
+
+    /// H8 says what this route imposes: no hook, decided where the call is made.
+    #[test]
+    fn the_catalogue_route_attests_its_own_seam() {
+        let (spec, context) = catalogue_world();
+        let plan = plan_launch(&spec, &context).expect("plans");
+        let h8 = plan
+            .attestation
+            .imposed
+            .iter()
+            .find(|control| control.row == HermeticRow::H8)
+            .expect("H8 is imposed");
+        assert!(h8.how.contains("item/tool/call"), "{}", h8.how);
+        assert!(h8.how.contains("--strict-config"), "{}", h8.how);
+        assert!(!h8.how.contains("bypass-hook-trust is"), "{}", h8.how);
     }
 
     // ------------------------------------------------------------ observe mode (a10) and #4

@@ -1,0 +1,82 @@
+{
+  "app_server": {
+    "initialize": {
+      "capabilities": {
+        "experimentalApi": true
+      },
+      "clientInfo": {
+        "name": "metaharness",
+        "title": null,
+        "version": "<metaharness version>"
+      }
+    },
+    "thread_start": {
+      "cwd": "/scratch/run-1/work",
+      "dynamicTools": [
+        {
+          "description": "Read a file.",
+          "inputSchema": {
+            "properties": {
+              "path": {
+                "type": "string"
+              }
+            },
+            "required": [
+              "path"
+            ],
+            "type": "object"
+          },
+          "name": "fs_read",
+          "type": "function"
+        },
+        {
+          "description": "Describe a path.",
+          "inputSchema": {
+            "properties": {
+              "path": {
+                "type": "string"
+              }
+            },
+            "required": [
+              "path"
+            ],
+            "type": "object"
+          },
+          "name": "fs_stat",
+          "type": "function"
+        }
+      ],
+      "environments": [],
+      "model": "a-model"
+    },
+    "turn_input": [
+      {
+        "text": "<execution-context>\nexecution_path=metaharness-driven\ninner_harness=codex\nworkspace=metaharness-scratch\nhermetic=strict\nconfinement=inner-harness\nsubstrate=not-used-by-metaharness\ndecision_mode=frame\nimplication=metaharness applies the sealed frame before each mediated call\n</execution-context>\n\nstate the workflow you are in",
+        "type": "text"
+      }
+    ]
+  },
+  "args": [
+    "app-server",
+    "--strict-config",
+    "--listen",
+    "stdio://"
+  ],
+  "config": "# metaharness scratch CODEX_HOME for codex app-server. Generated per run; edited by\n# nobody.\n\n# Every tool this run offers is a client tool metaharness serves and decides where it is\n# called (item/tool/call, design amendment a66). `never` keeps a vendor prompt nobody is\n# there to answer from turning a call away first.\napproval_policy = \"never\"\n\n# The vendor's own floor beneath the seam, and Claude Code has no counterpart for it\n# (design § 7.4, V17). It is **not** a constant: it is what the run's cwd declaration\n# decides, because on this vendor the two are one setting.\n#\n# The cwd is scratch, so the child can write nothing at all: it reads, and the seam\n# decides the rest.\nsandbox_mode = \"read-only\"\npersonality = \"pragmatic\"\n\n# The tools no environment gates, switched off: every one a config key reaches\n# (design amendment a66 § 2).\nweb_search = \"disabled\"\n\n# H5: the MCP surface is exactly what this launch gave, which is nothing.\n[mcp_servers]\n\n[tools.experimental_request_user_input]\nenabled = false\n\n[features]\ngoals = false\nmulti_agent = false\nimage_generation = false\napps = false\nplugins = false\ntool_suggest = false\nsleep_tool = false\n\n[agents]\nenabled = false\n\n[orchestrator.skills]\nenabled = false\n",
+  "credential_copies": [
+    {
+      "from": "/operator/.codex/auth.json",
+      "to": "/scratch/run-1/codex-home/auth.json"
+    }
+  ],
+  "env": {
+    "CODEX_HOME": "/scratch/run-1/codex-home",
+    "HOME": "/operator",
+    "LANG": "C.UTF-8",
+    "PATH": "/operator/.local/bin:/usr/local/bin:/usr/bin:/bin",
+    "TERM": "dumb",
+    "TMPDIR": "/scratch/run-1/tmp",
+    "USER": "operator"
+  },
+  "program": "codex"
+}

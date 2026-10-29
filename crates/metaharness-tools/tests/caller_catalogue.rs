@@ -4,8 +4,8 @@ use std::path::{Path, PathBuf};
 
 use metaharness_tools::{
     CATALOGUE_BYTES_MAX, CATALOGUE_MALFORMED, CATALOGUE_NOT_TOOL_CONTRACT, CATALOGUE_UNREADABLE,
-    CallerCatalogue, Catalogue, CatalogueEntry, CatalogueError, LocalOperations, Resolved,
-    SERVER_NAME, Server, Verbs, render_scratch_copy,
+    CallerCatalogue, Catalogue, CatalogueEntry, CatalogueError, EntryNaming, LocalOperations,
+    Resolved, SERVER_NAME, Server, Verbs, render_scratch_copy,
 };
 use serde_json::{Value, json};
 
@@ -1160,4 +1160,51 @@ fn a_name_outside_the_catalogue_is_not_performed_and_the_answer_names_the_catalo
         assert!(text.contains("`fs_read`, `fs_stat`"), "{outside}: {text}");
         assert!(text.contains("nothing was done"), "{outside}: {text}");
     }
+}
+
+/// Codex's app-server names a client tool by its bare published name (design amendment a66), so a
+/// catalogue read under that naming resolves `fs_read` and nothing prefixed, and offers the bare
+/// names; the prefixed naming is the one every existing caller keeps.
+#[test]
+fn under_the_bare_naming_an_entry_resolves_by_its_published_name_and_nothing_prefixed_does() {
+    let catalogue = caller();
+    let prefixed = format!("mcp__{SERVER_NAME}__fs_read");
+    assert_eq!(
+        catalogue.offered_tools_as(EntryNaming::Bare),
+        ["fs_read", "fs_stat"],
+        "story:codex-catalogue-on-app-server: the bare names are what Codex offers"
+    );
+    assert_eq!(
+        catalogue.offered_tools_as(EntryNaming::McpPrefixed),
+        catalogue.offered_tools()
+    );
+    assert_eq!(
+        catalogue.resolve_as("fs_read", EntryNaming::Bare),
+        Resolved::Operations(vec!["file.read".to_owned()])
+    );
+    assert_eq!(
+        catalogue.resolve_as(&prefixed, EntryNaming::Bare),
+        Resolved::Unknown
+    );
+    assert_eq!(
+        catalogue.resolve_as("fs_read", EntryNaming::McpPrefixed),
+        Resolved::Unknown
+    );
+    assert_eq!(
+        catalogue.resolve_as("fs_stat", EntryNaming::Bare),
+        Resolved::Unknown,
+        "an entry nothing in this run performs"
+    );
+    assert_eq!(
+        catalogue.subjects_as("fs_read", &json!({"path": "README.md"}), EntryNaming::Bare),
+        ["file:README.md"]
+    );
+    assert_eq!(
+        catalogue.subjects_as(
+            "fs_read",
+            &json!({"path": "README.md"}),
+            EntryNaming::McpPrefixed
+        ),
+        [] as [String; 0]
+    );
 }

@@ -114,6 +114,18 @@ pub struct RolloutReader {
     /// absent, so a record that drifted cannot hold the stream open, and
     /// [`RolloutReader::finish`] releases whatever is still held.
     held: Option<Vec<(u64, Emission)>>,
+    /// Where `session.started.offered_tools` comes from (design amendment a66).
+    offered: OfferedTools,
+}
+
+/// Where a rollout's `session.started.offered_tools` comes from.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum OfferedTools {
+    /// Nowhere: the record lists no built-in tool, so the field stays absent.
+    Absent,
+    /// The opening record's `dynamic_tools`, because the launch removed every built-in tool a
+    /// config key reaches and the catalogue is what the model calls.
+    DynamicTools,
 }
 
 impl RolloutReader {
@@ -133,7 +145,22 @@ impl RolloutReader {
             last_usage: None,
             census: metaharness_protocol::DecisionCensus::default(),
             held: None,
+            offered: OfferedTools::Absent,
         }
+    }
+
+    /// The same reader for a rollout whose launch removed every built-in tool a config key
+    /// reaches: the app-server route (design amendment a66), where `environments: []` and the
+    /// config's switches leave the client tools and only what the model's own catalogue entry
+    /// adds (a66 § 6).
+    ///
+    /// Its `session_meta.dynamic_tools` (`codex-rs/protocol/src/protocol.rs:3176` at
+    /// `rust-v0.160.0`) then become `session.started.offered_tools`. The record lists no built-in
+    /// tool either way, so a reader that cannot vouch for the launch keeps the field absent.
+    #[must_use]
+    pub fn offering_only_dynamic_tools(mut self) -> Self {
+        self.offered = OfferedTools::DynamicTools;
+        self
     }
 
     /// Whether the opening record is being held for the record that completes it (amendment
@@ -393,7 +420,14 @@ impl RolloutReader {
             // (amendment a34); absent if the record names none.
             output_style: None,
             cwd: payload["cwd"].as_str().map(ToString::to_string),
-            offered_tools: None,
+            // Absent unless the launch removed every built-in a config key reaches (amendment a66
+            // § 5): the record lists no built-in tool, so only that launch makes `dynamic_tools`
+            // the list.
+            offered_tools: if self.offered == OfferedTools::DynamicTools {
+                dynamic_tool_names(payload)
+            } else {
+                None
+            },
             slash_commands: None,
             skills: None,
             agents: None,
@@ -627,6 +661,19 @@ fn completion_error(complete: &Value) -> Option<bool> {
             .filter(|message| !message.trim().is_empty())
             .map(|_| false),
     }
+}
+
+/// The names in a `session_meta`'s `dynamic_tools`, in record order, or `None` when the record
+/// carries no such list. 0.160.0 omits the field when the thread has no client tool
+/// (`codex-rs/rollout/src/recorder.rs:956-959`), so an exec rollout keeps `None`.
+fn dynamic_tool_names(payload: &Value) -> Option<Vec<String>> {
+    let tools = payload.get("dynamic_tools")?.as_array()?;
+    Some(
+        tools
+            .iter()
+            .filter_map(|tool| tool["name"].as_str().map(ToString::to_string))
+            .collect(),
+    )
 }
 
 /// The text of a message-ish payload, wherever this pin has seen it live.

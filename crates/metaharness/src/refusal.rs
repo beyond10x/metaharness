@@ -61,8 +61,9 @@ pub enum Refusal {
     ///
     /// Strategy C is **built** now: `metaharness-tools` implements read, write, edit, list, search
     /// and a bounded `run`, and `mcp-serve` publishes them as three verbs. What it needs from the
-    /// vendor is a way to remove the built-in tools and add ours, and only Claude Code has one
-    /// (`--tools ""` plus `--mcp-config`).
+    /// vendor is a way to remove the built-in tools and add ours. Claude Code has one (`--tools
+    /// ""` plus `--mcp-config`); Codex has one over `codex app-server`, used only for a caller's
+    /// catalogue (amendment a66), so on Codex the bare owned surface is refused.
     ///
     /// Q1 — per-step tool re-listing — never fires: its own recorded resolution is that strategy C
     /// is per-session, and an evaluation arm with one fixed toolset for a whole run never re-lists.
@@ -267,11 +268,10 @@ pub enum Refusal {
     },
     /// `--catalogue` was given for a kind that cannot carry it (design amendment a40).
     ///
-    /// In this build only Claude Code offers a catalogue **instead of** its own tools. This build
-    /// has not driven the codex exec switches that take its built-in tools away (a40 § 2 cites
-    /// them at rust-v0.153.4) and a codex rollout lists no tools; the b10x loop
-    /// publishes its own toolset in-process. Refused by name, with the code
-    /// [`CATALOGUE_NOT_CARRIED`], rather than accepted and ignored.
+    /// Claude Code offers a catalogue **instead of** its own tools over MCP, and Codex over
+    /// `codex app-server` (amendment a66). Only the b10x loop is left: it publishes its own
+    /// toolset in-process. Refused by name, with the code [`CATALOGUE_NOT_CARRIED`], rather than
+    /// accepted and ignored.
     CatalogueNotCarried {
         /// The kind that cannot carry it.
         kind: Kind,
@@ -553,10 +553,10 @@ impl fmt::Display for Refusal {
                 f,
                 "--tool-surface owned is refused for {}: metaharness serves the tools (see \
                  `metaharness mcp-serve`), but it has no way to take {}'s own tools away and add \
-                 ours. Claude Code has one — `--tools \"\"` plus `--mcp-config` — and codex \
-                 exec does not: dynamicTools is an app-server surface it does not expose. b10x \
-                 already publishes exactly this catalogue in-process, so there is nothing to \
-                 replace. Use --tool-surface native",
+                 ours. Claude Code has one — `--tools \"\"` plus `--mcp-config`. Codex has one \
+                 over codex app-server, used only for a caller's catalogue: give --catalogue \
+                 (design amendment a66). b10x already publishes exactly this catalogue \
+                 in-process, so there is nothing to replace. Use --tool-surface native",
                 kind.as_str(),
                 kind.as_str(),
             ),
@@ -706,14 +706,13 @@ impl fmt::Display for Refusal {
             Refusal::Catalogue { error } => write!(f, "{error}"),
             Refusal::CatalogueNotCarried { kind } => write!(
                 f,
-                "{CATALOGUE_NOT_CARRIED}: --catalogue is refused for {}: in this build only Claude Code \
-                 offers a catalogue instead of its own tools (`--tools \"\"` plus this binary's \
-                 tool server). This build launches codex exec, whose switches that take its built-in \
-                 tools away have not been driven here, and \
-                 its rollout lists no tools, so its record could not show what was offered; the \
-                 b10x loop publishes its own toolset in-process and takes no catalogue file. Refused by name rather than ignored: a run that offered something \
-                 other than the catalogue it was handed is not the run that was asked for \
-                 (design amendment a40). Nothing was started",
+                "{CATALOGUE_NOT_CARRIED}: --catalogue is refused for {}: Claude Code offers a \
+                 catalogue instead of its own tools (`--tools \"\"` plus this binary's tool \
+                 server) and Codex does over codex app-server (design amendment a66), while the \
+                 b10x loop publishes its own toolset in-process and takes no catalogue file. \
+                 Refused by name rather than ignored: a run that offered something other than \
+                 the catalogue it was handed is not the run that was asked for (design amendment \
+                 a40). Nothing was started",
                 kind.as_str(),
             ),
             Refusal::CatalogueNeedsOwnedSurface => write!(

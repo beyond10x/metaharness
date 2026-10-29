@@ -574,6 +574,8 @@ pub fn conformance_vectors(kind: Kind) -> Result<Vec<VectorOutcome>, Refusal> {
             // the spawn half — a real process, a real hook program, a real session file — and that
             // is what this adds.
             vectors.extend(crate::spawn_codex_vectors::spawn_vectors());
+            // The app-server route's round trip (amendment a66): a real child on two pipes.
+            vectors.extend(crate::spawn_codex_app_server_vectors::spawn_vectors());
             Ok(vectors)
         }
         Kind::B10x => Ok(metaharness_b10x::conformance_vectors()),

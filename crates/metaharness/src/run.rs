@@ -959,7 +959,7 @@ impl Run {
         // A caller's catalogue is flat (amendment a40): each entry is its own tool, so the subject
         // is the entry's, read from the call's own arguments by the catalogue that published it.
         if let Some(catalogue) = &self.catalogue {
-            return catalogue.subjects_of(tool, input);
+            return catalogue.subjects_as(tool, input, self.entry_naming());
         }
         if self.publishes_verbs() {
             // The b10x loop publishes its entries flat by default, so a call that is not one of
@@ -1004,10 +1004,21 @@ impl Run {
             || self.spec.kind == Kind::B10x
     }
 
+    /// The name a caller's catalogue entry reaches this run's record under (amendment a66 § 5):
+    /// Claude Code calls an MCP server's tool `mcp__metaharness__<name>`, and Codex calls a client
+    /// tool by its bare `<name>`.
+    fn entry_naming(&self) -> metaharness_tools::EntryNaming {
+        if self.spec.kind == Kind::Codex {
+            metaharness_tools::EntryNaming::Bare
+        } else {
+            metaharness_tools::EntryNaming::McpPrefixed
+        }
+    }
+
     fn resolve(&self, tool: &str, input: &Value) -> Vec<String> {
         // Only an entry the catalogue published resolves; everything else is uncovered.
         if let Some(catalogue) = &self.catalogue {
-            return match catalogue.resolve(tool) {
+            return match catalogue.resolve_as(tool, self.entry_naming()) {
                 metaharness_tools::Resolved::Operations(operations) => operations,
                 metaharness_tools::Resolved::Catalogue | metaharness_tools::Resolved::Unknown => {
                     Vec::new()

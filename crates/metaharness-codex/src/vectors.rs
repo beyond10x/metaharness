@@ -22,13 +22,14 @@ use std::collections::BTreeSet;
 use std::path::PathBuf;
 
 use metaharness_protocol::{
-    ConformanceTier, ContractObligations, CredentialSource, DeclaredContextFile, Digest, Emission,
-    Event, EventStream, HarnessSeam, HermeticAttestation, HermeticMode, HermeticRow, Kind,
-    Obligation, RunId, RunSpec, Seam, ToolSurface, TranscriptRef, VectorOutcome,
+    ConformanceTier, ContractObligations, CredentialSource, Decision, DeclaredContextFile, Digest,
+    Emission, Event, EventStream, HarnessSeam, HermeticAttestation, HermeticMode, HermeticRow,
+    Kind, Obligation, RunId, RunSpec, Seam, ToolSurface, TranscriptRef, VectorOutcome,
 };
 use serde_json::{Value, json};
 
-use crate::bridge::{CodexSeam, hook_request_line};
+use crate::app_server::{AppServerOpening, AppServerSession, DynamicTool, SessionAction};
+use crate::bridge::{CodexSeam, dynamic_decision, hook_request_line};
 
 use crate::launch::{
     CodexLogin, LaunchContext, LaunchPlan, LaunchRefusal, LoopbackParams, plan_launch,
@@ -52,7 +53,7 @@ pub const CONTRACT_OBLIGATIONS: ContractObligations = ContractObligations {
         "c1-memory-ancestor-refusal",
         "c1-scratch-cwd-declaration",
         "c1-context-files",
-        "c1-caller-catalogue-refusal",
+        "c1-caller-catalogue",
     ]),
     recorded_wire: Obligation::Filled(&["golden-rollout"]),
     recorded_hook_input: Obligation::Filled(&["golden-hook-input"]),
@@ -101,6 +102,8 @@ pub fn conformance_vectors() -> Vec<VectorOutcome> {
         vector_output_style_recorded(),
         vector_output_style_foreign(),
         vector_output_style_absent(),
+        vector_app_server_conversation(),
+        vector_dynamic_tools_offered(),
         golden_rollout_vector(GOLDEN_ROLLOUT),
         golden_hook_vector(GOLDEN_HOOK_INPUT),
         golden_version_pair_vector(GOLDEN_ROLLOUT),
@@ -133,8 +136,8 @@ const LAUNCH_FIXTURES: [(&str, &str); 8] = [
         include_str!("../fixtures/c1/context-files.json"),
     ),
     (
-        "c1-caller-catalogue-refusal",
-        include_str!("../fixtures/c1/caller-catalogue-refusal.json"),
+        "c1-caller-catalogue",
+        include_str!("../fixtures/c1/caller-catalogue.json"),
     ),
 ];
 
@@ -163,8 +166,12 @@ fn launch_vector(id: &str, expectation: &str) -> VectorOutcome {
 /// The config document is here because on this vendor it carries the seam, and the copy list is
 /// here because "how many credentials travel" is the H6 claim and the LP-4 upgrade both: a
 /// loopback run's empty list is the evidence, not a comment about it.
+///
+/// An app-server launch (amendment a66) adds its opening messages under `app_server`, with the
+/// client version replaced by a placeholder so a release does not move the fixture. An exec
+/// launch has no such key, so its recorded expectation is the one it had before a66.
 fn observed_plan(plan: &LaunchPlan) -> Value {
-    json!({
+    let mut observed = json!({
         "program": plan.program,
         "args": plan.args,
         "env": plan.env,
@@ -177,7 +184,13 @@ fn observed_plan(plan: &LaunchPlan) -> Value {
                 "to": copy.to.display().to_string(),
             }))
             .collect::<Vec<Value>>(),
-    })
+    });
+    if let Some(opening) = &plan.app_server {
+        let mut opening = opening.to_value();
+        opening["initialize"]["clientInfo"]["version"] = json!("<metaharness version>");
+        observed["app_server"] = opening;
+    }
+    observed
 }
 
 fn observed_refusal(refusal: &LaunchRefusal) -> Value {
@@ -226,16 +239,34 @@ fn launch_case(id: &str) -> Option<(RunSpec, LaunchContext)> {
             context.cwd = PathBuf::from("/operator/repo");
             context.context_files = synthetic_context_files();
         }
-        // A caller's catalogue (design amendment a40), with the owned surface it implies: refused
-        // by name, because `codex exec` cannot offer it instead of its own tools and its rollout
-        // could not show which it offered.
-        "c1-caller-catalogue-refusal" => {
+        // A caller's catalogue with the owned surface it implies (amendment a66): launched over
+        // `codex app-server`, with no environment and the catalogue's entries as the only tools,
+        // and a config that switches off every tool an environment does not gate.
+        "c1-caller-catalogue" => {
             spec.catalogue = Some(PathBuf::from("/operator/session-catalogue.yaml"));
             spec.tool_surface = ToolSurface::Owned;
+            context.dynamic_tools = synthetic_dynamic_tools();
         }
         _ => return None,
     }
     Some((spec, context))
+}
+
+/// The two synthesised catalogue entries the catalogue vectors offer: invented descriptions,
+/// minimal schemas.
+fn synthetic_dynamic_tools() -> Vec<DynamicTool> {
+    [("fs_read", "Read a file."), ("fs_stat", "Describe a path.")]
+        .into_iter()
+        .map(|(name, description)| DynamicTool {
+            name: name.to_owned(),
+            description: description.to_owned(),
+            input_schema: json!({
+                "type": "object",
+                "properties": {"path": {"type": "string"}},
+                "required": ["path"],
+            }),
+        })
+        .collect()
 }
 
 /// The two synthesised files the context vector renders: invented names, invented bytes.
@@ -422,6 +453,7 @@ fn base_context() -> LaunchContext {
         plugins: Vec::new(),
         loopback: None,
         config_layers: Vec::new(),
+        dynamic_tools: Vec::new(),
     }
 }
 
@@ -1022,6 +1054,228 @@ fn expect_unstyled_opening(shape: &str, released: &[Emission], faults: &mut Vec<
     }
 }
 
+/// The app-server's side of one scripted conversation (amendment a66 § 3), in the shapes the
+/// 0.160.0 binary wrote on its stdout, with values invented here. The server's own requests carry
+/// ids from its own counter, so `1` is both the client's `initialize` and the server's second
+/// request, told apart by `method`.
+fn app_server_script() -> Vec<Value> {
+    vec![
+        json!({"id": 1, "result": {"userAgent": "fixture/0.160.0", "codexHome": "/scratch/run-1/codex-home"}}),
+        json!({"method": "thread/started", "params": {"thread": {"id": "th-fixture"}}}),
+        json!({"id": 2, "result": {"thread": {"id": "th-fixture"}, "model": "a-model"}}),
+        json!({"method": "turn/started", "params": {"threadId": "th-fixture", "turn": {"id": "tu-1"}}}),
+        json!({"id": 0, "method": "item/commandExecution/requestApproval", "params": {"threadId": "th-fixture"}}),
+        json!({"id": 1, "method": "item/tool/call", "params": {"threadId": "th-fixture", "turnId": "tu-1", "callId": "call_fixture", "namespace": null, "tool": "fs_read", "arguments": {"path": "README.md"}}}),
+        json!({"method": "turn/completed", "params": {"threadId": "th-fixture", "turn": {"id": "tu-1", "status": "completed"}}}),
+        json!({"method": "turn/completed", "params": {"threadId": "th-fixture", "turn": {"id": "tu-1", "status": "completed"}}}),
+    ]
+}
+
+/// One session action as the vector records it, with the client version replaced as in C1.
+fn observed_action(action: &SessionAction) -> Value {
+    match action {
+        SessionAction::Send(message) => {
+            let mut message = message.clone();
+            if message["method"] == "initialize" {
+                message["params"]["clientInfo"]["version"] = json!("<metaharness version>");
+            }
+            json!({"send": message})
+        }
+        SessionAction::ToolCall {
+            key,
+            request_id,
+            tool,
+            arguments,
+            line,
+        } => json!({"tool_call": {
+            "key": key,
+            "request_id": request_id,
+            "tool": tool,
+            "arguments": arguments,
+            "line": serde_json::from_str::<Value>(line).unwrap_or(Value::Null),
+        }}),
+        SessionAction::CloseInput => json!("close_input"),
+        SessionAction::Failed(reason) => json!({"failed": reason}),
+    }
+}
+
+/// C2 — **the app-server conversation** (amendment a66 § 3-4): the client half driven through
+/// [`app_server_script`], every message it sends against the expectation, then the seam's reading
+/// of the `item/tool/call` it was handed and the decision line that routes the answer back.
+///
+/// It pins the order (`initialize`, `initialized`, `thread/start`, `turn/start`), the opening's
+/// `environments: []` and exact `dynamicTools`, the refusal of a server request this route does
+/// not serve, the call held under the vendor's `callId` and answered under its JSON-RPC id, and
+/// one `close_input` however often the turn is reported complete.
+#[allow(
+    clippy::too_many_lines,
+    reason = "one conversation and its whole expectation, read top to bottom; split, the order \
+              it pins would be in two places"
+)]
+fn vector_app_server_conversation() -> VectorOutcome {
+    let id = "c2-app-server-conversation";
+    let opening = AppServerOpening::new(
+        &PathBuf::from("/scratch/run-1/work"),
+        Some("a-model"),
+        &synthetic_dynamic_tools(),
+        "read README.md with fs_read",
+    );
+    let mut session = AppServerSession::new(opening);
+    let mut steps: Vec<Value> = vec![Value::Array(
+        session.start().iter().map(observed_action).collect(),
+    )];
+    let mut handed = None;
+    for message in app_server_script() {
+        let actions = session.receive(&message);
+        for action in &actions {
+            if let SessionAction::ToolCall { line, .. } = action {
+                handed = Some(line.clone());
+            }
+        }
+        steps.push(Value::Array(actions.iter().map(observed_action).collect()));
+    }
+    let schema = json!({
+        "type": "object",
+        "properties": {"path": {"type": "string"}},
+        "required": ["path"],
+    });
+    let call = json!({"threadId": "th-fixture", "turnId": "tu-1", "callId": "call_fixture",
+        "namespace": null, "tool": "fs_read", "arguments": {"path": "README.md"}});
+    let expected_steps = json!([
+        [{"send": {"id": 1, "method": "initialize", "params": {
+            "clientInfo": {"name": "metaharness", "title": null, "version": "<metaharness version>"},
+            "capabilities": {"experimentalApi": true},
+        }}}],
+        [
+            {"send": {"method": "initialized"}},
+            {"send": {"id": 2, "method": "thread/start", "params": {
+                "cwd": "/scratch/run-1/work",
+                "model": "a-model",
+                "environments": [],
+                "dynamicTools": [
+                    {"type": "function", "name": "fs_read", "description": "Read a file.", "inputSchema": schema},
+                    {"type": "function", "name": "fs_stat", "description": "Describe a path.", "inputSchema": schema},
+                ],
+            }}},
+        ],
+        [],
+        [{"send": {"id": 3, "method": "turn/start", "params": {
+            "threadId": "th-fixture",
+            "input": [{"type": "text", "text": "read README.md with fs_read"}],
+        }}}],
+        [],
+        [{"send": {"id": 0, "error": {
+            "code": crate::METHOD_NOT_FOUND,
+            "message": "metaharness serves only item/tool/call on this route; \
+                        item/commandExecution/requestApproval is refused",
+        }}}],
+        [{"tool_call": {
+            "key": "rpc-1",
+            "request_id": 1,
+            "tool": "fs_read",
+            "arguments": {"path": "README.md"},
+            "line": {"metaharness.codex/1": "dynamic_tool_call", "key": "rpc-1", "call": call},
+        }}],
+        ["close_input"],
+        [],
+    ]);
+    let mut seam = CodexSeam::new(
+        TranscriptRef {
+            path: None,
+            digest: None,
+            bytes: None,
+        },
+        HermeticAttestation::none(HermeticMode::Off),
+        Seam::OwnedTool,
+    );
+    let requested = handed.map(|line| {
+        seam.push_line(&line)
+            .iter()
+            .map(|emission| match &emission.event {
+                Event::ToolRequested {
+                    call_id,
+                    name,
+                    input,
+                    decision_required,
+                    seam,
+                    ..
+                } => json!({"tool.requested": {
+                    "call_id": call_id,
+                    "name": name,
+                    "input": input,
+                    "decision_required": decision_required,
+                    "seam": seam,
+                }}),
+                other => json!({"other": other.name()}),
+            })
+            .collect::<Vec<Value>>()
+    });
+    let routed = |decision: &Decision| {
+        let line = seam.decision_line("call_fixture", decision);
+        serde_json::from_str::<Value>(&line)
+            .ok()
+            .and_then(|line| dynamic_decision(&line))
+            .map(|(key, decision)| json!({"key": key, "decision": decision}))
+    };
+    let deny = Decision::Deny {
+        reason: "outside the frame".to_owned(),
+    };
+    let observed = json!({
+        "steps": steps,
+        "requested": requested,
+        "allow": routed(&Decision::Allow),
+        "deny": routed(&deny),
+    });
+    let expected = json!({
+        "steps": expected_steps,
+        "requested": [{"tool.requested": {
+            "call_id": "call_fixture",
+            "name": "fs_read",
+            "input": {"path": "README.md"},
+            "decision_required": true,
+            "seam": "owned_tool",
+        }}],
+        "allow": {"key": "rpc-1", "decision": {"decision": "allow"}},
+        "deny": {"key": "rpc-1", "decision": {"decision": "deny", "reason": "outside the frame"}},
+    });
+    compare(id, ConformanceTier::C2, &expected.to_string(), &observed)
+}
+
+/// C2 — **the offered tools on the app-server route** (amendment a66 § 5-6): an opening record
+/// whose `dynamic_tools` names the catalogue's entries becomes `session.started.offered_tools`
+/// under the owned-tool seam, and the same record under the hook seam claims nothing, because the
+/// exec route's built-ins are not in it.
+fn vector_dynamic_tools_offered() -> VectorOutcome {
+    let id = "c2-dynamic-tools-offered";
+    let meta = r#"{"timestamp":"2026-10-29T10:00:00.000Z","type":"session_meta","payload":{"id":"01a1-fixture","cli_version":"0.160.0","cwd":"/scratch/work","dynamic_tools":[{"type":"function","name":"fs_read","description":"Read a file.","inputSchema":{"type":"object"}},{"type":"function","name":"fs_stat","description":"Describe a path.","inputSchema":{"type":"object"}}]}}"#;
+    let offered = |seam: Seam| {
+        let mut codex = CodexSeam::new(
+            TranscriptRef {
+                path: None,
+                digest: None,
+                bytes: None,
+            },
+            HermeticAttestation::none(HermeticMode::Off),
+            seam,
+        );
+        let mut emitted = codex.push_line(meta);
+        emitted.extend(codex.push_line(TURN_CONTEXT));
+        emitted.iter().find_map(|emission| match &emission.event {
+            Event::SessionStarted { offered_tools, .. } => Some(json!(offered_tools)),
+            _ => None,
+        })
+    };
+    let observed = json!({
+        "owned_tool": offered(Seam::OwnedTool),
+        "hook": offered(Seam::Hook),
+    });
+    let expected = json!({
+        "owned_tool": ["fs_read", "fs_stat"],
+        "hook": null,
+    });
+    compare(id, ConformanceTier::C2, &expected.to_string(), &observed)
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -1049,7 +1303,7 @@ mod tests {
             "c1-loopback-subscription-refusal",
             "c1-unsupported-option-refusal",
             "c1-memory-ancestor-refusal",
-            "c1-caller-catalogue-refusal",
+            "c1-caller-catalogue",
             "CX2-session",
             "CX2-version-gate",
             "CX2-drift-opaque",
@@ -1058,6 +1312,8 @@ mod tests {
             "CX2-output-style-recorded",
             "CX2-output-style-foreign",
             "CX2-output-style-absent",
+            "c2-app-server-conversation",
+            "c2-dynamic-tools-offered",
             "golden-rollout",
             "golden-hook-input",
             "golden-version-pair",

@@ -5,6 +5,19 @@ was amended and the amendment is named here.
 
 ## [Unreleased]
 
+### Added
+
+- `metaharness run codex --catalogue <FILE>` carries a caller's catalogue over `codex app-server --strict-config --listen stdio://` (amendment a66, story:codex-catalogue-on-app-server). The thread starts with `environments: []` and the catalogue's entries as `dynamicTools`. The scratch config switches off every other tool a config key reaches: web search, `request_user_input`, goals, multi-agent, image generation, apps, plugins, tool suggestions, the sleep tool, the agents a model names (`[agents] enabled = false`) and, for 0.153.4, the orchestrator's skills tool. Each `item/tool/call` is `tool.requested` on the `owned_tool` seam, and metaharness decides and answers it in process through `Server::with_catalogue`, with the Claude route's argument checks. A denied call and a call outside the catalogue are answered `success: false` and perform nothing. `session.started.offered_tools` lists the catalogue from the rollout's `session_meta.dynamic_tools`.
+- `metaharness::CodexAppServerRunner` and `AppServerProcess`; `metaharness_codex::{AppServerOpening, AppServerSession, SessionAction, DynamicTool, APP_SERVER_ARGS, tool_call_answer, dynamic_decision, dynamic_tool_call_line}` and the related path helpers; `metaharness_tools::EntryNaming` with `CallerCatalogue::{resolve_as, subjects_as, offered_tools_as}`, because Codex calls an entry by its bare name where Claude Code calls `mcp__metaharness__<name>`.
+- Codex conformance: `c1-caller-catalogue` (the app-server launch, replacing `c1-caller-catalogue-refusal`), `c2-app-server-conversation`, `c2-dynamic-tools-offered` and `c3-app-server-round-trip`, the real runner against a `/bin/sh` app-server. `conformance codex` runs 27 vectors, up from 24, and the codex contract golden records `checked: 27`.
+- `docs/research/2026-10-29-codex-0.160.0-app-server-catalogue.md`: one live run on a ChatGPT login at 0.160.0, exit 0, the catalogue call served and decided by the frame.
+
+### Changed
+
+- `catalogue-not-carried` is raised for `b10x` only, and `--tool-surface owned` is admitted on `codex` beside `--catalogue` and still refused without one. A run without `--catalogue` is unchanged, and its C1 fixtures are byte-identical.
+- On the catalogue route the launch attestation names, among its `ambient_inputs`, the tools a model's own entry in the vendor's model catalogue adds and no config key removes: the live run's model was offered code mode's `exec` and `wait`, reaching the catalogue only from inside `exec`, and `request_user_input_async`. The rollout records the `exec` cell as its own call, so such a run's stream carries a `tool.requested` named `exec` under `seam: none` (a66 § 5 and § 6).
+- `metaharness_codex::LaunchContext` gains `dynamic_tools` and `LaunchPlan` gains `app_server`. A caller that builds `LaunchContext` with a struct literal adds `dynamic_tools: Vec::new()`.
+
 ## [0.23.1] — 2026-10-29
 
 ### Changed
