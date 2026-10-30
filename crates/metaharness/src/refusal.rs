@@ -256,6 +256,40 @@ pub enum Refusal {
         /// The literal the `command` contains.
         variable: &'static str,
     },
+    /// `--scratch-name` is not one plain path component (design amendment a72): empty, `.` or
+    /// `..`, holding a `/` or a control character, or longer than 64 bytes.
+    ///
+    /// Raised by [`crate::check_spec`], so before anything is created, on every kind. Its code
+    /// string is [`SCRATCH_NAME_INVALID`].
+    ScratchNameInvalid {
+        /// The name as given.
+        name: String,
+        /// What is wrong with it.
+        why: &'static str,
+    },
+    /// Another run holds the `--scratch-name` (design amendment a72).
+    ///
+    /// A named run holds an exclusive lock on the name's lock file for its whole life, and this
+    /// run took nothing: the other run's root is untouched. Its code string is
+    /// [`SCRATCH_NAME_HELD`].
+    ScratchNameHeld {
+        /// The name.
+        name: String,
+        /// The lock file the other run holds.
+        lock: PathBuf,
+    },
+    /// Something other than this user's own directory or lock file is where a named run puts its
+    /// root or its lock (design amendment a72): a symbolic link, a file, or an entry another user
+    /// owns.
+    ///
+    /// Refused and left untouched: following or removing it would act on a path this run did not
+    /// make. Its code string is [`SCRATCH_ROOT_FOREIGN`].
+    ScratchRootForeign {
+        /// The entry in the way.
+        path: PathBuf,
+        /// What it is.
+        found: &'static str,
+    },
     /// `--catalogue <file>` could not be used as a catalogue (design amendment a40): unreadable,
     /// not a `tool-contract/1` document, or one that format's checks refuse.
     ///
@@ -377,6 +411,18 @@ pub const SCRATCH_PATH_NOT_UTF8: &str = "scratch-path-not-utf8";
 /// The stable code string [`Refusal::ScratchPathNamesPluginVariable`] carries in its message
 /// (design amendment a37 § 6). Defined by the Claude adapter, whose vendor reads the literals.
 pub use metaharness_claude::SCRATCH_PATH_NAMES_PLUGIN_VARIABLE;
+
+/// The stable code string [`Refusal::ScratchNameInvalid`] carries in its message (design
+/// amendment a72). A launch-condition code, like [`SCRATCH_PATH_NOT_UTF8`].
+pub const SCRATCH_NAME_INVALID: &str = "scratch-name-invalid";
+
+/// The stable code string [`Refusal::ScratchNameHeld`] carries in its message (design amendment
+/// a72).
+pub const SCRATCH_NAME_HELD: &str = "scratch-name-held";
+
+/// The stable code string [`Refusal::ScratchRootForeign`] carries in its message (design
+/// amendment a72).
+pub const SCRATCH_ROOT_FOREIGN: &str = "scratch-root-foreign";
 
 impl Refusal {
     /// The Claude adapter's launch refusal, as one of these.
@@ -730,6 +776,30 @@ impl fmt::Display for Refusal {
                  command names a plugin variable when the hook is not a plugin's, so the seam \
                  would never be consulted (design amendment a37). Run with a TMPDIR whose path \
                  does not contain it",
+                path.display()
+            ),
+            Refusal::ScratchNameInvalid { name, why } => write!(
+                f,
+                "{SCRATCH_NAME_INVALID}: --scratch-name {name:?} is refused: {why}. The name is \
+                 one plain path component of the scratch root <temp dir>/metaharness-<NAME>: not \
+                 empty, not . or .., no / and no control character, at most 64 bytes (design \
+                 amendment a72). Nothing was created"
+            ),
+            Refusal::ScratchNameHeld { name, lock } => write!(
+                f,
+                "{SCRATCH_NAME_HELD}: a run under scratch name {name:?} is still going: it holds \
+                 the lock {} for as long as it runs, and two runs in one scratch root would \
+                 overwrite each other's config home, hook channel and transcript (design \
+                 amendment a72). Nothing was touched. Wait for that run to end, or give this run \
+                 another name",
+                lock.display()
+            ),
+            Refusal::ScratchRootForeign { path, found } => write!(
+                f,
+                "{SCRATCH_ROOT_FOREIGN}: {} is {found}, where a named run keeps its scratch root \
+                 or its lock. Only a directory or lock file this user left there is taken over; \
+                 anything else is refused rather than followed or removed, and was left as it is \
+                 (design amendment a72). Remove it, or give the run another name",
                 path.display()
             ),
             Refusal::Catalogue { error } => write!(f, "{error}"),

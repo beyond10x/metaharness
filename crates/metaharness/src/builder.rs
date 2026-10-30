@@ -244,6 +244,17 @@ impl Metaharness {
         self
     }
 
+    /// Name the run's scratch root, `<temp dir>/metaharness-<NAME>`, so every path derived from
+    /// it is the same from one run to the next (design amendment a72).
+    ///
+    /// One plain path component of at most 64 bytes, else [`check_spec`] refuses it. The run
+    /// holds the name until it is dropped, and a second run under a held name is refused.
+    #[must_use]
+    pub fn with_scratch_name(mut self, name: impl Into<String>) -> Self {
+        self.spec.scratch_name = Some(name.into());
+        self
+    }
+
     /// Copy the run's raw vendor wire into this directory when the run ends.
     ///
     /// The capture surface the adapter contract's golden samples come from (CT-2): the retained
@@ -560,7 +571,7 @@ fn start_b10x(
         return Err(Refusal::Control { refusals });
     }
 
-    let scratch = tempfile::TempDir::new()?;
+    let scratch = ScratchRoot::for_spec(&spec)?;
     guard_scratch_path(scratch.path())?;
     let confined = spec.substrate.is_some() || spec.substrate_embedded;
     let cwd = resolve_cwd_named(
@@ -931,7 +942,7 @@ fn start_claude(
         metaharness_claude::guard_native_frame(&spec, frame.as_ref())
             .map_err(Refusal::from_claude_launch)?;
 
-        let scratch = tempfile::TempDir::new()?;
+        let scratch = ScratchRoot::for_spec(&spec)?;
         guard_scratch_path(scratch.path())?;
         let cwd = resolve_cwd(&spec, scratch.path())?;
         // Read once, beneath the tree, before the proxy starts (amendment a35); the plan renders
@@ -1248,7 +1259,7 @@ fn start_codex(
         });
     }
 
-    let scratch = tempfile::TempDir::new()?;
+    let scratch = ScratchRoot::for_spec(&spec)?;
     guard_scratch_path(scratch.path())?;
     let cwd = resolve_cwd(&spec, scratch.path())?;
     // As on the claude path (amendment a35): read once, rendered and digested from these bytes.
@@ -1888,6 +1899,225 @@ fn guard_scratch_path(scratch_root: &std::path::Path) -> Result<(), Refusal> {
     Ok(())
 }
 
+/// The most bytes a `--scratch-name` may have (design amendment a72).
+const SCRATCH_NAME_BYTES_MAX: usize = 64;
+
+/// Refuse a `--scratch-name` that is not one plain path component (design amendment a72).
+///
+/// Reads nothing and makes nothing, and [`check_spec`] calls it, so a bad name is refused before
+/// any directory, lock file or temporary directory exists.
+fn check_scratch_name(spec: &RunSpec) -> Result<(), Refusal> {
+    let Some(name) = &spec.scratch_name else {
+        return Ok(());
+    };
+    let why = if name.is_empty() {
+        "it is empty"
+    } else if name == "." || name == ".." {
+        "it is . or .., which a path reads as this directory or its parent, not as a plain name"
+    } else if name.contains('/') {
+        "it holds a /, so it would name a path below the temp dir rather than one entry in it"
+    } else if name.chars().any(char::is_control) {
+        "it holds a control character"
+    } else if name.len() > SCRATCH_NAME_BYTES_MAX {
+        "it is longer than 64 bytes"
+    } else {
+        return Ok(());
+    };
+    Err(Refusal::ScratchNameInvalid {
+        name: name.clone(),
+        why,
+    })
+}
+
+/// A run's scratch root: a new temporary directory, or the one a caller named (design amendment
+/// a72). The run owns it either way, and it is removed when the run is dropped.
+pub(crate) enum ScratchRoot {
+    /// A new temporary directory, as every run had before a72.
+    Temporary(tempfile::TempDir),
+    /// `<temp dir>/metaharness-<NAME>`, held under the name's lock.
+    Named(NamedScratch),
+}
+
+impl ScratchRoot {
+    /// The root this spec asks for, made or taken over: named when the spec names one.
+    ///
+    /// A named root lies in the directory an unnamed one is made in, `tempfile`'s temp dir, so an
+    /// embedder that moved one moved both. The name is checked again here, so no path is ever
+    /// derived from a name nobody checked, whichever way the start was reached.
+    fn for_spec(spec: &RunSpec) -> Result<Self, Refusal> {
+        check_scratch_name(spec)?;
+        match &spec.scratch_name {
+            None => Ok(Self::Temporary(tempfile::TempDir::new()?)),
+            Some(name) => Ok(Self::Named(NamedScratch::take(
+                &tempfile::env::temp_dir(),
+                name,
+                rustix::process::geteuid().as_raw(),
+            )?)),
+        }
+    }
+
+    /// The root.
+    pub(crate) fn path(&self) -> &std::path::Path {
+        match self {
+            Self::Temporary(directory) => directory.path(),
+            Self::Named(named) => &named.root,
+        }
+    }
+}
+
+/// A caller-named scratch root, and the lock that holds its name (design amendment a72).
+pub(crate) struct NamedScratch {
+    root: PathBuf,
+    /// The open lock file. Dropped after [`Drop::drop`] has removed the root, so a second run
+    /// cannot take the name while the first run's root is still there.
+    _lock: std::fs::File,
+}
+
+impl NamedScratch {
+    /// Take the name `name` under `parent`, for a process whose effective uid is `euid`.
+    ///
+    /// The name's lock first, then the root under it: absent, it is made; a directory `euid`
+    /// owns, a leftover, it is removed and made again; anything else refuses the run and is left
+    /// as it is. Never followed through a link.
+    fn take(parent: &std::path::Path, name: &str, euid: u32) -> Result<Self, Refusal> {
+        use std::os::unix::fs::DirBuilderExt as _;
+
+        let lock_path = parent.join(format!("metaharness.{name}.lock"));
+        let root = parent.join(format!("metaharness-{name}"));
+        let lock = open_scratch_lock(&lock_path, euid)?;
+        match lock.try_lock() {
+            Ok(()) => {}
+            Err(std::fs::TryLockError::WouldBlock) => {
+                return Err(Refusal::ScratchNameHeld {
+                    name: name.to_owned(),
+                    lock: lock_path,
+                });
+            }
+            Err(std::fs::TryLockError::Error(error)) => {
+                return Err(io_at(&lock_path, "could not take the lock", &error));
+            }
+        }
+        match std::fs::symlink_metadata(&root) {
+            Err(error) if error.kind() == std::io::ErrorKind::NotFound => {}
+            Err(error) => return Err(io_at(&root, "could not be read", &error)),
+            Ok(found) => {
+                if let Some(found) = foreign_entry(&found, euid, true) {
+                    return Err(Refusal::ScratchRootForeign { path: root, found });
+                }
+                std::fs::remove_dir_all(&root).map_err(|error| {
+                    io_at(
+                        &root,
+                        "is this user's leftover and could not be removed",
+                        &error,
+                    )
+                })?;
+            }
+        }
+        std::fs::DirBuilder::new()
+            .mode(0o700)
+            .create(&root)
+            .map_err(|error| io_at(&root, "could not be created", &error))?;
+        Ok(Self { root, _lock: lock })
+    }
+}
+
+impl Drop for NamedScratch {
+    fn drop(&mut self) {
+        // As `TempDir` does: a root that cannot be removed is left, and the next run under the
+        // name takes it over as this user's leftover.
+        drop(std::fs::remove_dir_all(&self.root));
+    }
+}
+
+/// Open a scratch name's lock file without following a link, making it 0600 when absent, and
+/// refuse it unless it is a regular file `euid` owns.
+fn open_scratch_lock(path: &std::path::Path, euid: u32) -> Result<std::fs::File, Refusal> {
+    use rustix::fs::{Mode, OFlags};
+
+    let opened = rustix::fs::open(
+        path,
+        OFlags::RDONLY | OFlags::CREATE | OFlags::NOFOLLOW | OFlags::CLOEXEC | OFlags::NOCTTY,
+        Mode::from_raw_mode(0o600),
+    );
+    let lock = match opened {
+        Ok(descriptor) => std::fs::File::from(descriptor),
+        // `O_NOFOLLOW` on a link: `ELOOP` on Linux and macOS, `EMLINK` on FreeBSD. Either also
+        // has other causes, so the entry itself is looked at, without following it.
+        Err(errno)
+            if (errno == rustix::io::Errno::LOOP || errno == rustix::io::Errno::MLINK)
+                && std::fs::symlink_metadata(path).is_ok_and(|found| found.is_symlink()) =>
+        {
+            return Err(Refusal::ScratchRootForeign {
+                path: path.to_path_buf(),
+                found: "a symbolic link",
+            });
+        }
+        // `O_CREAT` on a directory fails before the descriptor exists to be looked at.
+        Err(rustix::io::Errno::ISDIR) => {
+            return Err(Refusal::ScratchRootForeign {
+                path: path.to_path_buf(),
+                found: "a directory",
+            });
+        }
+        Err(errno) => {
+            return Err(io_at(
+                path,
+                "could not be opened",
+                &std::io::Error::from(errno),
+            ));
+        }
+    };
+    let found = lock
+        .metadata()
+        .map_err(|error| io_at(path, "could not be read", &error))?;
+    if let Some(found) = foreign_entry(&found, euid, false) {
+        return Err(Refusal::ScratchRootForeign {
+            path: path.to_path_buf(),
+            found,
+        });
+    }
+    Ok(lock)
+}
+
+/// What an entry at a named root (`directory`) or its lock file is, when it is not this user's
+/// own directory or regular file; `None` when it is. Read from metadata that did not follow a
+/// link.
+fn foreign_entry(found: &std::fs::Metadata, euid: u32, directory: bool) -> Option<&'static str> {
+    use std::os::unix::fs::MetadataExt as _;
+
+    let kind = found.file_type();
+    if kind.is_symlink() {
+        Some("a symbolic link")
+    } else if directory && !kind.is_dir() {
+        Some(if kind.is_file() {
+            "a file"
+        } else {
+            "neither a directory nor a file"
+        })
+    } else if !directory && !kind.is_file() {
+        Some(if kind.is_dir() {
+            "a directory"
+        } else {
+            "not a regular file"
+        })
+    } else if found.uid() != euid {
+        Some(if directory {
+            "a directory another user owns"
+        } else {
+            "a file another user owns"
+        })
+    } else {
+        None
+    }
+}
+
+/// A platform refusal that names the path it was about.
+fn io_at(path: &std::path::Path, what: &str, error: &std::io::Error) -> Refusal {
+    Refusal::Io {
+        detail: format!("{} {what}: {error}", path.display()),
+    }
+}
+
 /// The child's working directory: the operator's, or a scratch one made here.
 ///
 /// The operator's directory is used, never created: a typo that silently became an empty
@@ -1977,6 +2207,8 @@ pub fn check_spec(spec: &RunSpec) -> Result<(), Refusal> {
                 .to_owned(),
         });
     }
+    // A scratch name is one plain path component (amendment a72), refused before anything exists.
+    check_scratch_name(spec)?;
     // `--context` on every kind (amendment a35): what a declaration can be refused for before
     // anything is read. The read itself, beneath the resolved tree, is each start's.
     crate::context::check_declared(spec)?;
@@ -5633,5 +5865,124 @@ mod catalogue_copy_tests {
             "the vendor binary had been run with --version for --strict-version; a credential \
              proxy had been started, and it stops as this refusal returns"
         ));
+    }
+}
+
+#[cfg(test)]
+mod scratch_name_tests {
+    //! A named scratch root's ownership and lock-file refusals (design amendment a72): the cases
+    //! `tests/scratch_name.rs` cannot reach through the builder, because they need another uid or
+    //! an entry at the lock path. The parent directory is injected, so nothing here touches the
+    //! process's temp dir.
+
+    use std::os::unix::fs::PermissionsExt as _;
+    use std::path::Path;
+
+    use super::{NamedScratch, Refusal, foreign_entry};
+
+    fn euid() -> u32 {
+        rustix::process::geteuid().as_raw()
+    }
+
+    fn exists(path: &Path) -> bool {
+        std::fs::symlink_metadata(path).is_ok()
+    }
+
+    #[test]
+    fn only_this_users_own_directory_or_regular_file_is_taken() {
+        let parent = tempfile::tempdir().expect("a directory");
+        let directory = parent.path().join("directory");
+        std::fs::create_dir(&directory).expect("a directory");
+        let file = parent.path().join("file");
+        std::fs::write(&file, "").expect("a file");
+        let link = parent.path().join("link");
+        std::os::unix::fs::symlink(&directory, &link).expect("a link");
+        let read = |path: &Path| std::fs::symlink_metadata(path).expect("metadata");
+        let other = euid().wrapping_add(1);
+
+        assert_eq!(foreign_entry(&read(&directory), euid(), true), None);
+        assert_eq!(
+            foreign_entry(&read(&directory), other, true),
+            Some("a directory another user owns")
+        );
+        assert_eq!(foreign_entry(&read(&file), euid(), false), None);
+        assert_eq!(
+            foreign_entry(&read(&file), other, false),
+            Some("a file another user owns")
+        );
+        assert_eq!(foreign_entry(&read(&file), euid(), true), Some("a file"));
+        assert_eq!(
+            foreign_entry(&read(&directory), euid(), false),
+            Some("a directory")
+        );
+        for directory in [true, false] {
+            assert_eq!(
+                foreign_entry(&read(&link), euid(), directory),
+                Some("a symbolic link")
+            );
+        }
+    }
+
+    #[test]
+    fn a_link_a_directory_or_another_users_file_at_the_lock_path_is_refused() {
+        let parent = tempfile::tempdir().expect("a directory");
+        let outside = tempfile::tempdir().expect("a directory");
+        let lock = parent.path().join("metaharness.case.lock");
+        let root = parent.path().join("metaharness-case");
+        let refused = |euid: u32| {
+            NamedScratch::take(parent.path(), "case", euid)
+                .err()
+                .expect("refused")
+        };
+
+        let target = outside.path().join("absent");
+        std::os::unix::fs::symlink(&target, &lock).expect("a dangling link");
+        assert_eq!(
+            refused(euid()),
+            Refusal::ScratchRootForeign {
+                path: lock.clone(),
+                found: "a symbolic link"
+            }
+        );
+        assert!(!exists(&target), "nothing was made through the link");
+        assert!(!exists(&root));
+        std::fs::remove_file(&lock).expect("the link");
+
+        std::fs::create_dir(&lock).expect("a directory");
+        assert_eq!(
+            refused(euid()),
+            Refusal::ScratchRootForeign {
+                path: lock.clone(),
+                found: "a directory"
+            }
+        );
+        assert!(!exists(&root));
+        std::fs::remove_dir(&lock).expect("the directory");
+
+        // The lock file this uid made, read as another uid's.
+        assert_eq!(
+            refused(euid().wrapping_add(1)),
+            Refusal::ScratchRootForeign {
+                path: lock.clone(),
+                found: "a file another user owns"
+            }
+        );
+        assert!(!exists(&root));
+
+        let taken = NamedScratch::take(parent.path(), "case", euid()).expect("this uid's own");
+        assert_eq!(taken.root, root);
+        let mode = std::fs::symlink_metadata(&root)
+            .expect("the root")
+            .permissions()
+            .mode();
+        assert_eq!(mode & 0o7777, 0o700, "{mode:o}");
+        let lock_mode = std::fs::symlink_metadata(&lock)
+            .expect("the lock file")
+            .permissions()
+            .mode();
+        assert_eq!(lock_mode & 0o077, 0, "{lock_mode:o}");
+        drop(taken);
+        assert!(!exists(&root), "removed when dropped");
+        assert!(exists(&lock), "the lock file is left in place");
     }
 }

@@ -25,7 +25,7 @@ metaharness-b10x = { path = "../metaharness-b10x" }
 # The loopback placeholder's nonce — see the workspace manifest for why it is not the clock.
 getrandom = { workspace = true }
 # The custody file lock (`flock`), so a run that dies holding it does not strand the next one.
-rustix = { workspace = true }
+rustix = { workspace = true, features = ["process"] }
 # The loopback proxy's upstream leg, TLS on a blocking socket and no async runtime.
 rustls = { workspace = true }
 serde_json = { workspace = true }
