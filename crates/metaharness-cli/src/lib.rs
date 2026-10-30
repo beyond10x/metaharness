@@ -411,9 +411,10 @@ const STEER_POLL: Duration = Duration::from_millis(50);
 /// `run` — the whole point: spawn the harness, put its events on stdout, take steering on stdin.
 ///
 /// A named run's vendor child leads a process group of its own, so the terminal's signals stop
-/// at metaharness: `SIGINT`, `SIGTERM` and `SIGHUP` are forwarded to the group, and once the run
-/// has been dropped, its root and locks with it, metaharness ends by the signal (design amendment
-/// a72 § 5).
+/// at metaharness: `SIGINT`, `SIGTERM`, `SIGHUP` and `SIGQUIT` are forwarded to the group, and
+/// once the run has been dropped, its root and locks with it, metaharness ends by the signal;
+/// `SIGTSTP` stops the group and then metaharness, `SIGCONT` continues the group. Afterwards each
+/// of them has its default action again (design amendment a72 § 5).
 fn run(spec: RunSpec) -> i32 {
     if spec.scratch_name.is_none() {
         return run_once(spec, None);
@@ -438,7 +439,7 @@ fn run_once(spec: RunSpec, forwarding: Option<&forward::GroupForwarding>) -> i32
         Err(refusal) => return refuse(&refusal),
     };
     if let Some(forwarding) = forwarding {
-        forwarding.lead(run.process_group());
+        forwarding.lead(run.group());
     }
     if let Err(error) = drive(&mut run, &steering()) {
         // A run that broke mid-flight is exit `2` and not a verdict: metaharness could not do
