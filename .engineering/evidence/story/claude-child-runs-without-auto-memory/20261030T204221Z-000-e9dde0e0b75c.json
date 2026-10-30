@@ -1,0 +1,12 @@
+{
+  "at": "2026-10-30T20:42:21Z",
+  "actor": "human:timo",
+  "artifact": "story:claude-child-runs-without-auto-memory",
+  "kind": "story",
+  "revision": 6,
+  "change": {
+    "change": "evidence",
+    "kind": "test_result",
+    "source": "scoped gate on wave/2026-10-30-c5 at 277adc2 (D295/wave-rules scope): fmt, clippy -D warnings on 13 crates, cargo test on metaharness-protocol, metaharness, metaharness-claude, metaharness-codex, metaharness-b10x, metaharness-cli: 118 test binaries, 1298 passed, 0 failed, 53 ignored; metaharness-docs check valid (gate log gate-test3.log in ~/.cache/metaharness-c5)"
+  }
+}

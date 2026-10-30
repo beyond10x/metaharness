@@ -5,6 +5,21 @@ was amended and the amendment is named here.
 
 ## [Unreleased]
 
+## [0.26.0] — 2026-10-30
+
+Trial finding C5: the provider's prompt cache did not hold between two sessions of one case.
+
+### Breaking
+
+- `metaharness::RunSpec` gains `prompt_cache_ttl` and `scratch_name`, `metaharness_protocol::Usage` gains `cache_creation_5m_input_tokens` and `cache_creation_1h_input_tokens`, and `metaharness::Refusal` gains `ScratchNameInvalid`, `ScratchNameHeld` and `ScratchRootForeign`. A struct literal adds the fields; an exhaustive `match` on `Refusal` adds the arms.
+
+### Added
+
+- A Claude child runs with `CLAUDE_CODE_DISABLE_AUTO_MEMORY=1` under every credential source. The system prompt's auto-memory line named the per-run `CLAUDE_CONFIG_DIR`, so two sessions in one working directory sent different system prompts. The H3 attestation names the key, and the native lane at 2.1.309 runs two sessions in one cwd and requires byte-identical `system` blocks (amendment a70, story:claude-child-runs-without-auto-memory).
+- `--prompt-cache-ttl 5m|1h` (run-spec key `prompt-cache-ttl`, `Metaharness::with_prompt_cache_ttl`) sets `CLAUDE_CODE_PROMPT_CACHE_TTL` for a Claude child; without it the vendor's choice holds. `codex` and `b10x` refuse the flag by name. `Usage` carries the cache writes split by class, from the vendor's `cache_creation`, absent when the vendor does not say (amendment a71, story:claude-prompt-cache-ttl-declared).
+- `--scratch-name <NAME>` (run-spec key `scratch-name`, `Metaharness::with_scratch_name`) makes the run's scratch root `<temp dir>/metaharness-u<EUID>/<NAME>`, under a private 0700 parent, so every path derived from it is the same from one session to the next on every kind, including the b10x `--context` copies the loop renders into its prompt. A name is 1 to 64 bytes of ASCII letters, digits, `.`, `_` and `-`, not ending in `.lock`. The name and the root are held by `flock` for the run's life and released explicitly. A leftover of this user's is replaced, read-only directories included. Refusals: `scratch-name-invalid`, `scratch-name-held` and `scratch-root-foreign` (amendment a72, story:scratch-root-stable-by-declared-name).
+- Dropping a run whose vendor child is still running kills the child and waits for it before the scratch root is removed, on every kind. A named run's child runs in its own process group, which is killed as a whole, so nothing it started writes into a root another run has taken over; `metaharness run --scratch-name` forwards SIGINT, SIGTERM, SIGHUP and SIGQUIT to that group, stops it on SIGTSTP and continues it on SIGCONT, and puts the default dispositions back when the run ends. The group is killed while its exited leader still holds the id, on a normal end too, and never after the reap; `metaharness::ProcessGroup` and `Run::group()` expose it (a72 review corrections). `metaharness-cli` gains the `signal-hook` dependency.
+
 ## [0.25.0] — 2026-10-30
 
 ### Breaking
