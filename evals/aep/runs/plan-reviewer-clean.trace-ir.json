@@ -103,6 +103,7 @@
             "script": null,
             "signature": null,
             "start": 0,
+            "tool": "Task",
             "wrappers": []
           }
         ]
@@ -143,6 +144,7 @@
             "script": null,
             "signature": null,
             "start": 0,
+            "tool": null,
             "wrappers": []
           },
           {
@@ -164,6 +166,7 @@
             "script": null,
             "signature": null,
             "start": 0,
+            "tool": "protocol",
             "wrappers": []
           }
         ]
@@ -224,6 +227,7 @@
             "script": null,
             "signature": null,
             "start": 0,
+            "tool": null,
             "wrappers": []
           },
           {
@@ -245,6 +249,7 @@
             "script": null,
             "signature": null,
             "start": 0,
+            "tool": "protocol",
             "wrappers": []
           }
         ]
@@ -308,6 +313,7 @@
             "script": null,
             "signature": null,
             "start": 0,
+            "tool": "Read",
             "wrappers": []
           }
         ]
@@ -368,6 +374,7 @@
             "script": null,
             "signature": null,
             "start": 0,
+            "tool": null,
             "wrappers": []
           },
           {
@@ -389,6 +396,7 @@
             "script": null,
             "signature": null,
             "start": 0,
+            "tool": "protocol",
             "wrappers": []
           }
         ]

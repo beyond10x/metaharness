@@ -30,8 +30,8 @@ pub const VERSION: &str = "metaharness-semantic/1";
 
 /// One semantic operation, or one structure node around operations.
 ///
-/// The field set is the source's, plus [`Self::executable`], [`Self::script`] and
-/// [`Self::wrappers`].
+/// The field set is the source's, plus [`Self::tool`], [`Self::executable`], [`Self::script`]
+/// and [`Self::wrappers`].
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
 pub struct Node {
     /// The index of the enclosing structure node in the same list; always lower than this node's.
@@ -41,6 +41,15 @@ pub struct Node {
     pub kind: String,
     /// How the kind was recognised: the program, `native`, `redirection`, `malformed_shell`, ...
     pub method: String,
+    /// The normalized tool this operation ran: the [`Self::executable`] for a shell command, the
+    /// native tool's own name (`Read`, `apply_patch`, ...) for a native call, also one a Codex
+    /// `exec` script makes. Never the shell or script tool that carried it (`Bash`,
+    /// `exec_command`, `exec`): that is glue, and its structure node names no tool. [`None`] for
+    /// a structure node, for a builtin that only changes the shell's state (`cd`, `export`,
+    /// `set`, ...), and for an operation whose program could not be read (a malformed command,
+    /// `resolution: unsupported`), which is unknown rather than the carrier's name (amendment
+    /// a69).
+    pub tool: Option<String>,
     /// The basename of the argv[0] a shell command runs, after the wrappers are unwrapped.
     /// [`None`] for a native tool, a redirection and a structure node the source adds.
     pub executable: Option<String>,
@@ -146,6 +155,7 @@ impl Extractor {
             parent,
             kind: kind.into(),
             method: method.into(),
+            tool: None,
             executable: None,
             script: None,
             wrappers: Vec::new(),
@@ -329,6 +339,9 @@ impl Extractor {
                     }
                 }
             }
+            for node in &mut self.nodes[idx + 1..] {
+                node.tool = Some(name.to_owned());
+            }
             if !found {
                 self.unresolved(
                     Some(idx),
@@ -436,7 +449,7 @@ impl Extractor {
             if value.is_null() {
                 complete = false;
             }
-            self.add(
+            let index = self.add(
                 parent,
                 kind,
                 method,
@@ -453,6 +466,7 @@ impl Extractor {
                 false,
                 complete,
             );
+            self.nodes[index].tool = Some(name.to_owned());
         }
         self.depth -= 1;
     }
@@ -1332,6 +1346,7 @@ pub fn extract(provider: &str, tool: &str, input: &str, cwd: Option<&str>) -> Ve
             parent: None,
             kind: "other".into(),
             method: "input_size_limit".into(),
+            tool: None,
             executable: None,
             script: None,
             wrappers: Vec::new(),
@@ -1365,8 +1380,24 @@ pub fn extract(provider: &str, tool: &str, input: &str, cwd: Option<&str>) -> Ve
         input.len(),
         "input",
     );
-    extractor.nodes
+    let mut nodes = extractor.nodes;
+    for node in &mut nodes {
+        let glue = node
+            .executable
+            .as_deref()
+            .is_some_and(|program| SHELL_STATE.contains(&program));
+        if !node.container && node.tool.is_none() && !glue {
+            node.tool.clone_from(&node.executable);
+        }
+    }
+    nodes
 }
+
+/// Builtins that change only the shell's own state. A command line uses them to set up the
+/// programs it runs, so they are glue, as a pipe or a wrapper is, and name no tool.
+const SHELL_STATE: [&str; 10] = [
+    "cd", "pushd", "popd", "export", "unset", "set", "alias", "true", "false", ":",
+];
 
 fn path_known(path: &str, cwd: Option<&str>) -> bool {
     !path.split('/').any(|part| part == "..")
@@ -2468,5 +2499,51 @@ mod tests {
             let text = serde_json::to_string(&shell(command)).unwrap();
             assert!(!text.contains("sentinel"), "{command}: {text}");
         }
+    }
+
+    fn tools(nodes: &[Node]) -> Vec<Option<&str>> {
+        leaves(nodes).iter().map(|n| n.tool.as_deref()).collect()
+    }
+
+    #[test]
+    fn the_normalized_tool_is_the_program_or_the_native_tool_never_the_carrier() {
+        assert_eq!(
+            tools(&shell("cd src && timeout 5 rg -n x . | head -n 3")),
+            [None, Some("rg"), Some("head")]
+        );
+        let setup = shell("export A=1; set -e; true && pushd x && git status");
+        let named: Vec<_> = tools(&setup).into_iter().flatten().collect();
+        assert_eq!(named, ["git"]);
+        let bash = extract(
+            "claude",
+            "Bash",
+            r#"{"command":"bash -c 'git status' && ./x.sh"}"#,
+            Some("/repo"),
+        );
+        assert_eq!(tools(&bash), [Some("git"), Some("x.sh")]);
+        let read = extract("claude", "Read", r#"{"file_path":"/repo/a"}"#, None);
+        assert_eq!(tools(&read), [Some("Read")]);
+        let exec = extract(
+            "codex",
+            "exec",
+            r#"await tools.exec_command({cmd:"cargo test"}); await tools.apply_patch({input:"x"});"#,
+            Some("/repo"),
+        );
+        assert_eq!(tools(&exec), [Some("cargo"), Some("apply_patch")]);
+        for carrier in [&bash, &exec] {
+            assert!(
+                carrier
+                    .iter()
+                    .filter(|n| n.container)
+                    .all(|n| n.tool.is_none())
+            );
+        }
+        let malformed = extract("claude", "Bash", r#"{"command":"cat 'oops"}"#, None);
+        assert_eq!(tools(&malformed), [None]);
+        assert!(
+            !serde_json::to_string(&tools(&malformed))
+                .unwrap()
+                .contains("Bash")
+        );
     }
 }

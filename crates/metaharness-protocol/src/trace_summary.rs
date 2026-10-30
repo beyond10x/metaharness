@@ -23,14 +23,32 @@ pub const SUMMARY_FORMAT: &str = "trace-ir-summary/1";
 pub struct SummarizedToolCall {
     /// The node's own `call_id`.
     pub call_id: Option<String>,
-    /// The node's own `name`.
+    /// The node's own `name`: the harness tool that carried the call (`Bash`, `exec_command`,
+    /// `Read`), kept as provenance. It is not what the call ran; [`Self::tools`] is.
     pub name: Option<String>,
+    /// What the call ran, normalized (amendment a69): the `tool` of each operation in the node's
+    /// `semantic_operations`, in order, read off the node and never off its raw `input`. A shell
+    /// call names its programs with wrappers unwrapped and glue dropped, never the shell tool;
+    /// an operation that names no program and was not read (`resolution: unsupported`) is `null`.
+    /// `None` when the node carries no `semantic_operations`.
+    pub tools: Option<Vec<Option<String>>>,
     /// Whether any `tool_result` node carries the same `call_id`. A call without a string id is
     /// answered by nothing, because nothing can name it.
     pub answered: bool,
     /// The first such result's `is_error`: `null` both when nothing answered the call and when the
     /// result did not say, which [`Self::answered`] tells apart.
     pub error: Option<bool>,
+}
+
+/// How many operations of the document's tool calls name one tool, or one semantic kind
+/// (amendment a69).
+#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
+pub struct SummarizedCount {
+    /// The normalized tool or the semantic kind; `null` counts the operations whose program
+    /// could not be read.
+    pub name: Option<String>,
+    /// The operations that name it.
+    pub operations: u64,
 }
 
 /// One model the document names, with the figures the document states for it alone (a42 point 2).
@@ -107,6 +125,14 @@ pub struct TraceIrSummary {
     pub stop_reason: Option<String>,
     /// One entry per `tool_call` node, in document order.
     pub tool_calls: Vec<SummarizedToolCall>,
+    /// The tools the calls ran, normalized: every entry of every [`SummarizedToolCall::tools`],
+    /// counted per name, most operations first, then by name. A shell tool such as `Bash` or
+    /// `exec_command` is never counted as a tool; its programs are. `None` when the document
+    /// names no `metaharness.semantic_rule`, so its calls were never read (amendment a69).
+    pub tools: Option<Vec<SummarizedCount>>,
+    /// The same operations counted per semantic `kind` (`file.read`, `vcs.status`, ...), in the
+    /// same order; `None` as [`Self::tools`] is.
+    pub operation_kinds: Option<Vec<SummarizedCount>>,
     /// The document's unk count: the sum over `metaharness.unk_kinds`.
     pub unk: u64,
 }
@@ -186,11 +212,28 @@ pub fn summarize(document: &TraceIrDocument) -> TraceIrSummary {
             SummarizedToolCall {
                 call_id: text(Some(node), "call_id"),
                 name: text(Some(node), "name"),
+                tools: ran(node).map(|ran| ran.into_iter().map(|(tool, _)| tool).collect()),
                 answered: answer.is_some(),
                 error: answer.copied().flatten(),
             }
         })
         .collect();
+    let (tools, operation_kinds) = if document.metaharness.semantic_rule.is_some() {
+        let ran: Vec<(Option<String>, Option<String>)> = document
+            .events
+            .iter()
+            .map(|node| &node.kind)
+            .filter(|node| family_is(node, IrFamily::ToolCall))
+            .filter_map(ran)
+            .flatten()
+            .collect();
+        (
+            Some(counted(ran.iter().map(|(tool, _)| tool.clone()))),
+            Some(counted(ran.into_iter().map(|(_, kind)| kind))),
+        )
+    } else {
+        (None, None)
+    };
 
     TraceIrSummary {
         format: SUMMARY_FORMAT,
@@ -213,6 +256,8 @@ pub fn summarize(document: &TraceIrDocument) -> TraceIrSummary {
         is_error: terminal.and_then(|node| node["is_error"].as_bool()),
         stop_reason: text(terminal, "stop_reason"),
         tool_calls,
+        tools,
+        operation_kinds,
         unk: document
             .metaharness
             .unk_kinds
@@ -220,6 +265,45 @@ pub fn summarize(document: &TraceIrDocument) -> TraceIrSummary {
             .map(|count| u64::from(*count))
             .sum(),
     }
+}
+
+/// What one `tool_call` node ran (amendment a69): per operation of its `semantic_operations`
+/// that is not a structure node, its normalized `tool` and its `kind`. An operation without a
+/// `tool` is glue (a builtin such as `cd`, a redirection) and is left out, unless it names no
+/// program and was not read (`resolution: unsupported`), which stays as an unknown `null`. Read off the
+/// operations alone: the node's raw `input` is provenance, and no summary reads it. `None` when
+/// the node carries no operations.
+fn ran(node: &Value) -> Option<Vec<(Option<String>, Option<String>)>> {
+    let operations = node["semantic_operations"].as_array()?;
+    Some(
+        operations
+            .iter()
+            .filter(|operation| operation["container"] != true)
+            .filter_map(|operation| {
+                let tool = operation["tool"].as_str().map(ToOwned::to_owned);
+                let unread =
+                    operation["executable"].is_null() && operation["resolution"] == "unsupported";
+                if tool.is_none() && !unread {
+                    return None;
+                }
+                Some((tool, operation["kind"].as_str().map(ToOwned::to_owned)))
+            })
+            .collect(),
+    )
+}
+
+/// Count names, most first, then by name (`null` before any name).
+fn counted(names: impl Iterator<Item = Option<String>>) -> Vec<SummarizedCount> {
+    let mut counts: BTreeMap<Option<String>, u64> = BTreeMap::new();
+    for name in names {
+        *counts.entry(name).or_default() += 1;
+    }
+    let mut counted: Vec<SummarizedCount> = counts
+        .into_iter()
+        .map(|(name, operations)| SummarizedCount { name, operations })
+        .collect();
+    counted.sort_by(|a, b| b.operations.cmp(&a.operations).then(a.name.cmp(&b.name)));
+    counted
 }
 
 /// The four `usage` keys the summary carries, in its field order.
@@ -536,6 +620,7 @@ mod tests {
             SummarizedToolCall {
                 call_id: call_id.map(ToOwned::to_owned),
                 name: Some(name.to_owned()),
+                tools: None,
                 answered,
                 error,
             }
@@ -731,5 +816,128 @@ mod tests {
             .unk_kinds
             .extend([("turn.started".to_string(), 2), ("warning".to_string(), 1)]);
         assert_eq!(summarize(&document).unk, 3);
+    }
+
+    fn operation(tool: Option<&str>, kind: &str, resolution: &str, container: bool) -> Value {
+        json!({"tool": tool, "kind": kind, "resolution": resolution, "container": container})
+    }
+
+    fn annotated_calls() -> TraceIrDocument {
+        let mut document = document_of(vec![
+            (
+                None,
+                json!({"event": "tool_call", "call_id": "c1", "name": "Bash",
+                "input": {"command": "cd src && timeout 5 rg -n x . | head -n 3"},
+                "semantic_operations": [
+                    operation(None, "sequence", "classified", true),
+                    json!({"tool": null, "executable": "cd", "kind": "process.run", "resolution": "unsupported", "container": false}),
+                    operation(None, "pipeline", "classified", true),
+                    operation(Some("rg"), "file.search", "classified", false),
+                    operation(Some("head"), "stream.select", "classified", false),
+                ]}),
+            ),
+            (
+                None,
+                json!({"event": "tool_call", "call_id": "c2", "name": "exec_command",
+                "input": {"cmd": "cat 'oops"},
+                "semantic_operations": [
+                    operation(None, "wrapper", "classified", true),
+                    operation(None, "other", "unsupported", false),
+                ]}),
+            ),
+            (
+                None,
+                json!({"event": "tool_call", "call_id": "c3", "name": "Read",
+                    "input": {"file_path": "/repo/a"},
+                    "semantic_operations": [operation(Some("Read"), "file.read", "classified", false)]}),
+            ),
+            (
+                None,
+                json!({"event": "tool_call", "call_id": "c4", "name": "Bash",
+                    "input": {"command": "rg y"},
+                    "semantic_operations": [operation(Some("rg"), "file.search", "classified", false)]}),
+            ),
+        ]);
+        document.metaharness.semantic_rule = Some("metaharness-semantic/1");
+        document
+    }
+
+    /// a69: a shell call is summarized by the programs it ran, never by the shell tool that
+    /// carried it; glue is dropped and an unreadable program is an unknown `null`.
+    #[test]
+    fn a_shell_call_counts_its_programs_never_the_shell_tool() {
+        let summary = summarize(&annotated_calls());
+        let per_call: Vec<_> = summary
+            .tool_calls
+            .iter()
+            .map(|call| call.tools.clone())
+            .collect();
+        let named = |names: &[Option<&str>]| {
+            Some(
+                names
+                    .iter()
+                    .map(|name| name.map(ToOwned::to_owned))
+                    .collect::<Vec<_>>(),
+            )
+        };
+        assert_eq!(
+            per_call,
+            [
+                named(&[Some("rg"), Some("head")]),
+                named(&[None]),
+                named(&[Some("Read")]),
+                named(&[Some("rg")]),
+            ]
+        );
+        let count = |name: Option<&str>, operations: u64| SummarizedCount {
+            name: name.map(ToOwned::to_owned),
+            operations,
+        };
+        assert_eq!(
+            summary.tools.unwrap(),
+            [
+                count(Some("rg"), 2),
+                count(None, 1),
+                count(Some("Read"), 1),
+                count(Some("head"), 1)
+            ]
+        );
+        assert_eq!(
+            summary.operation_kinds.unwrap(),
+            [
+                count(Some("file.search"), 2),
+                count(Some("file.read"), 1),
+                count(Some("other"), 1),
+                count(Some("stream.select"), 1),
+            ]
+        );
+    }
+
+    /// a69: the raw input is provenance and no summary reads it.
+    #[test]
+    fn the_summary_reads_no_raw_input() {
+        let original = summarize(&annotated_calls()).render().unwrap();
+        let mut document = annotated_calls();
+        for node in &mut document.events {
+            node.kind["input"] = json!({"command": "Bash exec_command sentinel"});
+        }
+        assert_eq!(summarize(&document).render().unwrap(), original);
+    }
+
+    /// a69: a document no rule annotated has no tool counts, which is not zero tools.
+    #[test]
+    fn an_unannotated_document_has_no_tool_counts() {
+        let mut document = annotated_calls();
+        document.metaharness.semantic_rule = None;
+        for node in &mut document.events {
+            node.kind
+                .as_object_mut()
+                .unwrap()
+                .remove("semantic_operations");
+        }
+        let summary = summarize(&document);
+        assert_eq!(summary.tools, None);
+        assert_eq!(summary.operation_kinds, None);
+        assert!(summary.tool_calls.iter().all(|call| call.tools.is_none()));
     }
 }

@@ -7,7 +7,7 @@ title: 'Publish Metaharness 0.25.0: semantic operations on every trace-ir tool c
 summary: context-lens semantic extractor, unit 1
 relations:
 - supersedes: release-plan:release-0-24-1
-revision: 1
+revision: 2
 ---
 ## Why this release
 
@@ -17,10 +17,12 @@ Wave `wave/context-lens-semantic`:
   document carries `semantic_operations`, extracted by the context-lens (MIT) semantic extractor
   in the new crate `metaharness-semantic`, with `executable`, `wrappers` and `script` added on top
   (amendment a68). `docs/design/context-lens-parity.md` lists the units still open.
+- `story:trace-ir-normalized-tools`: each operation names its normalized `tool`, and the summary
+  counts programs and semantic kinds, never the shell tool that carried a call (amendment a69).
 
 ## Version
 
-`0.25.0`. `metaharness_protocol::MetaharnessBlock` gains `semantic_rule`, which breaks a struct
+`0.25.0`. `MetaharnessBlock`, `SummarizedToolCall` and `TraceIrSummary` gain fields, which breaks a struct
 literal; the document format stays `trace-ir/1` under D3.
 
 ## Procedure

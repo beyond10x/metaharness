@@ -1,0 +1,13 @@
+{
+  "at": "2026-10-30T03:23:00Z",
+  "actor": "human:timo",
+  "artifact": "story:trace-ir-normalized-tools",
+  "kind": "story",
+  "revision": 3,
+  "change": {
+    "change": "evidence",
+    "kind": "test_result",
+    "source": "task check on wave/context-lens-semantic, the a69 change over 3ea4cc7: 6 steps exit 0, 140 test binaries, 1545 passed, 0 failed, 54 ignored, conformance 142/142 on ESS 0.77.0",
+    "reference": "gate log gate5.log in the session scratch directory mh-contextlens"
+  }
+}

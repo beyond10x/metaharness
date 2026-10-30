@@ -786,8 +786,8 @@ fn the_viewer_renders_two_vendor_records_of_one_format() {
 
 // --- trace-ir-summary/1 (amendment a42) ----------------------------------------------------------
 
-/// The summary's keys, in the order a42 point 2 renders them.
-const SUMMARY_KEYS: [&str; 21] = [
+/// The summary's keys, in the order a42 point 2 renders them, with a69's tool counts.
+const SUMMARY_KEYS: [&str; 23] = [
     "format",
     "source",
     "transcript_digest",
@@ -808,6 +808,8 @@ const SUMMARY_KEYS: [&str; 21] = [
     "is_error",
     "stop_reason",
     "tool_calls",
+    "tools",
+    "operation_kinds",
     "unk",
 ];
 
@@ -1048,6 +1050,13 @@ fn assert_summary_of_document(from: Option<&str>, record: &str, nulls: &[&str]) 
         .map(|call| &call["name"])
         .collect();
     assert_eq!(summarized, calls, "{label}: one entry per call, in order");
+    for count in summary["tools"].as_array().expect("tool counts (a69)") {
+        assert!(
+            !["Bash", "exec_command", "exec", "shell"]
+                .contains(&count["name"].as_str().unwrap_or("")),
+            "{label}: a shell tool is never counted as the tool a call ran: {count}"
+        );
+    }
     let unk: u64 = document["metaharness"]["unk_kinds"]
         .as_object()
         .expect("the unk kinds")

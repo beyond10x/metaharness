@@ -2100,6 +2100,83 @@ fn extract_operations(input: &Value) -> Observed {
     )
 }
 
+/// The one synthetic call `metaharness.trace.ReadNormalizedTools` drives per `ToolCallShape`.
+fn normalized_tools_call(shape: &str) -> (&'static str, &'static str, Value) {
+    let bash = |command: &str| ("claude", "Bash", json!({ "command": command }));
+    match shape {
+        "shell-programs" => bash("cd src && rg -n x . | head -n 3"),
+        "wrapped-shell" => bash("timeout 60 bash -c 'git status && cargo test'"),
+        "codex-exec" => (
+            "codex",
+            "exec",
+            json!(
+                "await tools.exec_command({\"cmd\":\"git status\"}); await tools.apply_patch({\"input\":\"x\"});\n"
+            ),
+        ),
+        "native-call" => ("claude", "Read", json!({"file_path": "/repo/src/lib.rs"})),
+        "unreadable-shell" => bash("cat 'oops"),
+        other => panic!("the domain declares no ToolCallShape {other}"),
+    }
+}
+
+/// `metaharness.trace.ReadNormalizedTools` (amendment a69): one synthetic call, projected by
+/// `metaharness::project_file` as `extract_operations` projects it, then summarized by
+/// `metaharness_protocol::summarize`. `node_tools` is read straight off the rendered node's
+/// operations; `call_tools` and `summary_tools` off a parse of the summary's render. Then the
+/// node's raw `input` is replaced by other text and the document summarized again: a summary
+/// that reads the raw command renders different bytes.
+fn read_normalized_tools(input: &Value) -> Observed {
+    let shape = input["shape"].as_str().unwrap();
+    let (adapter, tool, call_input) = normalized_tools_call(shape);
+    let bytes = extraction_stream(adapter, tool, call_input);
+    let directory = tempfile::tempdir().unwrap();
+    let path = directory.path().join("normalized-tools.events.jsonl");
+    fs::write(&path, &bytes).unwrap();
+    let mut document = metaharness::project_file(&path).unwrap();
+    let rendered: Value = serde_json::from_str(&document.render().unwrap()).unwrap();
+    let node = rendered["events"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .find(|node| node["kind"]["event"] == "tool_call")
+        .expect("the call is a tool_call node");
+    let node_tools: Vec<Value> = node["kind"][metaharness::semantic::FIELD]
+        .as_array()
+        .expect("a tool_call node carries its semantic operations")
+        .iter()
+        .filter(|operation| operation["container"] != true)
+        .map(|operation| operation["tool"].clone())
+        .collect();
+    let summary_text = metaharness::protocol::summarize(&document)
+        .render()
+        .unwrap();
+    let summary: Value = serde_json::from_str(&summary_text).unwrap();
+    let carrier_counted = summary["tools"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .any(|count| count["name"] == tool);
+    for node in &mut document.events {
+        if node.kind["event"] == "tool_call" {
+            node.kind["input"] = json!({"command": "Bash exec_command raw input replaced"});
+        }
+    }
+    let replaced = metaharness::protocol::summarize(&document)
+        .render()
+        .unwrap();
+    event(
+        shape,
+        "metaharness.trace.NormalizedToolsRead",
+        json!({
+            "node_tools": Value::Array(node_tools).to_string(),
+            "call_tools": summary["tool_calls"][0]["tools"].to_string(),
+            "summary_tools": summary["tools"].to_string(),
+            "carrier_counted": carrier_counted,
+            "raw_input_read": replaced != summary_text,
+        }),
+    )
+}
+
 /// The framed stream `extract_operations` projects: a `session.started` naming the adapter and
 /// `cwd` `/repo`, then the one `tool.requested`, through the production `EventStream`.
 fn extraction_stream(adapter: &str, tool: &str, call_input: Value) -> Vec<u8> {
@@ -2169,6 +2246,7 @@ fn extraction_stream(adapter: &str, tool: &str, call_input: Value) -> Vec<u8> {
 fn execute(command: &str, input: &Value) -> Observed {
     match command {
         "metaharness.trace.ExtractOperations" => extract_operations(input),
+        "metaharness.trace.ReadNormalizedTools" => read_normalized_tools(input),
         "metaharness.trace.ClassifyEventKind" => classify(input),
         "metaharness.trace.VerifyStreamCompleteness" => completeness(input),
         "metaharness.trace.NameDigest" => digest(input),
@@ -2615,7 +2693,7 @@ fn ess_generated_scenarios_drive_production_targets() {
     if external.is_none() {
         assert_eq!(
             scenarios.len(),
-            137,
+            142,
             "review and update coverage deliberately"
         );
         assert_eq!(
@@ -2649,6 +2727,7 @@ fn ess_generated_scenarios_drive_production_targets() {
             "ProjectVendorRecord",
             "SummarizeRecord",
             "ExtractOperations",
+            "ReadNormalizedTools",
         ] {
             assert!(
                 scenarios.keys().any(|id| id.contains(command)),

@@ -1,5 +1,5 @@
 domain: metaharness.trace
-summary: The trace-ir/1 session format this repository owns, observed through the production projection and the four production readers.
+summary: The trace-ir/1 session format this repository owns, observed through the production projection and the four production readers. trace-ir normalizes the sessions of every harness, Claude Code, Codex, b10x or another, into one form, so that what a session did can be understood - how much context it used, what it cost, how many turns it took and which tools it ran. Which tools ran is read after the pipes, wrappers and shell commands Claude Code and Codex add around a program are removed; a tool call is represented by its normalized operations, never left as the raw command.
 # Owner: Atlas ADR 0096 point 7. Protocol design amendment a26
 # (docs/design/metaharness-protocol-v0.1.md) names this file the owning
 # specification of the document form; docs/design/runs-side-by-side-v0.1.md § 1
@@ -172,8 +172,14 @@ types:
     fields:
       - {name: call_id, type: Optional<String>, presence: null_when_absent}
       - {name: name, type: Optional<String>, presence: null_when_absent}
+      - {name: tools, type: Optional<List<Optional<String>>>, presence: null_when_absent}
       - {name: answered, type: Boolean}
       - {name: error, type: Optional<Boolean>, presence: null_when_absent}
+    # Amendment a69: name is the harness tool that carried the call (Bash,
+    # exec_command, Read), kept as provenance; tools is what the call ran, the
+    # tool of each of the node's semantic_operations that is not a container
+    # and not glue, in order, null for an operation whose program could not be
+    # read; null itself when the node carries no semantic_operations.
     # Amendment a42 point 2: one entry per tool_call node, in document order.
     # call_id and name are the node's own keys; answered is whether a
     # tool_result node carries the same call_id; error is the first such node's
@@ -208,6 +214,17 @@ types:
     # a finite Binary64, refused in this projection (ESS-AUTHOR-036). Its type
     # is metaharness.monetary.SummaryCost, as SessionSummary's cost_usd is.
     # crates/metaharness-protocol/src/trace_summary.rs SummarizedModel.
+  - name: metaharness.trace.SummarizedCount
+    kind: struct
+    fields:
+      - {name: name, type: Optional<String>, presence: null_when_absent}
+      - {name: operations, type: Integer}
+    # Amendment a69: how many operations of the document's tool calls name one
+    # normalized tool (SessionSummary tools) or one semantic kind
+    # (operation_kinds), most first, then by name; a null name counts the
+    # operations whose program could not be read. A shell tool such as Bash or
+    # exec_command is never a name here; the programs it ran are.
+    # crates/metaharness-protocol/src/trace_summary.rs SummarizedCount.
   - name: metaharness.trace.SessionSummary
     kind: struct
     fields:
@@ -230,6 +247,8 @@ types:
       - {name: is_error, type: Optional<Boolean>, presence: null_when_absent}
       - {name: stop_reason, type: Optional<String>, presence: null_when_absent}
       - {name: tool_calls, type: List<metaharness.trace.SummarizedToolCall>}
+      - {name: tools, type: Optional<List<metaharness.trace.SummarizedCount>>, presence: null_when_absent}
+      - {name: operation_kinds, type: Optional<List<metaharness.trace.SummarizedCount>>, presence: null_when_absent}
       - {name: unk, type: Integer}
     # trace-ir-summary/1 (amendment a42), TraceIrSummary in
     # crates/metaharness-protocol/src/trace_summary.rs, rendered in this field
@@ -267,6 +286,7 @@ types:
       - {name: parent, type: Optional<Integer>, presence: null_when_absent}
       - {name: kind, type: String}
       - {name: method, type: String}
+      - {name: tool, type: Optional<String>, presence: null_when_absent}
       - {name: executable, type: Optional<String>, presence: null_when_absent}
       - {name: script, type: Optional<String>, presence: null_when_absent}
       - {name: wrappers, type: List<String>}
@@ -281,7 +301,12 @@ types:
     # crates/metaharness-semantic/src/extract.rs Node, written by
     # metaharness_semantic::annotate under the rule the document names in
     # metaharness.semantic_rule. The field set is context-lens's (MIT) plus
-    # executable (the basename of argv[0] after the wrappers env, timeout,
+    # tool (amendment a69: the normalized tool the operation ran, the
+    # executable for a command and the native tool's name for a native call,
+    # never the shell or script tool that carried it; null for a container, a
+    # builtin that only changes the shell's state such as cd, and an operation
+    # whose program could not be read), executable (the basename of argv[0]
+    # after the wrappers env, timeout,
     # xargs, sudo, nice, nohup and time are unwrapped), script (the basename of
     # the script a command runs) and wrappers (outermost first). kind is the
     # source's open vocabulary (file.read, stream.select, vcs.status,
@@ -296,6 +321,10 @@ types:
     kind: enum
     # One synthetic tool call per shape (ExtractOperations); no transcript.
     variants: [native-read, pipeline-read, sequence, shell-unwrap, env-unwrap, timeout-unwrap, xargs-unwrap, sudo-unwrap, nice-unwrap, nohup-unwrap, time-unwrap, nested-wrappers, script-path, interpreter-script, codex-javascript, malformed-shell, pattern-withheld]
+  - name: metaharness.trace.ToolCallShape
+    kind: enum
+    # One synthetic tool call per shape (ReadNormalizedTools, amendment a69); no transcript.
+    variants: [shell-programs, wrapped-shell, codex-exec, native-call, unreadable-shell]
 
 commands:
   - name: metaharness.trace.ClassifyEventKind
@@ -620,7 +649,9 @@ commands:
             last_timestamp_ms: '1787453880172'
             is_error: 'false'
             stop_reason: '"end_turn"'
-            tool_calls: '[{"answered":true,"call_id":"toolu_0126wZX9VgSsd4Hw7AbgMkc3","error":false,"name":"Bash"}]'
+            tool_calls: '[{"answered":true,"call_id":"toolu_0126wZX9VgSsd4Hw7AbgMkc3","error":false,"name":"Bash","tools":["ls"]}]'
+            tools: '[{"name":"ls","operations":1}]'
+            operation_kinds: '[{"name":"file.discover","operations":1}]'
             unk: '1'
             byte_stable: true
       - name: codex-rollout-summarized
@@ -654,7 +685,9 @@ commands:
             last_timestamp_ms: '1787453926967'
             is_error: 'false'
             stop_reason: 'null'
-            tool_calls: '[{"answered":true,"call_id":"call_bnZWdUqhCidLSR2PelWxMxcK","error":null,"name":"exec"}]'
+            tool_calls: '[{"answered":true,"call_id":"call_bnZWdUqhCidLSR2PelWxMxcK","error":null,"name":"exec","tools":["ls"]}]'
+            tools: '[{"name":"ls","operations":1}]'
+            operation_kinds: '[{"name":"file.discover","operations":1}]'
             unk: '3'
             byte_stable: true
       - name: harness-record-summarized
@@ -686,7 +719,9 @@ commands:
             last_timestamp_ms: 'null'
             is_error: 'false'
             stop_reason: 'null'
-            tool_calls: '[{"answered":true,"call_id":"call_b10x_001","error":false,"name":"file_read"}]'
+            tool_calls: '[{"answered":true,"call_id":"call_b10x_001","error":false,"name":"file_read","tools":["file_read"]}]'
+            tools: '[{"name":"file_read","operations":1}]'
+            operation_kinds: '[{"name":"other","operations":1}]'
             unk: '2'
             byte_stable: true
       - name: claude-session-summarized
@@ -721,7 +756,9 @@ commands:
             last_timestamp_ms: '1793178008000'
             is_error: 'null'
             stop_reason: 'null'
-            tool_calls: '[{"answered":true,"call_id":"toolu_fixture_01","error":false,"name":"Bash"},{"answered":true,"call_id":"toolu_fixture_02","error":null,"name":"Agent"},{"answered":true,"call_id":"toolu_fixture_11","error":null,"name":"Read"}]'
+            tool_calls: '[{"answered":true,"call_id":"toolu_fixture_01","error":false,"name":"Bash","tools":["ls"]},{"answered":true,"call_id":"toolu_fixture_02","error":null,"name":"Agent","tools":["Agent"]},{"answered":true,"call_id":"toolu_fixture_11","error":null,"name":"Read","tools":["Read"]}]'
+            tools: '[{"name":"Agent","operations":1},{"name":"Read","operations":1},{"name":"ls","operations":1}]'
+            operation_kinds: '[{"name":"agent.spawn","operations":1},{"name":"file.discover","operations":1},{"name":"file.read","operations":1}]'
             unk: '1'
             byte_stable: true
       - name: event-stream-summarized
@@ -751,7 +788,9 @@ commands:
             last_timestamp_ms: '1787302817300'
             is_error: 'false'
             stop_reason: '"end_turn"'
-            tool_calls: '[{"answered":true,"call_id":"toolu_1","error":null,"name":"Task"},{"answered":true,"call_id":"toolu_2","error":null,"name":"Bash"},{"answered":true,"call_id":"toolu_3","error":null,"name":"Bash"},{"answered":true,"call_id":"toolu_4","error":null,"name":"Bash"},{"answered":true,"call_id":"toolu_5","error":null,"name":"Bash"},{"answered":true,"call_id":"toolu_6","error":null,"name":"Bash"}]'
+            tool_calls: '[{"answered":true,"call_id":"toolu_1","error":null,"name":"Task","tools":["Task"]},{"answered":true,"call_id":"toolu_2","error":null,"name":"Bash","tools":["protocol"]},{"answered":true,"call_id":"toolu_3","error":null,"name":"Bash","tools":["protocol"]},{"answered":true,"call_id":"toolu_4","error":null,"name":"Bash","tools":["protocol"]},{"answered":true,"call_id":"toolu_5","error":null,"name":"Bash","tools":["protocol"]},{"answered":true,"call_id":"toolu_6","error":null,"name":"Bash","tools":["protocol"]}]'
+            tools: '[{"name":"protocol","operations":5},{"name":"Task","operations":1}]'
+            operation_kinds: '[{"name":"process.run","operations":5},{"name":"agent.spawn","operations":1}]'
             unk: '0'
             byte_stable: true
     # UNMAPPED: a tool_call no result answers (answered false, error null), a
@@ -858,6 +897,48 @@ commands:
     # The default is pattern-withheld, kept for ClassifyEventKind's reason:
     # without one every guard-negate mutant of this command is stillborn.
 
+  - name: metaharness.trace.ReadNormalizedTools
+    # Amendment a69: what a tool call ran is its normalized operation list, not
+    # its raw command. One synthetic call per ToolCallShape, framed and
+    # projected as ExtractOperations frames it, then summarized by
+    # metaharness_protocol::summarize. node_tools is the compact JSON text of
+    # the tool of every operation on the rendered tool_call node that is not a
+    # container, read straight off the node's fields with no parse of any
+    # string; call_tools is the summary's tool_calls[0].tools and summary_tools
+    # the summary's tools, both off a parse of the summary's render.
+    # carrier_counted is whether summary_tools names the call's own name (Bash,
+    # exec_command, exec, Read): false for every shell or script call, true
+    # only where a native tool is its own name. raw_input_read is whether the
+    # summary's render changes when the node's input, the raw command kept as
+    # provenance, is replaced by other text: no summary reads it.
+    input: [{name: shape, type: metaharness.trace.ToolCallShape}]
+    outcomes:
+      - name: shell-programs
+        when: shape == shell-programs
+        summary: 'Bash "cd src && rg -n x . | head -n 3": the summary counts rg and head; cd is glue and Bash is no tool.'
+        emits: [metaharness.trace.NormalizedToolsRead]
+        payload: {metaharness.trace.NormalizedToolsRead: {node_tools: '[null,"rg","head"]', call_tools: '["rg","head"]', summary_tools: '[{"name":"head","operations":1},{"name":"rg","operations":1}]', carrier_counted: false, raw_input_read: false}}
+      - name: wrapped-shell
+        when: shape == wrapped-shell
+        summary: "Bash \"timeout 60 bash -c 'git status && cargo test'\": the wrapper and the inner shell are unwrapped to git and cargo."
+        emits: [metaharness.trace.NormalizedToolsRead]
+        payload: {metaharness.trace.NormalizedToolsRead: {node_tools: '["git","cargo"]', call_tools: '["git","cargo"]', summary_tools: '[{"name":"cargo","operations":1},{"name":"git","operations":1}]', carrier_counted: false, raw_input_read: false}}
+      - name: codex-exec
+        when: shape == codex-exec
+        summary: 'Codex exec script calling tools.exec_command with "git status" and tools.apply_patch: git and apply_patch, never exec or exec_command.'
+        emits: [metaharness.trace.NormalizedToolsRead]
+        payload: {metaharness.trace.NormalizedToolsRead: {node_tools: '["git","apply_patch"]', call_tools: '["git","apply_patch"]', summary_tools: '[{"name":"apply_patch","operations":1},{"name":"git","operations":1}]', carrier_counted: false, raw_input_read: false}}
+      - name: native-call
+        when: shape == native-call
+        summary: 'Claude Read {"file_path": "/repo/src/lib.rs"}: a native tool is its own name.'
+        emits: [metaharness.trace.NormalizedToolsRead]
+        payload: {metaharness.trace.NormalizedToolsRead: {node_tools: '["Read"]', call_tools: '["Read"]', summary_tools: '[{"name":"Read","operations":1}]', carrier_counted: true, raw_input_read: false}}
+      - name: unreadable-shell
+        summary: "Bash \"cat 'oops\": a command that does not parse ran an unknown tool, counted as null and never as Bash."
+        emits: [metaharness.trace.NormalizedToolsRead]
+        payload: {metaharness.trace.NormalizedToolsRead: {node_tools: '[null]', call_tools: '[null]', summary_tools: '[{"name":null,"operations":1}]', carrier_counted: false, raw_input_read: false}}
+    # The default is unreadable-shell, for the reason ExtractOperations keeps one.
+
 # Conformance observations, not newly published runtime wire events.
 events:
   - name: metaharness.trace.FamilyClassified
@@ -933,6 +1014,8 @@ events:
       - {name: is_error, type: String}
       - {name: stop_reason, type: String}
       - {name: tool_calls, type: String}
+      - {name: tools, type: String}
+      - {name: operation_kinds, type: String}
       - {name: unk, type: String}
       - {name: byte_stable, type: Boolean}
   - name: metaharness.trace.OperationsExtracted
@@ -951,6 +1034,13 @@ events:
       - {name: kinds, type: String}
       - {name: pattern_stored, type: Boolean}
       - {name: patterns_hashed, type: Integer}
+  - name: metaharness.trace.NormalizedToolsRead
+    fields:
+      - {name: node_tools, type: String}
+      - {name: call_tools, type: String}
+      - {name: summary_tools, type: String}
+      - {name: carrier_counted, type: Boolean}
+      - {name: raw_input_read, type: Boolean}
 
 # An immutable retained document, not a second run lifecycle.
 entities:

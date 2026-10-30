@@ -95,5 +95,6 @@ pub use trace_ir::{
     project_document,
 };
 pub use trace_summary::{
-    SUMMARY_FORMAT, SummarizedModel, SummarizedToolCall, TokensBasis, TraceIrSummary, summarize,
+    SUMMARY_FORMAT, SummarizedCount, SummarizedModel, SummarizedToolCall, TokensBasis,
+    TraceIrSummary, summarize,
 };

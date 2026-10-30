@@ -14,6 +14,15 @@ cross-repository roadmap, and the page that says what each id means and which ev
 - **O3 — any harness, observed and compared.** One interface to many harnesses, one record vocabulary, and the eval that scores two arms on the same work under the same governor.
 - **O6 — self-improvement, built into all of it.** That eval is the measurement a self-improvement loop reads; a column that cannot fail measures nothing.
 
+**What `trace-ir` is for** (operator, 2026-10-30). `trace-ir` normalizes the sessions of every
+harness, whether Claude Code, Codex, b10x or another, into one form, so that what a session did can
+be understood: how much context it used, what it cost, how many turns it took and which tools it
+ran. To see which tools ran, the pipes, wrappers and shell commands Claude Code and Codex add
+around a program are removed: a tool call is represented by its normalized operations
+(`semantic_operations`, each naming its `tool`), and is never left as the raw command. The raw
+input stays on the node as provenance; no summary, report or count reads it, and a shell tool
+such as `Bash` or `exec_command` is never counted as the tool a call ran (amendments a68, a69).
+
 A change here that moves none of these is a question for the operator, not a task.
 `atlas/scripts/check-map.sh` fails a repository whose `AGENTS.md` names no objective.
 

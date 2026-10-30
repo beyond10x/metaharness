@@ -5877,3 +5877,46 @@ its metaharness counterpart and the unit that copies it; this amendment is unit 
 Not done here, listed in the parity map: conversation classification and outcomes (unit 2),
 fragments (unit 3), store, report and dashboard (unit 4), and the adapter records the source reads
 and metaharness keeps opaque, with per-record `cwd` (unit 5).
+
+### Amendment a69 — what a tool call ran is its normalized operations, never its raw command (2026-10-30)
+
+`story:trace-ir-normalized-tools`, under `epic:session-format`. Operator decision, 2026-10-30:
+`trace-ir` normalizes the sessions of every harness into one form, so that what a session did can
+be understood: how much context it used, what it cost, how many turns it took and which tools it
+ran. To see which tools ran, the pipes, wrappers and shell commands Claude Code and Codex add
+around a program are removed, and the call is not left raw. a68 wrote the operations; this
+amendment makes them the representation every reader counts.
+
+1. **Each operation names its tool.** `semantic_operations[].tool` is the normalized tool the
+   operation ran: the `executable` of a shell command, and the native tool's own name for a native
+   call (`Read`, `Agent`, `file_read`), also one a Codex `exec` script makes through `tools.*`
+   (`apply_patch`). It is never the shell or script tool that carried the call (`Bash`,
+   `exec_command`, `exec`): those are glue, and their structure node names no tool. `null` for a
+   structure node, for a builtin that only changes the shell's own state (`cd`, `pushd`, `popd`,
+   `export`, `unset`, `set`, `alias`, `true`, `false`, `:`), and for an operation whose program
+   could not be read (a malformed command).
+2. **A reader gets the list without parsing.** The tools of a call are fields of its node: no
+   reader parses `input`, splits a command or knows a shell. The node's raw `input` stays where it
+   is, as provenance.
+3. **The summary counts operations, not carriers.** `trace-ir-summary/1` gains:
+   - per call, `tool_calls[].tools`: the `tool` of each operation that is not glue, in order. An
+     operation that names no program and was not read (`resolution: unsupported`) is `null`, an
+     unknown, never the carrier's name. `null` as a whole when the node carries no operations.
+     `tool_calls[].name` stays, documented as the harness tool that carried the call.
+   - `tools`: those entries counted per name, most first, then by name.
+   - `operation_kinds`: the same operations counted per semantic `kind`.
+   Both counts are `null` when the document names no `metaharness.semantic_rule`, because its
+   calls were never read; that is not zero tools. The summary reads `semantic_operations` and never
+   `input`: replacing every call's `input` leaves its bytes unchanged.
+4. **Specification and conformance.** `metaharness.trace` states the purpose in its summary,
+   declares `tool` on `SemanticOperation`, `tools` on `SummarizedToolCall`, `SummarizedCount`,
+   and `tools` and `operation_kinds` on `SessionSummary` and on the `SessionSummarized` event,
+   whose five recorded summaries now carry them. The command
+   `metaharness.trace.ReadNormalizedTools` drives one call per `ToolCallShape` (`shell-programs`,
+   `wrapped-shell`, `codex-exec`, `native-call`, `unreadable-shell`) through `project_file` and
+   `summarize`: the node's tools are read straight off its fields; the summary's per-call and
+   counted tools never name the shell or script carrier; and the summary does not change when the
+   raw input is replaced. The suite moves from 137 to 142 scenarios; a mutated suite fails exactly
+   the two mutated scenarios.
+5. **The format does not move.** `tool`, `tools` and `operation_kinds` are added fields, additive
+   under D3: the document stays `trace-ir/1` and the summary `trace-ir-summary/1`.

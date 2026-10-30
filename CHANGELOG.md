@@ -10,11 +10,14 @@ was amended and the amendment is named here.
 ### Breaking
 
 - `metaharness_protocol::MetaharnessBlock` gains `semantic_rule`; a struct literal adds the field.
+- `metaharness_protocol::SummarizedToolCall` gains `tools` and `TraceIrSummary` gains `tools` and `operation_kinds`; a struct literal adds the fields. A `trace-ir-summary/1` reader that refuses unknown keys sees three new ones.
 
 ### Added
 
 - Every `tool_call` node of a projected `trace-ir/1` document carries `semantic_operations`: one node per shell command with its `executable` (basename of `argv[0]`), semantic `kind`, `method`, `wrappers`, `script`, the sequence and pipeline containers and the `bash -c` unwrap. The document's `metaharness.semantic_rule` is `metaharness-semantic/1`. The extractor is context-lens (MIT, `d72b3b4`) in the new crate `metaharness-semantic`, with its 23 tests. On top of it, `env`, `timeout`, `xargs`, `sudo`, `nice`, `nohup` and `time` are unwrapped, and a script run as `./x.sh` or `python3 x.py` is named by its basename. No argument text is stored beyond the source's `argv_hash`. Additive under D3: the format stays `trace-ir/1` (amendment a68, story:trace-ir-semantic-operations).
-- `spec/domains/trace.yaml` declares `metaharness.trace.ExtractOperations` with 17 outcomes; `spec/conformance.json` grows from 120 to 137 scenarios.
+- What a tool call ran is its normalized operations, never its raw command. Each operation names its `tool`: the program for a shell command, the native tool's name for a native call, never `Bash`, `exec_command` or `exec`; `cd`, `export` and the other shell-state builtins are glue and name none. The summary gains `tool_calls[].tools`, and `tools` and `operation_kinds` counted over every call, read off the operations and never off the raw `input` (amendment a69, story:trace-ir-normalized-tools).
+- `AGENTS.md`, the `metaharness.trace` domain and the parity map state what `trace-ir` is for: one form for every harness's sessions, to understand context, cost, turns and the tools that ran.
+- `spec/domains/trace.yaml` declares `metaharness.trace.ExtractOperations` with 17 outcomes and `metaharness.trace.ReadNormalizedTools` with 5; `spec/conformance.json` grows from 120 to 142 scenarios.
 - `docs/design/context-lens-parity.md` maps every context-lens capability to what metaharness has, what is missing and the unit that copies it.
 
 ## [0.24.1] — 2026-10-29
