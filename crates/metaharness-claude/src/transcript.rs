@@ -1444,9 +1444,6 @@ mod tests {
         );
     }
 
-    /// A per-request `usage` event answers what the vendor wrote on that message, which at 2.1.240
-    /// is four token figures and a tier. The three terminal-only figures stay absent rather than
-    /// being back-filled from the run's own record.
     /// story:claude-prompt-cache-ttl-declared. The vendor splits its cache writes by class in
     /// `usage.cache_creation`, on every assistant message and on the terminal record; both are
     /// carried as written, so whether a declared class was applied is read from the record.
@@ -1514,6 +1511,9 @@ mod tests {
         assert!(!written.contains("cache_creation_1h"), "{written}");
     }
 
+    /// A per-request `usage` event answers what the vendor wrote on that message, which at 2.1.240
+    /// is four token figures and a tier. The three terminal-only figures stay absent rather than
+    /// being back-filled from the run's own record.
     #[test]
     fn a_per_request_usage_event_leaves_the_terminal_only_figures_absent() {
         let mut reader = new_reader();

@@ -41,6 +41,7 @@ under `frame` and `ask` — see [the b10x adapter](../harnesses/b10x.md).
 | `--max-turns <N>` | — | A ceiling on turns. |
 | `--cwd <DIR>` | scratch | A named working directory for the child, **which it can write to**. Alone, the operator's real tree: trades two hermetic rows for real work — see below. |
 | `--scratch-cwd` | off | Declares the `--cwd` directory as the embedder's **disposable scratch copy**. H7 is attested `declared`, H11 is attested from the copy as over a scratch cwd, and `--hermetic strict` passes on the pair when the record's cwd is the copy; on b10x that is the directory the loop reports, and where it reports none (`--substrate <socket>`) H7 is `unk` and it exits 3 — see below. Refused without `--cwd`. |
+| `--scratch-name <NAME>` | none | Names the run's scratch root, `<temp dir>/metaharness-<NAME>`, so every run of one case gets the same child paths (`TMPDIR`, `CLAUDE_CONFIG_DIR`, `CODEX_HOME`, the b10x `--context` copies) and the provider's prompt cache holds across sessions. One plain path component of at most 64 bytes. The root is 0700 and is locked for the run. A leftover of the same user is replaced; a link or a foreign entry is refused. A second run under a held name is refused. The root is removed when the run ends. Without it, each run gets a new temporary directory. |
 | `--context <FILE>` | *(none)* | A file the run is handed before it starts, named relative to the `--cwd` tree. Repeatable, **every kind**. See below. |
 
 ### `--context`: files the run is handed
