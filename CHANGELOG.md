@@ -5,6 +5,8 @@ was amended and the amendment is named here.
 
 ## [Unreleased]
 
+## [0.25.0] — 2026-10-30
+
 ### Breaking
 
 - `metaharness_protocol::MetaharnessBlock` gains `semantic_rule`; a struct literal adds the field.

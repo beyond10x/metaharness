@@ -1,0 +1,13 @@
+{
+  "at": "2026-10-30T02:40:19Z",
+  "actor": "human:timo",
+  "artifact": "story:trace-ir-semantic-operations",
+  "kind": "story",
+  "revision": 3,
+  "change": {
+    "change": "evidence",
+    "kind": "test_result",
+    "source": "task check on wave/context-lens-semantic at 6b0d610: 6 steps exit 0, 140 test binaries, 1541 passed, 0 failed, 54 ignored, conformance 137/137 on ESS 0.77.0",
+    "reference": "gate log gate3.log in the session scratch directory mh-contextlens"
+  }
+}

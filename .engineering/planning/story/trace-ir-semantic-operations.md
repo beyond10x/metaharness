@@ -2,7 +2,7 @@
 format: aep.planning-md/3
 id: story:trace-ir-semantic-operations
 kind: story
-status: active
+status: implemented
 title: Every tool call in a trace-ir/1 document carries its semantic operations
 summary: 'Copy context-lens (MIT) semantic extraction: one node per shell command with executable, kind and structure, plus wrapper unwraps'
 owner: metaharness
@@ -11,10 +11,11 @@ tags:
 - trace
 relations:
 - decomposes: epic:session-format
-revision: 3
+revision: 4
 transitions:
 - {from: "draft", to: "proposed", at: "2026-10-30T02:12:04Z", actor: "human:timo", revision: 2}
 - {from: "proposed", to: "active", at: "2026-10-30T02:12:05Z", actor: "human:timo", revision: 3}
+- {from: "active", to: "implemented", at: "2026-10-30T02:40:24Z", actor: "human:timo", revision: 4, decided_on: {"recorded":{"test_result":1,"ess_conformance_coverage_v1":1}}}
 ---
 # Story: every tool call in a trace-ir/1 document carries its semantic operations
 
