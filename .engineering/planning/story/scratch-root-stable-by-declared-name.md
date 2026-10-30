@@ -2,7 +2,7 @@
 format: aep.planning-md/3
 id: story:scratch-root-stable-by-declared-name
 kind: story
-status: draft
+status: active
 title: A caller can name the run's scratch root, so the child's paths are the same across the sessions of one case
 summary: '--scratch-name: one plain component, 0700 root, leftover replaced, link refused, held name refused, removed at end'
 owner: metaharness
@@ -19,7 +19,10 @@ scope:
   path: crates/metaharness/src/run.rs
 - confidence: cited
   path: crates/metaharness/tests/scratch_name.rs
-revision: 5
+revision: 7
+transitions:
+- {from: "draft", to: "proposed", at: "2026-10-30T17:48:56Z", actor: "human:timo", revision: 6}
+- {from: "proposed", to: "active", at: "2026-10-30T17:48:56Z", actor: "human:timo", revision: 7}
 ---
 # Story: a caller can name the run's scratch root, so the child's paths are the same across the sessions of one case
 

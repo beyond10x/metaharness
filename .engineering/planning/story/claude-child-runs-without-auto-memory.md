@@ -2,7 +2,7 @@
 format: aep.planning-md/3
 id: story:claude-child-runs-without-auto-memory
 kind: story
-status: draft
+status: active
 title: A Claude child runs with auto-memory off, so its system prompt names no per-run path
 summary: CLAUDE_CODE_DISABLE_AUTO_MEMORY=1 in the constructed environment; the memory path under the scratch config home breaks the prompt cache between sessions
 owner: metaharness
@@ -15,7 +15,10 @@ scope:
   path: crates/metaharness-claude/src/launch.rs
 - confidence: cited
   path: crates/metaharness-claude/tests/native_fixture.rs
-revision: 3
+revision: 5
+transitions:
+- {from: "draft", to: "proposed", at: "2026-10-30T17:48:53Z", actor: "human:timo", revision: 4}
+- {from: "proposed", to: "active", at: "2026-10-30T17:48:53Z", actor: "human:timo", revision: 5}
 ---
 # Story: a Claude child runs with auto-memory off, so its system prompt names no per-run path
 

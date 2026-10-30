@@ -2,7 +2,7 @@
 format: aep.planning-md/3
 id: story:claude-prompt-cache-ttl-declared
 kind: story
-status: draft
+status: active
 title: A caller declares the Claude prompt-cache TTL, and each usage record says which class the writes took
 summary: --prompt-cache-ttl 5m|1h sets CLAUDE_CODE_PROMPT_CACHE_TTL; usage carries cache_creation_5m/1h_input_tokens
 owner: metaharness
@@ -17,7 +17,10 @@ scope:
   path: crates/metaharness-protocol/src/event.rs
 - confidence: cited
   path: crates/metaharness-protocol/src/spec.rs
-revision: 4
+revision: 6
+transitions:
+- {from: "draft", to: "proposed", at: "2026-10-30T17:48:54Z", actor: "human:timo", revision: 5}
+- {from: "proposed", to: "active", at: "2026-10-30T17:48:55Z", actor: "human:timo", revision: 6}
 ---
 # Story: a caller declares the Claude prompt-cache TTL, and each usage record says which class the writes took
 
