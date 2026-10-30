@@ -10,14 +10,14 @@
 //! embedder links this crate. That module is the anti-drift half and needs the real argument
 //! definitions, so it builds with the feature (`cargo test --workspace` unifies it on).
 
-// `json!` over a document naming all 41 keys recurses past the default limit of 128.
+// `json!` over a document naming all 42 keys recurses past the default limit of 128.
 #![recursion_limit = "256"]
 
 use std::collections::BTreeSet;
 use std::path::PathBuf;
 
 use metaharness_protocol::{
-    CredentialSource, DecisionMode, HermeticMode, Kind, MarketplacePlugin, RunSpec,
+    CredentialSource, DecisionMode, HermeticMode, Kind, MarketplacePlugin, PromptCacheTtl, RunSpec,
     RunSpecDocumentError, ScopeAnnounce, ToolSurface,
 };
 use serde_json::{Value, json};
@@ -55,6 +55,7 @@ fn populated_document() -> Value {
         "subscription-token-pointer": "/access",
         "api-key-secret": "llm/key",
         "effort": "high",
+        "prompt-cache-ttl": "5m",
         "max-turns": 60,
         "max-budget-usd": "12.50",
         "plugin-dir": ["plugins/one", "plugins/two"],
@@ -101,6 +102,7 @@ fn populated() -> RunSpec {
     spec.subscription_token_pointer = Some("/access".to_owned());
     spec.api_key_secret = Some("llm/key".to_owned());
     spec.effort = Some("high".to_owned());
+    spec.prompt_cache_ttl = Some(PromptCacheTtl::FiveMinutes);
     spec.max_turns = Some(60);
     spec.max_budget_usd = Some("12.50".to_owned());
     spec.plugin_dir = vec![PathBuf::from("plugins/one"), PathBuf::from("plugins/two")];
@@ -261,6 +263,7 @@ fn a_value_that_does_not_read_as_its_keys_type_is_refused_naming_the_key() {
         ("model", json!(null)),
         ("model", json!(7)),
         ("effort", json!({"level": "high"})),
+        ("prompt-cache-ttl", json!("30m")),
         ("max-budget-usd", json!(5)),
         ("cwd", json!(false)),
         ("plugin-dir", json!("plugins/one")),

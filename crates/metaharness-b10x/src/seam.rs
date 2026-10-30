@@ -445,6 +445,8 @@ impl HarnessSeam for B10xSeam {
                     // "nobody looked" and became a figure the adapter dropped on the floor. Absent
                     // still reads `None`, which is the older loop's silence stated as silence.
                     cache_creation_input_tokens: number("cache_creation_input_tokens"),
+                    cache_creation_5m_input_tokens: None,
+                    cache_creation_1h_input_tokens: None,
                     service_tier: None,
                     thinking_tokens: None,
                     iterations: None,

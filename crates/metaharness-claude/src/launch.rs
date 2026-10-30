@@ -1532,6 +1532,9 @@ fn build_env(
         config_home.display().to_string(),
     );
     env.insert(DISABLE_AUTO_MEMORY.to_string(), "1".to_string());
+    if let Some(ttl) = spec.prompt_cache_ttl {
+        env.insert(PROMPT_CACHE_TTL.to_string(), ttl.as_str().to_string());
+    }
     if spec.credentials == CredentialSource::ApiKey
         && let Some(key) = context.inherited_env.get("ANTHROPIC_API_KEY")
     {
@@ -1620,6 +1623,13 @@ const DISABLE_NONESSENTIAL_TRAFFIC: &str = "CLAUDE_CODE_DISABLE_NONESSENTIAL_TRA
 /// deleted with the scratch, so nothing a session writes there is read again. Read from the
 /// pinned binary (2.1.309) and from 2.1.314: a truthy value turns auto-memory off.
 const DISABLE_AUTO_MEMORY: &str = "CLAUDE_CODE_DISABLE_AUTO_MEMORY";
+
+/// The variable the vendor reads for the main thread's prompt-cache TTL (design amendment a71).
+///
+/// Read from the binaries, not driven: 2.1.309 (the pin) and 2.1.314 take `FORCE_PROMPT_CACHING_5M`
+/// first, then this variable (`5m` or `1h`), before the settings and the automatic choice. Set
+/// only when the run declared a class, and never inherited.
+const PROMPT_CACHE_TTL: &str = "CLAUDE_CODE_PROMPT_CACHE_TTL";
 
 /// The stated `PATH`, and why it is not shorter.
 ///
@@ -1740,6 +1750,10 @@ fn is_scrubbed(key: &str, spec: &RunSpec) -> bool {
     // Set by every launch (a70), and never the operator's by the same allowlist.
     if key == DISABLE_AUTO_MEMORY {
         return false;
+    }
+    // The caller's declaration (a71), and only when there is one.
+    if key == PROMPT_CACHE_TTL {
+        return spec.prompt_cache_ttl.is_none();
     }
     key.starts_with("ANTHROPIC_")
         || key.starts_with("CLAUDE_CODE_")
@@ -2502,6 +2516,62 @@ mod tests {
         assert_eq!(
             plan.env.get(DISABLE_AUTO_MEMORY).map(String::as_str),
             Some("1"),
+            "{:?}",
+            plan.env
+        );
+    }
+
+    /// story:claude-prompt-cache-ttl-declared. A declared class reaches the child in the variable
+    /// the vendor reads for the main thread's TTL, spelled as the vendor takes it.
+    #[test]
+    fn a_declared_prompt_cache_ttl_reaches_the_child_environment() {
+        for (ttl, word) in [
+            (metaharness_protocol::PromptCacheTtl::FiveMinutes, "5m"),
+            (metaharness_protocol::PromptCacheTtl::OneHour, "1h"),
+        ] {
+            let mut spec = spec();
+            spec.prompt_cache_ttl = Some(ttl);
+            let plan = plan_launch(&spec, &context()).expect("plans");
+            assert_eq!(
+                plan.env.get(PROMPT_CACHE_TTL).map(String::as_str),
+                Some(word),
+                "{:?}",
+                plan.env
+            );
+        }
+    }
+
+    /// story:claude-prompt-cache-ttl-declared. Without a declaration nothing is set, so the
+    /// vendor's automatic choice holds, and neither TTL variable the operator exported reaches
+    /// the child, with or without a declaration.
+    #[test]
+    fn no_declared_ttl_sets_no_ttl_variable() {
+        let mut world = context();
+        world
+            .inherited_env
+            .insert(PROMPT_CACHE_TTL.to_string(), "1h".to_string());
+        world
+            .inherited_env
+            .insert("FORCE_PROMPT_CACHING_5M".to_string(), "1".to_string());
+        let plan = plan_launch(&spec(), &world).expect("plans");
+        assert!(!plan.env.contains_key(PROMPT_CACHE_TTL), "{:?}", plan.env);
+        assert!(
+            !plan.env.contains_key("FORCE_PROMPT_CACHING_5M"),
+            "{:?}",
+            plan.env
+        );
+
+        let mut declared = spec();
+        declared.prompt_cache_ttl = Some(metaharness_protocol::PromptCacheTtl::FiveMinutes);
+        let plan = plan_launch(&declared, &world).expect("plans");
+        assert_eq!(
+            plan.env.get(PROMPT_CACHE_TTL).map(String::as_str),
+            Some("5m"),
+            "the declaration, not the operator's export: {:?}",
+            plan.env
+        );
+        assert!(
+            !plan.env.contains_key("FORCE_PROMPT_CACHING_5M"),
             "{:?}",
             plan.env
         );

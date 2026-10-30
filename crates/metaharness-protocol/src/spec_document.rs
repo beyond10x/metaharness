@@ -29,7 +29,9 @@ use serde_json::{Map, Value};
 
 use crate::hermetic::HermeticMode;
 use crate::plugin::MarketplacePlugin;
-use crate::spec::{CredentialSource, DecisionMode, Kind, RunSpec, ScopeAnnounce, ToolSurface};
+use crate::spec::{
+    CredentialSource, DecisionMode, Kind, PromptCacheTtl, RunSpec, ScopeAnnounce, ToolSurface,
+};
 
 /// Why a run-spec document was refused. Every variant with a key names it.
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -137,6 +139,11 @@ const SCOPE_ANNOUNCEMENTS: [(&str, ScopeAnnounce); 2] = [
     ("silent", ScopeAnnounce::Silent),
 ];
 
+const PROMPT_CACHE_TTLS: [(&str, PromptCacheTtl); 2] = [
+    ("5m", PromptCacheTtl::FiveMinutes),
+    ("1h", PromptCacheTtl::OneHour),
+];
+
 impl RunSpec {
     /// Every key a run-spec document admits, in field order: the run verb's long flags, `kind`
     /// and `auditor-args`. A test holds it equal to the flag set `derive(clap::Args)` makes.
@@ -161,6 +168,7 @@ impl RunSpec {
         "subscription-token-pointer",
         "api-key-secret",
         "effort",
+        "prompt-cache-ttl",
         "max-turns",
         "max-budget-usd",
         "plugin-dir",
@@ -273,6 +281,10 @@ impl RunSpec {
         );
         set_some(&mut spec.api_key_secret, read.string("api-key-secret")?);
         set_some(&mut spec.effort, read.string("effort")?);
+        set_some(
+            &mut spec.prompt_cache_ttl,
+            read.word("prompt-cache-ttl", &PROMPT_CACHE_TTLS)?,
+        );
         set_some(&mut spec.max_turns, read.count("max-turns")?);
         set_some(&mut spec.max_budget_usd, read.string("max-budget-usd")?);
         set(&mut spec.plugin_dir, read.paths("plugin-dir")?);
@@ -533,8 +545,8 @@ mod tests {
     use clap::ValueEnum;
 
     use super::{
-        CREDENTIAL_SOURCES, DECISION_MODES, HERMETIC_MODES, KINDS, SCOPE_ANNOUNCEMENTS,
-        TOOL_SURFACES,
+        CREDENTIAL_SOURCES, DECISION_MODES, HERMETIC_MODES, KINDS, PROMPT_CACHE_TTLS,
+        SCOPE_ANNOUNCEMENTS, TOOL_SURFACES,
     };
 
     fn clap_words<T: ValueEnum + PartialEq + std::fmt::Debug>(table: &[(&str, T)]) {
@@ -568,5 +580,6 @@ mod tests {
         clap_words(&TOOL_SURFACES);
         clap_words(&CREDENTIAL_SOURCES);
         clap_words(&SCOPE_ANNOUNCEMENTS);
+        clap_words(&PROMPT_CACHE_TTLS);
     }
 }

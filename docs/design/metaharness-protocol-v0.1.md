@@ -5941,3 +5941,30 @@ the scratch, so nothing a session writes there is read again.
    runs a second session in the first one's working directory under each credential-free mode and
    requires both first model requests to carry byte-identical `system` blocks and no request to
    name either run's scratch root.
+
+### Amendment a71 — a caller declares the Claude prompt-cache TTL, and usage splits the writes by class (2026-10-30)
+
+`story:claude-prompt-cache-ttl-declared`, for trial finding C5. The trial's Claude steps wrote every
+cache entry in the one-hour class, the dearer write, while the steps of one case ran seconds
+apart. A host whose steps are minutes apart may still want the hour, so the class is the caller's
+to declare and the default does not move.
+
+1. **The run spec gains `prompt_cache_ttl`** (`--prompt-cache-ttl 5m|1h`, run-spec document key
+   `prompt-cache-ttl`, builder `with_prompt_cache_ttl`). The Claude launch sets
+   `CLAUDE_CODE_PROMPT_CACHE_TTL` to the declared word in the child's constructed environment.
+   Without a declaration nothing is set and the vendor's automatic choice holds. An operator's
+   exported `CLAUDE_CODE_PROMPT_CACHE_TTL` or `FORCE_PROMPT_CACHING_5M` never reaches the child:
+   neither is on the `INHERITED_KEYS` allowlist, and H3's scrub refuses the TTL variable unless the
+   run declared a class. Read from the binary, not driven: 2.1.309 (the pin) and 2.1.314 take
+   `FORCE_PROMPT_CACHING_5M` first, then this variable, before the settings and the automatic
+   choice.
+2. **`codex` and `b10x` refuse the flag by name** in `check_spec`, beside `--effort` and
+   `--max-budget-usd` (a64): a flag the launch would read nowhere is not dropped in silence.
+3. **`Usage` gains `cache_creation_5m_input_tokens` and `cache_creation_1h_input_tokens`.** The
+   Claude reader fills them from the vendor's `usage.cache_creation.ephemeral_5m_input_tokens` and
+   `ephemeral_1h_input_tokens`, on every assistant message's `usage` event and on
+   `session.ended`'s aggregate; absent when the vendor does not say. Whether a declared class was
+   applied is read from these fields, never from the flag (invariant 3). Both are omitted from
+   the wire when absent, so a record without the split serializes as before: additive under D3,
+   the stream stays `metaharness.event/1`. Codex and b10x leave them absent. The trace-ir
+   projection does not carry them yet.

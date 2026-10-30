@@ -204,6 +204,13 @@ impl Metaharness {
         self
     }
 
+    /// The prompt-cache TTL class a Claude run writes with (design amendment a71).
+    #[must_use]
+    pub fn with_prompt_cache_ttl(mut self, ttl: metaharness_protocol::PromptCacheTtl) -> Self {
+        self.spec.prompt_cache_ttl = Some(ttl);
+        self
+    }
+
     /// A ceiling on turns.
     #[must_use]
     pub fn with_max_turns(mut self, turns: u32) -> Self {
@@ -2166,6 +2173,13 @@ fn dropped_by_kind(spec: &RunSpec) -> Result<(), Refusal> {
             }
         }
     }
+    // Amendment a71: only Claude Code reads a prompt-cache class.
+    if spec.prompt_cache_ttl.is_some() && spec.kind != Kind::Claude {
+        return refuse(
+            "--prompt-cache-ttl",
+            "only Claude Code reads a prompt-cache TTL class",
+        );
+    }
     Ok(())
 }
 
@@ -4064,6 +4078,27 @@ mod b10x_launch_tests {
                 other => panic!("{kind:?} should be refused, got {other:?}"),
             }
         }
+    }
+
+    /// story:claude-prompt-cache-ttl-declared. Only Claude Code reads a prompt-cache class; the
+    /// other kinds name the flag in their refusal instead of dropping it.
+    #[test]
+    fn codex_and_b10x_refuse_a_prompt_cache_ttl_by_name() {
+        for kind in [Kind::Codex, Kind::B10x] {
+            let mut spec = RunSpec::new(kind);
+            assert!(check_spec(&spec).is_ok(), "{kind:?} without the flag");
+            spec.prompt_cache_ttl = Some(metaharness_protocol::PromptCacheTtl::FiveMinutes);
+            match check_spec(&spec) {
+                Err(Refusal::Launch { detail }) => {
+                    assert!(detail.contains("--prompt-cache-ttl"), "{detail}");
+                    assert!(detail.contains(kind.as_str()), "{detail}");
+                }
+                other => panic!("{kind:?} should be refused, got {other:?}"),
+            }
+        }
+        let mut claude = RunSpec::new(Kind::Claude);
+        claude.prompt_cache_ttl = Some(metaharness_protocol::PromptCacheTtl::OneHour);
+        assert!(check_spec(&claude).is_ok(), "Claude Code takes the class");
     }
 
     fn spec() -> RunSpec {
