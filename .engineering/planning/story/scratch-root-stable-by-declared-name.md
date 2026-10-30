@@ -19,7 +19,7 @@ scope:
   path: crates/metaharness/src/run.rs
 - confidence: cited
   path: crates/metaharness/tests/scratch_name.rs
-revision: 7
+revision: 8
 transitions:
 - {from: "draft", to: "proposed", at: "2026-10-30T17:48:56Z", actor: "human:timo", revision: 6}
 - {from: "proposed", to: "active", at: "2026-10-30T17:48:56Z", actor: "human:timo", revision: 7}
@@ -36,19 +36,29 @@ integration branch `wave/2026-10-30-c5`.
 ## Outcome
 
 A caller can give a run a stable scratch name (`RunSpec::scratch_name`, `--scratch-name <NAME>`).
-Every run under that name works in the same scratch root, `<temp dir>/metaharness-<NAME>`, so every
-path metaharness derives from the root is the same from one session of a case to the next: the
-child's `TMPDIR`, `CLAUDE_CONFIG_DIR` and `CODEX_HOME`, the hook channel, and the copies of the
-declared context files that the b10x kind hands the loop's own `--context`. Without a name the root
-is today's new temporary directory.
+Every run under that name works in the same scratch root, `<temp dir>/metaharness-u<EUID>/<NAME>`,
+under a private 0700 parent of the effective user's. So every path metaharness derives from the
+root is the same from one session of a case to the next: the child's `TMPDIR`,
+`CLAUDE_CONFIG_DIR` and `CODEX_HOME`, the hook channel, and the copies of the declared context
+files that the b10x kind hands the loop's own `--context`. Without a name, the root is a new
+temporary directory, as it is today.
 
-The name is one plain path component (no `/`, no `.` or `..`, no control character, not empty, at
-most 64 bytes), else the run is refused before anything is created. The root is created with mode
-0700. A directory left at the root by an earlier run of the same user (a directory, not a link,
-owned by the effective user) is removed first. A link or any other entry there refuses the run,
-naming the path, and leaves the entry untouched. A second run under a name whose run is still going
-is refused by name: the first run holds an exclusive lock for its lifetime. The root is removed
-when the run ends, as the temporary directory is today.
+- **The name.** It is 1 to 64 bytes of ASCII letters, digits, `.`, `_` and `-`. It is not `.` or
+  `..`, and it does not end in `.lock`. Any other name is refused before anything is created.
+- **The root and leftovers.**
+  - The root is created with mode 0700.
+  - A directory an earlier run of the same user left at the root is removed first, read-only
+    directories included. It must be a directory, not a link, owned by the effective user.
+  - A link or any other entry there refuses the run, naming the path, and is left untouched.
+- **A held name.** A second run under a name whose run is still going is refused by name. The
+  first run holds exclusive locks on the name and on the root for its lifetime.
+- **The end of a run.**
+  - The root is removed when the run ends, as the temporary directory is today.
+  - A named run's vendor child runs in its own process group, which is killed when the run is
+    dropped.
+
+Amended 2026-10-30 after the unit B reviews (amendment a72, review corrections passes 1 and 2):
+the per-user parent, the charset, the `.lock` suffix, the root lock and the process group.
 
 ## Why
 
