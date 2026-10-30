@@ -5,6 +5,14 @@ was amended and the amendment is named here.
 
 ## [Unreleased]
 
+## [0.26.2] — 2026-10-30
+
+The first published release since `0.24.1`. It carries everything `0.25.0`, `0.26.0` and `0.26.1` list; none of those three tags was published.
+
+### Fixed
+
+- Release executables pass the artifact scan again. The C sources compiled into the binary since `0.25.0` (tree-sitter, under `metaharness-semantic`) kept the runner's home path in their file names, because `--remap-path-prefix` reaches only Rust; the Release workflow now passes `-ffile-prefix-map` to the C compiler too. And the symbol table is stripped (`-C strip=symbols`), because a forbidden-literal rule matched a mangled symbol name in it.
+
 ## [0.26.1] — 2026-10-30
 
 ### Fixed
