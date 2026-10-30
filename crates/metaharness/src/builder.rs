@@ -2524,12 +2524,32 @@ fn make_own_directory_rwx(
 fn foreign_entry(found: &std::fs::Metadata, euid: u32, directory: bool) -> Option<&'static str> {
     use std::os::unix::fs::MetadataExt as _;
 
-    foreign_kind(
-        rustix::fs::FileType::from_raw_mode(found.mode()),
-        found.uid(),
-        euid,
-        directory,
-    )
+    foreign_kind(file_kind(found.file_type()), found.uid(), euid, directory)
+}
+
+/// The kind of an entry, from std's file type rather than its raw mode: `st_mode` is a `u32` in
+/// std on every Unix but a `u16` in rustix on macOS, so the raw word does not cross the two.
+fn file_kind(kind: std::fs::FileType) -> rustix::fs::FileType {
+    use rustix::fs::FileType;
+    use std::os::unix::fs::FileTypeExt as _;
+
+    if kind.is_symlink() {
+        FileType::Symlink
+    } else if kind.is_dir() {
+        FileType::Directory
+    } else if kind.is_file() {
+        FileType::RegularFile
+    } else if kind.is_fifo() {
+        FileType::Fifo
+    } else if kind.is_socket() {
+        FileType::Socket
+    } else if kind.is_char_device() {
+        FileType::CharacterDevice
+    } else if kind.is_block_device() {
+        FileType::BlockDevice
+    } else {
+        FileType::Unknown
+    }
 }
 
 /// [`foreign_entry`] over a file type and an owner.

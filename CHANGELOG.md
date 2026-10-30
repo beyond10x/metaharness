@@ -5,6 +5,12 @@ was amended and the amendment is named here.
 
 ## [Unreleased]
 
+## [0.26.1] — 2026-10-30
+
+### Fixed
+
+- `metaharness` builds on macOS again. The named scratch root read an entry's kind from std's raw `st_mode` (`u32`) into rustix, whose raw mode is `u16` on macOS, so the `0.26.0` tag's macOS packages failed to compile and `0.26.0` was never published. The kind is now read from std's file type. Linux behaviour is unchanged.
+
 ## [0.26.0] — 2026-10-30
 
 Trial finding C5: the provider's prompt cache did not hold between two sessions of one case.

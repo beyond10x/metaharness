@@ -55,7 +55,7 @@ never links this workspace.
 
 ## Status
 
-**Pre-v1. Tagged `0.26.0` (2026-10-30).** The design in `docs/design/` is binding: where this code
+**Pre-v1. Tagged `0.26.1` (2026-10-30).** The design in `docs/design/` is binding: where this code
 and that document disagree, the document is amended rather than the disagreement left in the code.
 
 | verb | state |
