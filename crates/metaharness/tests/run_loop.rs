@@ -308,6 +308,7 @@ fn every_builder_method_sets_one_field_of_the_one_options_type() {
         .with_model("sonnet")
         .with_model_endpoint("https://llmgw.example")
         .with_effort("medium")
+        .with_prompt_cache_ttl(metaharness::protocol::PromptCacheTtl::FiveMinutes)
         .with_max_turns(30)
         .with_plugin_dir("plugins/one")
         .with_cwd("/operator/repo")
@@ -348,6 +349,7 @@ fn every_builder_method_sets_one_field_of_the_one_options_type() {
         subscription_token_pointer: None,
         api_key_secret: None,
         effort: Some("medium".to_string()),
+        prompt_cache_ttl: Some(metaharness::protocol::PromptCacheTtl::FiveMinutes),
         max_turns: Some(30),
         max_budget_usd: None,
         plugin_dir: vec!["plugins/one".into()],

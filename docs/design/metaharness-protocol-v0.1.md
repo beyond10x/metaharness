@@ -5920,3 +5920,51 @@ amendment makes them the representation every reader counts.
    the two mutated scenarios.
 5. **The format does not move.** `tool`, `tools` and `operation_kinds` are added fields, additive
    under D3: the document stays `trace-ir/1` and the summary `trace-ir-summary/1`.
+
+### Amendment a70 — a Claude child runs with auto-memory off (2026-10-30)
+
+`story:claude-child-runs-without-auto-memory`, for trial finding C5 (prompt cache across
+sessions). Observed against 2.1.314: two sessions launched in one working directory sent first
+requests that differ only in `system[2]`, at the auto-memory line naming
+`<scratch>/claude-home/projects/<cwd>/memory/`. The scratch root is new per run, so that line
+breaks the provider's prompt cache between every two sessions, and the directory is deleted with
+the scratch, so nothing a session writes there is read again.
+
+1. **The constructed environment gains one key.** The Claude launch sets
+   `CLAUDE_CODE_DISABLE_AUTO_MEMORY=1` under every credential source. Read from the binary, not
+   driven: 2.1.309 (the pin) and 2.1.314 read the variable and turn auto-memory off when it is
+   truthy. It is this plan's own value: H3's scrub still refuses every other `CLAUDE_CODE_*` key,
+   and an operator's exported value cannot reach the child through the `INHERITED_KEYS` allowlist.
+2. **H3 says so.** The imposed H3 row names the key with its value beside `PATH`, `TMPDIR` and
+   `CLAUDE_CONFIG_DIR`, so a reader of the attestation sees the control without reading the launch.
+3. **The native lane checks the outcome.** `native_success_failure_model_usage_and_extension_inventory`
+   runs a second session in the first one's working directory under each credential-free mode and
+   requires both first model requests to carry byte-identical `system` blocks and no request to
+   name either run's scratch root.
+
+### Amendment a71 — a caller declares the Claude prompt-cache TTL, and usage splits the writes by class (2026-10-30)
+
+`story:claude-prompt-cache-ttl-declared`, for trial finding C5. The trial's Claude steps wrote every
+cache entry in the one-hour class, the dearer write, while the steps of one case ran seconds
+apart. A host whose steps are minutes apart may still want the hour, so the class is the caller's
+to declare and the default does not move.
+
+1. **The run spec gains `prompt_cache_ttl`** (`--prompt-cache-ttl 5m|1h`, run-spec document key
+   `prompt-cache-ttl`, builder `with_prompt_cache_ttl`). The Claude launch sets
+   `CLAUDE_CODE_PROMPT_CACHE_TTL` to the declared word in the child's constructed environment.
+   Without a declaration nothing is set and the vendor's automatic choice holds. An operator's
+   exported `CLAUDE_CODE_PROMPT_CACHE_TTL` or `FORCE_PROMPT_CACHING_5M` never reaches the child:
+   neither is on the `INHERITED_KEYS` allowlist, and H3's scrub refuses the TTL variable unless the
+   run declared a class. Read from the binary, not driven: 2.1.309 (the pin) and 2.1.314 take
+   `FORCE_PROMPT_CACHING_5M` first, then this variable, before the settings and the automatic
+   choice.
+2. **`codex` and `b10x` refuse the flag by name** in `check_spec`, beside `--effort` and
+   `--max-budget-usd` (a64): a flag the launch would read nowhere is not dropped in silence.
+3. **`Usage` gains `cache_creation_5m_input_tokens` and `cache_creation_1h_input_tokens`.** The
+   Claude reader fills them from the vendor's `usage.cache_creation.ephemeral_5m_input_tokens` and
+   `ephemeral_1h_input_tokens`, on every assistant message's `usage` event and on
+   `session.ended`'s aggregate; absent when the vendor does not say. Whether a declared class was
+   applied is read from these fields, never from the flag (invariant 3). Both are omitted from
+   the wire when absent, so a record without the split serializes as before: additive under D3,
+   the stream stays `metaharness.event/1`. Codex and b10x leave them absent. The trace-ir
+   projection does not carry them yet.

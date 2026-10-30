@@ -677,6 +677,10 @@ fn usage(value: &Value) -> Usage {
         cache_creation_input_tokens: value
             .get("cache_creation_input_tokens")
             .and_then(Value::as_u64),
+        // The vendor's own split of the writes by class (amendment a71), absent where it does
+        // not say: how a declared TTL was applied is read here, never from the declaration.
+        cache_creation_5m_input_tokens: cache_class(value, "ephemeral_5m_input_tokens"),
+        cache_creation_1h_input_tokens: cache_class(value, "ephemeral_1h_input_tokens"),
         service_tier: value
             .get("service_tier")
             .and_then(Value::as_str)
@@ -706,6 +710,14 @@ fn usage(value: &Value) -> Usage {
     }
 }
 
+/// One class of the vendor's `usage.cache_creation` object, as written.
+fn cache_class(usage: &Value, class: &str) -> Option<u64> {
+    usage
+        .get("cache_creation")
+        .and_then(|split| split.get(class))
+        .and_then(Value::as_u64)
+}
+
 /// The per-model split, whose keys the vendor spells differently from the per-request ones.
 ///
 /// `service_tier`, `thinking_tokens`, `iterations` and `speed` have no counterpart here, so they
@@ -733,6 +745,8 @@ fn model_usage(record: &Record) -> Option<std::collections::BTreeMap<String, Usa
                         cache_creation_input_tokens: value
                             .get("cacheCreationInputTokens")
                             .and_then(Value::as_u64),
+                        cache_creation_5m_input_tokens: None,
+                        cache_creation_1h_input_tokens: None,
                         service_tier: None,
                         thinking_tokens: None,
                         iterations: None,
@@ -1433,6 +1447,73 @@ mod tests {
     /// A per-request `usage` event answers what the vendor wrote on that message, which at 2.1.240
     /// is four token figures and a tier. The three terminal-only figures stay absent rather than
     /// being back-filled from the run's own record.
+    /// story:claude-prompt-cache-ttl-declared. The vendor splits its cache writes by class in
+    /// `usage.cache_creation`, on every assistant message and on the terminal record; both are
+    /// carried as written, so whether a declared class was applied is read from the record.
+    #[test]
+    fn cache_creation_classes_are_carried_from_the_vendor_usage() {
+        let mut reader = new_reader();
+        let events = reader.push_line(
+            r#"{"type":"assistant","request_id":"req-1","message":{"model":"a-model",
+                "content":[{"type":"text","text":"hi"}],
+                "usage":{"input_tokens":2,"output_tokens":20,"cache_creation_input_tokens":685,
+                  "cache_creation":{"ephemeral_5m_input_tokens":685,
+                    "ephemeral_1h_input_tokens":0}}}}"#,
+        );
+        let Event::Usage { usage, .. } = &events[1].event else {
+            panic!("expected usage");
+        };
+        assert_eq!(
+            (
+                usage.cache_creation_5m_input_tokens,
+                usage.cache_creation_1h_input_tokens
+            ),
+            (Some(685), Some(0))
+        );
+
+        let event = only(reader.push_line(
+            r#"{"type":"result","subtype":"success","usage":{"cache_creation_input_tokens":113,
+                "cache_creation":{"ephemeral_5m_input_tokens":0,
+                  "ephemeral_1h_input_tokens":113}}}"#,
+        ));
+        let Event::SessionEnded { usage, .. } = event else {
+            panic!("expected session.ended");
+        };
+        let usage = usage.expect("the aggregate");
+        assert_eq!(
+            (
+                usage.cache_creation_5m_input_tokens,
+                usage.cache_creation_1h_input_tokens
+            ),
+            (Some(0), Some(113))
+        );
+    }
+
+    /// story:claude-prompt-cache-ttl-declared. A vendor line without the split leaves both classes
+    /// absent, and the event is written without them, as it was before the fields existed.
+    #[test]
+    fn a_usage_without_cache_creation_leaves_both_classes_absent() {
+        let mut reader = new_reader();
+        let events = reader.push_line(
+            r#"{"type":"assistant","request_id":"req-1","message":{"model":"a-model",
+                "content":[{"type":"text","text":"hi"}],
+                "usage":{"input_tokens":2,"output_tokens":20,"cache_creation_input_tokens":685}}}"#,
+        );
+        let Event::Usage { usage, .. } = &events[1].event else {
+            panic!("expected usage");
+        };
+        assert_eq!(
+            (
+                usage.cache_creation_5m_input_tokens,
+                usage.cache_creation_1h_input_tokens
+            ),
+            (None, None)
+        );
+        let written = serde_json::to_string(&events[1].event).expect("serializes");
+        assert!(!written.contains("cache_creation_5m"), "{written}");
+        assert!(!written.contains("cache_creation_1h"), "{written}");
+    }
+
     #[test]
     fn a_per_request_usage_event_leaves_the_terminal_only_figures_absent() {
         let mut reader = new_reader();

@@ -549,6 +549,8 @@ impl RolloutReader {
                         output_tokens: totals["output_tokens"].as_u64(),
                         cache_read_input_tokens: totals["cached_input_tokens"].as_u64(),
                         cache_creation_input_tokens: totals["cache_write_input_tokens"].as_u64(),
+                        cache_creation_5m_input_tokens: None,
+                        cache_creation_1h_input_tokens: None,
                         service_tier: None,
                         // The vendor's own name for the same quantity: reasoning tokens billed
                         // out of the output figure. Mapped rather than left absent, because a

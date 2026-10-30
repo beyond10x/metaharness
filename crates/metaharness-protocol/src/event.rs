@@ -293,6 +293,15 @@ pub struct Usage {
     pub cache_read_input_tokens: Option<u64>,
     /// Tokens written to the prompt cache.
     pub cache_creation_input_tokens: Option<u64>,
+    /// Of the cache writes, the tokens written in the five-minute class (design amendment a71).
+    ///
+    /// Read from the vendor's own split; absent when the vendor does not say, and omitted from
+    /// the wire then, so a record without the split serializes as it did before the field.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub cache_creation_5m_input_tokens: Option<u64>,
+    /// Of the cache writes, the tokens written in the one-hour class (design amendment a71).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub cache_creation_1h_input_tokens: Option<u64>,
     /// The service tier the vendor billed at.
     pub service_tier: Option<String>,
     /// The **billed** thinking tokens, where the vendor breaks them out of the output figure

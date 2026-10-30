@@ -102,6 +102,8 @@ fn ended_event() -> Event {
             output_tokens: Some(20),
             cache_read_input_tokens: Some(0),
             cache_creation_input_tokens: Some(0),
+            cache_creation_5m_input_tokens: None,
+            cache_creation_1h_input_tokens: None,
             service_tier: Some("standard".into()),
             thinking_tokens: Some(64),
             iterations: Some(3),

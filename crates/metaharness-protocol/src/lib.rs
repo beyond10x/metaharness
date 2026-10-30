@@ -84,9 +84,9 @@ pub use seam::{HarnessSeam, SeamFactory};
 pub use spec::{
     ARGUMENT_BYTES_MAX, CONTEXT_BYTES_MAX, CONTEXT_FILES_MAX, CONTEXT_FRAMING_MAX,
     ContextContentError, ContextPathError, CredentialSource, DecisionMode, DeclaredContextFile,
-    Kind, RunSpec, ScopeAnnounce, ToolSurface, argument_fits, argument_too_long, context_cost,
-    context_matches_declaration, context_path, oversized_argument, render_context_files,
-    with_context_files,
+    Kind, PromptCacheTtl, RunSpec, ScopeAnnounce, ToolSurface, argument_fits, argument_too_long,
+    context_cost, context_matches_declaration, context_path, oversized_argument,
+    render_context_files, with_context_files,
 };
 pub use spec_document::RunSpecDocumentError;
 pub use trace_ir::{

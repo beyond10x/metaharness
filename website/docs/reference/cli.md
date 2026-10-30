@@ -97,6 +97,7 @@ sometimes exactly what a test wants.
 | `--model-wire <WIRE>` | Which API the harness speaks under that root — only `b10x` has a choice: `openai-responses` or `anthropic-messages`. |
 | `--subscription-token-file <FILE>`, `--subscription-token-env <NAME>`, `--subscription-token-pointer <POINTER>` | A subscription token for a route that takes one instead of an API key; the pointer selects a field inside a JSON source. Not interchangeable with `--credentials api-key`. |
 | `--effort <LEVEL>` | Reasoning effort in the vendor's vocabulary, passed through and validated by the vendor. |
+| `--prompt-cache-ttl <TTL>` | The prompt-cache class a `claude` run writes with, `5m` or `1h`; without it the vendor chooses. `codex` and `b10x` refuse it. Each `usage` event's `cache_creation_5m_input_tokens` and `cache_creation_1h_input_tokens` say which class the writes took. Read from the 2.1.309 binary, not yet driven. |
 | `--actor <ACTOR>` | Who the run's store writes are made *as*, carried to the child as `AEP_ACTOR` — declared, never inherited. |
 | `--retain-dir <DIR>` | Copy the raw vendor wire out of the scratch root before it is deleted. |
 

@@ -20,6 +20,7 @@
     "Task,Bash,CronCreate,CronDelete,CronList,Edit,EnterWorktree,ExitWorktree,ListAgents,NotebookEdit,Read,ReportFindings,ScheduleWakeup,SendMessage,Skill,TaskStop,ToolSearch,WebFetch,WebSearch,Workflow,Write,Glob,Grep"
   ],
   "env": {
+    "CLAUDE_CODE_DISABLE_AUTO_MEMORY": "1",
     "CLAUDE_CONFIG_DIR": "/scratch/run-1/claude-home",
     "HOME": "/operator",
     "LANG": "C.UTF-8",

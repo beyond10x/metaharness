@@ -158,6 +158,33 @@ pub enum ScopeAnnounce {
     Silent,
 }
 
+/// The prompt-cache class a Claude run writes with (design amendment a71).
+///
+/// Written as the vendor's own variable takes it, `5m` or `1h`.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[cfg_attr(feature = "clap", derive(clap::ValueEnum))]
+pub enum PromptCacheTtl {
+    /// Five minutes: the cheaper write, for steps seconds apart.
+    #[serde(rename = "5m")]
+    #[cfg_attr(feature = "clap", value(name = "5m"))]
+    FiveMinutes,
+    /// One hour: the dearer write, for steps minutes apart.
+    #[serde(rename = "1h")]
+    #[cfg_attr(feature = "clap", value(name = "1h"))]
+    OneHour,
+}
+
+impl PromptCacheTtl {
+    /// The class, as the CLI and the vendor's variable spell it.
+    #[must_use]
+    pub fn as_str(self) -> &'static str {
+        match self {
+            PromptCacheTtl::FiveMinutes => "5m",
+            PromptCacheTtl::OneHour => "1h",
+        }
+    }
+}
+
 /// Everything a run is.
 ///
 /// The builder's `with_…` methods and the CLI's flags are two spellings of this struct, and
@@ -363,6 +390,16 @@ pub struct RunSpec {
     /// Claude Code's default `high` while accepting `medium`, `low` and `xhigh`).
     #[cfg_attr(feature = "clap", arg(long, value_name = "LEVEL"))]
     pub effort: Option<String>,
+
+    /// The prompt-cache TTL a Claude run writes with, `5m` or `1h` (design amendment a71).
+    ///
+    /// Claude Code takes it as `CLAUDE_CODE_PROMPT_CACHE_TTL` in the child's constructed
+    /// environment. Absent, nothing is set and the vendor's automatic choice holds. Whether the
+    /// class was applied is read from the run's `usage` records, which split the cache writes by
+    /// class, never from this declaration. Codex and the b10x loop refuse it by name.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    #[cfg_attr(feature = "clap", arg(long, value_enum, value_name = "TTL"))]
+    pub prompt_cache_ttl: Option<PromptCacheTtl>,
 
     /// A ceiling on turns.
     #[cfg_attr(feature = "clap", arg(long))]
@@ -624,6 +661,7 @@ impl RunSpec {
             subscription_token_pointer: None,
             api_key_secret: None,
             effort: None,
+            prompt_cache_ttl: None,
             max_turns: None,
             max_budget_usd: None,
             plugin_dir: Vec::new(),
