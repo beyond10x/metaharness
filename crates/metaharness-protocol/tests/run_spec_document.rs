@@ -566,8 +566,8 @@ mod against_the_command_line {
             }
         }
         // claude, codex, b10x; off, on, strict; frame, ask, observe; native, owned; four
-        // credential sources; stated, silent.
-        assert_eq!(checked, 17);
+        // credential sources; stated, silent; 5m, 1h.
+        assert_eq!(checked, 19);
     }
 
     /// The same settings, spelled as a document and as an argv, are the same spec.
