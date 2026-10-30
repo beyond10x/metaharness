@@ -512,6 +512,15 @@ impl SpawnedProcess {
     }
 }
 
+/// A child nobody reaped is killed and reaped, so it cannot outlive the run's scratch (design
+/// amendment a72, review corrections).
+impl Drop for SpawnedProcess {
+    fn drop(&mut self) {
+        let reaped = matches!(self.exit, Exited::With(_));
+        crate::process::reap_unreaped(self.child.as_mut(), reaped);
+    }
+}
+
 impl HarnessProcess for SpawnedProcess {
     fn stderr(&self) -> String {
         Self::stderr(self)

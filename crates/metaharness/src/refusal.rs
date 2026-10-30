@@ -256,8 +256,8 @@ pub enum Refusal {
         /// The literal the `command` contains.
         variable: &'static str,
     },
-    /// `--scratch-name` is not one plain path component (design amendment a72): empty, `.` or
-    /// `..`, holding a `/` or a control character, or longer than 64 bytes.
+    /// `--scratch-name` is not 1 to 64 bytes of ASCII letters, digits, `.`, `_` and `-`, or is
+    /// `.` or `..` (design amendment a72 § 2).
     ///
     /// Raised by [`crate::check_spec`], so before anything is created, on every kind. Its code
     /// string is [`SCRATCH_NAME_INVALID`].
@@ -781,9 +781,9 @@ impl fmt::Display for Refusal {
             Refusal::ScratchNameInvalid { name, why } => write!(
                 f,
                 "{SCRATCH_NAME_INVALID}: --scratch-name {name:?} is refused: {why}. The name is \
-                 one plain path component of the scratch root <temp dir>/metaharness-<NAME>: not \
-                 empty, not . or .., no / and no control character, at most 64 bytes (design \
-                 amendment a72). Nothing was created"
+                 1 to 64 bytes of ASCII letters, digits, ., _ and -, and not . or .., because \
+                 it is one entry of the scratch root's parent: <temp dir>/metaharness-u<EUID>/\
+                 <NAME> (design amendment a72). Nothing was created"
             ),
             Refusal::ScratchNameHeld { name, lock } => write!(
                 f,
@@ -796,10 +796,11 @@ impl fmt::Display for Refusal {
             ),
             Refusal::ScratchRootForeign { path, found } => write!(
                 f,
-                "{SCRATCH_ROOT_FOREIGN}: {} is {found}, where a named run keeps its scratch root \
-                 or its lock. Only a directory or lock file this user left there is taken over; \
-                 anything else is refused rather than followed or removed, and was left as it is \
-                 (design amendment a72). Remove it, or give the run another name",
+                "{SCRATCH_ROOT_FOREIGN}: {} is {found}, where a named run keeps its private \
+                 parent, its scratch root or its lock. Only a directory or lock file this user \
+                 left there is taken over; anything else is refused rather than followed or \
+                 removed, and was left as it is (design amendment a72). Remove it, or give the \
+                 run another name",
                 path.display()
             ),
             Refusal::Catalogue { error } => write!(f, "{error}"),

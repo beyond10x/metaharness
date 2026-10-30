@@ -56,16 +56,31 @@ struct Unique {
 
 impl Unique {
     fn new(case: &str) -> Self {
+        use std::os::unix::fs::DirBuilderExt as _;
+
         static NEXT: AtomicU32 = AtomicU32::new(0);
         let name = format!(
             "custody-{case}-{}-{}",
             std::process::id(),
             NEXT.fetch_add(1, Ordering::Relaxed)
         );
-        let temp = std::env::temp_dir();
+        // The layout of a72's review corrections (decision 3): `<temp dir>/metaharness-u<EUID>/
+        // <NAME>`, its lock beside it. The parent is made 0700 here, as metaharness makes it, so
+        // a case can put an entry at the root or at the lock path before the first run.
+        let parent = std::path::absolute(std::env::temp_dir())
+            .expect("an absolute temp dir")
+            .join(format!(
+                "metaharness-u{}",
+                rustix::process::geteuid().as_raw()
+            ));
+        std::fs::DirBuilder::new()
+            .recursive(true)
+            .mode(0o700)
+            .create(&parent)
+            .expect("the private parent");
         Self {
-            root: temp.join(format!("metaharness-{name}")),
-            lock: temp.join(format!("metaharness.{name}.lock")),
+            root: parent.join(&name),
+            lock: parent.join(format!("{name}.lock")),
             name,
         }
     }

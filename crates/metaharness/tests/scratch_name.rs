@@ -3,21 +3,23 @@
 //! to the next.
 //!
 //! Each case drives the production builder over a scripted runner: no vendor process, no
-//! credential, no network. A named root lies in the process's temporary directory, which these
+//! credential, no network; the drop-order case alone starts `/bin/sh` through the real spawner in
+//! place of the vendor. A named root lies below the process's temporary directory, which these
 //! cases share with every other process on the machine, so each case takes a name nothing else
 //! uses (this process's id and a counter), and a guard removes whatever is left under that name,
 //! the lock file included, even when the case fails.
 #![cfg(unix)]
 
-use std::os::unix::fs::PermissionsExt as _;
+use std::os::unix::fs::{DirBuilderExt as _, PermissionsExt as _};
 use std::path::{Path, PathBuf};
 use std::process::Command;
 use std::sync::atomic::{AtomicU32, Ordering};
 
 use metaharness::protocol::{CredentialSource, DecisionMode, Kind, RunSpec};
 use metaharness::{
-    Input, Metaharness, Refusal, Run, SCRATCH_NAME_HELD, SCRATCH_NAME_INVALID,
-    SCRATCH_ROOT_FOREIGN, ScriptedLog, ScriptedRunner, ScriptedSeams,
+    HarnessProcess, Input, LaunchPlanView, Metaharness, ProcessRunner, Refusal, Run,
+    SCRATCH_NAME_HELD, SCRATCH_NAME_INVALID, SCRATCH_ROOT_FOREIGN, ScriptedLog, ScriptedRunner,
+    ScriptedSeams, SpawnRunner,
 };
 
 const KINDS: [Kind; 3] = [Kind::Claude, Kind::Codex, Kind::B10x];
@@ -77,14 +79,31 @@ impl Unique {
         Self::exactly(name)
     }
 
+    /// The private parent is made here, 0700 as metaharness makes it, so a case can put an entry
+    /// at the root before the first run under the name.
     fn exactly(name: String) -> Self {
-        let temp = std::env::temp_dir();
+        let parent = private_parent();
+        std::fs::DirBuilder::new()
+            .recursive(true)
+            .mode(0o700)
+            .create(&parent)
+            .expect("the private parent");
         Self {
-            root: temp.join(format!("metaharness-{name}")),
-            lock: temp.join(format!("metaharness.{name}.lock")),
+            root: parent.join(&name),
+            lock: parent.join(format!("{name}.lock")),
             name,
         }
     }
+}
+
+/// `<temp dir>/metaharness-u<EUID>`, where every named root and lock of this user's lies.
+fn private_parent() -> PathBuf {
+    std::path::absolute(std::env::temp_dir())
+        .expect("an absolute temp dir")
+        .join(format!(
+            "metaharness-u{}",
+            rustix::process::geteuid().as_raw()
+        ))
 }
 
 impl Drop for Unique {
@@ -164,7 +183,7 @@ fn two_runs_under_one_scratch_name_use_one_scratch_root() {
         assert_eq!(roots[0], roots[1], "{kind:?}");
         assert_eq!(
             roots[0], name.root,
-            "{kind:?}: <temp dir>/metaharness-<NAME>"
+            "{kind:?}: <temp dir>/metaharness-u<EUID>/<NAME>"
         );
         if kind == Kind::B10x {
             let copy = name.root.join("context").join("todo.py");
@@ -220,8 +239,13 @@ fn a_scratch_name_that_is_not_one_plain_component_is_refused() {
         "del\u{7f}",
         too_long.as_str(),
         wide.as_str(),
+        // Outside the plain charset (review corrections, decision 7): a shell or a settings
+        // template reads each of these as more than a name.
+        "cost$1",
+        "case:7",
+        "two words",
     ];
-    let temp = std::env::temp_dir();
+    let parent = private_parent();
     for kind in KINDS {
         for name in names {
             let mut spec = RunSpec::new(kind);
@@ -246,17 +270,15 @@ fn a_scratch_name_that_is_not_one_plain_component_is_refused() {
             );
             assert_eq!(log.spawns(), 0, "{kind:?} {name:?}");
             if !name.contains('\0') {
-                assert!(
-                    !exists(&temp.join(format!("metaharness-{name}"))),
-                    "{name:?}"
-                );
-                assert!(
-                    !exists(&temp.join(format!("metaharness.{name}.lock"))),
-                    "{name:?}"
-                );
+                // The empty name, `.` and `..` would make the root the parent itself or the temp
+                // dir, both of which exist whatever this run did; their lock files would not.
+                if !matches!(name, "" | "." | "..") {
+                    assert!(!exists(&parent.join(name)), "{name:?}");
+                }
+                assert!(!exists(&parent.join(format!("{name}.lock"))), "{name:?}");
             }
         }
-        assert!(!exists(&temp.join("metaharness-a")), "{kind:?}");
+        assert!(!exists(&parent.join("a")), "{kind:?}");
     }
 
     // The cap is sixty-four bytes and not fewer.
@@ -400,5 +422,105 @@ fn the_root_is_removed_when_the_run_ends() {
         std::fs::write(name.root.join("written.txt"), "by the child").expect("a file");
         drop(run);
         assert!(!exists(&name.root), "{kind:?}: the root outlived its run");
+    }
+}
+
+/// The real spawner, starting `/bin/sh` in place of the vendor. The child writes its pid to `pid`
+/// and then, with shell builtins only, looks at the decision channel inside its scratch root over
+/// and over; the first time the channel is gone while it still runs, it writes `gone` to
+/// `observed`. Builtins only, so no grandchild outlives the shell and could write after it.
+struct Watcher {
+    inner: SpawnRunner,
+    pid: PathBuf,
+    observed: PathBuf,
+}
+
+impl ProcessRunner for Watcher {
+    fn requires_executable(&self) -> bool {
+        false
+    }
+
+    fn start(&mut self, plan: &LaunchPlanView) -> std::io::Result<Box<dyn HarnessProcess>> {
+        let args = vec![
+            "-c".to_owned(),
+            "echo $$ > \"$2\"; while :; do if [ ! -d \"$1\" ]; then echo gone > \"$3\"; \
+             exit 0; fi; done"
+                .to_owned(),
+            "sh".to_owned(),
+            plan.decision_channel.display().to_string(),
+            self.pid.display().to_string(),
+            self.observed.display().to_string(),
+        ];
+        let mut env = plan.env.clone();
+        env.insert("PATH".to_owned(), "/usr/bin:/bin".to_owned());
+        let view = LaunchPlanView {
+            program: "/bin/sh",
+            args: &args,
+            env: &env,
+            cwd: plan.cwd,
+            credential_copies: plan.credential_copies,
+            decision_channel: plan.decision_channel,
+            transcript: plan.transcript,
+        };
+        self.inner.start(&view)
+    }
+}
+
+/// Review corrections, decision 2: `Run` drops its process before its scratch, and a spawned
+/// child nobody reaped is killed and reaped as its process is dropped. So a run dropped while
+/// its `/bin/sh` child still runs leaves no child that sees its root removed, the child is
+/// reaped (not a zombie) when the drop returns, and the root is gone. Named and unnamed alike:
+/// before this, an unnamed run's child went on writing into a deleted directory.
+#[test]
+fn a_dropped_runs_child_is_reaped_before_its_root_is_removed() {
+    for named in [true, false] {
+        let name = Unique::new("reaped");
+        let records = tempfile::tempdir_in(env!("CARGO_TARGET_TMPDIR")).expect("a directory");
+        let mut watcher = Watcher {
+            inner: SpawnRunner::new(),
+            pid: records.path().join("pid"),
+            observed: records.path().join("observed"),
+        };
+        let mut declared = builder(Kind::Claude);
+        if named {
+            declared = declared.with_scratch_name(&name.name);
+        }
+        let run = declared
+            .start_with(
+                Input::Prompt("run until dropped".to_owned()),
+                &mut watcher,
+                &mut ScriptedSeams,
+            )
+            .unwrap_or_else(|refusal| panic!("named {named}: {refusal}"));
+        let root = run.scratch_root().expect("a scratch").to_path_buf();
+
+        let mut pid = None;
+        for _ in 0..500 {
+            pid = std::fs::read_to_string(&watcher.pid)
+                .ok()
+                .and_then(|words| words.trim().parse::<i32>().ok());
+            if pid.is_some() {
+                break;
+            }
+            std::thread::sleep(std::time::Duration::from_millis(10));
+        }
+        let pid = pid.expect("the child wrote its pid");
+
+        drop(run);
+        let reaped = rustix::process::test_kill_process(
+            rustix::process::Pid::from_raw(pid).expect("a positive pid"),
+        );
+        std::thread::sleep(std::time::Duration::from_millis(300));
+        assert_eq!(
+            reaped,
+            Err(rustix::io::Errno::SRCH),
+            "named {named}: the child {pid} is still there (running or a zombie) after its run \
+             was dropped"
+        );
+        assert!(
+            !exists(&watcher.observed),
+            "named {named}: the child saw its root removed while it still ran"
+        );
+        assert!(!exists(&root), "named {named}: {}", root.display());
     }
 }

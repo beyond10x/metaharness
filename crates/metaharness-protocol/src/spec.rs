@@ -451,16 +451,17 @@ pub struct RunSpec {
     /// (design amendment a72).
     ///
     /// Without a name the root is a new temporary directory per run. With one it is
-    /// `<temp dir>/metaharness-<NAME>`, so every path derived from it is stable across the
-    /// sessions of one case: the child's `TMPDIR`, `CLAUDE_CONFIG_DIR` and `CODEX_HOME`, the hook
-    /// channel, and the copies the b10x loop's `--context` reads. Those copies reach the loop's
-    /// system prompt, so a per-run path there breaks the provider's prefix cache.
+    /// `<temp dir>/metaharness-u<EUID>/<NAME>`, in a parent private to the effective user, so
+    /// every path derived from it is stable across the sessions of one case: the child's
+    /// `TMPDIR`, `CLAUDE_CONFIG_DIR` and `CODEX_HOME`, the hook channel, and the copies the b10x
+    /// loop's `--context` reads. Those copies reach the loop's system prompt, so a per-run path
+    /// there breaks the provider's prefix cache.
     ///
-    /// One plain path component of at most 64 bytes: no `/`, not `.` or `..`, no control
-    /// character, not empty; anything else is refused before anything is created. The root is
-    /// made with mode 0700 and removed when the run ends. A run holds the name exclusively, so a
-    /// second run under a held name is refused by name. A directory this user left there is
-    /// replaced; a link or any other entry refuses the run and is left untouched.
+    /// 1 to 64 bytes of ASCII letters, digits, `.`, `_` and `-`, and not `.` or `..`; anything
+    /// else is refused before anything is created. The root is made with mode 0700 and removed
+    /// when the run ends. A run holds the name exclusively, so a second run under a held name is
+    /// refused by name. A directory this user left there is replaced; a link or any other entry
+    /// refuses the run and is left untouched.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     #[cfg_attr(feature = "clap", arg(long, value_name = "NAME"))]
     pub scratch_name: Option<String>,
