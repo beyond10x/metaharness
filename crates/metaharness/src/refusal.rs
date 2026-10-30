@@ -257,7 +257,7 @@ pub enum Refusal {
         variable: &'static str,
     },
     /// `--scratch-name` is not 1 to 64 bytes of ASCII letters, digits, `.`, `_` and `-`, or is
-    /// `.` or `..` (design amendment a72 § 2).
+    /// `.` or `..`, or ends in `.lock` in any case (design amendment a72 § 2).
     ///
     /// Raised by [`crate::check_spec`], so before anything is created, on every kind. Its code
     /// string is [`SCRATCH_NAME_INVALID`].
@@ -781,9 +781,10 @@ impl fmt::Display for Refusal {
             Refusal::ScratchNameInvalid { name, why } => write!(
                 f,
                 "{SCRATCH_NAME_INVALID}: --scratch-name {name:?} is refused: {why}. The name is \
-                 1 to 64 bytes of ASCII letters, digits, ., _ and -, and not . or .., because \
-                 it is one entry of the scratch root's parent: <temp dir>/metaharness-u<EUID>/\
-                 <NAME> (design amendment a72). Nothing was created"
+                 1 to 64 bytes of ASCII letters, digits, ., _ and -, not . or .. and not ending \
+                 in .lock in any case, because it is one entry of the scratch root's parent \
+                 beside its lock file: <temp dir>/metaharness-u<EUID>/<NAME> (design amendment \
+                 a72). Nothing was created"
             ),
             Refusal::ScratchNameHeld { name, lock } => write!(
                 f,

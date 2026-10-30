@@ -232,6 +232,7 @@ impl ProcessRunner for CodexSpawnRunner {
             .stdin(Stdio::null())
             .stdout(Stdio::piped())
             .stderr(Stdio::piped());
+        let own_group = crate::process::apply_process_group(&mut command);
         let mut child = command.spawn()?;
         self.spawns += 1;
 
@@ -268,6 +269,7 @@ impl ProcessRunner for CodexSpawnRunner {
 
         Ok(Box::new(CodexProcess {
             child: Some(child),
+            own_group,
             lines,
             stream_error,
             stderr: captured,
@@ -492,6 +494,9 @@ pub(crate) fn record(slot: &Arc<Mutex<Option<String>>>, message: String) {
 /// A live `codex` process, its tailed record, and the hook channel that answers its calls.
 pub struct CodexProcess {
     child: Option<Child>,
+    /// Whether the child leads a process group of its own (a named run, a72 review corrections
+    /// pass 2): then dropping this kills the whole group.
+    own_group: bool,
     lines: Receiver<String>,
     stream_error: Arc<Mutex<Option<String>>>,
     stderr: Arc<Mutex<String>>,
@@ -660,12 +665,16 @@ impl CodexProcess {
 impl Drop for CodexProcess {
     fn drop(&mut self) {
         let reaped = matches!(self.exit, Exited::With(_));
-        crate::process::reap_unreaped(self.child.as_mut(), reaped);
+        crate::process::reap_unreaped(self.child.as_mut(), reaped, self.own_group);
         self.mark_child_gone();
     }
 }
 
 impl HarnessProcess for CodexProcess {
+    fn process_group(&self) -> Option<i32> {
+        crate::process::led_group(self.child.as_ref(), self.own_group)
+    }
+
     fn next_line(&mut self) -> std::io::Result<Option<String>> {
         loop {
             match self.poll_line()? {

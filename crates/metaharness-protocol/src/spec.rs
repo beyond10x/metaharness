@@ -494,11 +494,12 @@ pub struct RunSpec {
     /// loop's `--context` reads. Those copies reach the loop's system prompt, so a per-run path
     /// there breaks the provider's prefix cache.
     ///
-    /// 1 to 64 bytes of ASCII letters, digits, `.`, `_` and `-`, and not `.` or `..`; anything
-    /// else is refused before anything is created. The root is made with mode 0700 and removed
-    /// when the run ends. A run holds the name exclusively, so a second run under a held name is
-    /// refused by name. A directory this user left there is replaced; a link or any other entry
-    /// refuses the run and is left untouched.
+    /// 1 to 64 bytes of ASCII letters, digits, `.`, `_` and `-`, not `.` or `..` and not ending in
+    /// `.lock` in any case; anything else is refused before anything is created. The root is made
+    /// with mode 0700 and removed when the run ends. A run holds the name exclusively, so a second run
+    /// under a held name is refused by name. A directory this user left there is replaced; a link
+    /// or any other entry refuses the run and is left untouched. The vendor child leads a
+    /// process group of its own, killed whole when the run ends.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     #[cfg_attr(feature = "clap", arg(long, value_name = "NAME"))]
     pub scratch_name: Option<String>,

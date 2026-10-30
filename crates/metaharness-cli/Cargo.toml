@@ -24,6 +24,8 @@ metaharness = { path = "../metaharness", features = ["clap"] }
 # The owned tool surface, served on stdio under `mcp-serve`.
 metaharness-tools = { path = "../metaharness-tools" }
 serde_json = { workspace = true }
+rustix = { workspace = true, features = ["process"] }
+signal-hook = "0.3"
 
 [dev-dependencies]
 metaharness-docs = { path = "../metaharness-docs" }

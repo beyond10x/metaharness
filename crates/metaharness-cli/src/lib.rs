@@ -21,6 +21,8 @@
 //! | `2` | metaharness could not do its job. **Never a verdict about the run** |
 //! | `3` | nobody found out — a gating row is `unk`, or the auditor exited `3`, or the harness died without a record. The harness itself may have exited `0`: the report then says `child exit: 0` beside `control verdict: unk` |
 
+mod forward;
+
 use std::sync::mpsc::{Receiver, RecvTimeoutError};
 use std::time::Duration;
 
@@ -407,11 +409,37 @@ fn mcp_serve(args: &McpServeArgs) -> i32 {
 const STEER_POLL: Duration = Duration::from_millis(50);
 
 /// `run` — the whole point: spawn the harness, put its events on stdout, take steering on stdin.
+///
+/// A named run's vendor child leads a process group of its own, so the terminal's signals stop
+/// at metaharness: `SIGINT`, `SIGTERM` and `SIGHUP` are forwarded to the group, and once the run
+/// has been dropped, its root and locks with it, metaharness ends by the signal (design amendment
+/// a72 § 5).
 fn run(spec: RunSpec) -> i32 {
+    if spec.scratch_name.is_none() {
+        return run_once(spec, None);
+    }
+    let forwarding = match forward::GroupForwarding::install() {
+        Ok(forwarding) => forwarding,
+        Err(error) => {
+            return refuse(&Refusal::Io {
+                detail: format!("the signals of a named run could not be taken over: {error}"),
+            });
+        }
+    };
+    let code = run_once(spec, Some(&forwarding));
+    forwarding.finish();
+    code
+}
+
+/// One run from start to drop, telling `forwarding` its process group once it has started.
+fn run_once(spec: RunSpec, forwarding: Option<&forward::GroupForwarding>) -> i32 {
     let mut run = match Metaharness::from_spec(spec).start(Input::FromSpec) {
         Ok(run) => run,
         Err(refusal) => return refuse(&refusal),
     };
+    if let Some(forwarding) = forwarding {
+        forwarding.lead(run.process_group());
+    }
     if let Err(error) = drive(&mut run, &steering()) {
         // A run that broke mid-flight is exit `2` and not a verdict: metaharness could not do
         // its job, and the events already printed are what there is to go on.

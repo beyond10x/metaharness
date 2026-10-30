@@ -244,6 +244,11 @@ fn a_scratch_name_that_is_not_one_plain_component_is_refused() {
         "cost$1",
         "case:7",
         "two words",
+        // Ending in `.lock` (review corrections, pass 2): its root would be the lock file of the
+        // name before the suffix.
+        "x.lock",
+        "metaharness-test.lock",
+        "x.LOCK",
     ];
     let parent = private_parent();
     for kind in KINDS {

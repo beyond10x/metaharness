@@ -474,6 +474,18 @@ impl Run {
         self.scratch.as_ref().map(crate::builder::ScratchRoot::path)
     }
 
+    /// The process group the spawned child leads, when it leads one of its own: under
+    /// `--scratch-name` (design amendment a72, review corrections pass 2).
+    ///
+    /// Such a group is not the terminal's foreground group, so a `SIGINT` from the terminal
+    /// does not reach it; an embedder that ends on a signal forwards the signal here first.
+    /// `None` for an unnamed run, whose child stays in the embedder's group, and for a runner
+    /// that spawned nothing.
+    #[must_use]
+    pub fn process_group(&self) -> Option<i32> {
+        self.process.process_group()
+    }
+
     /// The next event, or `None` when the run is over.
     ///
     /// # Errors
