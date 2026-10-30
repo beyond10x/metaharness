@@ -15,7 +15,7 @@ scope:
   path: crates/metaharness-claude/src/launch.rs
 - confidence: cited
   path: crates/metaharness-claude/tests/native_fixture.rs
-revision: 5
+revision: 6
 transitions:
 - {from: "draft", to: "proposed", at: "2026-10-30T17:48:53Z", actor: "human:timo", revision: 4}
 - {from: "proposed", to: "active", at: "2026-10-30T17:48:53Z", actor: "human:timo", revision: 5}
@@ -61,14 +61,17 @@ child's constructed environment, and the attestation says it did.
     `none`; today it holds no such key.
   - `an_inherited_auto_memory_switch_does_not_reach_the_child`: an operator environment with
     `CLAUDE_CODE_DISABLE_AUTO_MEMORY=0` still plans `1`.
-- `crates/metaharness-claude/tests/native_fixture.rs`, the native lane (run against the pinned
+- `crates/metaharness-claude/tests/native_fixture.rs`, the native lane. It runs against the pinned
   2.1.309 binary by explicit path, in the loopback-only namespace, as the 2.1.309 research page
-  describes):
-  - `native_two_sessions_in_one_cwd_send_one_system_prompt`: the stub records both sessions' first
-    request; every `system` block is byte-identical, and no request contains the run's scratch
-    root.
+  describes. `native_success_failure_model_usage_and_extension_inventory` runs two sessions in one
+  cwd and checks both sessions' first requests at the stub: every `system` block is byte-identical,
+  and no request contains the run's scratch root. Each assertion message names this story.
 - The measured number goes in the closing report: the second session's cached share with the
   operator's login, before and after, by the same command.
+
+Amended 2026-10-30 after adversary pass 1 on unit A: the first draft named a native case of its own,
+`native_two_sessions_in_one_cwd_send_one_system_prompt`. The release check refuses any added
+`#[ignore` line, so the check runs inside the existing ignored case instead.
 
 ## Out of scope
 
