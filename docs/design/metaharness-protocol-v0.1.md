@@ -5946,8 +5946,12 @@ as Loom does, can now name the root.
    every run under that name: the child's `TMPDIR`, `CLAUDE_CONFIG_DIR` and `CODEX_HOME`, the
    hook channel, the transcript path, the scratch working directory and the b10x `--context`
    copies. On every kind.
-2. **The name is a plain charset.** 1 to 64 bytes of ASCII letters, digits, `.`, `_` and `-`, and
-   neither `.` nor `..`. `check_spec` refuses anything else as `Refusal::ScratchNameInvalid`, code
+2. **The name is a plain charset.** 1 to 64 bytes of ASCII letters, digits, `.`, `_` and `-`,
+   neither `.` nor `..`, and not ending in `.lock` in any case of its letters (a file system that
+   ignores case makes `x.LOCK` the same entry): the root of such a name would be the lock file of
+   the name before the suffix (the root of `x.lock` is the lock path of `x`), so the name is
+   refused for what it is, every time, rather than as whatever the other name left at its path.
+   `check_spec` refuses anything else as `Refusal::ScratchNameInvalid`, code
    **`scratch-name-invalid`**, exit `2`, before any directory, lock file or temporary directory
    exists, and the start checks the name again before it derives a path from it. The charset is
    an allow-list, not a list of refused characters: a `/`, a control character, a `$`, a `:`, a
@@ -5975,14 +5979,14 @@ as Loom does, can now name the root.
    A `flock` belongs to the open file description, not to the descriptor: a child that another
    thread of the embedding process forked holds a copy of the description until its `exec`, even
    with `O_CLOEXEC`, so closing the descriptor does not release the lock while such a child
-   exists. The run therefore **releases both locks explicitly** (`flock(LOCK_UN)` on the root,
-   `File::unlock` on the lock file) and only then closes them. The kernel still releases a lock
+   exists. The run therefore **releases both locks explicitly** (`flock(LOCK_UN)` on each) and
+   only then closes them. Each lock is held in a guard from the moment it is taken, and the
+   guard's `Drop` unlocks before it closes, so every way out of a start releases what it took:
+   the run's own end, and a refusal after the name's lock was taken (a foreign entry at the root,
+   a leftover that cannot be emptied, a root another run holds). The kernel still releases a lock
    when the last copy of its description closes, so a killed run strands nobody.
 
-   Because `.` is in the charset, the root of the name `x.lock` is the lock path of the name `x`.
-   Neither run can harm the other: the lock file of `x` at the root of `x.lock` is a file, refused
-   as `scratch-root-foreign`; the root of `x.lock` at the lock path of `x` is a directory, refused
-   the same way. Only one of the two names can be in use at a time.
+   A name cannot end in `.lock` (§ 2), so no root is ever another name's lock file.
 4. **Under the locks, the root is made or taken over, never followed.** `lstat` at the root,
    relative to the parent:
    - nothing there: the root is created with mode 0700 (and set to 0700 through its descriptor,
@@ -5997,7 +6001,12 @@ as Loom does, can now name the root.
      name. A directory whose owner cannot even read it is changed through `/proc/self/fd` of an
      `O_PATH` descriptor of that very directory (Linux), never through a path a link could
      replace. A link inside is removed itself, never followed and never changed; another user's
-     entry is never changed. The emptied root is removed and created again with mode 0700;
+     entry is never changed. The walk is iterative and holds at most three descriptors at any
+     depth: a stack of names records the way down, a directory found empty is left through
+     `openat(fd, "..")`, and the directory reached must have the `(dev, ino)` of the one the walk
+     descended from, or the removal stops with an error and removes nothing more. A tree a child
+     nested tens of thousands of levels deep costs time, not stack. The emptied root is removed
+     and created again with mode 0700;
    - anything else (a symbolic link, dangling or not, a file, a directory another user owns):
      `Refusal::ScratchRootForeign`, code **`scratch-root-foreign`**, naming the path. It is left
      as it is, and nothing is made through it.
@@ -6009,11 +6018,26 @@ as Loom does, can now name the root.
    credential copy, the constructed environment or the hermetic rows changes.
 5. **The end.** `Run` declares its process before its scratch, and each process that owns a
    `std::process::Child` (`SpawnedProcess`, `CodexProcess`, `AppServerProcess`) kills and reaps a
-   child nobody reaped when it is dropped. So when the run is dropped the child is gone first, on
-   named and unnamed runs alike; then the root is removed the same way a leftover is, its own
-   read-only directories included; then both locks are released explicitly, so the next run under
-   the name finds the root gone, as a run in a new temporary directory would, and no child of the
-   previous run can write into it.
+   child nobody reaped when it is dropped. A named run's vendor child is spawned leading a
+   **process group of its own** (`process_group(0)`), so the processes the vendor starts (a hook,
+   a tool command, an MCP server) are in that group unless they leave it; when the run is dropped
+   the whole group is sent `SIGKILL`, even when the leader was already reaped (`ESRCH` is fine),
+   and then the leader is reaped. An unnamed run's child stays in metaharness's process group and
+   only that child is killed and reaped, as before. So when the run is dropped the child, and on a
+   named run its group, is gone first; then the root is removed the same way a leftover is, its
+   own read-only directories included; then both locks are released explicitly, so the next run
+   under the name finds the root gone, as a run in a new temporary directory would, and no
+   process of the previous run's group can write into it.
+
+   A group of its own no longer receives the terminal's `SIGINT`. So `metaharness run` with a
+   `--scratch-name` takes over `SIGINT`, `SIGTERM` and `SIGHUP` for the run's life and forwards
+   the first one to the run's group. A process that ignores it (a shell's background job ignores
+   `SIGINT`) is sent `SIGKILL` with the group a second later. The run then ends and is dropped as
+   above, and metaharness ends by the signal it was sent, as it would have without the forwarding;
+   if the run has not been dropped five seconds after the `SIGKILL`, metaharness ends by the
+   signal anyway, and the next run under the name takes the root over as a leftover. A run
+   without a name keeps the default handlers. An embedder that names a run forwards signals
+   itself; `Run::process_group` returns the group.
 6. **Codes, not protocol refusals.** The three codes lead their messages and are exported as
    `metaharness::SCRATCH_NAME_INVALID`, `SCRATCH_NAME_HELD` and `SCRATCH_ROOT_FOREIGN`. Like
    `scratch-path-not-utf8` (a37) they are launch conditions, not a `RefusalCode`: no command
@@ -6021,7 +6045,8 @@ as Loom does, can now name the root.
 7. **Tests.** `crates/metaharness/tests/scratch_name.rs`, over the scripted runner on all three
    kinds: two runs in turn under one name report one root, and on b10x hand the loop the same
    `--context` copy path; two unnamed runs get two roots; `a/b`, `..`, `.`, the empty name, four
-   control characters, 65 bytes, 33 two-byte characters, a `$`, a `:` and a space are refused
+   control characters, 65 bytes, 33 two-byte characters, a `$`, a `:`, a space and three names
+   ending in `.lock`, one of them in capitals, are refused
    before anything is created, and a 64-byte name runs; a leftover directory of this user's is
    replaced and the new root is 0700; a link to a directory outside the temp dir, a dangling link
    and a file at the root are refused and left as they were, with nothing made through the link;
@@ -6029,19 +6054,22 @@ as Loom does, can now name the root.
    gone when the run is dropped; and a run dropped while its `/bin/sh` child (started through the
    real `SpawnRunner`) still runs, named and unnamed, leaves the child reaped before its root is
    removed. `tests/scratch_name_custody.rs` (security review) and
-   `tests/adversary_scratch_name_pass1.rs` (adversary pass 1) hold the review corrections below.
+   `tests/adversary_scratch_name_pass1.rs` (adversary pass 1) hold the review corrections below,
+   and `tests/adversary_scratch_name_pass2.rs` (adversary pass 2) their second pass.
    Unit tests in `builder.rs` hold the ownership rule to a directory and a lock file of another
    uid's; refuse a dangling link, a directory and another uid's file at the lock path; refuse a
    link, a file and another uid's directory as the private parent and narrow a wider one to 0700;
    remove read-only and unreadable directories of this user's on takeover and on drop without
    touching a link's target; and refuse a root another holder has locked, untouched.
    `crates/metaharness-cli/tests/scratch_name.rs` holds `metaharness run --help` to naming the
-   flag and the flag to reaching `RunSpec::scratch_name`.
+   flag and the flag to reaching `RunSpec::scratch_name`, and holds a `SIGINT` sent to
+   `metaharness run --scratch-name` over a stub vendor that starts a background process to ending
+   both, ending metaharness by `SIGINT`, and leaving the name free for the next run.
 
 **Review corrections** (security review and adversary pass 1, before the release; amended in
 place, so no new amendment number):
 
-1. **Explicit release.** The locks are released with `flock(LOCK_UN)` / `File::unlock` after the
+1. **Explicit release.** The locks are released with `flock(LOCK_UN)` after the
    root is removed and before the descriptors close (§ 3), because a child forked by another
    thread holds the open file description until its `exec`; with a close alone, a dropped run's
    name stayed held for the next session.
@@ -6061,3 +6089,19 @@ place, so no new amendment number):
    (§ 4, § 5).
 7. **Names are a plain charset** (§ 2), so a name such as `${CLAUDE_PLUGIN_ROOT}` is refused at
    `check_spec` rather than becoming part of a path a template expands.
+
+**Review corrections, pass 2** (adversary pass 2, before the release; amended in place):
+
+1. **A named run's child leads its own process group**, killed whole on drop, and `metaharness
+   run` forwards `SIGINT`, `SIGTERM` and `SIGHUP` to it (§ 5). `Child::kill` signals one pid, so a
+   process the vendor started outlived the dropped run and wrote into the next run's root.
+2. **A name ending in `.lock`, in any case, is `scratch-name-invalid`** at `check_spec` (§ 2).
+   The first text said only one of `x` and `x.lock` could be in use at a time; since `x`'s lock
+   file stays, once
+   `x` had run, `x.lock` was refused for good, as `scratch-root-foreign`.
+3. **The removal walks iteratively** with at most three descriptors (§ 4). It had recursed once
+   per level and aborted the embedding process on a 1 500-deep tree on a 2 MiB thread; the
+   adversary case now drops a 20 000-deep tree on that thread.
+4. **Every lock is in a guard that unlocks before it closes** (§ 3). A start refused after it took
+   the name's lock closed it without unlocking, so with another thread spawning, the next start
+   was told `scratch-name-held` instead of the real refusal.

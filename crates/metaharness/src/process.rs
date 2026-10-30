@@ -277,6 +277,15 @@ pub trait HarnessProcess {
     fn stderr(&self) -> String {
         String::new()
     }
+
+    /// The process group the child leads, when it was started in one of its own (a named run,
+    /// design amendment a72, review corrections pass 2).
+    ///
+    /// Such a group does not receive a terminal's `SIGINT`, so an embedder that ends on a signal
+    /// forwards it here. `None` for a child in the embedder's own group, and by default.
+    fn process_group(&self) -> Option<i32> {
+        None
+    }
 }
 
 /// Kill and reap a spawned child nobody has reaped, as its process is dropped (design amendment
@@ -286,15 +295,86 @@ pub trait HarnessProcess {
 /// declares its process before its scratch, so a run dropped before its child ended leaves no
 /// child writing by path into a root that is removed next, or, under a scratch name, into the
 /// next run's root. `reaped` is whether a `wait` already took the status.
-pub(crate) fn reap_unreaped(child: Option<&mut std::process::Child>, reaped: bool) {
+///
+/// `own_group` is whether the child leads a process group of its own (a named run, a72 review
+/// corrections pass 2). Then the whole group is sent `SIGKILL` first, also when the leader was
+/// already reaped, because what the vendor started (a hook, a tool command, an MCP server) is in
+/// that group and may still run after the leader is gone. A group that is already empty is fine.
+pub(crate) fn reap_unreaped(
+    child: Option<&mut std::process::Child>,
+    reaped: bool,
+    own_group: bool,
+) {
     let Some(child) = child else {
         return;
     };
+    if own_group
+        && let Some(group) = i32::try_from(child.id())
+            .ok()
+            .and_then(rustix::process::Pid::from_raw)
+    {
+        let _ = rustix::process::kill_process_group(group, rustix::process::Signal::KILL);
+    }
     if reaped || matches!(child.try_wait(), Ok(Some(_))) {
         return;
     }
     drop(child.kill());
     drop(child.wait());
+}
+
+thread_local! {
+    /// Whether the launch in progress on this thread asks for a process group of its own.
+    static OWN_PROCESS_GROUP: std::cell::Cell<bool> = const { std::cell::Cell::new(false) };
+}
+
+/// The request, held for one [`ProcessRunner::start`] call: a named run's child leads a process
+/// group of its own (design amendment a72, review corrections pass 2).
+///
+/// It travels beside the [`LaunchPlanView`] and not in it, so every runner that wraps a spawn
+/// runner and hands it a view of its own on the same call (a test's `/bin/sh` stand-in, an
+/// embedder's wrapper) launches the child the way the run declared, without a field the wrapper
+/// could forget to copy. Restored when dropped.
+pub(crate) struct OwnProcessGroupScope {
+    previous: bool,
+}
+
+impl Drop for OwnProcessGroupScope {
+    fn drop(&mut self) {
+        OWN_PROCESS_GROUP.with(|requested| requested.set(self.previous));
+    }
+}
+
+/// Ask for a process group of its own for every child started on this thread until the returned
+/// scope is dropped.
+pub(crate) fn own_process_group_scope(requested: bool) -> OwnProcessGroupScope {
+    OwnProcessGroupScope {
+        previous: OWN_PROCESS_GROUP.with(|held| held.replace(requested)),
+    }
+}
+
+/// Whether the launch in progress on this thread asked for a process group of its own.
+pub(crate) fn own_process_group_requested() -> bool {
+    OWN_PROCESS_GROUP.with(std::cell::Cell::get)
+}
+
+/// The process group `child` leads, when it was started in one of its own.
+pub(crate) fn led_group(child: Option<&std::process::Child>, own_group: bool) -> Option<i32> {
+    if !own_group {
+        return None;
+    }
+    child.and_then(|child| i32::try_from(child.id()).ok())
+}
+
+/// Start `command` in a process group of its own when the launch asked for one, and say whether
+/// it did.
+pub(crate) fn apply_process_group(command: &mut std::process::Command) -> bool {
+    use std::os::unix::process::CommandExt as _;
+
+    let own = own_process_group_requested();
+    if own {
+        command.process_group(0);
+    }
+    own
 }
 
 pub(crate) fn observed_termination(

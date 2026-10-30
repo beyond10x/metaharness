@@ -306,35 +306,46 @@ fn a_process_the_vendor_started_does_not_outlive_its_dropped_run() {
     );
 }
 
-/// a72 § 3: "Because `.` is in the charset, the root of the name `x.lock` is the lock path of the
-/// name `x`. ... Only one of the two names can be in use at a time." The lock file of `x` is left
-/// in place when its run ends (§ 3, "The lock file is left in place"), so once `x` has run, the
-/// name `x.lock` is refused for good, with no run of `x` in use.
+/// a72 § 3 (as first written): "Because `.` is in the charset, the root of the name `x.lock` is
+/// the lock path of the name `x`. ... Only one of the two names can be in use at a time." The lock
+/// file of `x` is left in place when its run ends, so once `x` had run, the name `x.lock` was
+/// refused for good, with no run of `x` in use, and as `scratch-root-foreign`, which says nothing
+/// of the name. Review corrections, pass 2 (decision 2): a name ending in `.lock` is
+/// `scratch-name-invalid` when the spec is checked, whether or not the name it shadows has run,
+/// so the refusal is the same every time and names the rule.
 #[test]
-fn a_name_ending_in_lock_runs_once_the_name_it_shadows_has_ended() {
+fn a_name_ending_in_lock_is_refused_as_invalid_whether_or_not_the_name_it_shadows_has_run() {
     let shadowed = Unique::new("shadow");
+    let shadow = format!("{}.lock", shadowed.name);
+
+    let mut spec = metaharness::protocol::RunSpec::new(Kind::Claude);
+    spec.scratch_name = Some(shadow.clone());
+    let checked = metaharness::check_spec(&spec);
+    assert!(
+        matches!(checked, Err(Refusal::ScratchNameInvalid { .. })),
+        "the spec naming {shadow:?} is checked: {checked:?}"
+    );
+
+    let before = start(&shadow).map(drop);
     let first = start(&shadowed.name)
         .unwrap_or_else(|refusal| panic!("the run under {:?}: {refusal}", shadowed.name));
     drop(first);
-
-    let shadow = format!("{}.lock", shadowed.name);
-    let second = start(&shadow);
-    let outcome = second.as_ref().map(drop).map_err(ToString::to_string);
-    drop(second);
-    assert!(
-        outcome.is_ok(),
-        "no run under {:?} is in use, yet a run under {shadow:?}, a name the charset admits, is \
-         refused: {outcome:?}",
-        shadowed.name
-    );
+    let after = start(&shadow).map(drop);
+    for (when, outcome) in [("before", before), ("after", after)] {
+        assert!(
+            matches!(outcome, Err(Refusal::ScratchNameInvalid { .. })),
+            "a run under {shadow:?} {when} the name {:?} ran: {outcome:?}",
+            shadowed.name
+        );
+    }
 }
 
-/// How deep the tree a child leaves is: a chain of one-letter directories. `d/` 1 500 times is
-/// 3 000 bytes, under `PATH_MAX`, so a plain `mkdir -p` makes it. On a 2 MiB stack in this test
-/// profile, `std::fs::remove_dir_all` (which removed the root before the review corrections, and
-/// still removes an unnamed root through `TempDir`) removes a chain of 10 000; the corrections'
-/// recursive removal overflows at 1 500 (measured 2026-10-30: 1 000 removed, 1 500 aborted).
-const DEEP: usize = 1_500;
+/// How deep the tree a child leaves is: a chain of one-letter directories, 40 000 bytes as a
+/// path, past `PATH_MAX`, so it is made descriptor-relative. Before pass 2 the removal recursed
+/// once per level and overflowed the 2 MiB stack below at 1 500 levels (measured 2026-10-30:
+/// 1 000 removed, 1 500 aborted); `std::fs::remove_dir_all` removes about 10 000. The removal now
+/// walks iteratively (review corrections, pass 2, decision 3), so the depth only costs time.
+const DEEP: usize = 20_000;
 
 /// Make a chain of `depth` directories named `d` under `root`, with a file at the bottom, keeping
 /// one descriptor open at a time.

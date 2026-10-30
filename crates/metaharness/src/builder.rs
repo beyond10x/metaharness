@@ -247,9 +247,9 @@ impl Metaharness {
     /// Name the run's scratch root, `<temp dir>/metaharness-u<EUID>/<NAME>`, so every path derived
     /// from it is the same from one run to the next (design amendment a72).
     ///
-    /// 1 to 64 bytes of ASCII letters, digits, `.`, `_` and `-`, and not `.` or `..`, else
-    /// [`check_spec`] refuses it. The run holds the name until it is dropped, and a second run
-    /// under a held name is refused.
+    /// 1 to 64 bytes of ASCII letters, digits, `.`, `_` and `-`, not `.` or `..` and not ending in
+    /// `.lock`, else [`check_spec`] refuses it. The run holds the name until it is dropped, and a
+    /// second run under a held name is refused.
     #[must_use]
     pub fn with_scratch_name(mut self, name: impl Into<String>) -> Self {
         self.spec.scratch_name = Some(name.into());
@@ -797,7 +797,10 @@ fn start_b10x(
         decision_channel: scratch.path(),
         transcript: &transcript_path,
     };
+    // A named run's child leads a process group of its own (a72, review corrections pass 2).
+    let group = crate::process::own_process_group_scope(scratch.is_named());
     let process = runner.start(&view)?;
+    drop(group);
 
     let launch = LaunchFacts {
         planned_cwd: Some(cwd.display().to_string()),
@@ -1040,7 +1043,10 @@ fn start_claude(
             decision_channel: channel.root(),
             transcript: &transcript_path,
         };
+        // A named run's child leads a process group of its own (a72, review corrections pass 2).
+        let group = crate::process::own_process_group_scope(scratch.is_named());
         let process = runner.start(&view)?;
+        drop(group);
 
         let launch = LaunchFacts {
             planned_cwd: Some(plan.cwd.display().to_string()),
@@ -1377,7 +1383,10 @@ fn start_codex(
         decision_channel: &decision_channel,
         transcript: &transcript_path,
     };
+    // A named run's child leads a process group of its own (a72, review corrections pass 2).
+    let group = crate::process::own_process_group_scope(scratch.is_named());
     let process = runner.start(&view)?;
+    drop(group);
 
     let launch = LaunchFacts {
         planned_cwd: Some(plan.cwd.display().to_string()),
@@ -1909,8 +1918,8 @@ fn scratch_name_character(character: char) -> bool {
     character.is_ascii_alphanumeric() || matches!(character, '.' | '_' | '-')
 }
 
-/// Refuse a `--scratch-name` that is not 1 to 64 bytes of the plain charset, or is `.` or `..`
-/// (design amendment a72 § 2).
+/// Refuse a `--scratch-name` that is not 1 to 64 bytes of the plain charset, is `.` or `..`, or
+/// ends in `.lock` (design amendment a72 § 2).
 ///
 /// Reads nothing and makes nothing, and [`check_spec`] calls it, so a bad name is refused before
 /// any directory, lock file or temporary directory exists. The charset is an allow-list, so a
@@ -1935,6 +1944,9 @@ fn check_scratch_name(spec: &RunSpec) -> Result<(), Refusal> {
         "it holds a control character"
     } else if outside.is_some() {
         "it holds a character other than an ASCII letter, a digit, ., _ or -"
+    } else if name.len() >= 5 && name.as_bytes()[name.len() - 5..].eq_ignore_ascii_case(b".lock") {
+        "it ends in .lock (in any case, for a file system that ignores case), the name of the \
+         lock file beside every root, so its root would be another name's lock file"
     } else {
         return Ok(());
     };
@@ -1971,6 +1983,11 @@ impl ScratchRoot {
         }
     }
 
+    /// Whether a caller named the root.
+    pub(crate) fn is_named(&self) -> bool {
+        matches!(self, Self::Named(_))
+    }
+
     /// The root.
     pub(crate) fn path(&self) -> &std::path::Path {
         match self {
@@ -1993,9 +2010,45 @@ pub(crate) struct NamedScratch {
     /// The root itself, opened without following a link and locked for the run's life: the lock
     /// a second run checks before it removes what it found at the root, and which no cleaner of
     /// the lock file can take away.
-    root_lock: rustix::fd::OwnedFd,
-    /// The name's lock file, locked for the run's life.
-    lock: std::fs::File,
+    root_lock: HeldLock,
+    /// The name's lock file, locked for the run's life. Declared after the root lock, so both
+    /// are released, the root's first, when the root has been removed.
+    #[expect(
+        dead_code,
+        reason = "held for the run's life and released when it drops"
+    )]
+    lock: HeldLock,
+}
+
+/// An exclusive `flock` this run holds, released explicitly when it is dropped and only then
+/// closed (design amendment a72, review corrections 1 and pass 2 decision 4).
+///
+/// A `flock` belongs to the open file description, and a child another thread of this process
+/// forked holds a copy of the descriptor until its `exec`, so a close alone could leave the lock
+/// held with no run behind it. Every lock a start takes is one of these, so every way out of a
+/// start (a refusal after the name was taken, the run's own end) releases it the same way.
+struct HeldLock(rustix::fd::OwnedFd);
+
+impl HeldLock {
+    /// Take an exclusive lock on `descriptor` without waiting: `EWOULDBLOCK` when another holds it.
+    fn take(descriptor: rustix::fd::OwnedFd) -> Result<Self, rustix::io::Errno> {
+        rustix::fs::flock(
+            &descriptor,
+            rustix::fs::FlockOperation::NonBlockingLockExclusive,
+        )?;
+        Ok(Self(descriptor))
+    }
+
+    /// The locked descriptor.
+    fn descriptor(&self) -> rustix::fd::BorrowedFd<'_> {
+        rustix::fd::AsFd::as_fd(&self.0)
+    }
+}
+
+impl Drop for HeldLock {
+    fn drop(&mut self) {
+        let _ = rustix::fs::flock(&self.0, rustix::fs::FlockOperation::Unlock);
+    }
 }
 
 impl NamedScratch {
@@ -2035,7 +2088,7 @@ impl NamedScratch {
                     return Err(Refusal::ScratchRootForeign { path: root, found });
                 }
                 let leftover = lock_root(&parent, &root, name, &lock_path, euid)?;
-                empty_directory(&leftover, euid).map_err(|errno| {
+                empty_directory(leftover.descriptor(), euid).map_err(|errno| {
                     io_at(
                         &root,
                         "is this user's leftover and could not be emptied",
@@ -2049,14 +2102,14 @@ impl NamedScratch {
                         &errno.into(),
                     )
                 })?;
-                let _ = rustix::fs::flock(&leftover, rustix::fs::FlockOperation::Unlock);
+                drop(leftover);
             }
         }
         rustix::fs::mkdirat(&parent, name, Mode::from_raw_mode(0o700))
             .map_err(|errno| io_at(&root, "could not be created", &errno.into()))?;
         let root_lock = lock_root(&parent, &root, name, &lock_path, euid)?;
         // Whatever the umask took off `mkdir`'s mode.
-        rustix::fs::fchmod(&root_lock, Mode::from_raw_mode(0o700))
+        rustix::fs::fchmod(root_lock.descriptor(), Mode::from_raw_mode(0o700))
             .map_err(|errno| io_at(&root, "could not be made 0700", &errno.into()))?;
         Ok(Self {
             root,
@@ -2075,17 +2128,13 @@ impl Drop for NamedScratch {
         // through the descriptor of the directory this run made, its own read-only directories
         // made writable as a leftover's are. A root that cannot be removed is left, and the next
         // run under the name takes it over as this user's leftover.
-        let _ = empty_directory(&self.root_lock, self.euid);
+        let _ = empty_directory(self.root_lock.descriptor(), self.euid);
         let _ = rustix::fs::unlinkat(
             &self.parent,
             self.name.as_str(),
             rustix::fs::AtFlags::REMOVEDIR,
         );
-        // Then both locks, explicitly. A `flock` belongs to the open file description, and a
-        // child another thread of this process forked holds a copy of the descriptor until its
-        // `exec`, so closing ours alone could leave the name held after this run is gone.
-        let _ = rustix::fs::flock(&self.root_lock, rustix::fs::FlockOperation::Unlock);
-        drop(self.lock.unlock());
+        // Then both locks, explicitly, as the fields drop: see [`HeldLock`].
     }
 }
 
@@ -2159,30 +2208,30 @@ fn take_name_lock(
     lock_path: &std::path::Path,
     name: &str,
     euid: u32,
-) -> Result<std::fs::File, Refusal> {
+) -> Result<HeldLock, Refusal> {
     let leaf = format!("{name}.lock");
     for _ in 0..2 {
-        let lock = open_scratch_lock(parent, lock_path, &leaf, euid)?;
-        match lock.try_lock() {
-            Ok(()) => {}
-            Err(std::fs::TryLockError::WouldBlock) => {
+        let opened = open_scratch_lock(parent, lock_path, &leaf, euid)?;
+        let lock = match HeldLock::take(opened) {
+            Ok(lock) => lock,
+            Err(rustix::io::Errno::WOULDBLOCK) => {
                 return Err(Refusal::ScratchNameHeld {
                     name: name.to_owned(),
                     lock: lock_path.to_path_buf(),
                 });
             }
-            Err(std::fs::TryLockError::Error(error)) => {
-                return Err(io_at(lock_path, "could not take the lock", &error));
+            Err(errno) => {
+                return Err(io_at(lock_path, "could not take the lock", &errno.into()));
             }
-        }
-        let held = rustix::fs::fstat(&lock);
+        };
+        let held = rustix::fs::fstat(lock.descriptor());
         let named = rustix::fs::statat(parent, &leaf, rustix::fs::AtFlags::SYMLINK_NOFOLLOW);
         if let (Ok(held), Ok(named)) = (held, named)
             && (held.st_dev, held.st_ino) == (named.st_dev, named.st_ino)
         {
             return Ok(lock);
         }
-        drop(lock.unlock());
+        drop(lock);
     }
     Err(Refusal::ScratchNameHeld {
         name: name.to_owned(),
@@ -2200,7 +2249,7 @@ fn open_scratch_lock(
     path: &std::path::Path,
     leaf: &str,
     euid: u32,
-) -> Result<std::fs::File, Refusal> {
+) -> Result<rustix::fd::OwnedFd, Refusal> {
     use rustix::fs::{Mode, OFlags};
 
     let opened = rustix::fs::openat(
@@ -2215,7 +2264,7 @@ fn open_scratch_lock(
         Mode::from_raw_mode(0o600),
     );
     let lock = match opened {
-        Ok(descriptor) => std::fs::File::from(descriptor),
+        Ok(descriptor) => descriptor,
         // `O_NOFOLLOW` on a link: `ELOOP` on Linux and macOS, `EMLINK` on FreeBSD. Either also
         // has other causes, so the entry itself is looked at, without following it.
         Err(errno)
@@ -2246,10 +2295,14 @@ fn open_scratch_lock(
             ));
         }
     };
-    let found = lock
-        .metadata()
-        .map_err(|error| io_at(path, "could not be read", &error))?;
-    if let Some(found) = foreign_entry(&found, euid, false) {
+    let found = rustix::fs::fstat(&lock)
+        .map_err(|errno| io_at(path, "could not be read", &errno.into()))?;
+    if let Some(found) = foreign_kind(
+        rustix::fs::FileType::from_raw_mode(found.st_mode),
+        found.st_uid,
+        euid,
+        false,
+    ) {
         return Err(Refusal::ScratchRootForeign {
             path: path.to_path_buf(),
             found,
@@ -2269,7 +2322,7 @@ fn lock_root(
     name: &str,
     lock_path: &std::path::Path,
     euid: u32,
-) -> Result<rustix::fd::OwnedFd, Refusal> {
+) -> Result<HeldLock, Refusal> {
     let opened = match open_own_directory(parent, name, euid) {
         Ok(opened) => opened,
         Err(errno) => {
@@ -2290,11 +2343,8 @@ fn lock_root(
             found,
         });
     }
-    match rustix::fs::flock(
-        &opened,
-        rustix::fs::FlockOperation::NonBlockingLockExclusive,
-    ) {
-        Ok(()) => Ok(opened),
+    match HeldLock::take(opened) {
+        Ok(lock) => Ok(lock),
         Err(rustix::io::Errno::WOULDBLOCK) => Err(Refusal::ScratchNameHeld {
             name: name.to_owned(),
             lock: lock_path.to_path_buf(),
@@ -2376,39 +2426,87 @@ fn make_owner_rwx_by_path<At: rustix::fd::AsFd, P: rustix::path::Arg>(
 /// read-only directory a child left (`chmod a-w`, a copied read-only tree, a module cache) is
 /// removed rather than blocking every later run under the name. A link is removed itself; another
 /// user's entry is never changed, and one that cannot be removed fails the removal.
-fn empty_directory(directory: &rustix::fd::OwnedFd, euid: u32) -> rustix::io::Result<()> {
-    use rustix::fs::{AtFlags, FileType, Mode};
+///
+/// The walk is iterative and holds at most three descriptors whatever the depth: a stack of names
+/// records the way down, a directory found empty is left through `..`, and the directory reached
+/// must be the one descended from (same device and inode), or the removal stops. A tree a child
+/// nested thousands of levels deep is removed without growing the stack of the thread dropping
+/// the run.
+fn empty_directory(directory: rustix::fd::BorrowedFd<'_>, euid: u32) -> rustix::io::Result<()> {
+    use rustix::fs::{AtFlags, FileType, Mode, OFlags};
 
+    let identity = |descriptor: &rustix::fd::OwnedFd| {
+        rustix::fs::fstat(descriptor).map(|found| (found.st_dev, found.st_ino))
+    };
+    make_own_directory_rwx(directory, euid)?;
+    let mut current = rustix::fs::openat(
+        directory,
+        c".",
+        OFlags::RDONLY | OFlags::DIRECTORY | OFlags::CLOEXEC | OFlags::NOCTTY | OFlags::NONBLOCK,
+        Mode::empty(),
+    )?;
+    let mut way_down = Vec::new();
+    loop {
+        let mut inner = None;
+        for entry in rustix::fs::Dir::read_from(&current)? {
+            let entry = entry?;
+            let name = entry.file_name();
+            if name == c"." || name == c".." {
+                continue;
+            }
+            let found = match rustix::fs::statat(&current, name, AtFlags::SYMLINK_NOFOLLOW) {
+                Ok(found) => found,
+                Err(rustix::io::Errno::NOENT) => continue,
+                Err(errno) => return Err(errno),
+            };
+            if FileType::from_raw_mode(found.st_mode) == FileType::Directory {
+                inner = Some(name.to_owned());
+                break;
+            }
+            rustix::fs::unlinkat(&current, name, AtFlags::empty())?;
+        }
+        if let Some(name) = inner {
+            let opened = open_own_directory(&current, name.as_c_str(), euid)?;
+            make_own_directory_rwx(rustix::fd::AsFd::as_fd(&opened), euid)?;
+            way_down.push((name, identity(&current)?));
+            current = opened;
+            continue;
+        }
+        let Some((name, parent)) = way_down.pop() else {
+            return Ok(());
+        };
+        let above = rustix::fs::openat(
+            &current,
+            c"..",
+            OFlags::RDONLY
+                | OFlags::DIRECTORY
+                | OFlags::CLOEXEC
+                | OFlags::NOCTTY
+                | OFlags::NONBLOCK,
+            Mode::empty(),
+        )?;
+        if identity(&above)? != parent {
+            // The directory was moved while it was being emptied: `..` is no longer the one the
+            // walk came down from, so nothing more is removed through it.
+            return Err(rustix::io::Errno::STALE);
+        }
+        current = above;
+        rustix::fs::unlinkat(&current, name.as_c_str(), AtFlags::REMOVEDIR)?;
+    }
+}
+
+/// `u+rwx` on the opened directory `directory` when `euid` owns it and its mode denies its owner
+/// any of the three; another user's directory is left as it is.
+fn make_own_directory_rwx(
+    directory: rustix::fd::BorrowedFd<'_>,
+    euid: u32,
+) -> rustix::io::Result<()> {
     let found = rustix::fs::fstat(directory)?;
     if found.st_uid == euid && found.st_mode & 0o700 != 0o700 {
         rustix::fs::fchmod(
             directory,
-            Mode::from_raw_mode((found.st_mode | 0o700) & 0o7777),
+            rustix::fs::Mode::from_raw_mode((found.st_mode | 0o700) & 0o7777),
         )?;
-    }
-    let mut names = Vec::new();
-    for entry in rustix::fs::Dir::read_from(directory)? {
-        let entry = entry?;
-        let name = entry.file_name();
-        if name != c"." && name != c".." {
-            names.push(name.to_owned());
-        }
-    }
-    for name in names {
-        let found = match rustix::fs::statat(directory, name.as_c_str(), AtFlags::SYMLINK_NOFOLLOW)
-        {
-            Ok(found) => found,
-            Err(rustix::io::Errno::NOENT) => continue,
-            Err(errno) => return Err(errno),
-        };
-        if FileType::from_raw_mode(found.st_mode) == FileType::Directory {
-            let inner = open_own_directory(directory, name.as_c_str(), euid)?;
-            empty_directory(&inner, euid)?;
-            drop(inner);
-            rustix::fs::unlinkat(directory, name.as_c_str(), AtFlags::REMOVEDIR)?;
-        } else {
-            rustix::fs::unlinkat(directory, name.as_c_str(), AtFlags::empty())?;
-        }
     }
     Ok(())
 }
