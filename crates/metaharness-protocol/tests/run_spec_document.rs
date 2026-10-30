@@ -62,6 +62,7 @@ fn populated_document() -> Value {
         "plugin": ["beyond10x/agentplugins@aep@0.25.0"],
         "cwd": "work",
         "scratch-cwd": true,
+        "scratch-name": "case-7",
         "retain-dir": "retained",
         "strict-version": true,
         "audit": true,
@@ -113,6 +114,7 @@ fn populated() -> RunSpec {
     ];
     spec.cwd = Some(PathBuf::from("work"));
     spec.scratch_cwd = true;
+    spec.scratch_name = Some("case-7".to_owned());
     spec.retain_dir = Some(PathBuf::from("retained"));
     spec.strict_version = true;
     spec.audit = true;

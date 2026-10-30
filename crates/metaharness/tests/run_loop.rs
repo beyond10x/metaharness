@@ -356,6 +356,7 @@ fn every_builder_method_sets_one_field_of_the_one_options_type() {
         plugin: Vec::new(),
         cwd: Some("/operator/repo".into()),
         scratch_cwd: false,
+        scratch_name: None,
         retain_dir: Some("/operator/keep".into()),
         strict_version: true,
         audit: true,

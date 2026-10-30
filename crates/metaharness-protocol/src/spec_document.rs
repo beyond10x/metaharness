@@ -175,6 +175,7 @@ impl RunSpec {
         "plugin",
         "cwd",
         "scratch-cwd",
+        "scratch-name",
         "retain-dir",
         "strict-version",
         "audit",
@@ -291,6 +292,7 @@ impl RunSpec {
         set(&mut spec.plugin, read.plugins("plugin")?);
         set_some(&mut spec.cwd, read.path("cwd")?);
         set(&mut spec.scratch_cwd, read.flag("scratch-cwd")?);
+        set_some(&mut spec.scratch_name, read.string("scratch-name")?);
         set_some(&mut spec.retain_dir, read.path("retain-dir")?);
         set(&mut spec.strict_version, read.flag("strict-version")?);
         set(&mut spec.audit, read.flag("audit")?);

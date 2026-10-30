@@ -277,7 +277,7 @@ pub struct Run {
     events: Vec<Event>,
     warned_no_frame: bool,
     pub(crate) launch: LaunchFacts,
-    pub(crate) scratch: Option<tempfile::TempDir>,
+    pub(crate) scratch: Option<crate::builder::ScratchRoot>,
     /// The raw vendor wire this run writes, as absolute paths into the scratch: the retained
     /// transcript or rollout and the hook channel's `requests` directory. Listed by the builder
     /// — the only party that knows a vendor's layout — and deliberately never the whole scratch
@@ -326,7 +326,7 @@ pub(crate) struct RunParts {
     pub(crate) seam: Seam,
     pub(crate) vendor_timeout_ms: u64,
     pub(crate) launch: LaunchFacts,
-    pub(crate) scratch: Option<tempfile::TempDir>,
+    pub(crate) scratch: Option<crate::builder::ScratchRoot>,
     pub(crate) wire: Vec<std::path::PathBuf>,
     /// The started loopback proxy, or `None` for every other credential source.
     pub(crate) loopback: Option<crate::loopback::LoopbackHandle>,
@@ -460,12 +460,13 @@ impl Run {
 
     /// The scratch root this run owns, deleted when the run is dropped.
     ///
-    /// Held rather than merely created, because a `TempDir` that nobody keeps is removed the
-    /// moment it is constructed — and the config home, the copied credential and the retained
-    /// transcript all live under it.
+    /// Held rather than merely created, because a root that nobody keeps is removed the moment it
+    /// is constructed — and the config home, the copied credential and the retained transcript
+    /// all live under it. A new temporary directory, or `<temp dir>/metaharness-<NAME>` under
+    /// `--scratch-name`, whose name the run holds until it is dropped (design amendment a72).
     #[must_use]
     pub fn scratch_root(&self) -> Option<&std::path::Path> {
-        self.scratch.as_ref().map(tempfile::TempDir::path)
+        self.scratch.as_ref().map(crate::builder::ScratchRoot::path)
     }
 
     /// The next event, or `None` when the run is over.
@@ -1431,7 +1432,7 @@ impl Run {
     ///
     /// Here at wind-up and not in a `Drop`, because this is the last moment the scratch is both
     /// complete and alive: the stream has ended, so the tail threads have written everything
-    /// they will, and the `TempDir` has not yet been dropped. A run abandoned before its stream
+    /// they will, and the scratch root has not yet been dropped. A run abandoned before its stream
     /// ended dies with its scratch, retained nothing, and that is recorded nowhere — which is
     /// the honest account, since its wire was incomplete anyway.
     fn retain_wire(&mut self) {

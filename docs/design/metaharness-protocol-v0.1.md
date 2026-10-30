@@ -5968,3 +5968,74 @@ to declare and the default does not move.
    the wire when absent, so a record without the split serializes as before: additive under D3,
    the stream stays `metaharness.event/1`. Codex and b10x leave them absent. The trace-ir
    projection does not carry them yet.
+
+### Amendment a72 — a caller names the run's scratch root, so the child's paths are stable across sessions (2026-10-30)
+
+`story:scratch-root-stable-by-declared-name`, under `epic:loom-agent-work-through-metaharness`,
+trial finding C5. Every run made a new temporary directory as its scratch root, so every path
+derived from it differed from one session of a case to the next. On the b10x kind those paths
+reach the system prompt: the loop renders each `--context` file with `source="<path>"`, and the
+path is metaharness's copy at `<scratch>/context/<path>` (amendment a35). A per-run path there
+breaks the provider's prefix cache for everything after it. A host that builds one run per step,
+as Loom does, can now name the root.
+
+1. **The declaration.** `RunSpec::scratch_name: Option<String>`, the flag `--scratch-name <NAME>`,
+   the document key `scratch-name` (a64) and `Metaharness::with_scratch_name`. Without a name the
+   root is a new temporary directory, exactly as before. With one it is
+   `<temp dir>/metaharness-<NAME>`, where the temp dir is the one an unnamed root is made in
+   (`tempfile::env::temp_dir()`, which is `std::env::temp_dir()` unless the embedder overrode
+   tempfile's). Every path metaharness derives from the root is then the same in every run under
+   that name: the child's `TMPDIR`, `CLAUDE_CONFIG_DIR` and `CODEX_HOME`, the hook channel, the
+   transcript path, the scratch working directory and the b10x `--context` copies. On every kind.
+2. **The name is one plain path component.** Not empty, not `.` or `..`, no `/`, no control
+   character (`char::is_control`, which includes NUL and DEL), and at most 64 bytes, counted in
+   bytes rather than characters. `check_spec` refuses anything else as
+   `Refusal::ScratchNameInvalid`, code **`scratch-name-invalid`**, exit `2`, before any directory,
+   lock file or temporary directory exists, and the start checks the name again before it derives
+   a path from it. The message renders the name with Rust's `{:?}`, so a control character is
+   written as its escape.
+3. **The name is held for the run's life.** Before it looks at the root, the run opens
+   `<temp dir>/metaharness.<NAME>.lock` with `O_NOFOLLOW | O_CLOEXEC | O_CREAT`, mode 0600, and
+   takes an exclusive, non-blocking `flock` on it. The lock is the custody lock's mechanism: the
+   kernel releases it when the descriptor closes, also when the holder is killed, so a crashed
+   run strands nobody. A lock held by another run is `Refusal::ScratchNameHeld`, code
+   **`scratch-name-held`**, naming the name and the lock file; nothing is touched, so the other
+   run's root keeps what it holds. The lock file must be a regular file owned by the effective
+   uid; a link (which `O_NOFOLLOW` refuses), a directory or another user's file is
+   `Refusal::ScratchRootForeign`, naming the lock path. The lock file is left in place when the
+   run ends. The separator before the name is `.` rather than the root's `-`, so no name's root
+   can be another name's lock file: with `-`, the root of `x.lock` would be the lock of `x`.
+4. **Under the lock, the root is made or taken over, never followed.** `symlink_metadata` at the
+   root:
+   - nothing there: the root is created with mode 0700;
+   - a directory, not a link, owned by the effective uid: a leftover of an earlier run of this
+     user's, killed before it removed its root. It is removed with `std::fs::remove_dir_all`,
+     which removes a link inside it and never what the link names, and created again with mode
+     0700;
+   - anything else (a symbolic link, dangling or not, a file, a directory another user owns):
+     `Refusal::ScratchRootForeign`, code **`scratch-root-foreign`**, naming the path. It is left
+     as it is, and nothing is made through it.
+
+   The root is created with a plain `mkdir`, which fails rather than follows when an entry
+   appeared at the path after the check. In a sticky temp dir (`/tmp`) only an entry's owner can
+   rename or remove it, so a root checked as this user's stays this user's. The root is 0700 as a
+   `TempDir` is, and it holds the same copied login a `TempDir` held; nothing about the
+   credential copy, the constructed environment or the hermetic rows changes.
+5. **The end.** When the run is dropped the root is removed, and then the lock is released, so the
+   next run under the name finds the root gone, as a run in a new temporary directory would.
+6. **Codes, not protocol refusals.** The three codes lead their messages and are exported as
+   `metaharness::SCRATCH_NAME_INVALID`, `SCRATCH_NAME_HELD` and `SCRATCH_ROOT_FOREIGN`. Like
+   `scratch-path-not-utf8` (a37) they are launch conditions, not a `RefusalCode`: no command
+   exists yet when they are raised.
+7. **Tests.** `crates/metaharness/tests/scratch_name.rs`, over the scripted runner on all three
+   kinds: two runs in turn under one name report one root, and on b10x hand the loop the same
+   `--context` copy path; two unnamed runs get two roots; `a/b`, `..`, `.`, the empty name, four
+   control characters, 65 bytes and 33 two-byte characters are refused before anything is
+   created, and a 64-byte name runs; a leftover directory of this user's is replaced and the new
+   root is 0700; a link to a directory outside the temp dir, a dangling link and a file at the
+   root are refused and left as they were, with nothing made through the link; a second run
+   under a held name is refused and the first run's root is untouched; the root is gone when the
+   run is dropped. Unit tests in `builder.rs` hold the ownership rule to a directory and a lock
+   file of another uid's, and refuse a dangling link, a directory and another uid's file at the
+   lock path. `crates/metaharness-cli/tests/scratch_name.rs` holds `metaharness run --help` to
+   naming the flag and the flag to reaching `RunSpec::scratch_name`.
