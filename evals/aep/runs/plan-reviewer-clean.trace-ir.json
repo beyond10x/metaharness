@@ -82,7 +82,30 @@
           "subagent_type": "aep-planning:plan-reviewer"
         },
         "name": "Task",
-        "seam": "none"
+        "seam": "none",
+        "semantic_operations": [
+          {
+            "activity": "coordinate",
+            "container": false,
+            "end": 118,
+            "evidence": "observed",
+            "executable": null,
+            "kind": "agent.spawn",
+            "method": "native",
+            "params": {
+              "agent_type": "aep-planning:plan-reviewer",
+              "model": null,
+              "payload_hash": "78a4a5d91e04f0b54c77096832ed55c8eb7455b70701ad5d2b4cab03982d07b0",
+              "source_domain": "input"
+            },
+            "parent": null,
+            "resolution": "classified",
+            "script": null,
+            "signature": null,
+            "start": 0,
+            "wrappers": []
+          }
+        ]
       }
     },
     {
@@ -99,7 +122,51 @@
           "command": "protocol artifact list --format json"
         },
         "name": "Bash",
-        "seam": "none"
+        "seam": "none",
+        "semantic_operations": [
+          {
+            "activity": "unknown",
+            "container": true,
+            "end": 50,
+            "evidence": "observed",
+            "executable": null,
+            "kind": "wrapper",
+            "method": "shell",
+            "params": {
+              "cwd": "/scratch/project",
+              "decoded_argument_pointer": "/command",
+              "native_tool": "Bash",
+              "source_domain": "input"
+            },
+            "parent": null,
+            "resolution": "classified",
+            "script": null,
+            "signature": null,
+            "start": 0,
+            "wrappers": []
+          },
+          {
+            "activity": "unknown",
+            "container": false,
+            "end": 36,
+            "evidence": "declared",
+            "executable": "protocol",
+            "kind": "process.run",
+            "method": "shell_command",
+            "params": {
+              "argv_hash": "01e6c6ae195354d02ddf1899fdde2305184019c5d9eda96a0cd5f0997ff99c8a",
+              "cwd": "/scratch/project",
+              "executable": "protocol",
+              "source_domain": "input:node[0]/command"
+            },
+            "parent": 0,
+            "resolution": "unsupported",
+            "script": null,
+            "signature": null,
+            "start": 0,
+            "wrappers": []
+          }
+        ]
       }
     },
     {
@@ -136,7 +203,51 @@
           "command": "protocol artifact graph"
         },
         "name": "Bash",
-        "seam": "none"
+        "seam": "none",
+        "semantic_operations": [
+          {
+            "activity": "unknown",
+            "container": true,
+            "end": 37,
+            "evidence": "observed",
+            "executable": null,
+            "kind": "wrapper",
+            "method": "shell",
+            "params": {
+              "cwd": "/scratch/project",
+              "decoded_argument_pointer": "/command",
+              "native_tool": "Bash",
+              "source_domain": "input"
+            },
+            "parent": null,
+            "resolution": "classified",
+            "script": null,
+            "signature": null,
+            "start": 0,
+            "wrappers": []
+          },
+          {
+            "activity": "unknown",
+            "container": false,
+            "end": 23,
+            "evidence": "declared",
+            "executable": "protocol",
+            "kind": "process.run",
+            "method": "shell_command",
+            "params": {
+              "argv_hash": "bd1196d3c0aa3f76f05803574583b6e4c8a472c3851a8301da5909c00a95be32",
+              "cwd": "/scratch/project",
+              "executable": "protocol",
+              "source_domain": "input:node[0]/command"
+            },
+            "parent": 0,
+            "resolution": "unsupported",
+            "script": null,
+            "signature": null,
+            "start": 0,
+            "wrappers": []
+          }
+        ]
       }
     },
     {
@@ -173,7 +284,33 @@
           "file_path": "/scratch/project/.engineering/planning/epic/passkey-sign-in.md"
         },
         "name": "Read",
-        "seam": "none"
+        "seam": "none",
+        "semantic_operations": [
+          {
+            "activity": "inspect",
+            "container": false,
+            "end": 78,
+            "evidence": "observed",
+            "executable": null,
+            "kind": "file.read",
+            "method": "native",
+            "params": {
+              "limit": null,
+              "native_defaults": "claude",
+              "offset": null,
+              "output_mode": "native_rendered",
+              "path": "/scratch/project/.engineering/planning/epic/passkey-sign-in.md",
+              "selector": "native_lines",
+              "source_domain": "input"
+            },
+            "parent": null,
+            "resolution": "classified",
+            "script": null,
+            "signature": null,
+            "start": 0,
+            "wrappers": []
+          }
+        ]
       }
     },
     {
@@ -210,7 +347,51 @@
           "command": "protocol artifact validate"
         },
         "name": "Bash",
-        "seam": "none"
+        "seam": "none",
+        "semantic_operations": [
+          {
+            "activity": "unknown",
+            "container": true,
+            "end": 40,
+            "evidence": "observed",
+            "executable": null,
+            "kind": "wrapper",
+            "method": "shell",
+            "params": {
+              "cwd": "/scratch/project",
+              "decoded_argument_pointer": "/command",
+              "native_tool": "Bash",
+              "source_domain": "input"
+            },
+            "parent": null,
+            "resolution": "classified",
+            "script": null,
+            "signature": null,
+            "start": 0,
+            "wrappers": []
+          },
+          {
+            "activity": "unknown",
+            "container": false,
+            "end": 26,
+            "evidence": "declared",
+            "executable": "protocol",
+            "kind": "process.run",
+            "method": "shell_command",
+            "params": {
+              "argv_hash": "d41f7258d3dc6d0649e063ace679e97eac9efdb8b2a3de37839be989b5f2c640",
+              "cwd": "/scratch/project",
+              "executable": "protocol",
+              "source_domain": "input:node[0]/command"
+            },
+            "parent": 0,
+            "resolution": "unsupported",
+            "script": null,
+            "signature": null,
+            "start": 0,
+            "wrappers": []
+          }
+        ]
       }
     },
     {
@@ -361,6 +542,7 @@
       "abstained": 0,
       "by_seam": {},
       "by_decider": {}
-    }
+    },
+    "semantic_rule": "metaharness-semantic/1"
   }
 }

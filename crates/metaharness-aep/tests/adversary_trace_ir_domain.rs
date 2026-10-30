@@ -492,7 +492,8 @@ fn the_opening_node_carries_the_vendors_timestamp_and_its_millisecond_derivation
 
 /// P1 across builds, not across two renders by one build: a committed rendered document exists
 /// for each recorded run (`evals/aep/runs/<run>.trace-ir.json`), and a fresh projection of the
-/// committed stream must render to exactly those bytes. The suite's `byte_stable` compares two
+/// committed stream, annotated with its semantic operations as the production writers do
+/// (amendment a68), must render to exactly those bytes. The suite's `byte_stable` compares two
 /// renders of the same build in the same process (`trace.yaml:121,129-130`) and never reads
 /// these files.
 #[test]
@@ -507,7 +508,9 @@ fn a_fresh_projection_renders_to_the_committed_golden_document() {
             .filter(|line| !line.trim().is_empty())
             .map(|line| parse_event_line(line).unwrap())
             .collect();
-        let rendered = project_document(&lines, &bytes).render().unwrap();
+        let mut document = project_document(&lines, &bytes);
+        metaharness::semantic::annotate(&mut document);
+        let rendered = document.render().unwrap();
         let committed = fs::read_to_string(&golden).unwrap();
         if rendered != committed {
             let first_difference = rendered

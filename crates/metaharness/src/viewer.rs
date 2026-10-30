@@ -104,7 +104,8 @@ impl AlignmentRule {
     }
 }
 
-/// Read one `metaharness.event/1` stream and project it.
+/// Read one `metaharness.event/1` stream and project it, every `tool_call` node carrying its
+/// semantic operations (amendment a68, [`metaharness_semantic::annotate`]).
 ///
 /// # Errors
 ///
@@ -133,7 +134,9 @@ pub fn project_file(path: &Path) -> Result<TraceIrDocument, Refusal> {
         })?;
         lines.push(parsed);
     }
-    Ok(project_document(&lines, &bytes))
+    let mut document = project_document(&lines, &bytes);
+    metaharness_semantic::annotate(&mut document);
+    Ok(document)
 }
 
 // --- vendor records, through the production readers (amendment a28) ----------------------------
@@ -204,7 +207,8 @@ impl FromStr for VendorSource {
     }
 }
 
-/// Read one vendor record through its adapter's production reader and project what it emits.
+/// Read one vendor record through its adapter's production reader and project what it emits, every
+/// `tool_call` node carrying its semantic operations (amendment a68).
 ///
 /// A replay is not a launch, and the reader is built the way
 /// `crates/metaharness-claude/tests/recorded_runs.rs` builds it: a transcript reference naming the
@@ -333,12 +337,10 @@ pub fn project_vendor_record(
         .into_iter()
         .map(|emission| stream.stamp(emission))
         .collect();
-    Ok(TraceIrDocument::project_from(
-        &lines,
-        &bytes,
-        source.as_str(),
-        Some(&record_lines),
-    ))
+    let mut document =
+        TraceIrDocument::project_from(&lines, &bytes, source.as_str(), Some(&record_lines));
+    metaharness_semantic::annotate(&mut document);
+    Ok(document)
 }
 
 /// Why the reader's first event says the record is not of the declared format (a28 point 4), in

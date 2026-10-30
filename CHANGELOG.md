@@ -5,6 +5,16 @@ was amended and the amendment is named here.
 
 ## [Unreleased]
 
+### Breaking
+
+- `metaharness_protocol::MetaharnessBlock` gains `semantic_rule`; a struct literal adds the field.
+
+### Added
+
+- Every `tool_call` node of a projected `trace-ir/1` document carries `semantic_operations`: one node per shell command with its `executable` (basename of `argv[0]`), semantic `kind`, `method`, `wrappers`, `script`, the sequence and pipeline containers and the `bash -c` unwrap. The document's `metaharness.semantic_rule` is `metaharness-semantic/1`. The extractor is context-lens (MIT, `d72b3b4`) in the new crate `metaharness-semantic`, with its 23 tests. On top of it, `env`, `timeout`, `xargs`, `sudo`, `nice`, `nohup` and `time` are unwrapped, and a script run as `./x.sh` or `python3 x.py` is named by its basename. No argument text is stored beyond the source's `argv_hash`. Additive under D3: the format stays `trace-ir/1` (amendment a68, story:trace-ir-semantic-operations).
+- `spec/domains/trace.yaml` declares `metaharness.trace.ExtractOperations` with 17 outcomes; `spec/conformance.json` grows from 120 to 137 scenarios.
+- `docs/design/context-lens-parity.md` maps every context-lens capability to what metaharness has, what is missing and the unit that copies it.
+
 ## [0.24.1] — 2026-10-29
 
 ### Added

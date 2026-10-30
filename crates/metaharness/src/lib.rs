@@ -71,6 +71,9 @@ mod viewer;
 /// Re-exported so an embedder needs one dependency to write a decision policy, and so the
 /// binary can `derive` its `run` flags on the same `RunSpec` the library takes.
 pub use metaharness_protocol as protocol;
+/// What a recorded tool call does: the semantic operations [`project_file`] and
+/// [`project_vendor_record`] write into every `tool_call` node (amendment a68).
+pub use metaharness_semantic as semantic;
 
 pub use audit::{
     AuditReport, BuiltinPlugin, FloorInputs, MemoryCanary, RunExit, anything_was_adjudicated,

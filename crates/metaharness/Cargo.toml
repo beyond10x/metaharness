@@ -14,6 +14,7 @@ clap = ["metaharness-protocol/clap"]
 
 [dependencies]
 metaharness-protocol = { path = "../metaharness-protocol" }
+metaharness-semantic = { path = "../metaharness-semantic" }
 metaharness-claude = { path = "../metaharness-claude" }
 # Reading a run back: `resolve_verb` says what a call *was* in the neutral vocabulary, which the
 # loop needs and no adapter can answer — under the owned surface every entry travels through one

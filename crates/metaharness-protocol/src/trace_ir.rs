@@ -178,6 +178,14 @@ pub struct MetaharnessBlock {
     pub hermetic: Option<HermeticAttestation>,
     /// What metaharness's own seam did, from the terminal record.
     pub census: Option<DecisionCensus>,
+    /// The rule the `tool_call` nodes' `semantic_operations` were written under (amendment a68).
+    ///
+    /// Absent, not null, from a document nobody annotated: this crate projects and does not parse a
+    /// shell command (invariant 1), and `metaharness-semantic` names its rule here when it writes
+    /// the operations, so a reader tells a document with no operations from one whose calls
+    /// declared none.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub semantic_rule: Option<&'static str>,
 }
 
 /// A stream's closing marker, as a document carries it.
@@ -286,6 +294,7 @@ fn project(
         available_operations: None,
         hermetic: None,
         census: None,
+        semantic_rule: None,
     };
 
     for (position, line) in lines.iter().enumerate() {

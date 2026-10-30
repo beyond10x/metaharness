@@ -251,6 +251,51 @@ types:
     # cache_creation_input_tokens and duration_ms) is a finite Binary64, which
     # ESS 0.67.0 refuses in the core conformance projection (ESS-AUTHOR-036). Its
     # type is metaharness.monetary.SummaryCost in spec/monetary/observations.yaml.
+  - name: metaharness.trace.OperationEvidence
+    kind: enum
+    # observed: the logged invocation itself; declared: what its input says it runs.
+    variants: [observed, declared]
+  - name: metaharness.trace.OperationResolution
+    kind: enum
+    variants: [classified, partial, unsupported]
+  - name: metaharness.trace.OperationActivity
+    kind: enum
+    variants: [inspect, change, verify, research, wait, coordinate, unknown]
+  - name: metaharness.trace.SemanticOperation
+    kind: struct
+    fields:
+      - {name: parent, type: Optional<Integer>, presence: null_when_absent}
+      - {name: kind, type: String}
+      - {name: method, type: String}
+      - {name: executable, type: Optional<String>, presence: null_when_absent}
+      - {name: script, type: Optional<String>, presence: null_when_absent}
+      - {name: wrappers, type: List<String>}
+      - {name: evidence, type: metaharness.trace.OperationEvidence}
+      - {name: resolution, type: metaharness.trace.OperationResolution}
+      - {name: activity, type: metaharness.trace.OperationActivity}
+      - {name: container, type: Boolean}
+      - {name: signature, type: Optional<String>, presence: null_when_absent}
+      - {name: start, type: Integer}
+      - {name: end, type: Integer}
+    # Amendment a68: one entry of a tool_call node's semantic_operations list,
+    # crates/metaharness-semantic/src/extract.rs Node, written by
+    # metaharness_semantic::annotate under the rule the document names in
+    # metaharness.semantic_rule. The field set is context-lens's (MIT) plus
+    # executable (the basename of argv[0] after the wrappers env, timeout,
+    # xargs, sudo, nice, nohup and time are unwrapped), script (the basename of
+    # the script a command runs) and wrappers (outermost first). kind is the
+    # source's open vocabulary (file.read, stream.select, vcs.status,
+    # validation.test, ...) for an operation and sequence, pipeline,
+    # conditional, loop, parallel or wrapper for a container; a dotted word is
+    # a String here because a guard reads "." as field access. parent is the
+    # index of the enclosing container in the same list. start and end are byte
+    # offsets into the decoded source domain.
+    # UNMAPPED: params, the kind's parameters (paths, hashed patterns, argv_hash,
+    # source_domain), is an object whose keys vary per kind.
+  - name: metaharness.trace.CommandShape
+    kind: enum
+    # One synthetic tool call per shape (ExtractOperations); no transcript.
+    variants: [native-read, pipeline-read, sequence, shell-unwrap, env-unwrap, timeout-unwrap, xargs-unwrap, sudo-unwrap, nice-unwrap, nohup-unwrap, time-unwrap, nested-wrappers, script-path, interpreter-script, codex-javascript, malformed-shell, pattern-withheld]
 
 commands:
   - name: metaharness.trace.ClassifyEventKind
@@ -714,6 +759,105 @@ commands:
     # the render refuses occur in no committed record; they are pinned by the
     # unit tests in trace_summary.rs, not driven by this suite.
 
+  - name: metaharness.trace.ExtractOperations
+    # Amendment a68. One synthetic call per CommandShape, framed by the
+    # production EventStream after a session.started naming the adapter and
+    # cwd /repo, written to a file and read by metaharness::project_file twice,
+    # the writer behind `metaharness project`. Every String is the compact JSON
+    # text of a list read off the rendered document's tool_call node's
+    # semantic_operations: kinds, methods, executables, wrappers and scripts
+    # one entry per operation (container false), containers one entry per
+    # container, all in document order. semantic_rule is the compact JSON text
+    # of metaharness.semantic_rule; byte_stable whether the two renders agree.
+    input: [{name: shape, type: metaharness.trace.CommandShape}]
+    outcomes:
+      - name: native-read
+        when: shape == native-read
+        summary: 'Claude Read {"file_path": "/repo/src/lib.rs"}: a native tool is one operation and runs no executable.'
+        emits: [metaharness.trace.OperationsExtracted]
+        payload: {metaharness.trace.OperationsExtracted: {semantic_rule: '"metaharness-semantic/1"', kinds: '["file.read"]', methods: '["native"]', executables: '[null]', containers: '[]', wrappers: '[[]]', scripts: '[null]', byte_stable: true}}
+      - name: pipeline-read
+        when: shape == pipeline-read
+        summary: 'Bash "cat src/lib.rs | head -n 3": one operation per command, inside the pipeline.'
+        emits: [metaharness.trace.OperationsExtracted]
+        payload: {metaharness.trace.OperationsExtracted: {semantic_rule: '"metaharness-semantic/1"', kinds: '["file.read","stream.select"]', methods: '["cat","head"]', executables: '["cat","head"]', containers: '["wrapper","pipeline"]', wrappers: '[[],[]]', scripts: '[null,null]', byte_stable: true}}
+      - name: sequence
+        when: shape == sequence
+        summary: 'Bash "git status && cargo test": an and-list is a conditional around both commands.'
+        emits: [metaharness.trace.OperationsExtracted]
+        payload: {metaharness.trace.OperationsExtracted: {semantic_rule: '"metaharness-semantic/1"', kinds: '["vcs.status","validation.test"]', methods: '["git","cargo"]', executables: '["git","cargo"]', containers: '["wrapper","conditional"]', wrappers: '[[],[]]', scripts: '[null,null]', byte_stable: true}}
+      - name: shell-unwrap
+        when: shape == shell-unwrap
+        summary: "Bash \"bash -c 'git diff'\": the inner shell is a wrapper and its command is read."
+        emits: [metaharness.trace.OperationsExtracted]
+        payload: {metaharness.trace.OperationsExtracted: {semantic_rule: '"metaharness-semantic/1"', kinds: '["vcs.diff"]', methods: '["git"]', executables: '["git"]', containers: '["wrapper","wrapper"]', wrappers: '[[]]', scripts: '[null]', byte_stable: true}}
+      - name: env-unwrap
+        when: shape == env-unwrap
+        summary: 'Bash "env RUST_LOG=debug cargo test".'
+        emits: [metaharness.trace.OperationsExtracted]
+        payload: {metaharness.trace.OperationsExtracted: {semantic_rule: '"metaharness-semantic/1"', kinds: '["validation.test"]', methods: '["cargo"]', executables: '["cargo"]', containers: '["wrapper"]', wrappers: '[["env"]]', scripts: '[null]', byte_stable: true}}
+      - name: timeout-unwrap
+        when: shape == timeout-unwrap
+        summary: 'Bash "timeout 60 cargo build".'
+        emits: [metaharness.trace.OperationsExtracted]
+        payload: {metaharness.trace.OperationsExtracted: {semantic_rule: '"metaharness-semantic/1"', kinds: '["validation.build"]', methods: '["cargo"]', executables: '["cargo"]', containers: '["wrapper"]', wrappers: '[["timeout"]]', scripts: '[null]', byte_stable: true}}
+      - name: xargs-unwrap
+        when: shape == xargs-unwrap
+        summary: 'Bash "xargs rg -l needle": the files come from standard input, so the search is over files.'
+        emits: [metaharness.trace.OperationsExtracted]
+        payload: {metaharness.trace.OperationsExtracted: {semantic_rule: '"metaharness-semantic/1"', kinds: '["file.search"]', methods: '["rg"]', executables: '["rg"]', containers: '["wrapper"]', wrappers: '[["xargs"]]', scripts: '[null]', byte_stable: true}}
+      - name: sudo-unwrap
+        when: shape == sudo-unwrap
+        summary: 'Bash "sudo -u build git status".'
+        emits: [metaharness.trace.OperationsExtracted]
+        payload: {metaharness.trace.OperationsExtracted: {semantic_rule: '"metaharness-semantic/1"', kinds: '["vcs.status"]', methods: '["git"]', executables: '["git"]', containers: '["wrapper"]', wrappers: '[["sudo"]]', scripts: '[null]', byte_stable: true}}
+      - name: nice-unwrap
+        when: shape == nice-unwrap
+        summary: 'Bash "nice -n 10 cargo clippy".'
+        emits: [metaharness.trace.OperationsExtracted]
+        payload: {metaharness.trace.OperationsExtracted: {semantic_rule: '"metaharness-semantic/1"', kinds: '["validation.lint"]', methods: '["cargo"]', executables: '["cargo"]', containers: '["wrapper"]', wrappers: '[["nice"]]', scripts: '[null]', byte_stable: true}}
+      - name: nohup-unwrap
+        when: shape == nohup-unwrap
+        summary: 'Bash "nohup cargo build".'
+        emits: [metaharness.trace.OperationsExtracted]
+        payload: {metaharness.trace.OperationsExtracted: {semantic_rule: '"metaharness-semantic/1"', kinds: '["validation.build"]', methods: '["cargo"]', executables: '["cargo"]', containers: '["wrapper"]', wrappers: '[["nohup"]]', scripts: '[null]', byte_stable: true}}
+      - name: time-unwrap
+        when: shape == time-unwrap
+        summary: 'Bash "time cargo test".'
+        emits: [metaharness.trace.OperationsExtracted]
+        payload: {metaharness.trace.OperationsExtracted: {semantic_rule: '"metaharness-semantic/1"', kinds: '["validation.test"]', methods: '["cargo"]', executables: '["cargo"]', containers: '["wrapper"]', wrappers: '[["time"]]', scripts: '[null]', byte_stable: true}}
+      - name: nested-wrappers
+        when: shape == nested-wrappers
+        summary: 'Bash "sudo timeout 5 env A=1 git log": wrappers unwrap outermost first.'
+        emits: [metaharness.trace.OperationsExtracted]
+        payload: {metaharness.trace.OperationsExtracted: {semantic_rule: '"metaharness-semantic/1"', kinds: '["vcs.inspect"]', methods: '["git"]', executables: '["git"]', containers: '["wrapper"]', wrappers: '[["sudo","timeout","env"]]', scripts: '[null]', byte_stable: true}}
+      - name: script-path
+        when: shape == script-path
+        summary: 'Bash "./scripts/check.sh --fast": a script run by path names its basename.'
+        emits: [metaharness.trace.OperationsExtracted]
+        payload: {metaharness.trace.OperationsExtracted: {semantic_rule: '"metaharness-semantic/1"', kinds: '["process.run"]', methods: '["shell_command"]', executables: '["check.sh"]', containers: '["wrapper"]', wrappers: '[[]]', scripts: '["check.sh"]', byte_stable: true}}
+      - name: interpreter-script
+        when: shape == interpreter-script
+        summary: 'Bash "python3 tools/report.py --all": the interpreter is the executable, the script its operand.'
+        emits: [metaharness.trace.OperationsExtracted]
+        payload: {metaharness.trace.OperationsExtracted: {semantic_rule: '"metaharness-semantic/1"', kinds: '["process.run"]', methods: '["opaque_program"]', executables: '["python3"]', containers: '["wrapper"]', wrappers: '[[]]', scripts: '["report.py"]', byte_stable: true}}
+      - name: codex-javascript
+        when: shape == codex-javascript
+        summary: 'Codex exec script calling tools.exec_command with "git status": the script and the shell are wrappers.'
+        emits: [metaharness.trace.OperationsExtracted]
+        payload: {metaharness.trace.OperationsExtracted: {semantic_rule: '"metaharness-semantic/1"', kinds: '["vcs.status"]', methods: '["git"]', executables: '["git"]', containers: '["wrapper","wrapper"]', wrappers: '[[]]', scripts: '[null]', byte_stable: true}}
+      - name: malformed-shell
+        when: shape == malformed-shell
+        summary: "Bash \"cat 'oops\": a command that does not parse is one unsupported operation, never a read."
+        emits: [metaharness.trace.OperationsExtracted]
+        payload: {metaharness.trace.OperationsExtracted: {semantic_rule: '"metaharness-semantic/1"', kinds: '["other"]', methods: '["malformed_shell"]', executables: '[null]', containers: '["wrapper"]', wrappers: '[[]]', scripts: '[null]', byte_stable: true}}
+      - name: pattern-withheld
+        summary: "Bash \"rg -n 'sentinel pattern' src\": the pattern is hashed and its text is nowhere in the operations."
+        emits: [metaharness.trace.ArgumentsWithheld]
+        payload: {metaharness.trace.ArgumentsWithheld: {semantic_rule: '"metaharness-semantic/1"', kinds: '["file.search"]', pattern_stored: false, patterns_hashed: 1}}
+    # The default is pattern-withheld, kept for ClassifyEventKind's reason:
+    # without one every guard-negate mutant of this command is stillborn.
+
 # Conformance observations, not newly published runtime wire events.
 events:
   - name: metaharness.trace.FamilyClassified
@@ -791,6 +935,22 @@ events:
       - {name: tool_calls, type: String}
       - {name: unk, type: String}
       - {name: byte_stable, type: Boolean}
+  - name: metaharness.trace.OperationsExtracted
+    fields:
+      - {name: semantic_rule, type: String}
+      - {name: kinds, type: String}
+      - {name: methods, type: String}
+      - {name: executables, type: String}
+      - {name: containers, type: String}
+      - {name: wrappers, type: String}
+      - {name: scripts, type: String}
+      - {name: byte_stable, type: Boolean}
+  - name: metaharness.trace.ArgumentsWithheld
+    fields:
+      - {name: semantic_rule, type: String}
+      - {name: kinds, type: String}
+      - {name: pattern_stored, type: Boolean}
+      - {name: patterns_hashed, type: Integer}
 
 # An immutable retained document, not a second run lifecycle.
 entities:

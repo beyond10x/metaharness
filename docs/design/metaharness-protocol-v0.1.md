@@ -5818,3 +5818,62 @@ changes; one test holds point 4.
      `two_entries_under_one_name_are_refused_on_claude_and_codex_before_the_spawn` holds it.
 
 Event wire, frame wire and command wire are unchanged.
+
+### Amendment a68 — every tool call in a `trace-ir/1` document carries its semantic operations (2026-10-30)
+
+`story:trace-ir-semantic-operations`, under `epic:session-format`. Operator decision, 2026-10-30:
+metaharness copies what context-lens (MIT) does, so that a consumer reads one document instead of a
+second analysis tool. `docs/design/context-lens-parity.md` maps every context-lens capability to
+its metaharness counterpart and the unit that copies it; this amendment is unit 1.
+
+1. **What a node gains.** Every `tool_call` node's `kind` carries `semantic_operations`: an array
+   of operation nodes, in the order the source's extractor emits them. Each has `parent` (an index
+   into the same array, or `null`), `kind` (`file.read`, `stream.select`, `vcs.status`,
+   `validation.test`, `process.run`, `sequence`, `pipeline`, `wrapper`, ...), `method`,
+   `executable`, `script`, `wrappers`, `evidence`, `resolution`, `params`, `start`, `end`,
+   `signature`, `activity` and `container`. The document's `metaharness` block gains
+   `semantic_rule: "metaharness-semantic/1"`, the rule that wrote them; a document projected
+   before this amendment has neither.
+2. **The extractor is context-lens's.** `crates/metaharness-semantic/src/extract.rs` is the
+   source's `semantic/extract.rs` (commit `d72b3b4`, MIT, licence in
+   `crates/metaharness-semantic/LICENSE-context-lens`), parsed with tree-sitter 0.25 and
+   tree-sitter-bash 0.25 (tree-sitter-javascript 0.25 for a Codex `exec` script), never executed.
+   The source's 23 tests are ported unchanged and pass.
+3. **What metaharness adds on top.**
+   - `executable` is the basename of the command's `argv[0]` after unwrapping, on every command
+     node and on the `bash -c` and `sh -c` wrapper node; `null` on a native tool call.
+   - `env`, `timeout`, `xargs`, `sudo`, `nice`, `nohup` and `time` are unwrapped, outermost
+     first, each with its own option grammar. The unwrapped wrappers are listed in `wrappers`.
+     A wrapper with an option it does not know, or with no program after its options, is not
+     unwrapped and stays `process.run`.
+   - Under `xargs`, a file read or search takes its operands from the pipe (`params.input:
+     "xargs_operands"`) and is not complete.
+   - A wrapped command carries no `signature`, because the request it signs is not the one the
+     wrapper ran.
+   - `script` is the basename of a script run as `./x.sh`, `scripts/x`, or as an interpreter's
+     first operand (`python3 x.py`, `node ./cli.mjs`, `bash ./deploy.sh`). An inline program
+     (`-c`, `-e`, `-m`, `--eval`, `-p`) names no script.
+4. **No argument text beyond the source's.** The source stores an `argv_hash` and the parameters
+   its rules name (paths, refs, flags it classifies); `executable`, `script` and `wrappers` are
+   names, never arguments. An option value, an environment assignment, a search pattern and an
+   inline program are not stored (`no_argument_text_is_stored_beyond_the_source`; the
+   `pattern-withheld` scenario).
+5. **Where it runs.** `metaharness-protocol` depends on four crates (AGENTS.md invariant 1), so
+   the extractor lives in its own crate, `metaharness-semantic`. The protocol's `project` is
+   unchanged; the production writers `metaharness::project_file` and
+   `metaharness::project_vendor_record` call `metaharness_semantic::annotate` on the document they
+   project. The provider is the opening `session_start` node's `adapter` and the working directory
+   its `cwd`; a Codex call's own `workdir` overrides it. Annotating twice writes the same bytes.
+6. **The format does not move.** Both additions are fields added to existing nodes and to the
+   `metaharness` block, additive under decision D3: the document stays `trace-ir/1`. A reader
+   that does not know `semantic_operations` ignores it; the event wire, frame wire and command
+   wire are unchanged.
+7. **Specification and conformance.** `spec/domains/trace.yaml` declares the command
+   `metaharness.trace.ExtractOperations` with one outcome per command shape (17) and the events
+   `OperationsExtracted` and `ArgumentsWithheld`. The runner frames each shape as a recorded
+   `tool.requested`, projects it through `project_file` twice and reads the node back. The suite
+   moves from 120 to 137 scenarios; a mutated suite fails exactly the mutated scenarios.
+
+Not done here, listed in the parity map: conversation classification and outcomes (unit 2),
+fragments (unit 3), store, report and dashboard (unit 4), and the adapter records the source reads
+and metaharness keeps opaque, with per-record `cwd` (unit 5).

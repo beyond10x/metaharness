@@ -1584,12 +1584,16 @@ fn digest(input: &Value) -> Observed {
     )
 }
 
-/// One committed recorded run, projected and rendered: the document, the stream's line count and
-/// the rendered bytes.
+/// One committed recorded run, projected by the production writer `metaharness project` uses
+/// (`metaharness::project_file`, which writes the semantic operations, amendment a68) and
+/// rendered: the document, the stream's line count and the rendered bytes.
 fn project_recorded(run: &str) -> (TraceIrDocument, usize, String) {
     let bytes = recorded_stream(run);
     let lines = parse_stream(&bytes);
-    let document = project_document(&lines, &bytes);
+    let document = metaharness::project_file(
+        &repository_root().join(format!("evals/aep/runs/{run}.events.jsonl")),
+    )
+    .unwrap();
     let rendered = document.render().unwrap();
     (document, lines.len(), rendered)
 }
@@ -1998,12 +2002,173 @@ fn summarize_record(input: &Value) -> Observed {
     event(outcome, "metaharness.trace.SessionSummarized", payload)
 }
 
+/// The one synthetic call `metaharness.trace.ExtractOperations` drives per `CommandShape`: the
+/// adapter the opening record names, the tool and its input. Synthetic, never a transcript.
+fn extraction_call(shape: &str) -> (&'static str, &'static str, Value) {
+    let bash = |command: &str| ("claude", "Bash", json!({ "command": command }));
+    match shape {
+        "native-read" => ("claude", "Read", json!({"file_path": "/repo/src/lib.rs"})),
+        "pipeline-read" => bash("cat src/lib.rs | head -n 3"),
+        "sequence" => bash("git status && cargo test"),
+        "shell-unwrap" => bash("bash -c 'git diff'"),
+        "env-unwrap" => bash("env RUST_LOG=debug cargo test"),
+        "timeout-unwrap" => bash("timeout 60 cargo build"),
+        "xargs-unwrap" => bash("xargs rg -l needle"),
+        "sudo-unwrap" => bash("sudo -u build git status"),
+        "nice-unwrap" => bash("nice -n 10 cargo clippy"),
+        "nohup-unwrap" => bash("nohup cargo build"),
+        "time-unwrap" => bash("time cargo test"),
+        "nested-wrappers" => bash("sudo timeout 5 env A=1 git log"),
+        "script-path" => bash("./scripts/check.sh --fast"),
+        "interpreter-script" => bash("python3 tools/report.py --all"),
+        "codex-javascript" => (
+            "codex",
+            "exec",
+            json!(
+                "const r = await tools.exec_command({\"cmd\":\"git status\",\"workdir\":\"/repo\"}); text(JSON.stringify(r))\n"
+            ),
+        ),
+        "malformed-shell" => bash("cat 'oops"),
+        "pattern-withheld" => bash("rg -n 'sentinel pattern' src"),
+        other => panic!("the domain declares no CommandShape {other}"),
+    }
+}
+
+/// `metaharness.trace.ExtractOperations` (amendment a68): one synthetic call, framed by the
+/// production `EventStream` after a `session.started` naming the adapter and `cwd` `/repo`,
+/// written to a file and read by `metaharness::project_file` twice, the writer behind
+/// `metaharness project`. Every list is read off the rendered document's `tool_call` node, parsed
+/// from the render's bytes. The outcome is the shape the scenario asked for; what the target
+/// cannot choose is the payload, which is all observed.
+fn extract_operations(input: &Value) -> Observed {
+    let shape = input["shape"].as_str().unwrap();
+    let (adapter, tool, call_input) = extraction_call(shape);
+    let bytes = extraction_stream(adapter, tool, call_input);
+    let directory = tempfile::tempdir().unwrap();
+    let path = directory.path().join("extract-operations.events.jsonl");
+    fs::write(&path, &bytes).unwrap();
+    let first = metaharness::project_file(&path).unwrap().render().unwrap();
+    let second = metaharness::project_file(&path).unwrap().render().unwrap();
+    let document: Value = serde_json::from_str(&first).unwrap();
+    let node = document["events"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .find(|node| node["kind"]["event"] == "tool_call")
+        .expect("the call is a tool_call node");
+    let operations = node["kind"][metaharness::semantic::FIELD]
+        .as_array()
+        .expect("a tool_call node carries its semantic operations")
+        .clone();
+    let (containers, leaves): (Vec<&Value>, Vec<&Value>) = operations
+        .iter()
+        .partition(|operation| operation["container"] == true);
+    let text =
+        |values: Vec<&Value>| Value::Array(values.into_iter().cloned().collect()).to_string();
+    let field = |key: &str| text(leaves.iter().map(|leaf| &leaf[key]).collect());
+    let semantic_rule = document["metaharness"]["semantic_rule"].to_string();
+    if shape == "pattern-withheld" {
+        let patterns_hashed: usize = leaves
+            .iter()
+            .filter_map(|leaf| leaf["params"]["patterns_hash"].as_array())
+            .map(Vec::len)
+            .sum();
+        return event(
+            shape,
+            "metaharness.trace.ArgumentsWithheld",
+            json!({
+                "semantic_rule": semantic_rule,
+                "kinds": field("kind"),
+                "pattern_stored": Value::Array(operations).to_string().contains("sentinel pattern"),
+                "patterns_hashed": patterns_hashed,
+            }),
+        );
+    }
+    event(
+        shape,
+        "metaharness.trace.OperationsExtracted",
+        json!({
+            "semantic_rule": semantic_rule,
+            "kinds": field("kind"),
+            "methods": field("method"),
+            "executables": field("executable"),
+            "containers": text(containers.iter().map(|container| &container["kind"]).collect()),
+            "wrappers": field("wrappers"),
+            "scripts": field("script"),
+            "byte_stable": first == second,
+        }),
+    )
+}
+
+/// The framed stream `extract_operations` projects: a `session.started` naming the adapter and
+/// `cwd` `/repo`, then the one `tool.requested`, through the production `EventStream`.
+fn extraction_stream(adapter: &str, tool: &str, call_input: Value) -> Vec<u8> {
+    let Event::SessionStarted {
+        adapter_class,
+        hermetic,
+        transcript,
+        ..
+    } = sample_event("session.started")
+    else {
+        unreachable!("the sample of session.started is a SessionStarted")
+    };
+    let opening = Event::SessionStarted {
+        adapter: adapter.to_owned(),
+        adapter_class,
+        harness_version: None,
+        session_id: None,
+        model: None,
+        permission_mode: None,
+        credential_source: None,
+        output_style: None,
+        cwd: Some("/repo".to_owned()),
+        offered_tools: None,
+        available_operations: None,
+        withheld: None,
+        context_files: Vec::new(),
+        slash_commands: None,
+        skills: None,
+        agents: None,
+        plugins: None,
+        mcp_servers: None,
+        inputs_digest: None,
+        transcript,
+        hermetic,
+    };
+    let Event::ToolRequested {
+        decision_required,
+        deadline_ms,
+        seam,
+        ..
+    } = sample_event("tool.requested")
+    else {
+        unreachable!("the sample of tool.requested is a ToolRequested")
+    };
+    let call = Event::ToolRequested {
+        call_id: "call_1".to_owned(),
+        name: tool.to_owned(),
+        input: call_input,
+        operations: Vec::new(),
+        subjects: Vec::new(),
+        decision_required,
+        deadline_ms,
+        seam,
+    };
+    let (_, bytes) = framed(
+        "extract-operations",
+        vec![Emission::untimed(opening), Emission::untimed(call)],
+        None,
+    );
+    bytes
+}
+
 #[allow(
     clippy::too_many_lines,
     reason = "one arm per specified command, read top to bottom"
 )]
 fn execute(command: &str, input: &Value) -> Observed {
     match command {
+        "metaharness.trace.ExtractOperations" => extract_operations(input),
         "metaharness.trace.ClassifyEventKind" => classify(input),
         "metaharness.trace.VerifyStreamCompleteness" => completeness(input),
         "metaharness.trace.NameDigest" => digest(input),
@@ -2450,7 +2615,7 @@ fn ess_generated_scenarios_drive_production_targets() {
     if external.is_none() {
         assert_eq!(
             scenarios.len(),
-            120,
+            137,
             "review and update coverage deliberately"
         );
         assert_eq!(
@@ -2483,6 +2648,7 @@ fn ess_generated_scenarios_drive_production_targets() {
             "NormalizeRecord",
             "ProjectVendorRecord",
             "SummarizeRecord",
+            "ExtractOperations",
         ] {
             assert!(
                 scenarios.keys().any(|id| id.contains(command)),
