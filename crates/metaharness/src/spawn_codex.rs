@@ -655,6 +655,16 @@ impl CodexProcess {
     }
 }
 
+/// A child nobody reaped is killed and reaped, so it cannot outlive the run's scratch (design
+/// amendment a72, review corrections).
+impl Drop for CodexProcess {
+    fn drop(&mut self) {
+        let reaped = matches!(self.exit, Exited::With(_));
+        crate::process::reap_unreaped(self.child.as_mut(), reaped);
+        self.mark_child_gone();
+    }
+}
+
 impl HarnessProcess for CodexProcess {
     fn next_line(&mut self) -> std::io::Result<Option<String>> {
         loop {

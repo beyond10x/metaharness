@@ -5982,47 +5982,86 @@ as Loom does, can now name the root.
 1. **The declaration.** `RunSpec::scratch_name: Option<String>`, the flag `--scratch-name <NAME>`,
    the document key `scratch-name` (a64) and `Metaharness::with_scratch_name`. Without a name the
    root is a new temporary directory, exactly as before. With one it is
-   `<temp dir>/metaharness-<NAME>`, where the temp dir is the one an unnamed root is made in
-   (`tempfile::env::temp_dir()`, which is `std::env::temp_dir()` unless the embedder overrode
-   tempfile's). Every path metaharness derives from the root is then the same in every run under
-   that name: the child's `TMPDIR`, `CLAUDE_CONFIG_DIR` and `CODEX_HOME`, the hook channel, the
-   transcript path, the scratch working directory and the b10x `--context` copies. On every kind.
-2. **The name is one plain path component.** Not empty, not `.` or `..`, no `/`, no control
-   character (`char::is_control`, which includes NUL and DEL), and at most 64 bytes, counted in
-   bytes rather than characters. `check_spec` refuses anything else as
-   `Refusal::ScratchNameInvalid`, code **`scratch-name-invalid`**, exit `2`, before any directory,
-   lock file or temporary directory exists, and the start checks the name again before it derives
-   a path from it. The message renders the name with Rust's `{:?}`, so a control character is
+   `<temp dir>/metaharness-u<EUID>/<NAME>`, where `<EUID>` is the process's effective uid and the
+   temp dir is the one an unnamed root is made in (`tempfile::env::temp_dir()`, which is
+   `std::env::temp_dir()` unless the embedder overrode tempfile's), made absolute with
+   `std::path::absolute` as `tempfile` does, so a relative `TMPDIR` never reaches the child.
+   `metaharness-u<EUID>` is a **private parent**: created with mode 0700 when absent, opened with
+   `O_DIRECTORY | O_NOFOLLOW`, and refused as `Refusal::ScratchRootForeign`, naming the parent,
+   unless it is a real directory the effective uid owns; a mode other than 0700 is set to 0700
+   with `fchmod` on the opened descriptor. Every later call (the lock, the root, the removal) is
+   relative to that descriptor. Every path metaharness derives from the root is then the same in
+   every run under that name: the child's `TMPDIR`, `CLAUDE_CONFIG_DIR` and `CODEX_HOME`, the
+   hook channel, the transcript path, the scratch working directory and the b10x `--context`
+   copies. On every kind.
+2. **The name is a plain charset.** 1 to 64 bytes of ASCII letters, digits, `.`, `_` and `-`, and
+   neither `.` nor `..`. `check_spec` refuses anything else as `Refusal::ScratchNameInvalid`, code
+   **`scratch-name-invalid`**, exit `2`, before any directory, lock file or temporary directory
+   exists, and the start checks the name again before it derives a path from it. The charset is
+   an allow-list, not a list of refused characters: a `/`, a control character, a `$`, a `:`, a
+   space or a `{` never reaches a path the child is given, a hook `command`, a settings template
+   or a path list. The message renders the name with Rust's `{:?}`, so a control character is
    written as its escape.
-3. **The name is held for the run's life.** Before it looks at the root, the run opens
-   `<temp dir>/metaharness.<NAME>.lock` with `O_NOFOLLOW | O_CLOEXEC | O_CREAT`, mode 0600, and
-   takes an exclusive, non-blocking `flock` on it. The lock is the custody lock's mechanism: the
-   kernel releases it when the descriptor closes, also when the holder is killed, so a crashed
-   run strands nobody. A lock held by another run is `Refusal::ScratchNameHeld`, code
-   **`scratch-name-held`**, naming the name and the lock file; nothing is touched, so the other
-   run's root keeps what it holds. The lock file must be a regular file owned by the effective
-   uid; a link (which `O_NOFOLLOW` refuses), a directory or another user's file is
-   `Refusal::ScratchRootForeign`, naming the lock path. The lock file is left in place when the
-   run ends. The separator before the name is `.` rather than the root's `-`, so no name's root
-   can be another name's lock file: with `-`, the root of `x.lock` would be the lock of `x`.
-4. **Under the lock, the root is made or taken over, never followed.** `symlink_metadata` at the
-   root:
-   - nothing there: the root is created with mode 0700;
+3. **The name and the root are held for the run's life.** Before it looks at the root, the run
+   opens `<parent>/<NAME>.lock` with `O_NOFOLLOW | O_CLOEXEC | O_CREAT | O_NONBLOCK`, mode 0600,
+   and takes an exclusive, non-blocking `flock` on it. `O_NONBLOCK` makes a FIFO at the lock path
+   open at once, to be refused as not a regular file, instead of holding the start in `open`. With
+   the lock taken, the descriptor's `(dev, ino)` is compared with `lstat` of the lock path; on a
+   difference (the file was replaced or unlinked between the open and the lock) the open is tried
+   once more, then the name is refused as held. After the root is created, the run also opens the
+   root itself with `O_DIRECTORY | O_NOFOLLOW | O_CLOEXEC` and takes a non-blocking exclusive
+   `flock` on that directory, held for the run's life too. The root lock is what a second run
+   checks before it removes what it found at the root, so a lock file that an operator's `rm` or
+   an age-based temp cleaner unlinked while the run held it does not let a second run remove a
+   live root. A lock held by another run, on the name or on the root, is
+   `Refusal::ScratchNameHeld`, code **`scratch-name-held`**, naming the name and the lock file;
+   nothing is touched, so the other run's root keeps what it holds. The lock file must be a
+   regular file owned by the effective uid; a link (which `O_NOFOLLOW` refuses), a directory, a
+   FIFO or another user's file is `Refusal::ScratchRootForeign`, naming the lock path. The lock
+   file is left in place when the run ends.
+
+   A `flock` belongs to the open file description, not to the descriptor: a child that another
+   thread of the embedding process forked holds a copy of the description until its `exec`, even
+   with `O_CLOEXEC`, so closing the descriptor does not release the lock while such a child
+   exists. The run therefore **releases both locks explicitly** (`flock(LOCK_UN)` on the root,
+   `File::unlock` on the lock file) and only then closes them. The kernel still releases a lock
+   when the last copy of its description closes, so a killed run strands nobody.
+
+   Because `.` is in the charset, the root of the name `x.lock` is the lock path of the name `x`.
+   Neither run can harm the other: the lock file of `x` at the root of `x.lock` is a file, refused
+   as `scratch-root-foreign`; the root of `x.lock` at the lock path of `x` is a directory, refused
+   the same way. Only one of the two names can be in use at a time.
+4. **Under the locks, the root is made or taken over, never followed.** `lstat` at the root,
+   relative to the parent:
+   - nothing there: the root is created with mode 0700 (and set to 0700 through its descriptor,
+     whatever the umask took off);
    - a directory, not a link, owned by the effective uid: a leftover of an earlier run of this
-     user's, killed before it removed its root. It is removed with `std::fs::remove_dir_all`,
-     which removes a link inside it and never what the link names, and created again with mode
-     0700;
+     user's, killed before it removed its root. The root lock is taken first; held, the run is
+     refused as above and nothing is touched. Then the leftover is emptied descriptor-relative
+     (`openat` with `O_NOFOLLOW`, `fstatat` with `AT_SYMLINK_NOFOLLOW`, `unlinkat`): each of this
+     user's own directories, the root included, is made `u+rwx` with `fchmod` on its own
+     descriptor before it is read, so a read-only directory a child left (`chmod a-w`, a copied
+     read-only tree, a module cache) is removed rather than blocking every later run under the
+     name. A directory whose owner cannot even read it is changed through `/proc/self/fd` of an
+     `O_PATH` descriptor of that very directory (Linux), never through a path a link could
+     replace. A link inside is removed itself, never followed and never changed; another user's
+     entry is never changed. The emptied root is removed and created again with mode 0700;
    - anything else (a symbolic link, dangling or not, a file, a directory another user owns):
      `Refusal::ScratchRootForeign`, code **`scratch-root-foreign`**, naming the path. It is left
      as it is, and nothing is made through it.
 
-   The root is created with a plain `mkdir`, which fails rather than follows when an entry
-   appeared at the path after the check. In a sticky temp dir (`/tmp`) only an entry's owner can
-   rename or remove it, so a root checked as this user's stays this user's. The root is 0700 as a
-   `TempDir` is, and it holds the same copied login a `TempDir` held; nothing about the
+   The root is created with a plain `mkdirat`, which fails rather than follows when an entry
+   appeared at the path after the check. The private parent is 0700 and this user's, so no other
+   user can put, rename or remove an entry in it, whatever the temp dir's own mode. The root is
+   0700 as a `TempDir` is, and it holds the same copied login a `TempDir` held; nothing about the
    credential copy, the constructed environment or the hermetic rows changes.
-5. **The end.** When the run is dropped the root is removed, and then the lock is released, so the
-   next run under the name finds the root gone, as a run in a new temporary directory would.
+5. **The end.** `Run` declares its process before its scratch, and each process that owns a
+   `std::process::Child` (`SpawnedProcess`, `CodexProcess`, `AppServerProcess`) kills and reaps a
+   child nobody reaped when it is dropped. So when the run is dropped the child is gone first, on
+   named and unnamed runs alike; then the root is removed the same way a leftover is, its own
+   read-only directories included; then both locks are released explicitly, so the next run under
+   the name finds the root gone, as a run in a new temporary directory would, and no child of the
+   previous run can write into it.
 6. **Codes, not protocol refusals.** The three codes lead their messages and are exported as
    `metaharness::SCRATCH_NAME_INVALID`, `SCRATCH_NAME_HELD` and `SCRATCH_ROOT_FOREIGN`. Like
    `scratch-path-not-utf8` (a37) they are launch conditions, not a `RefusalCode`: no command
@@ -6030,12 +6069,43 @@ as Loom does, can now name the root.
 7. **Tests.** `crates/metaharness/tests/scratch_name.rs`, over the scripted runner on all three
    kinds: two runs in turn under one name report one root, and on b10x hand the loop the same
    `--context` copy path; two unnamed runs get two roots; `a/b`, `..`, `.`, the empty name, four
-   control characters, 65 bytes and 33 two-byte characters are refused before anything is
-   created, and a 64-byte name runs; a leftover directory of this user's is replaced and the new
-   root is 0700; a link to a directory outside the temp dir, a dangling link and a file at the
-   root are refused and left as they were, with nothing made through the link; a second run
-   under a held name is refused and the first run's root is untouched; the root is gone when the
-   run is dropped. Unit tests in `builder.rs` hold the ownership rule to a directory and a lock
-   file of another uid's, and refuse a dangling link, a directory and another uid's file at the
-   lock path. `crates/metaharness-cli/tests/scratch_name.rs` holds `metaharness run --help` to
-   naming the flag and the flag to reaching `RunSpec::scratch_name`.
+   control characters, 65 bytes, 33 two-byte characters, a `$`, a `:` and a space are refused
+   before anything is created, and a 64-byte name runs; a leftover directory of this user's is
+   replaced and the new root is 0700; a link to a directory outside the temp dir, a dangling link
+   and a file at the root are refused and left as they were, with nothing made through the link;
+   a second run under a held name is refused and the first run's root is untouched; the root is
+   gone when the run is dropped; and a run dropped while its `/bin/sh` child (started through the
+   real `SpawnRunner`) still runs, named and unnamed, leaves the child reaped before its root is
+   removed. `tests/scratch_name_custody.rs` (security review) and
+   `tests/adversary_scratch_name_pass1.rs` (adversary pass 1) hold the review corrections below.
+   Unit tests in `builder.rs` hold the ownership rule to a directory and a lock file of another
+   uid's; refuse a dangling link, a directory and another uid's file at the lock path; refuse a
+   link, a file and another uid's directory as the private parent and narrow a wider one to 0700;
+   remove read-only and unreadable directories of this user's on takeover and on drop without
+   touching a link's target; and refuse a root another holder has locked, untouched.
+   `crates/metaharness-cli/tests/scratch_name.rs` holds `metaharness run --help` to naming the
+   flag and the flag to reaching `RunSpec::scratch_name`.
+
+**Review corrections** (security review and adversary pass 1, before the release; amended in
+place, so no new amendment number):
+
+1. **Explicit release.** The locks are released with `flock(LOCK_UN)` / `File::unlock` after the
+   root is removed and before the descriptors close (§ 3), because a child forked by another
+   thread holds the open file description until its `exec`; with a close alone, a dropped run's
+   name stayed held for the next session.
+2. **No child outlives its scratch.** `SpawnedProcess`, `CodexProcess` and `AppServerProcess`
+   kill and reap an unreaped child in `Drop`, and `Run` drops its process before its scratch
+   (§ 5). Before this, a named run's late child wrote into the next run's root, and an unnamed
+   run's into a deleted directory.
+3. **A per-user private parent.** `<temp dir>/metaharness-u<EUID>/<NAME>` and `<NAME>.lock`
+   beside it, the parent 0700, a real directory of the effective uid, narrowed to 0700 through
+   its descriptor; the temp dir made absolute (§ 1). The unnamed path is unchanged.
+4. **The root is locked as well as the name**, and the lock file's `(dev, ino)` is checked against
+   its path after the lock is taken (§ 3), so an unlinked lock file does not let a second run
+   remove a live root.
+5. **`O_NONBLOCK` on the lock open**, so a FIFO at the lock path is refused without waiting (§ 3).
+6. **A read-only leftover is still replaced**: this user's own directories are made `u+rwx`
+   descriptor-relative, never through a link and never another user's, on takeover and on drop
+   (§ 4, § 5).
+7. **Names are a plain charset** (§ 2), so a name such as `${CLAUDE_PLUGIN_ROOT}` is refused at
+   `check_spec` rather than becoming part of a path a template expands.

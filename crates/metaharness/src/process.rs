@@ -279,6 +279,24 @@ pub trait HarnessProcess {
     }
 }
 
+/// Kill and reap a spawned child nobody has reaped, as its process is dropped (design amendment
+/// a72, review corrections).
+///
+/// A `HarnessProcess` that owns a `std::process::Child` calls this from its `Drop`, and `Run`
+/// declares its process before its scratch, so a run dropped before its child ended leaves no
+/// child writing by path into a root that is removed next, or, under a scratch name, into the
+/// next run's root. `reaped` is whether a `wait` already took the status.
+pub(crate) fn reap_unreaped(child: Option<&mut std::process::Child>, reaped: bool) {
+    let Some(child) = child else {
+        return;
+    };
+    if reaped || matches!(child.try_wait(), Ok(Some(_))) {
+        return;
+    }
+    drop(child.kill());
+    drop(child.wait());
+}
+
 pub(crate) fn observed_termination(
     status: std::process::ExitStatus,
 ) -> metaharness_protocol::ProcessTermination {

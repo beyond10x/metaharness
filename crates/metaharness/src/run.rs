@@ -250,6 +250,10 @@ pub struct Run {
     spec: RunSpec,
     stream: EventStream,
     bridge: Box<dyn HarnessSeam>,
+    /// Declared before [`Run::scratch`], so it is dropped first: a spawned child nobody reaped is
+    /// killed and reaped there, before the root it was given is removed (design amendment a72,
+    /// review corrections). Fields drop in declaration order; moving this below `scratch` lets a
+    /// child write into a deleted root, or under a scratch name into the next run's.
     process: Box<dyn HarnessProcess>,
     clock: Box<dyn Clock>,
     capabilities: Capabilities,
@@ -462,8 +466,9 @@ impl Run {
     ///
     /// Held rather than merely created, because a root that nobody keeps is removed the moment it
     /// is constructed — and the config home, the copied credential and the retained transcript
-    /// all live under it. A new temporary directory, or `<temp dir>/metaharness-<NAME>` under
-    /// `--scratch-name`, whose name the run holds until it is dropped (design amendment a72).
+    /// all live under it. A new temporary directory, or `<temp dir>/metaharness-u<EUID>/<NAME>`
+    /// under `--scratch-name`, whose name the run holds until it is dropped (design amendment
+    /// a72).
     #[must_use]
     pub fn scratch_root(&self) -> Option<&std::path::Path> {
         self.scratch.as_ref().map(crate::builder::ScratchRoot::path)
