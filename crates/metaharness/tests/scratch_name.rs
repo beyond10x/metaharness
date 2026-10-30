@@ -529,3 +529,118 @@ fn a_dropped_runs_child_is_reaped_before_its_root_is_removed() {
         assert!(!exists(&root), "named {named}: {}", root.display());
     }
 }
+
+/// The real spawner, starting `/bin/sh` in place of the vendor. The shell starts a background
+/// `sleep` (a hook or tool command a vendor leaves behind), detached from the stream, writes the
+/// sleep's pid to `pid` and exits at once, so the run ends normally with the sleep still there.
+struct Leaver {
+    inner: SpawnRunner,
+    pid: PathBuf,
+}
+
+impl ProcessRunner for Leaver {
+    fn requires_executable(&self) -> bool {
+        false
+    }
+
+    fn start(&mut self, plan: &LaunchPlanView) -> std::io::Result<Box<dyn HarnessProcess>> {
+        let args = vec![
+            "-c".to_owned(),
+            "sleep 30 < /dev/null > /dev/null 2>&1 & echo $! > \"$1\"; exit 0".to_owned(),
+            "sh".to_owned(),
+            self.pid.display().to_string(),
+        ];
+        let mut env = plan.env.clone();
+        env.insert("PATH".to_owned(), "/usr/bin:/bin".to_owned());
+        let view = LaunchPlanView {
+            program: "/bin/sh",
+            args: &args,
+            env: &env,
+            cwd: plan.cwd,
+            credential_copies: plan.credential_copies,
+            decision_channel: plan.decision_channel,
+            transcript: plan.transcript,
+        };
+        self.inner.start(&view)
+    }
+}
+
+/// Whether `pid` runs: neither gone nor a zombie.
+fn running(pid: i32) -> bool {
+    std::fs::read_to_string(format!("/proc/{pid}/stat")).map_or_else(
+        |_| {
+            rustix::process::Pid::from_raw(pid)
+                .is_some_and(|pid| rustix::process::test_kill_process(pid).is_ok())
+        },
+        |stat| {
+            stat.rsplit_once(") ")
+                .is_none_or(|(_, rest)| !rest.starts_with('Z'))
+        },
+    )
+}
+
+/// Review corrections pass 3, decision 1: a named run's group is killed between its leader's
+/// exit and its reap on the normal end too, so what the vendor left behind does not outlive a
+/// run that ended by itself, and once the leader is reaped the run names no group. An unnamed
+/// run's child stays in the embedder's group, and what it left is not touched, as before.
+#[test]
+fn what_a_named_runs_vendor_left_behind_ends_with_the_run() {
+    for named in [true, false] {
+        let name = Unique::new("left");
+        let records = tempfile::tempdir_in(env!("CARGO_TARGET_TMPDIR")).expect("a directory");
+        let mut leaver = Leaver {
+            inner: SpawnRunner::new(),
+            pid: records.path().join("pid"),
+        };
+        let mut declared = builder(Kind::Claude);
+        if named {
+            declared = declared.with_scratch_name(&name.name);
+        }
+        let mut run = declared
+            .start_with(
+                Input::Prompt("end at once".to_owned()),
+                &mut leaver,
+                &mut ScriptedSeams,
+            )
+            .unwrap_or_else(|refusal| panic!("named {named}: {refusal}"));
+        assert_eq!(
+            run.process_group().is_some(),
+            named,
+            "named {named}: the child leads a group of its own only under a name"
+        );
+        let _ = run.drain();
+        let mut left = None;
+        for _ in 0..500 {
+            left = std::fs::read_to_string(&leaver.pid)
+                .ok()
+                .and_then(|words| words.trim().parse::<i32>().ok());
+            if left.is_some() {
+                break;
+            }
+            std::thread::sleep(std::time::Duration::from_millis(10));
+        }
+        let left = left.expect("the child wrote the pid of what it left");
+        let mut alive = running(left);
+        for _ in 0..200 {
+            if !alive {
+                break;
+            }
+            std::thread::sleep(std::time::Duration::from_millis(10));
+            alive = running(left);
+        }
+        let group = run.process_group();
+        if let Some(pid) = rustix::process::Pid::from_raw(left) {
+            let _ = rustix::process::kill_process(pid, rustix::process::Signal::KILL);
+        }
+        drop(run);
+        assert_eq!(
+            alive, !named,
+            "named {named}: the process {left} the vendor left behind runs after the run ended \
+             by itself ({alive})"
+        );
+        assert_eq!(
+            group, None,
+            "named {named}: the run still names a group after its child was reaped"
+        );
+    }
+}

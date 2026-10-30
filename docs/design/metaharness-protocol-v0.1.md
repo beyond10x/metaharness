@@ -6068,24 +6068,39 @@ as Loom does, can now name the root.
    `std::process::Child` (`SpawnedProcess`, `CodexProcess`, `AppServerProcess`) kills and reaps a
    child nobody reaped when it is dropped. A named run's vendor child is spawned leading a
    **process group of its own** (`process_group(0)`), so the processes the vendor starts (a hook,
-   a tool command, an MCP server) are in that group unless they leave it; when the run is dropped
-   the whole group is sent `SIGKILL`, even when the leader was already reaped (`ESRCH` is fine),
-   and then the leader is reaped. An unnamed run's child stays in metaharness's process group and
-   only that child is killed and reaped, as before. So when the run is dropped the child, and on a
-   named run its group, is gone first; then the root is removed the same way a leftover is, its
-   own read-only directories included; then both locks are released explicitly, so the next run
-   under the name finds the root gone, as a run in a new temporary directory would, and no
-   process of the previous run's group can write into it.
+   a tool command, an MCP server) are in that group unless they leave it. The group is sent
+   `SIGKILL` **before the leader is reaped, never after**: while the leader is unreaped (running,
+   or a zombie) it holds the group id, and once it is reaped the kernel may hand the id to a later
+   process that leads a group of its own. Wherever a named run's leader is waited for (the normal
+   end, a poll that finds it exited, the drop), metaharness first sees it exit with `waitid(…,
+   WEXITED | WNOWAIT)`, which leaves it waitable, sends the group `SIGKILL`, then reaps it; a drop
+   before the leader exited kills the group and then kills and reaps the leader. Once the leader
+   has been reaped no group signal is sent at all. So what the vendor left behind does not outlive
+   a named run that ended by itself either. An unnamed run's child stays in metaharness's process
+   group and only that child is killed and reaped, as before. So when the run is dropped the
+   child, and on a named run its group, is gone first; then the root is removed the same way a
+   leftover is, its own read-only directories included; then both locks are released explicitly,
+   so the next run under the name finds the root gone, as a run in a new temporary directory
+   would, and no process of the previous run's group can write into it.
 
-   A group of its own no longer receives the terminal's `SIGINT`. So `metaharness run` with a
-   `--scratch-name` takes over `SIGINT`, `SIGTERM` and `SIGHUP` for the run's life and forwards
-   the first one to the run's group. A process that ignores it (a shell's background job ignores
-   `SIGINT`) is sent `SIGKILL` with the group a second later. The run then ends and is dropped as
-   above, and metaharness ends by the signal it was sent, as it would have without the forwarding;
-   if the run has not been dropped five seconds after the `SIGKILL`, metaharness ends by the
-   signal anyway, and the next run under the name takes the root over as a leftover. A run
-   without a name keeps the default handlers. An embedder that names a run forwards signals
-   itself; `Run::process_group` returns the group.
+   A group of its own no longer receives the terminal's signals. So `metaharness run` with a
+   `--scratch-name` takes over `SIGINT`, `SIGTERM`, `SIGHUP`, `SIGQUIT`, `SIGTSTP` and `SIGCONT`
+   for the run's life. The first of `SIGINT`, `SIGTERM`, `SIGHUP` and `SIGQUIT` is forwarded to
+   the run's group. A process that ignores it (a shell's background job ignores `SIGINT`) is sent
+   `SIGKILL` with the group a second later. The run then ends and is dropped as above, and
+   metaharness ends by the signal it was sent, as it would have without the forwarding; if the
+   run has not been dropped five seconds after the `SIGKILL`, metaharness ends by the signal
+   anyway, and the next run under the name takes the root over as a leftover. `SIGTSTP` (Ctrl-Z)
+   is sent to the group, then metaharness stops itself with the default action; `SIGCONT` (the
+   shell's `fg` or `bg`) is sent on to the group. Every forward goes through
+   `metaharness::ProcessGroup` (`Run::group`), which shares the reaping lock and sends nothing
+   once the leader has been reaped. When the named run's forwarding ends, each of the six signals
+   takes its default action again for the rest of the process, so a caller of
+   `metaharness_cli::execute` that goes on is interruptible as before: signal-hook keeps its
+   low-level handler installed once a signal has had one, so a handler registered once per
+   process with `signal_hook::flag::register_conditional_default` runs the default action
+   whenever no named run is forwarding. A run without a name never installs any of this. An
+   embedder that names a run forwards signals itself, through `Run::group`.
 6. **Codes, not protocol refusals.** The three codes lead their messages and are exported as
    `metaharness::SCRATCH_NAME_INVALID`, `SCRATCH_NAME_HELD` and `SCRATCH_ROOT_FOREIGN`. Like
    `scratch-path-not-utf8` (a37) they are launch conditions, not a `RefusalCode`: no command
@@ -6101,9 +6116,12 @@ as Loom does, can now name the root.
    a second run under a held name is refused and the first run's root is untouched; the root is
    gone when the run is dropped; and a run dropped while its `/bin/sh` child (started through the
    real `SpawnRunner`) still runs, named and unnamed, leaves the child reaped before its root is
-   removed. `tests/scratch_name_custody.rs` (security review) and
+   removed; and what a named run's vendor left behind (a background `sleep`) is gone once the run
+   ended by itself, and the run then names no group, while an unnamed run's is left as before.
+   `tests/scratch_name_custody.rs` (security review) and
    `tests/adversary_scratch_name_pass1.rs` (adversary pass 1) hold the review corrections below,
-   and `tests/adversary_scratch_name_pass2.rs` (adversary pass 2) their second pass.
+   `tests/adversary_scratch_name_pass2.rs` (adversary pass 2) their second pass, and
+   `tests/adversary_scratch_name_pass3.rs` in both crates (adversary pass 3) their third.
    Unit tests in `builder.rs` hold the ownership rule to a directory and a lock file of another
    uid's; refuse a dangling link, a directory and another uid's file at the lock path; refuse a
    link, a file and another uid's directory as the private parent and narrow a wider one to 0700;
@@ -6145,11 +6163,25 @@ place, so no new amendment number):
    process the vendor started outlived the dropped run and wrote into the next run's root.
 2. **A name ending in `.lock`, in any case, is `scratch-name-invalid`** at `check_spec` (§ 2).
    The first text said only one of `x` and `x.lock` could be in use at a time; since `x`'s lock
-   file stays, once
-   `x` had run, `x.lock` was refused for good, as `scratch-root-foreign`.
+   file stays, once `x` had run, `x.lock` was refused for good, as `scratch-root-foreign`.
 3. **The removal walks iteratively** with at most three descriptors (§ 4). It had recursed once
    per level and aborted the embedding process on a 1 500-deep tree on a 2 MiB thread; the
    adversary case now drops a 20 000-deep tree on that thread.
 4. **Every lock is in a guard that unlocks before it closes** (§ 3). A start refused after it took
    the name's lock closed it without unlocking, so with another thread spawning, the next start
    was told `scratch-name-held` instead of the real refusal.
+
+**Review corrections, pass 3** (adversary pass 3, before the release; amended in place, § 5):
+
+1. **The group is killed before the leader is reaped, never after.** Pass 2 killed it on drop
+   "even when the leader was already reaped"; by then the id was free, and a later process that
+   led a group of its own under the reused id was killed (shown in a pid namespace). The kill now
+   happens between `waitid(WNOWAIT)` and the reap, also on the normal end, and the forwarding
+   signals through the same lock.
+2. **`SIGQUIT` is forwarded** like `SIGINT`. Ctrl-\ ended metaharness by its default action and
+   left the vendor and what it started running, with the name's locks released.
+3. **Job control.** `SIGTSTP` stops the group and then metaharness, `SIGCONT` continues the group.
+   Ctrl-Z had stopped metaharness while the vendor ran on with nobody reading its record.
+4. **The default actions come back** when a named run's forwarding ends. Closing the `Signals`
+   left signal-hook's handler installed with nothing behind it, so a `SIGINT` after `execute`
+   returned was ignored for the rest of the process.

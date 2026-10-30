@@ -90,7 +90,7 @@ pub use doctor::{FlagFault, Installed, flag_surface, installed};
 pub use loopback::{LoopbackHandle, LoopbackProxy, ProxyReport};
 pub use process::{
     CredentialCopyView, EnvelopeLaunch, EnvelopeStartError, EnvelopeStarted, HarnessProcess,
-    LaunchPlanView, ProcessEnvelope, ProcessPoll, ProcessRunner, copy_credentials,
+    LaunchPlanView, ProcessEnvelope, ProcessGroup, ProcessPoll, ProcessRunner, copy_credentials,
     start_in_envelope,
 };
 pub use qualify::{Qualification, QualifiedRow, qualify};

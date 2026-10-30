@@ -478,11 +478,20 @@ impl Run {
     /// `--scratch-name` (design amendment a72, review corrections pass 2).
     ///
     /// Such a group is not the terminal's foreground group, so a `SIGINT` from the terminal
-    /// does not reach it; an embedder that ends on a signal forwards the signal here first.
-    /// `None` for an unnamed run, whose child stays in the embedder's group, and for a runner
-    /// that spawned nothing.
+    /// does not reach it; an embedder that ends on a signal forwards the signal through
+    /// [`Run::group`]. `None` for an unnamed run, whose child stays in the embedder's group, for
+    /// a runner that spawned nothing, and once the child has been reaped, when the id may name
+    /// somebody else's group (review corrections pass 3).
     #[must_use]
     pub fn process_group(&self) -> Option<i32> {
+        self.group().and_then(|group| group.id())
+    }
+
+    /// The child's process group as a handle that signals it only while the child is unreaped,
+    /// for an embedder that forwards signals from another thread (design amendment a72 § 5).
+    /// `None` for an unnamed run and for a runner that spawned nothing.
+    #[must_use]
+    pub fn group(&self) -> Option<crate::process::ProcessGroup> {
         self.process.process_group()
     }
 

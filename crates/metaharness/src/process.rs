@@ -282,10 +282,126 @@ pub trait HarnessProcess {
     /// design amendment a72, review corrections pass 2).
     ///
     /// Such a group does not receive a terminal's `SIGINT`, so an embedder that ends on a signal
-    /// forwards it here. `None` for a child in the embedder's own group, and by default.
-    fn process_group(&self) -> Option<i32> {
+    /// forwards it through [`ProcessGroup::signal`], which sends nothing once the leader has been
+    /// reaped (review corrections pass 3). `None` for a child in the embedder's own group, and by
+    /// default.
+    fn process_group(&self) -> Option<ProcessGroup> {
         None
     }
+}
+
+/// The process group a named run's vendor child leads, shared between the process that reaps the
+/// child and whoever signals the group (design amendment a72 § 5, review corrections pass 3).
+///
+/// A group id is a pid. While the leader has not been reaped (running, or a zombie), it holds that
+/// id and the group can only be this one. Once the leader is reaped and the group is empty, the
+/// kernel can hand the id to a later process that leads a group of its own, and a signal sent to
+/// the old id would reach that process instead. So the group is signalled only while the leader
+/// is unreaped: the reaping takes the same lock, kills the group, reaps the leader and forgets
+/// the id, and a signal sent after that finds no group and sends nothing.
+///
+/// Cloned freely and `Send`; an unnamed run has none.
+#[derive(Clone, Debug, Default)]
+pub struct ProcessGroup(std::sync::Arc<std::sync::Mutex<Option<i32>>>);
+
+impl ProcessGroup {
+    /// A group led by the child `pid`, or none when `own` is false.
+    pub(crate) fn led_by(pid: u32, own: bool) -> Self {
+        let id = if own { i32::try_from(pid).ok() } else { None };
+        Self(std::sync::Arc::new(std::sync::Mutex::new(id)))
+    }
+
+    fn held(&self) -> std::sync::MutexGuard<'_, Option<i32>> {
+        self.0
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner)
+    }
+
+    /// The group id, while its leader has not been reaped.
+    #[must_use]
+    pub fn id(&self) -> Option<i32> {
+        *self.held()
+    }
+
+    /// Send the signal numbered `signal` to the whole group, while its leader has not been
+    /// reaped. Nothing is sent once the leader was reaped or for a number that is not a signal;
+    /// a group whose members are all gone is no error.
+    pub fn signal(&self, signal: i32) {
+        let held = self.held();
+        if let (Some(group), Some(signal)) = (
+            held.and_then(rustix::process::Pid::from_raw),
+            rustix::process::Signal::from_named_raw(signal),
+        ) {
+            let _ = rustix::process::kill_process_group(group, signal);
+        }
+    }
+}
+
+/// Whether the child `pid` has exited and is still waitable, without reaping it or waiting.
+/// `None` when it is no longer this process's to wait for (already reaped).
+fn exited_unreaped(pid: rustix::process::Pid, block: bool) -> std::io::Result<Option<bool>> {
+    use rustix::process::{WaitId, WaitIdOptions};
+
+    let mut options = WaitIdOptions::EXITED | WaitIdOptions::NOWAIT;
+    if !block {
+        options |= WaitIdOptions::NOHANG;
+    }
+    loop {
+        match rustix::process::waitid(WaitId::Pid(pid), options) {
+            Ok(found) => return Ok(Some(found.is_some())),
+            Err(rustix::io::Errno::INTR) => {}
+            Err(rustix::io::Errno::CHILD) => return Ok(None),
+            Err(errno) => return Err(errno.into()),
+        }
+    }
+}
+
+/// Reap `child` if it has exited, without waiting: `Child::try_wait`, except that a leader of its
+/// own group has the group sent `SIGKILL` first, while its zombie still holds the group id, so
+/// nothing it started outlives it, and the id is forgotten with the reap ([`ProcessGroup`]).
+pub(crate) fn try_reap(
+    child: &mut std::process::Child,
+    group: &ProcessGroup,
+) -> std::io::Result<Option<std::process::ExitStatus>> {
+    let mut held = group.held();
+    if let Some(id) = *held
+        && let Some(pid) = rustix::process::Pid::from_raw(id)
+    {
+        match exited_unreaped(pid, false)? {
+            Some(false) => return Ok(None),
+            Some(true) => {
+                let _ = rustix::process::kill_process_group(pid, rustix::process::Signal::KILL);
+            }
+            None => {}
+        }
+    }
+    let status = child.try_wait()?;
+    if status.is_some() {
+        *held = None;
+    }
+    Ok(status)
+}
+
+/// Wait for `child` and reap it: `Child::wait`, with the group of a leader of its own sent
+/// `SIGKILL` between its exit and its reap, as [`try_reap`] does. The lock is not held while the
+/// leader runs, so the group can still be signalled then.
+pub(crate) fn reap(
+    child: &mut std::process::Child,
+    group: &ProcessGroup,
+) -> std::io::Result<std::process::ExitStatus> {
+    let id = group.id();
+    if let Some(pid) = id.and_then(rustix::process::Pid::from_raw) {
+        exited_unreaped(pid, true)?;
+    }
+    let mut held = group.held();
+    if let Some(pid) = held.and_then(rustix::process::Pid::from_raw)
+        && exited_unreaped(pid, false)? == Some(true)
+    {
+        let _ = rustix::process::kill_process_group(pid, rustix::process::Signal::KILL);
+    }
+    let status = child.wait()?;
+    *held = None;
+    Ok(status)
 }
 
 /// Kill and reap a spawned child nobody has reaped, as its process is dropped (design amendment
@@ -296,30 +412,31 @@ pub trait HarnessProcess {
 /// child writing by path into a root that is removed next, or, under a scratch name, into the
 /// next run's root. `reaped` is whether a `wait` already took the status.
 ///
-/// `own_group` is whether the child leads a process group of its own (a named run, a72 review
-/// corrections pass 2). Then the whole group is sent `SIGKILL` first, also when the leader was
-/// already reaped, because what the vendor started (a hook, a tool command, an MCP server) is in
-/// that group and may still run after the leader is gone. A group that is already empty is fine.
+/// A child that leads a group of its own (a named run, a72 review corrections pass 2) has the
+/// whole group sent `SIGKILL` first, because what the vendor started (a hook, a tool command, an
+/// MCP server) is in that group and may still run. Only while the leader is unreaped: a leader
+/// already reaped no longer holds the id, which may lead somebody else's group by now (review
+/// corrections pass 3), and the reap that took it already killed the group.
 pub(crate) fn reap_unreaped(
     child: Option<&mut std::process::Child>,
     reaped: bool,
-    own_group: bool,
+    group: &ProcessGroup,
 ) {
     let Some(child) = child else {
         return;
     };
-    if own_group
-        && let Some(group) = i32::try_from(child.id())
-            .ok()
-            .and_then(rustix::process::Pid::from_raw)
+    let mut held = group.held();
+    if !reaped
+        && let Some(pid) = held.and_then(rustix::process::Pid::from_raw)
+        && matches!(exited_unreaped(pid, false), Ok(Some(_)))
     {
-        let _ = rustix::process::kill_process_group(group, rustix::process::Signal::KILL);
+        let _ = rustix::process::kill_process_group(pid, rustix::process::Signal::KILL);
     }
-    if reaped || matches!(child.try_wait(), Ok(Some(_))) {
-        return;
+    if !(reaped || matches!(child.try_wait(), Ok(Some(_)))) {
+        drop(child.kill());
+        drop(child.wait());
     }
-    drop(child.kill());
-    drop(child.wait());
+    *held = None;
 }
 
 thread_local! {
@@ -355,14 +472,6 @@ pub(crate) fn own_process_group_scope(requested: bool) -> OwnProcessGroupScope {
 /// Whether the launch in progress on this thread asked for a process group of its own.
 pub(crate) fn own_process_group_requested() -> bool {
     OWN_PROCESS_GROUP.with(std::cell::Cell::get)
-}
-
-/// The process group `child` leads, when it was started in one of its own.
-pub(crate) fn led_group(child: Option<&std::process::Child>, own_group: bool) -> Option<i32> {
-    if !own_group {
-        return None;
-    }
-    child.and_then(|child| i32::try_from(child.id()).ok())
 }
 
 /// Start `command` in a process group of its own when the launch asked for one, and say whether
