@@ -520,6 +520,17 @@ fn run_in(
     extra: &[&str],
     plant: impl FnOnce(&Path),
 ) -> (PathBuf, Vec<Value>, i32) {
+    run_at(mode, credentials, extra, plant, None)
+}
+
+/// [`run_in`], with the session's `--cwd` named: `None` is the fresh root's own `work/`.
+fn run_at(
+    mode: Mode,
+    credentials: Credentials,
+    extra: &[&str],
+    plant: impl FnOnce(&Path),
+    cwd: Option<&Path>,
+) -> (PathBuf, Vec<Value>, i32) {
     require_isolation();
     let driver = PathBuf::from(
         std::env::var_os("METAHARNESS_NATIVE_DRIVER").expect("explicit production driver"),
@@ -529,7 +540,8 @@ fn run_in(
     let root = fresh_root(&vendor, &evidence, credentials);
     plant(&root);
     let provider = Provider::start(mode, credentials);
-    let mut command = driver_command(&driver, &root, &provider.endpoint, mode, credentials);
+    let cwd = cwd.map_or_else(|| root.join("work"), Path::to_path_buf);
+    let mut command = driver_command(&driver, &root, &cwd, &provider.endpoint, mode, credentials);
     command.args(extra);
     let mut child = NativeChild {
         child: command.spawn().unwrap(),
@@ -598,12 +610,12 @@ fn run_in(
 fn driver_command(
     driver: &Path,
     root: &Path,
+    cwd: &Path,
     endpoint: &str,
     mode: Mode,
     credentials: Credentials,
 ) -> Command {
     let home = root.join("home");
-    let cwd = root.join("work");
     let mut command = Command::new(driver);
     command
         .args([
@@ -627,7 +639,7 @@ fn driver_command(
             },
             "--cwd",
         ])
-        .arg(&cwd)
+        .arg(cwd)
         .arg("--retain-dir")
         .arg(root.join("retained"))
         .env_clear()
@@ -635,7 +647,7 @@ fn driver_command(
         .env("PATH", "/usr/local/bin:/usr/bin:/bin")
         .env("LANG", "C.UTF-8")
         .env("TMPDIR", root.join("tmp"))
-        .current_dir(&cwd)
+        .current_dir(cwd)
         .stdin(Stdio::piped())
         .stdout(fs::File::create(root.join("events.jsonl")).unwrap())
         .stderr(fs::File::create(root.join("stderr.log")).unwrap())
@@ -703,6 +715,63 @@ fn retain_provider(root: &Path, provider: &Provider) {
     .unwrap();
 }
 
+/// The `system` blocks of the first model request a run's stub recorded, as the child sent them.
+fn first_system_prompt(root: &Path) -> Value {
+    let requests: Vec<Value> =
+        serde_json::from_str(&fs::read_to_string(root.join("requests.json")).unwrap()).unwrap();
+    let first = requests
+        .iter()
+        .find(|request| {
+            let line = request["request"].as_str().unwrap_or_default();
+            line.starts_with("POST /v1/messages") && !line.contains("count_tokens")
+        })
+        .unwrap_or_else(|| panic!("no model request recorded in {}", root.display()));
+    first["body"]["system"].clone()
+}
+
+/// story:claude-child-runs-without-auto-memory, the native half: a second session in the first
+/// one's working directory sends the first one's system prompt byte for byte, so the provider
+/// cache can hold across sessions, and no request names either run's scratch root. The scratch
+/// root is a temporary directory under the driver's `TMPDIR`, which is the fixture root's `tmp/`.
+fn two_sessions_in_one_cwd_send_one_system_prompt(first: &Path, credentials: Credentials) {
+    let (second, _, exit) = run_at(
+        Mode::Text,
+        credentials,
+        &[],
+        |_| {},
+        Some(&first.join("work")),
+    );
+    assert_eq!(
+        exit,
+        0,
+        "story:claude-child-runs-without-auto-memory: the second session ran: {}",
+        second.display()
+    );
+    let (one, two) = (first_system_prompt(first), first_system_prompt(&second));
+    assert!(
+        one.as_array().is_some_and(|blocks| !blocks.is_empty()),
+        "story:claude-child-runs-without-auto-memory: the first request carries system blocks: \
+         {one}"
+    );
+    assert_eq!(
+        serde_json::to_string(&one).unwrap(),
+        serde_json::to_string(&two).unwrap(),
+        "story:claude-child-runs-without-auto-memory ({credentials:?}): two sessions in one cwd \
+         sent different system blocks; {} and {}",
+        first.display(),
+        second.display()
+    );
+    for root in [first, second.as_path()] {
+        let scratch_parent = root.join("tmp").display().to_string();
+        let requests = fs::read_to_string(root.join("requests.json")).unwrap();
+        assert!(
+            !requests.contains(&scratch_parent),
+            "story:claude-child-runs-without-auto-memory ({credentials:?}): a request names the \
+             run's scratch root under {scratch_parent}"
+        );
+    }
+}
+
 #[test]
 #[ignore = "actual Claude and production driver; explicit binaries/evidence and isolated loopback network namespace required"]
 fn native_success_failure_model_usage_and_extension_inventory() {
@@ -713,7 +782,11 @@ fn native_success_failure_model_usage_and_extension_inventory() {
         .into_iter()
         .flat_map(|credentials| [(credentials, false), (credentials, true)])
     {
-        let (_, events, exit) = run(if failed { Mode::Refusal } else { Mode::Text }, credentials);
+        let (root, events, exit) =
+            run(if failed { Mode::Refusal } else { Mode::Text }, credentials);
+        if !failed {
+            two_sessions_in_one_cwd_send_one_system_prompt(&root, credentials);
+        }
         let started = events
             .iter()
             .find(|e| e["event"] == "session.started")
@@ -988,8 +1061,14 @@ fn native_strict_version_refuses_an_off_pin_binary_before_the_spawn() {
     for credentials in Credentials::ALL {
         let root = fresh_root(&off_pin, &evidence, credentials);
         let provider = Provider::start(Mode::Text, credentials);
-        let mut command =
-            driver_command(&driver, &root, &provider.endpoint, Mode::Text, credentials);
+        let mut command = driver_command(
+            &driver,
+            &root,
+            &root.join("work"),
+            &provider.endpoint,
+            Mode::Text,
+            credentials,
+        );
         command.arg("--strict-version");
         let mut child = NativeChild {
             child: command.spawn().unwrap(),

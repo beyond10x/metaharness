@@ -19,6 +19,7 @@
   ],
   "env": {
     "ANTHROPIC_API_KEY": "sk-not-a-real-key",
+    "CLAUDE_CODE_DISABLE_AUTO_MEMORY": "1",
     "CLAUDE_CONFIG_DIR": "/scratch/run-1/claude-home",
     "HOME": "/operator",
     "LANG": "C.UTF-8",

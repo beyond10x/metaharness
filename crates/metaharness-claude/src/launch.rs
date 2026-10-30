@@ -1531,6 +1531,7 @@ fn build_env(
         "CLAUDE_CONFIG_DIR".to_string(),
         config_home.display().to_string(),
     );
+    env.insert(DISABLE_AUTO_MEMORY.to_string(), "1".to_string());
     if spec.credentials == CredentialSource::ApiKey
         && let Some(key) = context.inherited_env.get("ANTHROPIC_API_KEY")
     {
@@ -1610,6 +1611,15 @@ const ENDPOINT_PLACEHOLDER_KEY: &str = "metaharness-model-endpoint";
 /// the binary otherwise talks to `api.anthropic.com` directly, past a base URL that redirected
 /// everything else, and nothing in the run's record would say so.
 const DISABLE_NONESSENTIAL_TRAFFIC: &str = "CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC";
+
+/// The variable that switches Claude Code's auto-memory off (design amendment a70).
+///
+/// Auto-memory puts a line naming `<CLAUDE_CONFIG_DIR>/projects/<cwd>/memory/` into the system
+/// prompt. The config home is under a scratch root that is new per run, so that line differs
+/// between every two sessions and breaks the provider's prompt cache there; and the directory is
+/// deleted with the scratch, so nothing a session writes there is read again. Read from the
+/// pinned binary (2.1.309) and from 2.1.314: a truthy value turns auto-memory off.
+const DISABLE_AUTO_MEMORY: &str = "CLAUDE_CODE_DISABLE_AUTO_MEMORY";
 
 /// The stated `PATH`, and why it is not shorter.
 ///
@@ -1726,6 +1736,10 @@ fn is_scrubbed(key: &str, spec: &RunSpec) -> bool {
     }
     if key == DISABLE_NONESSENTIAL_TRAFFIC {
         return !credential_free(spec);
+    }
+    // Set by every launch (a70), and never the operator's by the same allowlist.
+    if key == DISABLE_AUTO_MEMORY {
+        return false;
     }
     key.starts_with("ANTHROPIC_")
         || key.starts_with("CLAUDE_CODE_")
@@ -1899,7 +1913,8 @@ fn attest(
             HermeticRow::H3,
             format!(
                 "the child environment is constructed from an allowlist of {} keys plus PATH, \
-                 TMPDIR and CLAUDE_CONFIG_DIR",
+                 TMPDIR, CLAUDE_CONFIG_DIR and {DISABLE_AUTO_MEMORY}=1, which turns auto-memory \
+                 off so no per-run memory path enters the system prompt (a70)",
                 INHERITED_KEYS.len()
             ),
         ),
@@ -2428,6 +2443,67 @@ mod tests {
         assert_eq!(
             plan.env.get("PATH").map(String::as_str),
             Some("/operator/.local/bin:/usr/local/bin:/usr/bin:/bin")
+        );
+    }
+
+    /// story:claude-child-runs-without-auto-memory. Auto-memory names a directory under the
+    /// scratch config home in the system prompt, and the scratch root is new per run, so two
+    /// sessions in one cwd differ in that line and the provider cache breaks there. The switch is
+    /// set whatever the credential source, and the attestation says it was.
+    #[test]
+    fn the_child_runs_with_auto_memory_off_under_every_credential_source() {
+        let mut worlds = Vec::new();
+        worlds.push((spec(), context()));
+        let mut api_key = spec();
+        api_key.credentials = CredentialSource::ApiKey;
+        let mut keyed = context();
+        keyed
+            .inherited_env
+            .insert("ANTHROPIC_API_KEY".to_string(), "sk-test".to_string());
+        worlds.push((api_key, keyed));
+        worlds.push(loopback_world());
+        let mut none = spec();
+        none.credentials = CredentialSource::None;
+        worlds.push((none, context()));
+
+        for (spec, context) in worlds {
+            let plan = plan_launch(&spec, &context).expect("plans");
+            assert_eq!(
+                plan.env.get(DISABLE_AUTO_MEMORY).map(String::as_str),
+                Some("1"),
+                "{:?}: auto-memory must be off in the child: {:?}",
+                spec.credentials,
+                plan.env
+            );
+            let h3 = plan
+                .attestation
+                .imposed
+                .iter()
+                .find(|control| control.row == HermeticRow::H3)
+                .expect("H3 is imposed");
+            assert!(
+                h3.how.contains("CLAUDE_CODE_DISABLE_AUTO_MEMORY=1"),
+                "{:?}: the attestation names the switch: {}",
+                spec.credentials,
+                h3.how
+            );
+        }
+    }
+
+    /// story:claude-child-runs-without-auto-memory. The switch is the plan's own value: an
+    /// operator who exported `0` does not turn auto-memory back on in the child.
+    #[test]
+    fn an_inherited_auto_memory_switch_does_not_reach_the_child() {
+        let mut world = context();
+        world
+            .inherited_env
+            .insert(DISABLE_AUTO_MEMORY.to_string(), "0".to_string());
+        let plan = plan_launch(&spec(), &world).expect("plans");
+        assert_eq!(
+            plan.env.get(DISABLE_AUTO_MEMORY).map(String::as_str),
+            Some("1"),
+            "{:?}",
+            plan.env
         );
     }
 

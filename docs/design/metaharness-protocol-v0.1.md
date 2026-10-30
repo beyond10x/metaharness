@@ -5920,3 +5920,24 @@ amendment makes them the representation every reader counts.
    the two mutated scenarios.
 5. **The format does not move.** `tool`, `tools` and `operation_kinds` are added fields, additive
    under D3: the document stays `trace-ir/1` and the summary `trace-ir-summary/1`.
+
+### Amendment a70 — a Claude child runs with auto-memory off (2026-10-30)
+
+`story:claude-child-runs-without-auto-memory`, for trial finding C5 (prompt cache across
+sessions). Observed against 2.1.314: two sessions launched in one working directory sent first
+requests that differ only in `system[2]`, at the auto-memory line naming
+`<scratch>/claude-home/projects/<cwd>/memory/`. The scratch root is new per run, so that line
+breaks the provider's prompt cache between every two sessions, and the directory is deleted with
+the scratch, so nothing a session writes there is read again.
+
+1. **The constructed environment gains one key.** The Claude launch sets
+   `CLAUDE_CODE_DISABLE_AUTO_MEMORY=1` under every credential source. Read from the binary, not
+   driven: 2.1.309 (the pin) and 2.1.314 read the variable and turn auto-memory off when it is
+   truthy. It is this plan's own value: H3's scrub still refuses every other `CLAUDE_CODE_*` key,
+   and an operator's exported value cannot reach the child through the `INHERITED_KEYS` allowlist.
+2. **H3 says so.** The imposed H3 row names the key with its value beside `PATH`, `TMPDIR` and
+   `CLAUDE_CONFIG_DIR`, so a reader of the attestation sees the control without reading the launch.
+3. **The native lane checks the outcome.** `native_success_failure_model_usage_and_extension_inventory`
+   runs a second session in the first one's working directory under each credential-free mode and
+   requires both first model requests to carry byte-identical `system` blocks and no request to
+   name either run's scratch root.
