@@ -478,6 +478,35 @@ impl HarnessSeam for B10xSeam {
                     .and_then(Value::as_str)
                     .unwrap_or("unknown")
                     .to_owned();
+                // A `failed` stop from Harness 0.21.0 on names its cause, one line about it and
+                // whether a compaction preceded it (amendment a73). The cause and the flag ride in
+                // `subtype` as `failed[:<cause>][:after-compaction]`, because a caller formatting
+                // `subtype` alone read `failed` and nothing else. The line is why the session
+                // ended, as `failed: <message>`, so it never equals another stop's word: the close
+                // check reads a budget stop from the exact word `budget-exhausted`. Only `failed`
+                // is refined, so a bound-bound stop keeps that word. An absent or empty value
+                // leaves the stop's own word, and an older loop's line maps exactly as before.
+                let failed = reason == "failed";
+                let refined = |field: &str| {
+                    stop.get(field)
+                        .and_then(Value::as_str)
+                        .filter(|text| failed && !text.is_empty())
+                };
+                let after_compaction = failed
+                    && stop
+                        .get("after_compaction")
+                        .and_then(Value::as_bool)
+                        .unwrap_or(false);
+                let mut subtype = reason.clone();
+                if let Some(cause) = refined("cause") {
+                    subtype.push(':');
+                    subtype.push_str(cause);
+                }
+                if after_compaction {
+                    subtype.push_str(":after-compaction");
+                }
+                let terminal_reason = refined("message")
+                    .map_or_else(|| reason.clone(), |message| format!("{reason}: {message}"));
                 // Anything still held ran without being asked about; its record goes out before the
                 // end.
                 let mut emitted = self.release_held();
@@ -485,9 +514,9 @@ impl HarnessSeam for B10xSeam {
                     final_answer: None,
                     observed_models: None,
                     is_error: Some(reason != "completed"),
-                    subtype: Some(reason.clone()),
+                    subtype: Some(subtype),
                     stop_reason: None,
-                    terminal_reason: Some(reason),
+                    terminal_reason: Some(terminal_reason),
                     api_error_status: None,
                     // The loop's own count, beside the stop rather than inside it. Only the two
                     // bound-bound stops carry one, so a reader asking how long a run was got an
@@ -1108,6 +1137,184 @@ mod tests {
             permission_denials,
             Some(Vec::new()),
             "the loop withheld nothing: a tool outside the set was never there to withhold"
+        );
+    }
+
+    /// A failed run names its cause in the terminal record (Harness 0.21.0 on).
+    ///
+    /// The loop ends a run that started and then failed with one `finished` line whose stop
+    /// carries `cause`, `message` and `after_compaction`. A caller that formats `subtype` alone
+    /// read `failed` and nothing else, so the cause rides there as `failed:<cause>`, and the
+    /// stop's one line is why the session ended.
+    #[test]
+    fn a_failed_run_names_its_cause_in_the_terminal_record() {
+        let mut seam = seam();
+        let event = one(
+            &mut *seam,
+            r#"{"kind":"finished","stop":{"kind":"failed","cause":"provider-refused","message":"m","after_compaction":true},"turns":3}"#,
+        );
+        let Event::SessionEnded {
+            is_error,
+            subtype,
+            terminal_reason,
+            stop_reason,
+            num_turns,
+            ..
+        } = event
+        else {
+            panic!("a terminal record")
+        };
+        assert_eq!(is_error, Some(true));
+        assert_eq!(num_turns, Some(3));
+        assert_eq!(
+            subtype.as_deref(),
+            Some("failed:provider-refused:after-compaction")
+        );
+        assert_eq!(terminal_reason.as_deref(), Some("failed: m"));
+        assert_eq!(stop_reason, None, "the model did not stop; the run failed");
+    }
+
+    fn subtype_and_reason(line: &str) -> (Option<String>, Option<String>) {
+        let mut seam = seam();
+        let Event::SessionEnded {
+            subtype,
+            terminal_reason,
+            ..
+        } = one(&mut *seam, line)
+        else {
+            panic!("a terminal record")
+        };
+        (subtype, terminal_reason)
+    }
+
+    /// `after_compaction: false` and no `after_compaction` at all both leave `failed:<cause>`.
+    #[test]
+    fn a_failure_without_compaction_names_the_cause_alone() {
+        for line in [
+            r#"{"kind":"finished","stop":{"kind":"failed","cause":"provider-refused","after_compaction":false}}"#,
+            r#"{"kind":"finished","stop":{"kind":"failed","cause":"provider-refused"}}"#,
+        ] {
+            assert_eq!(
+                subtype_and_reason(line).0.as_deref(),
+                Some("failed:provider-refused"),
+                "{line}"
+            );
+        }
+    }
+
+    /// A failure after compaction that names no cause still says so.
+    #[test]
+    fn a_failure_after_compaction_without_a_cause_says_so() {
+        assert_eq!(
+            subtype_and_reason(
+                r#"{"kind":"finished","stop":{"kind":"failed","after_compaction":true}}"#
+            )
+            .0
+            .as_deref(),
+            Some("failed:after-compaction")
+        );
+    }
+
+    /// A message that is another stop's word never stands alone in `terminal_reason`, where the
+    /// close check compares words exactly.
+    #[test]
+    fn a_message_that_is_another_stops_word_is_prefixed_with_the_failure() {
+        let (subtype, reason) = subtype_and_reason(
+            r#"{"kind":"finished","stop":{"kind":"failed","cause":"budget","message":"budget-exhausted"}}"#,
+        );
+        assert_eq!(subtype.as_deref(), Some("failed:budget"));
+        assert_eq!(reason.as_deref(), Some("failed: budget-exhausted"));
+    }
+
+    #[test]
+    fn a_cause_without_a_message_keeps_the_stops_word_as_the_reason() {
+        let mut seam = seam();
+        let Event::SessionEnded {
+            subtype,
+            terminal_reason,
+            ..
+        } = one(
+            &mut *seam,
+            r#"{"kind":"finished","stop":{"kind":"failed","cause":"environment","after_compaction":false}}"#,
+        )
+        else {
+            panic!("a terminal record")
+        };
+        assert_eq!(subtype.as_deref(), Some("failed:environment"));
+        assert_eq!(terminal_reason.as_deref(), Some("failed"));
+    }
+
+    /// An empty cause or message is the loop's silence, never a value: no `failed:` with nothing
+    /// after it and no empty reason.
+    #[test]
+    fn an_empty_cause_or_message_is_absent_and_never_an_empty_string() {
+        let mut seam = seam();
+        let Event::SessionEnded {
+            subtype,
+            terminal_reason,
+            ..
+        } = one(
+            &mut *seam,
+            r#"{"kind":"finished","stop":{"kind":"failed","cause":"","message":""}}"#,
+        )
+        else {
+            panic!("a terminal record")
+        };
+        assert_eq!(subtype.as_deref(), Some("failed"));
+        assert_eq!(terminal_reason.as_deref(), Some("failed"));
+    }
+
+    /// Only a `failed` stop is refined. A bound-bound stop keeps its own word in both fields,
+    /// because `budget-exhausted` there is what closes the stream as a budget stop.
+    #[test]
+    fn a_stop_that_is_not_failed_keeps_its_word_whatever_else_it_carries() {
+        let mut seam = seam();
+        let Event::SessionEnded {
+            subtype,
+            terminal_reason,
+            ..
+        } = one(
+            &mut *seam,
+            r#"{"kind":"finished","stop":{"kind":"budget-exhausted","cause":"budget","message":"m","turns":9}}"#,
+        )
+        else {
+            panic!("a terminal record")
+        };
+        assert_eq!(subtype.as_deref(), Some("budget-exhausted"));
+        assert_eq!(terminal_reason.as_deref(), Some("budget-exhausted"));
+    }
+
+    /// A `finished` line from a Harness before 0.21.0 names no cause and maps exactly as before:
+    /// the whole record is compared, not the fields this story touched.
+    #[test]
+    fn a_failed_line_from_an_older_harness_maps_exactly_as_before() {
+        let mut seam = seam();
+        let event = one(
+            &mut *seam,
+            r#"{"kind":"finished","stop":{"kind":"failed"},"turns":2}"#,
+        );
+        assert_eq!(
+            event,
+            Event::SessionEnded {
+                final_answer: None,
+                observed_models: None,
+                is_error: Some(true),
+                subtype: Some("failed".to_owned()),
+                stop_reason: None,
+                terminal_reason: Some("failed".to_owned()),
+                api_error_status: None,
+                num_turns: Some(2),
+                duration_ms: None,
+                duration_api_ms: None,
+                ttft_ms: None,
+                time_to_request_ms: None,
+                total_cost_usd: None,
+                permission_denials: Some(Vec::new()),
+                subagents_spawned: Some(0),
+                usage: None,
+                model_usage: None,
+                census: DecisionCensus::default(),
+            }
         );
     }
 

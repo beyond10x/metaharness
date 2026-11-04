@@ -6185,3 +6185,38 @@ place, so no new amendment number):
 4. **The default actions come back** when a named run's forwarding ends. Closing the `Signals`
    left signal-hook's handler installed with nothing behind it, so a `SIGINT` after `execute`
    returned was ignored for the rest of the process.
+
+### Amendment a73 — a failed b10x run names its cause in `session.ended` (2026-11-04)
+
+`story:b10x-failed-run-names-its-cause`, under `epic:loom-agent-work-through-metaharness`. From
+Harness 0.21.0 a run that started and then failed ends with one `finished` line whose stop is
+`{"kind":"failed","cause":"<cause>","message":"<one line>","after_compaction":<bool>}`. The b10x
+adapter read only `stop.kind`, so the record said `failed` and a caller formatting `subtype` could
+not say why.
+
+1. **The cause and the compaction flag ride in `subtype`.** `subtype` is the field a caller already
+   formats, so both reach its message with no change on its side:
+
+   | stop | `subtype` |
+   |---|---|
+   | `cause` set, `after_compaction: true` | `failed:<cause>:after-compaction` |
+   | `cause` set, `after_compaction` false or absent | `failed:<cause>` |
+   | no `cause`, `after_compaction: true` | `failed:after-compaction` |
+   | no `cause`, `after_compaction` false or absent | `failed` |
+
+2. **The message is `terminal_reason`, as `failed: <message>`**: the stop's word, a colon, a space,
+   the message. `terminal_reason` is *why the session ended*, and the close check reads a budget
+   stop from the exact word `budget-exhausted` there (§ 4.1, `stream.closed` rule 4). A bare
+   message equal to that word would turn a failure into a budget stop; with the prefix it never
+   equals another stop's word. A `failed` stop without a message keeps `terminal_reason: "failed"`.
+3. **Only a `failed` stop is refined.** A bound-bound stop keeps its own word in `subtype` and
+   `terminal_reason` whatever else its stop carries, so `budget-exhausted` still closes `budget`.
+4. **Absent stays absent.** A missing or empty `cause` or `message` leaves the stop's own word:
+   never `failed:` with nothing after it and never an empty reason. An `after_compaction` that is
+   not a boolean reads as absent. A line from a loop before 0.21.0 maps exactly as before.
+5. **No new field.** A field for the cause, the message or the flag would touch the protocol
+   crate, every construction of `session.ended` across the workspace (37 in 21 files), the ESS
+   domain and the ESS pin, which this wave does not move. The existing string fields carry all three
+   in a fixed grammar instead. A typed field can replace this mapping in a later change.
+
+No new event or field; the wire's shape is unchanged.
