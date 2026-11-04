@@ -6189,10 +6189,15 @@ place, so no new amendment number):
 ### Amendment a73 — a failed b10x run names its cause in `session.ended` (2026-11-04)
 
 `story:b10x-failed-run-names-its-cause`, under `epic:loom-agent-work-through-metaharness`. From
-Harness 0.21.0 a run that started and then failed ends with one `finished` line whose stop is
-`{"kind":"failed","cause":"<cause>","message":"<one line>","after_compaction":<bool>}`. The b10x
-adapter read only `stop.kind`, so the record said `failed` and a caller formatting `subtype` could
-not say why.
+Harness 0.23.0 a run that started and then failed ends with one `finished` line whose stop is
+`{"kind":"failed","cause":"<cause>","message":"<one line>","after_compaction":<bool>}`; before
+0.23.0 such a run wrote no `finished` line at all. The b10x adapter read only `stop.kind`, so the
+record said `failed` and a caller formatting `subtype` could not say why.
+
+**Unverified at the pin.** The adapter's pin is Harness 0.22.0, which writes no failed stop, so at
+the pin this mapping never runs (invariant 4). It was checked only against a record written by an
+unpinned `b10x-harness 0.26.0` on 2026-11-04 (`crates/metaharness/tests/adversary_u1_pass1.rs`).
+The pin does not move in this amendment.
 
 1. **The cause and the compaction flag ride in `subtype`.** `subtype` is the field a caller already
    formats, so both reach its message with no change on its side:
@@ -6213,7 +6218,8 @@ not say why.
    `terminal_reason` whatever else its stop carries, so `budget-exhausted` still closes `budget`.
 4. **Absent stays absent.** A missing or empty `cause` or `message` leaves the stop's own word:
    never `failed:` with nothing after it and never an empty reason. An `after_compaction` that is
-   not a boolean reads as absent. A line from a loop before 0.21.0 maps exactly as before.
+   not a boolean reads as absent. A failed stop that names none of them maps exactly as before
+   this amendment, to `failed` in both fields.
 5. **No new field.** A field for the cause, the message or the flag would touch the protocol
    crate, every construction of `session.ended` across the workspace (37 in 21 files), the ESS
    domain and the ESS pin, which this wave does not move. The existing string fields carry all three

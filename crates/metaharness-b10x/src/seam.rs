@@ -478,14 +478,17 @@ impl HarnessSeam for B10xSeam {
                     .and_then(Value::as_str)
                     .unwrap_or("unknown")
                     .to_owned();
-                // A `failed` stop from Harness 0.21.0 on names its cause, one line about it and
-                // whether a compaction preceded it (amendment a73). The cause and the flag ride in
+                // A `failed` stop from Harness 0.23.0 on names its cause, one line about it and
+                // whether a compaction preceded it (amendment a73). At the adapter's pin (0.22.0)
+                // the loop writes no failed stop, so this mapping is unverified at the pin; it was
+                // checked against a record from an unpinned 0.26.0
+                // (`crates/metaharness/tests/adversary_u1_pass1.rs`). The cause and the flag ride in
                 // `subtype` as `failed[:<cause>][:after-compaction]`, because a caller formatting
                 // `subtype` alone read `failed` and nothing else. The line is why the session
                 // ended, as `failed: <message>`, so it never equals another stop's word: the close
                 // check reads a budget stop from the exact word `budget-exhausted`. Only `failed`
                 // is refined, so a bound-bound stop keeps that word. An absent or empty value
-                // leaves the stop's own word, and an older loop's line maps exactly as before.
+                // leaves the stop's own word, so a failed stop without them maps as before.
                 let failed = reason == "failed";
                 let refined = |field: &str| {
                     stop.get(field)
@@ -1140,7 +1143,7 @@ mod tests {
         );
     }
 
-    /// A failed run names its cause in the terminal record (Harness 0.21.0 on).
+    /// A failed run names its cause in the terminal record (Harness 0.23.0 on).
     ///
     /// The loop ends a run that started and then failed with one `finished` line whose stop
     /// carries `cause`, `message` and `after_compaction`. A caller that formats `subtype` alone
@@ -1284,10 +1287,12 @@ mod tests {
         assert_eq!(terminal_reason.as_deref(), Some("budget-exhausted"));
     }
 
-    /// A `finished` line from a Harness before 0.21.0 names no cause and maps exactly as before:
-    /// the whole record is compared, not the fields this story touched.
+    /// A failed stop that names no cause, message or compaction keeps the word `failed` in both
+    /// fields, exactly as the mapping did before a73. No released loop is known to write such a
+    /// line (before 0.23.0 a failed run wrote no `finished` line at all); the whole record is
+    /// compared, not the fields this story touched.
     #[test]
-    fn a_failed_line_from_an_older_harness_maps_exactly_as_before() {
+    fn a_failed_stop_without_a_cause_keeps_the_word_failed() {
         let mut seam = seam();
         let event = one(
             &mut *seam,
