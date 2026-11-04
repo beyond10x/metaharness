@@ -1,0 +1,13 @@
+{
+  "at": "2026-11-04T21:40:20Z",
+  "actor": "human:timo",
+  "artifact": "story:actor-reaches-every-launch",
+  "kind": "story",
+  "revision": 6,
+  "change": {
+    "change": "evidence",
+    "kind": "verification",
+    "source": "cargo test -p metaharness-codex --lib and -p metaharness --test adversary_check_spec_pass1, base vs unit: VERIFIED (base: the_actor_a_run_writes_as_is_declared_and_never_inherited and the b10x refusal case red; unit 79f811c: 122 passed, 3 passed)",
+    "reference": "u3/scratch/red-codex.log, red-pass1.log vs green-codex-lib.log, green-pass1.log"
+  }
+}
