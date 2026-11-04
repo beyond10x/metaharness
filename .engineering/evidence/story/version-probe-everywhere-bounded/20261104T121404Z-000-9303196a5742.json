@@ -1,0 +1,13 @@
+{
+  "at": "2026-11-04T12:14:04Z",
+  "actor": "human:timo",
+  "artifact": "story:version-probe-everywhere-bounded",
+  "kind": "story",
+  "revision": 5,
+  "change": {
+    "change": "evidence",
+    "kind": "verification",
+    "source": "cargo test -p metaharness --lib and -p metaharness-cli --test version_probe_bounded, base vs unit: VERIFIED (base: 3 lib cases did not return, 2 CLI cases still running after 20s; unit: 163 passed, 2 passed)",
+    "reference": "u2/scratch/red-lib.log, red-cli.log vs green-lib.log, green-cli.log"
+  }
+}
