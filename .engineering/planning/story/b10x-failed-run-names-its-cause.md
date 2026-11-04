@@ -10,14 +10,14 @@ relations:
 scope:
 - confidence: cited
   path: crates/metaharness-b10x/src/seam.rs
-revision: 4
+revision: 6
 transitions:
 - {from: "draft", to: "proposed", at: "2026-11-04T07:33:26Z", actor: "human:timo", revision: 2}
 - {from: "proposed", to: "active", at: "2026-11-04T07:33:26Z", actor: "human:timo", revision: 3}
 ---
 ## Context
 
-From Harness 0.21.0 on, a b10x-harness run that started and then failed ends its event stream with
+From Harness 0.23.0 on (corrected 2026-11-04 from 0.21.0 by adversary pass 1: Harness 0.21.0 and 0.22.0 contain no `after_compaction`), a b10x-harness run that started and then failed ends its event stream with
 one `finished` line whose stop is
 `{"kind":"failed","cause":"<cause>","message":"<one line>","after_compaction":<bool>}`
 (harness `story:failed-run-ends-with-a-finished-line`). `cause` is `provider-<wire error code>`
@@ -49,5 +49,6 @@ record can say why the run ended.
 
 ## Out of scope
 
-- Harness's own line (shipped in Harness 0.21.0).
+- Harness's own line (shipped in Harness 0.23.0).
 - The Loom executor's message format (Loom's store), beyond what `subtype` already carries.
+- Moving the adapter pin from 0.22.0 to a Harness that writes the failed stop: at the pin the mapping is labelled unverified.
