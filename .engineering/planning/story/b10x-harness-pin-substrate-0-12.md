@@ -2,15 +2,16 @@
 format: aep.planning-md/3
 id: story:b10x-harness-pin-substrate-0-12
 kind: story
-status: active
+status: implemented
 title: metaharness admits the b10x-harness release on the newest Substrate
 summary: Harness moves Substrate 0.7.17 -> the release after 0.12.0 and ESS 0.70.0; move the harness pin, re-record the golden from the released archive
 tags:
 - adr-0109
-revision: 3
+revision: 5
 transitions:
 - {from: "draft", to: "proposed", at: "2026-10-27T09:12:33Z", actor: "human:timo", revision: 2}
 - {from: "proposed", to: "active", at: "2026-10-27T09:12:33Z", actor: "human:timo", revision: 3}
+- {from: "active", to: "implemented", at: "2026-11-04T07:30:32Z", actor: "human:timo", revision: 5, decided_on: {"recorded":{"test_result":1}}}
 ---
 # Story: b10x-harness-pin-substrate-0-12
 
@@ -49,3 +50,21 @@ tests pass apart from the two that pin the harness revision in the lock
   onto Substrate's `systemd` adapter would add a Substrate dependency metaharness does not have;
   ADR 0109 F2 A names such moves as later hops.
 - A paid one-turn run.
+
+## Result
+
+Delivered on main by `020d832` (`feat(b10x)!: admit b10x-harness 0.21.0 on Substrate 0.13.0`), released as
+metaharness 0.21.0 (tag `0.21.0` points at that commit; GitHub Release published by b10x-bot[bot] on
+2026-10-27T14:18:48Z). Harness 0.21.0 (`ef6df52e`) embeds Substrate 0.13.0, the release after 0.12.0.
+
+- Acceptance 1: both manifests, the lock, `PINNED_VERSIONS` and `HARNESS_REVISION` moved to 0.21.0 in
+  `020d832`; CI Gate and MSRV 1.98 green on that commit
+  (https://github.com/beyond10x/metaharness/actions/runs/40517199747).
+- Acceptance 2: the golden loop record, banner and caller-seam samples were captured again from the released,
+  checksum-verified 0.21.0 archive against harness's emulator; the replays moved only in `harness_version`
+  (`020d832` body).
+- Acceptance 3: the credential-free `--strict-version` run is recorded on the follow-up hop,
+  `story:b10x-harness-pin-0-22` (verification entry of 2026-10-28T22:15:14Z, 0.21.0 and 0.22.0 archives).
+
+Superseded since by `e90e247` (harness 0.22.0, Substrate 0.14.0). Closed 2026-11-04 from the idle audit,
+no code change.
