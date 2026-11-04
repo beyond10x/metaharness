@@ -6194,18 +6194,29 @@ Harness 0.21.0 a run that started and then failed ends with one `finished` line 
 adapter read only `stop.kind`, so the record said `failed` and a caller formatting `subtype` could
 not say why.
 
-1. **The cause rides in `subtype` as `failed:<cause>`** (`failed:provider-refused`). `subtype` is
-   the field a caller already formats, so the cause reaches its message with no change on its side.
-2. **The message is `terminal_reason`**, which is *why the session ended*. A `failed` stop without
-   a message keeps `terminal_reason: "failed"`.
-3. **Only a `failed` stop is refined.** `budget-exhausted` in `subtype` or `terminal_reason` is what
-   closes a stream as a budget stop (§ 4.1, `stream.closed` rule 4), so a bound-bound stop
-   keeps its own word in both fields whatever else its stop carries.
+1. **The cause and the compaction flag ride in `subtype`.** `subtype` is the field a caller already
+   formats, so both reach its message with no change on its side:
+
+   | stop | `subtype` |
+   |---|---|
+   | `cause` set, `after_compaction: true` | `failed:<cause>:after-compaction` |
+   | `cause` set, `after_compaction` false or absent | `failed:<cause>` |
+   | no `cause`, `after_compaction: true` | `failed:after-compaction` |
+   | no `cause`, `after_compaction` false or absent | `failed` |
+
+2. **The message is `terminal_reason`, as `failed: <message>`**: the stop's word, a colon, a space,
+   the message. `terminal_reason` is *why the session ended*, and the close check reads a budget
+   stop from the exact word `budget-exhausted` there (§ 4.1, `stream.closed` rule 4). A bare
+   message equal to that word would turn a failure into a budget stop; with the prefix it never
+   equals another stop's word. A `failed` stop without a message keeps `terminal_reason: "failed"`.
+3. **Only a `failed` stop is refined.** A bound-bound stop keeps its own word in `subtype` and
+   `terminal_reason` whatever else its stop carries, so `budget-exhausted` still closes `budget`.
 4. **Absent stays absent.** A missing or empty `cause` or `message` leaves the stop's own word:
-   never `failed:` with nothing after it and never an empty reason. A line from a loop before
-   0.21.0 maps exactly as before.
-5. **Open: `after_compaction`.** No existing field of `session.ended` carries a flag, and adding one
-   touches the protocol crate and every constructor of the variant across the workspace. It stays in
-   the retained transcript until that change is made.
+   never `failed:` with nothing after it and never an empty reason. An `after_compaction` that is
+   not a boolean reads as absent. A line from a loop before 0.21.0 maps exactly as before.
+5. **No new field.** A field for the cause, the message or the flag would touch the protocol
+   crate, every construction of `session.ended` across the workspace (37 in 21 files), the ESS
+   domain and the ESS pin, which this wave does not move. The existing string fields carry all three
+   in a fixed grammar instead. A typed field can replace this mapping in a later change.
 
 No new event or field; the wire's shape is unchanged.

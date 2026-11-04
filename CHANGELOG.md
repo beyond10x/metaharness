@@ -5,7 +5,7 @@ was amended and the amendment is named here.
 
 ## [Unreleased]
 
-- A failed b10x run names its cause: Harness 0.21.0's `finished` stop `{"kind":"failed","cause":…,"message":…}` becomes `session.ended` with `subtype: "failed:<cause>"` and the message as `terminal_reason`; a line without a cause maps as before. `after_compaction` is not carried yet (amendment a73).
+- A failed b10x run names its cause: Harness 0.21.0's `finished` stop `{"kind":"failed","cause":…,"message":…}` becomes `session.ended` with `subtype: "failed:<cause>"` (with `:after-compaction` appended when the failure followed a compaction) and `terminal_reason: "failed: <message>"`; a line without a cause maps as before (amendment a73).
 
 ## [0.26.2] — 2026-10-30
 

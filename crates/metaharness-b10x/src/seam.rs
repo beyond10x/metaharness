@@ -478,22 +478,35 @@ impl HarnessSeam for B10xSeam {
                     .and_then(Value::as_str)
                     .unwrap_or("unknown")
                     .to_owned();
-                // A `failed` stop from Harness 0.21.0 on names its cause and one line about it.
-                // The cause rides in `subtype` as `failed:<cause>`, because a caller formatting
-                // `subtype` alone read `failed` and nothing else; the line is why the session
-                // ended. Only `failed` is refined: `budget-exhausted` in either field is what
-                // closes the stream as a budget stop. An absent or empty value leaves the stop's
-                // own word, so an older loop's line maps exactly as before. `after_compaction`
-                // has no field on `session.ended` yet and stays in the retained transcript.
+                // A `failed` stop from Harness 0.21.0 on names its cause, one line about it and
+                // whether a compaction preceded it (amendment a73). The cause and the flag ride in
+                // `subtype` as `failed[:<cause>][:after-compaction]`, because a caller formatting
+                // `subtype` alone read `failed` and nothing else. The line is why the session
+                // ended, as `failed: <message>`, so it never equals another stop's word: the close
+                // check reads a budget stop from the exact word `budget-exhausted`. Only `failed`
+                // is refined, so a bound-bound stop keeps that word. An absent or empty value
+                // leaves the stop's own word, and an older loop's line maps exactly as before.
+                let failed = reason == "failed";
                 let refined = |field: &str| {
                     stop.get(field)
                         .and_then(Value::as_str)
-                        .filter(|text| reason == "failed" && !text.is_empty())
+                        .filter(|text| failed && !text.is_empty())
                 };
-                let subtype = refined("cause")
-                    .map_or_else(|| reason.clone(), |cause| format!("{reason}:{cause}"));
-                let terminal_reason =
-                    refined("message").map_or_else(|| reason.clone(), str::to_owned);
+                let after_compaction = failed
+                    && stop
+                        .get("after_compaction")
+                        .and_then(Value::as_bool)
+                        .unwrap_or(false);
+                let mut subtype = reason.clone();
+                if let Some(cause) = refined("cause") {
+                    subtype.push(':');
+                    subtype.push_str(cause);
+                }
+                if after_compaction {
+                    subtype.push_str(":after-compaction");
+                }
+                let terminal_reason = refined("message")
+                    .map_or_else(|| reason.clone(), |message| format!("{reason}: {message}"));
                 // Anything still held ran without being asked about; its record goes out before the
                 // end.
                 let mut emitted = self.release_held();
@@ -1153,9 +1166,64 @@ mod tests {
         };
         assert_eq!(is_error, Some(true));
         assert_eq!(num_turns, Some(3));
-        assert_eq!(subtype.as_deref(), Some("failed:provider-refused"));
-        assert_eq!(terminal_reason.as_deref(), Some("m"));
+        assert_eq!(
+            subtype.as_deref(),
+            Some("failed:provider-refused:after-compaction")
+        );
+        assert_eq!(terminal_reason.as_deref(), Some("failed: m"));
         assert_eq!(stop_reason, None, "the model did not stop; the run failed");
+    }
+
+    fn subtype_and_reason(line: &str) -> (Option<String>, Option<String>) {
+        let mut seam = seam();
+        let Event::SessionEnded {
+            subtype,
+            terminal_reason,
+            ..
+        } = one(&mut *seam, line)
+        else {
+            panic!("a terminal record")
+        };
+        (subtype, terminal_reason)
+    }
+
+    /// `after_compaction: false` and no `after_compaction` at all both leave `failed:<cause>`.
+    #[test]
+    fn a_failure_without_compaction_names_the_cause_alone() {
+        for line in [
+            r#"{"kind":"finished","stop":{"kind":"failed","cause":"provider-refused","after_compaction":false}}"#,
+            r#"{"kind":"finished","stop":{"kind":"failed","cause":"provider-refused"}}"#,
+        ] {
+            assert_eq!(
+                subtype_and_reason(line).0.as_deref(),
+                Some("failed:provider-refused"),
+                "{line}"
+            );
+        }
+    }
+
+    /// A failure after compaction that names no cause still says so.
+    #[test]
+    fn a_failure_after_compaction_without_a_cause_says_so() {
+        assert_eq!(
+            subtype_and_reason(
+                r#"{"kind":"finished","stop":{"kind":"failed","after_compaction":true}}"#
+            )
+            .0
+            .as_deref(),
+            Some("failed:after-compaction")
+        );
+    }
+
+    /// A message that is another stop's word never stands alone in `terminal_reason`, where the
+    /// close check compares words exactly.
+    #[test]
+    fn a_message_that_is_another_stops_word_is_prefixed_with_the_failure() {
+        let (subtype, reason) = subtype_and_reason(
+            r#"{"kind":"finished","stop":{"kind":"failed","cause":"budget","message":"budget-exhausted"}}"#,
+        );
+        assert_eq!(subtype.as_deref(), Some("failed:budget"));
+        assert_eq!(reason.as_deref(), Some("failed: budget-exhausted"));
     }
 
     #[test]
