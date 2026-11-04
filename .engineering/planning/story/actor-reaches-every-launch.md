@@ -7,7 +7,14 @@ title: Every launch carries --actor, or check_spec refuses it on the kinds that 
 summary: Codex and b10x accept --actor and drop it; aep drive passes it to Codex
 relations:
 - decomposes: epic:loom-agent-work-through-metaharness
-revision: 3
+scope:
+- confidence: cited
+  path: crates/metaharness-codex/src/launch.rs
+- confidence: cited
+  path: crates/metaharness/src/builder.rs
+- confidence: cited
+  path: crates/metaharness/tests/adversary_check_spec_pass1.rs
+revision: 6
 transitions:
 - {from: "draft", to: "proposed", at: "2026-11-04T07:33:27Z", actor: "human:timo", revision: 2}
 - {from: "proposed", to: "active", at: "2026-11-04T07:33:27Z", actor: "human:timo", revision: 3}

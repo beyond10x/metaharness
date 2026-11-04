@@ -7,7 +7,10 @@ title: A failed b10x run names its cause in session.ended
 summary: The b10x adapter carries finished.stop.cause, message and after_compaction into session.ended
 relations:
 - decomposes: epic:loom-agent-work-through-metaharness
-revision: 3
+scope:
+- confidence: cited
+  path: crates/metaharness-b10x/src/seam.rs
+revision: 4
 transitions:
 - {from: "draft", to: "proposed", at: "2026-11-04T07:33:26Z", actor: "human:timo", revision: 2}
 - {from: "proposed", to: "active", at: "2026-11-04T07:33:26Z", actor: "human:timo", revision: 3}

@@ -5,7 +5,14 @@ kind: story
 status: active
 title: Link aep 0.79.0 so a run with --approver gets past an operator step
 summary: Retargeted from 0.77.1 to aep 0.79.0; resume takes --evidence
-revision: 6
+scope:
+- confidence: cited
+  path: Cargo.lock
+- confidence: cited
+  path: crates/metaharness-aep/Cargo.toml
+- confidence: inferred
+  path: crates/metaharness-aep/src/drive.rs
+revision: 9
 transitions:
 - {from: "draft", to: "proposed", at: "2026-11-04T07:33:26Z", actor: "human:timo", revision: 5, decided_on: {"recorded":{"approval":1}}}
 - {from: "proposed", to: "active", at: "2026-11-04T07:33:26Z", actor: "human:timo", revision: 6, decided_on: {"recorded":{"approval":1}}}
