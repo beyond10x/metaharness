@@ -73,6 +73,9 @@ fn b10x_is_refused_a_spend_ceiling_its_launch_drops() {
 /// story's outcome says `check_spec` refuses such a key before anything starts; it admitted every
 /// one of them. Rewritten by the coordinator after pass 1: `actor` on Codex and b10x moves to its
 /// own story, because `aep drive` passes `--actor` to Codex today and a refusal would break it.
+/// story:actor-reaches-every-launch settled it: the Codex launch carries `--actor` as `AEP_ACTOR`
+/// (pinned in `metaharness-codex`'s launch tests), so `check_spec` admits it there; the b10x launch
+/// carries none, so `check_spec` refuses it there by name.
 #[test]
 fn every_key_a_kinds_launch_reads_nowhere_is_refused_by_check_spec() {
     let cases = [
@@ -100,18 +103,21 @@ fn every_key_a_kinds_launch_reads_nowhere_is_refused_by_check_spec() {
         "story:run-spec-document: check_spec admits a key the kind drops in silence:\n{}",
         admitted.join("\n")
     );
-    for spec in [
-        RunSpec::from_document_str(r#"{"kind":"codex","actor":"agent:x"}"#).expect("a document"),
-        b10x(r#","actor":"agent:x""#),
-    ] {
-        assert_eq!(
-            check_spec(&spec),
-            Ok(()),
-            "story:actor-reaches-every-launch: --actor stays admitted on {} until that story \
-             decides whether the launch carries it or check_spec refuses it",
-            spec.kind.as_str()
-        );
-    }
+    let codex =
+        RunSpec::from_document_str(r#"{"kind":"codex","actor":"agent:x"}"#).expect("a document");
+    assert_eq!(
+        check_spec(&codex),
+        Ok(()),
+        "story:actor-reaches-every-launch: the Codex launch carries --actor, so check_spec admits it"
+    );
+    let b10x_actor = check_spec(&b10x(r#","actor":"agent:x""#));
+    assert!(
+        b10x_actor
+            .as_ref()
+            .is_err_and(|refusal| refusal.to_string().contains("--actor")),
+        "story:actor-reaches-every-launch: the b10x launch carries no --actor, so check_spec \
+         refuses it by name rather than dropping it: {b10x_actor:?}"
+    );
 }
 
 /// Green probe at 9109f336: an empty path read from a document reached `check_spec` and passed it,

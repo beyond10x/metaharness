@@ -6220,3 +6220,22 @@ not say why.
    in a fixed grammar instead. A typed field can replace this mapping in a later change.
 
 No new event or field; the wire's shape is unchanged.
+
+### Amendment a74 — `--actor` reaches the Codex child and is refused on b10x (2026-11-04)
+
+`story:actor-reaches-every-launch`, settling the third point of a64's review: `--actor` was admitted
+on Codex and b10x and read by neither launch.
+
+1. **Codex carries it.** `metaharness aep drive` passes `--actor` to Codex (`codex_argv`), so the
+   Codex launch sets `AEP_ACTOR` in the child's constructed environment, as the Claude launch does.
+   It comes from the spec and never from `INHERITED_KEYS`: an `AEP_ACTOR` in the operator's own
+   environment does not reach a run that declared none (H3). Both Codex routes, `exec` and
+   `app-server`, spawn with `env_clear()` and that one map. Whether the vendor's shell tool hands it
+   on to a command the model runs is the vendor's `shell_environment_policy`, which the scratch
+   config does not set; that is unverified on any pinned version.
+2. **b10x refuses it.** No caller passes `--actor` to b10x (`b10x_argv` emits none), and the loop
+   starts the model's programs through its own confinement, so a variable set on the loop's process
+   would not be shown to reach a store write. `check_spec` refuses it through `dropped_by_kind`,
+   naming `--actor` and the kind, before anything starts.
+
+No new event or field; the wire's shape and `RunSpec`'s serde form are unchanged.

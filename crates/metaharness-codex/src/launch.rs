@@ -1131,6 +1131,12 @@ fn build_env(
             env.insert(key.to_string(), value.clone());
         }
     }
+    // Declared by the caller, as the Claude launch carries it, and never on [`INHERITED_KEYS`]:
+    // an `AEP_ACTOR` in the operator's shell would otherwise stamp a run that declared none
+    // (story:actor-reaches-every-launch, amendment a74).
+    if let Some(actor) = &spec.actor {
+        env.insert("AEP_ACTOR".to_string(), actor.clone());
+    }
     env.insert("PATH".to_string(), reduced_path(&env));
     env.insert(
         "TMPDIR".to_string(),
@@ -2126,6 +2132,35 @@ mod tests {
             assert!(!plan.env.contains_key(key), "{key} reached the child");
         }
         assert_eq!(plan.env.get("HOME").map(String::as_str), Some("/operator"));
+    }
+
+    /// story:actor-reaches-every-launch: `aep drive` passes `--actor` to this kind, so the launch
+    /// sets `AEP_ACTOR` where the Claude launch sets it, in the constructed child environment. The
+    /// operator's own `AEP_ACTOR` is in the context below, and a spec that declares nothing must
+    /// still send nothing: provenance a surrounding shell can set is not provenance.
+    #[test]
+    fn the_actor_a_run_writes_as_is_declared_and_never_inherited() {
+        let mut world = context();
+        world
+            .inherited_env
+            .insert("AEP_ACTOR".to_string(), "human:someone-else".to_string());
+
+        let mut spec = spec();
+        let plan = plan_launch(&spec, &world).expect("plans");
+        assert!(
+            !plan.env.contains_key("AEP_ACTOR"),
+            "an undeclared actor must not be picked up from the operator's environment: {:?}",
+            plan.env
+        );
+
+        spec.actor = Some("agent:x".to_owned());
+        let plan = plan_launch(&spec, &world).expect("plans");
+        assert_eq!(
+            plan.env.get("AEP_ACTOR").map(String::as_str),
+            Some("agent:x"),
+            "the declared actor is what reaches the child: {:?}",
+            plan.env
+        );
     }
 
     #[test]
