@@ -882,22 +882,29 @@ fn b10x_program(
         })?
         .display()
         .to_string();
-    let version = b10x_version(&program);
+    let version = b10x_version(&program, child_path);
     Ok((program, version))
 }
 
-fn b10x_version(program: &str) -> Option<String> {
-    let output = std::process::Command::new(program)
-        .arg("--version")
-        .output()
-        .ok()?;
-    if !output.status.success() {
-        return None;
+/// The version the b10x launch reads from `program`, within [`VERSION_PROBE_DEADLINE`] and the
+/// drain grace (a65, story:version-probe-everywhere-bounded).
+pub(crate) fn b10x_version(program: &str, child_path: &str) -> Option<String> {
+    b10x_version_within(program, child_path, VERSION_PROBE_DEADLINE)
+}
+
+/// [`b10x_version`] under `deadline`, through [`vendor_version`] with only the child's `PATH`, as
+/// `qualify` asks. A binary that is unreadable or did not exit in time reports no version, which
+/// `--strict-version` refuses before the spawn.
+pub(crate) fn b10x_version_within(
+    program: &str,
+    child_path: &str,
+    deadline: std::time::Duration,
+) -> Option<String> {
+    let env = BTreeMap::from([("PATH".to_owned(), child_path.to_owned())]);
+    match vendor_version(Path::new(program), &env, deadline) {
+        VersionProbe::Reported(version) => Some(version),
+        VersionProbe::Unreadable | VersionProbe::TimedOut(_) => None,
     }
-    String::from_utf8_lossy(&output.stdout)
-        .split_whitespace()
-        .find(|word| word.starts_with(|character: char| character.is_ascii_digit()))
-        .map(ToOwned::to_owned)
 }
 
 /// A decision mode the adapter does not deliver is refused by name, and so is a frame the

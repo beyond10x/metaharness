@@ -7,6 +7,7 @@ was amended and the amendment is named here.
 
 - A failed b10x run names its cause: Harness 0.21.0's `finished` stop `{"kind":"failed","cause":…,"message":…}` becomes `session.ended` with `subtype: "failed:<cause>"` (with `:after-compaction` appended when the failure followed a compaction) and `terminal_reason: "failed: <message>"`; a line without a cause maps as before (amendment a73).
 - The AEP crates are linked at aep 0.79.0 (`81d80288038e85dd30a1c54ce9c7f25e38b42ae0`) instead of 0.77.0 (`23294974a72bbe7e8651588ec3bfa69e1cb64145`). A run started with `--approver` and stopped at an `operator` step is answered by `metaharness aep drive resume <run> --evidence <file>`, which hands the file's records to the run before its first step; under 0.77.0 the pause text named `aep govern evaluate --evidence --state`, which writes nothing back, so every resume stopped again. `--aep-binary` and the eval's child `aep` must report 0.79.0.
+- `metaharness doctor` and every b10x launch read `--version` through the bounded probe of amendment a65 (a minute, then at most 5 seconds of draining after the binary exits): a binary that never exits is refused by name, and a leftover process holding its stdout no longer blocks them (`story:version-probe-everywhere-bounded`).
 
 ## [0.26.2] — 2026-10-30
 
