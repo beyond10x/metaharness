@@ -2838,9 +2838,9 @@ fn adapter_spec_refusals(spec: &RunSpec) -> Result<(), Refusal> {
 
 /// A setting the kind's launch reads nowhere, refused rather than dropped in silence (a64, after
 /// adversary pass 1 of story:run-spec-document). `--hooks` and `--driver` belong to the native
-/// loop; `--effort` and `--max-budget-usd` reach only the vendor CLIs. `--actor` is not here: the
-/// Codex launch reads none of it yet `aep drive` passes it, which story:actor-reaches-every-launch
-/// settles.
+/// loop; `--effort` and `--max-budget-usd` reach only the vendor CLIs. `--actor` reaches the Claude
+/// and Codex children as `AEP_ACTOR` and is refused on b10x, whose launch carries none
+/// (story:actor-reaches-every-launch, amendment a74).
 fn dropped_by_kind(spec: &RunSpec) -> Result<(), Refusal> {
     let refuse = |flag: &str, why: &str| {
         Err(Refusal::Launch {
@@ -2877,6 +2877,13 @@ fn dropped_by_kind(spec: &RunSpec) -> Result<(), Refusal> {
                 return refuse(
                     "--effort",
                     "only Claude Code and Codex read a reasoning effort",
+                );
+            }
+            if spec.actor.is_some() {
+                return refuse(
+                    "--actor",
+                    "the loop starts the model's programs through its own confinement, and no \
+                     launch sets AEP_ACTOR where they would read it",
                 );
             }
         }
