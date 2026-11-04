@@ -5,6 +5,8 @@ was amended and the amendment is named here.
 
 ## [Unreleased]
 
+- The AEP crates are linked at aep 0.79.0 (`81d80288038e85dd30a1c54ce9c7f25e38b42ae0`) instead of 0.77.0 (`23294974a72bbe7e8651588ec3bfa69e1cb64145`). A run started with `--approver` and stopped at an `operator` step is answered by `metaharness aep drive resume <run> --evidence <file>`, which hands the file's records to the run before its first step; under 0.77.0 the pause text named `aep govern evaluate --evidence --state`, which writes nothing back, so every resume stopped again. `--aep-binary` and the eval's child `aep` must report 0.79.0.
+
 ## [0.26.2] — 2026-10-30
 
 The first published release since `0.24.1`. It carries everything `0.25.0`, `0.26.0` and `0.26.1` list; none of those three tags was published.

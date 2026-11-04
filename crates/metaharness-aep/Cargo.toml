@@ -11,13 +11,13 @@ rust-version.workspace = true
 metaharness = { path = "../metaharness" }
 metaharness-b10x = { path = "../metaharness-b10x" }
 metaharness-codex = { path = "../metaharness-codex" }
-aep-cli = { git = "https://github.com/beyond10x/aep", rev = "23294974a72bbe7e8651588ec3bfa69e1cb64145" }
-aep-domain = { git = "https://github.com/beyond10x/aep", rev = "23294974a72bbe7e8651588ec3bfa69e1cb64145" }
-aep-driver = { git = "https://github.com/beyond10x/aep", rev = "23294974a72bbe7e8651588ec3bfa69e1cb64145" }
-aep-driver-spec = { git = "https://github.com/beyond10x/aep", rev = "23294974a72bbe7e8651588ec3bfa69e1cb64145" }
-aep-engine = { git = "https://github.com/beyond10x/aep", rev = "23294974a72bbe7e8651588ec3bfa69e1cb64145" }
-aep-project = { git = "https://github.com/beyond10x/aep", rev = "23294974a72bbe7e8651588ec3bfa69e1cb64145" }
-trace-domain = { git = "https://github.com/beyond10x/aep", rev = "23294974a72bbe7e8651588ec3bfa69e1cb64145" }
+aep-cli = { git = "https://github.com/beyond10x/aep", rev = "81d80288038e85dd30a1c54ce9c7f25e38b42ae0" }
+aep-domain = { git = "https://github.com/beyond10x/aep", rev = "81d80288038e85dd30a1c54ce9c7f25e38b42ae0" }
+aep-driver = { git = "https://github.com/beyond10x/aep", rev = "81d80288038e85dd30a1c54ce9c7f25e38b42ae0" }
+aep-driver-spec = { git = "https://github.com/beyond10x/aep", rev = "81d80288038e85dd30a1c54ce9c7f25e38b42ae0" }
+aep-engine = { git = "https://github.com/beyond10x/aep", rev = "81d80288038e85dd30a1c54ce9c7f25e38b42ae0" }
+aep-project = { git = "https://github.com/beyond10x/aep", rev = "81d80288038e85dd30a1c54ce9c7f25e38b42ae0" }
+trace-domain = { git = "https://github.com/beyond10x/aep", rev = "81d80288038e85dd30a1c54ce9c7f25e38b42ae0" }
 clap.workspace = true
 serde.workspace = true
 serde_json.workspace = true
@@ -29,7 +29,7 @@ anyhow = "1"
 metaharness-codex = { path = "../metaharness-codex", features = ["conformance"] }
 metaharness-tools = { path = "../metaharness-tools" }
 tempfile.workspace = true
-aep-schema = { git = "https://github.com/beyond10x/aep", rev = "23294974a72bbe7e8651588ec3bfa69e1cb64145" }
+aep-schema = { git = "https://github.com/beyond10x/aep", rev = "81d80288038e85dd30a1c54ce9c7f25e38b42ae0" }
 
 [lints]
 workspace = true
