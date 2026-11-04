@@ -6185,3 +6185,27 @@ place, so no new amendment number):
 4. **The default actions come back** when a named run's forwarding ends. Closing the `Signals`
    left signal-hook's handler installed with nothing behind it, so a `SIGINT` after `execute`
    returned was ignored for the rest of the process.
+
+### Amendment a73 — a failed b10x run names its cause in `session.ended` (2026-11-04)
+
+`story:b10x-failed-run-names-its-cause`, under `epic:loom-agent-work-through-metaharness`. From
+Harness 0.21.0 a run that started and then failed ends with one `finished` line whose stop is
+`{"kind":"failed","cause":"<cause>","message":"<one line>","after_compaction":<bool>}`. The b10x
+adapter read only `stop.kind`, so the record said `failed` and a caller formatting `subtype` could
+not say why.
+
+1. **The cause rides in `subtype` as `failed:<cause>`** (`failed:provider-refused`). `subtype` is
+   the field a caller already formats, so the cause reaches its message with no change on its side.
+2. **The message is `terminal_reason`**, which is *why the session ended*. A `failed` stop without
+   a message keeps `terminal_reason: "failed"`.
+3. **Only a `failed` stop is refined.** `budget-exhausted` in `subtype` or `terminal_reason` is what
+   closes a stream as a budget stop (§ 4.1, `stream.closed` rule 4), so a bound-bound stop
+   keeps its own word in both fields whatever else its stop carries.
+4. **Absent stays absent.** A missing or empty `cause` or `message` leaves the stop's own word:
+   never `failed:` with nothing after it and never an empty reason. A line from a loop before
+   0.21.0 maps exactly as before.
+5. **Open: `after_compaction`.** No existing field of `session.ended` carries a flag, and adding one
+   touches the protocol crate and every constructor of the variant across the workspace. It stays in
+   the retained transcript until that change is made.
+
+No new event or field; the wire's shape is unchanged.
