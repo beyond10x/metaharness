@@ -1,0 +1,13 @@
+{
+  "at": "2026-11-04T10:53:35Z",
+  "actor": "human:timo",
+  "artifact": "story:aep-pin-0-77-1",
+  "kind": "story",
+  "revision": 9,
+  "change": {
+    "change": "evidence",
+    "kind": "verification",
+    "source": "cargo test --locked -p metaharness-aep --test resume_evidence, aep 0.77.0 vs 0.79.0: VERIFIED (base: unexpected argument '--evidence'; unit: 1 passed, run carries on past the operator step)",
+    "reference": "u4/scratch/red2.log vs u4/scratch/g-evidence.log"
+  }
+}

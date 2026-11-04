@@ -1,0 +1,13 @@
+{
+  "at": "2026-11-04T10:31:29Z",
+  "actor": "human:timo",
+  "artifact": "story:b10x-failed-run-names-its-cause",
+  "kind": "story",
+  "revision": 4,
+  "change": {
+    "change": "evidence",
+    "kind": "verification",
+    "source": "cargo test -p metaharness-b10x --lib and -p metaharness --test b10x_failed_stop_close, base vs unit: VERIFIED (base red 3+1 cases: subtype failed:provider-refused vs failed:provider-refused:after-compaction, failed stop with budget word closed Budget; unit 65 passed, 2 passed)",
+    "reference": "u1/scratch/red2.log vs u1/scratch/green2.log"
+  }
+}
