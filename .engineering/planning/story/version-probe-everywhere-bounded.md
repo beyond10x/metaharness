@@ -2,10 +2,13 @@
 format: aep.planning-md/3
 id: story:version-probe-everywhere-bounded
 kind: story
-status: draft
+status: active
 title: doctor and the b10x launch read --version under the probe deadline
 summary: 'Pre-existing finding of D170 adversary pass 1: two --version reads have no deadline'
-revision: 1
+revision: 3
+transitions:
+- {from: "draft", to: "proposed", at: "2026-11-04T07:33:26Z", actor: "human:timo", revision: 2}
+- {from: "proposed", to: "active", at: "2026-11-04T07:33:26Z", actor: "human:timo", revision: 3}
 ---
 ## Outcome
 

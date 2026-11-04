@@ -2,7 +2,7 @@
 format: aep.planning-md/3
 id: story:aep-drive-disposition
 kind: story
-status: draft
+status: implemented
 title: The decided future of metaharness aep drive is carried out
 summary: Keep, move to Loom or retire, as decision-blocker:aep-drive-future records; rewritten to the chosen option when it clears.
 owner: metaharness
@@ -40,7 +40,11 @@ scope:
   path: crates/metaharness-cli/src/lib.rs
 - confidence: inferred
   path: docs/ROADMAP.md
-revision: 18
+revision: 22
+transitions:
+- {from: "draft", to: "proposed", at: "2026-11-04T07:33:27Z", actor: "human:timo", revision: 19, decided_on: {"recorded":{"review_outcome":6}}}
+- {from: "proposed", to: "active", at: "2026-11-04T07:33:27Z", actor: "human:timo", revision: 20, decided_on: {"recorded":{"review_outcome":6}}}
+- {from: "active", to: "implemented", at: "2026-11-04T07:33:48Z", actor: "human:timo", revision: 22, decided_on: {"recorded":{"test_result":1,"review_outcome":6}}}
 ---
 # Story: the decided future of `metaharness aep drive` is carried out
 
@@ -99,3 +103,16 @@ Depends on `story:trace-ir-domain` and `story:project-reads-vendor-transcripts` 
   `Taskfile.yml`, `docs/ROADMAP.md`. Narrowed from the whole crate on the parallel-safety finding
   of 2026-10-20; the move and retire options touch every file of the crate and are serialized
   behind `story:trace-ir-domain` by the edge above.
+
+## Result
+
+Closed 2026-11-04 with no code, on the orchestrator's acceptance (`approval-record:wave-2026-11-04`).
+
+- AGENTS.md § What this repository owns carries the sentence since `205125c` (2026-10-20, on main):
+  "`metaharness aep drive` is kept as the governed-run driver until Loom's session executor runs a case
+  (`decision-blocker:aep-drive-future`, option A, 2026-10-20; ADR 0098 Consequences)." (AGENTS.md:61-62 at
+  `b6ce2d9`.)
+- This story changed nothing in `crates/metaharness-aep`.
+- The ESS conformance count gate in `crates/metaharness-aep/src/drive/ess_conformance.rs`
+  (`ess_generated_scenarios_drive_production_targets`) reads 142 at `b6ce2d9`, the base of this closure.
+  `task check` on main at `b6ce2d9` is the release 0.26.2 gate.

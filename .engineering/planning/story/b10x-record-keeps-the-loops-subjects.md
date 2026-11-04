@@ -2,7 +2,7 @@
 format: aep.planning-md/3
 id: story:b10x-record-keeps-the-loops-subjects
 kind: story
-status: draft
+status: active
 title: A b10x record keeps the subject the loop reported for each call
 refs:
 - provider: atlas
@@ -10,7 +10,10 @@ refs:
 relations:
 - decomposes: epic:loom-agent-work-through-metaharness
 - informed_by: review-result:adr0096-w3-contract-names-adversary-2
-revision: 1
+revision: 3
+transitions:
+- {from: "draft", to: "proposed", at: "2026-11-04T07:33:27Z", actor: "human:timo", revision: 2}
+- {from: "proposed", to: "active", at: "2026-11-04T07:33:27Z", actor: "human:timo", revision: 3}
 ---
 # Story: a b10x record keeps the subject the loop reported for each call
 

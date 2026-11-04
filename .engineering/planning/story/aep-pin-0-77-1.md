@@ -2,10 +2,13 @@
 format: aep.planning-md/3
 id: story:aep-pin-0-77-1
 kind: story
-status: draft
-title: Link aep 0.77.1 so a run with --approver gets past an operator step
-summary: 'Re-pin when aep 0.77.1 ships: govern evaluate --evidence persists the snapshot'
-revision: 2
+status: active
+title: Link aep 0.79.0 so a run with --approver gets past an operator step
+summary: Retargeted from 0.77.1 to aep 0.79.0; resume takes --evidence
+revision: 6
+transitions:
+- {from: "draft", to: "proposed", at: "2026-11-04T07:33:26Z", actor: "human:timo", revision: 5, decided_on: {"recorded":{"approval":1}}}
+- {from: "proposed", to: "active", at: "2026-11-04T07:33:26Z", actor: "human:timo", revision: 6, decided_on: {"recorded":{"approval":1}}}
 ---
 # Story: aep-pin-0-77-1
 
@@ -32,11 +35,18 @@ start the run without `--approver`, so the guard on the artifact decides.
 
 ## Acceptance
 
-- The AEP crates link the aep 0.77.1 tag commit, and `task check` exits 0.
-- A test drives a run with an approver named to an `operator` step, records a granted approval by
-  that approver through the 0.77.1 evidence route, resumes, and the run carries on with the answer
-  in the cursor.
-- `--aep-binary` and the eval's child `aep` must report 0.77.1.
+Retargeted 2026-11-04 to aep 0.79.0, the newest aep release, on the orchestrator's acceptance. aep 0.77.1
+shipped the fix as `aep drive resume <run> --evidence <file>` (aep `CHANGELOG.md`: the pause text names
+that route; `aep govern evaluate --evidence --state` writes nothing back). metaharness still links
+`23294974` (aep 0.77.0) in `crates/metaharness-aep/Cargo.toml`.
+
+- The AEP crates link the aep 0.79.0 tag commit, the lock holds no second aep revision, and `task check`
+  exits 0.
+- `metaharness aep drive resume <run> --evidence <file>` hands the file's records to the run before its
+  first step; a test drives a run with an approver named to an `operator` step, records a granted
+  approval by that approver through that flag, resumes, and the run carries on with the answer in the
+  cursor.
+- `--aep-binary` and the eval's child `aep` must report 0.79.0.
 
 ## Out of Scope
 
