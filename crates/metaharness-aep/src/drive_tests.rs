@@ -2117,8 +2117,9 @@ fn b10x_step() -> LlmStep {
     /// Under the 0.68.1 pin each was refused before a run existed: `` unknown field `judgement` ``
     /// on the two development maps and `[unsupported_format_version]` on `releases/source`. The
     /// fixtures are byte copies of `drivers/` at AEP `4d22c903`, and `development/checks` at
-    /// `23294974` (0.77.0, which adds its `commands:`), so this test goes red on the day
-    /// the pin falls behind the maps a store adopted with the newest AEP carries.
+    /// `23294974` (0.77.0, which adds its `commands:`); all three are byte-identical at the
+    /// linked 0.79.0 (`81d80288`). So this test goes red on the day the pin falls behind the maps
+    /// a store adopted with the newest AEP carries.
     #[test]
     fn the_driver_steps_2_maps_aep_0_76_0_ships_load_under_the_pinned_aep() {
         let tree = Path::new(env!("CARGO_MANIFEST_DIR")).join("fixtures/aep/drivers");
