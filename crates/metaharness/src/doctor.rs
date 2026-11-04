@@ -22,7 +22,8 @@ pub struct Installed {
     pub program: String,
     /// The version string the binary reported, reduced to its version token.
     pub version: String,
-    /// Exactly what the binary printed, before any reduction.
+    /// What the bounded `--version` probe read: the first token that starts with a digit. The
+    /// probe keeps no more than that (a65), so the rest of what the binary printed is not here.
     pub reported: String,
     /// The versions this adapter declares it was written against.
     pub pinned: Vec<String>,
@@ -68,8 +69,8 @@ impl Installed {
 /// # Errors
 ///
 /// [`Refusal::NoAdapter`] for a kind this build has no adapter for, and [`Refusal::Io`] when the
-/// binary is absent from the child's `PATH` or would not run — both exit `2`, because neither is
-/// a verdict about a run.
+/// binary is absent from the child's `PATH`, would not run, or did not answer `--version` within
+/// the launch's probe deadline of a minute — all exit `2`, because none is a verdict about a run.
 pub fn installed(kind: Kind) -> Result<Installed, Refusal> {
     let home = std::env::var("HOME").ok();
     let (adapter, child_path) = match kind {
@@ -93,26 +94,48 @@ pub fn installed(kind: Kind) -> Result<Installed, Refusal> {
         ),
     };
     let program = resolve_on(adapter, &child_path)?;
+    installed_at(
+        kind,
+        adapter,
+        &program,
+        &child_path,
+        crate::builder::VERSION_PROBE_DEADLINE,
+    )
+}
+
+/// [`installed`] past the `PATH` walk: `program`'s `--version`, read through the launch's own
+/// bounded probe with only the child's `PATH` (a65, story:version-probe-everywhere-bounded). A
+/// binary that does not exit within `deadline` is killed and refused by name; one that exited and
+/// left a process holding its stdout is read once the drain grace has passed.
+pub(crate) fn installed_at(
+    kind: Kind,
+    adapter: &str,
+    program: &std::path::Path,
+    child_path: &str,
+    deadline: std::time::Duration,
+) -> Result<Installed, Refusal> {
+    use crate::builder::{VersionProbe, vendor_version};
+    let env = std::collections::BTreeMap::from([("PATH".to_owned(), child_path.to_owned())]);
+    let probe = vendor_version(program, &env, deadline);
     let program = program.display().to_string();
-    let output = std::process::Command::new(&program)
-        .arg("--version")
-        .output()
-        .map_err(|error| Refusal::Io {
-            detail: format!("{program} --version could not be run: {error}"),
-        })?;
-    if !output.status.success() {
-        return Err(Refusal::Io {
-            detail: format!(
-                "{program} --version exited {}: {}",
-                output
-                    .status
-                    .code()
-                    .map_or_else(|| "on a signal".to_string(), |code| code.to_string()),
-                String::from_utf8_lossy(&output.stderr).trim()
-            ),
-        });
-    }
-    let reported = String::from_utf8_lossy(&output.stdout).trim().to_string();
+    let reported = match probe {
+        VersionProbe::Reported(version) => version,
+        VersionProbe::Unreadable => {
+            return Err(Refusal::Io {
+                detail: format!(
+                    "{program} --version could not be run, failed, or printed no version token"
+                ),
+            });
+        }
+        VersionProbe::TimedOut(deadline) => {
+            return Err(Refusal::Io {
+                detail: format!(
+                    "{program} --version did not exit within {} ms and was killed",
+                    deadline.as_millis()
+                ),
+            });
+        }
+    };
     Ok(Installed {
         adapter: adapter.to_string(),
         program,
@@ -519,6 +542,122 @@ Options:
         assert!(!installed.on_pin());
         assert!(installed.render().contains("OFF the adapter's pin"));
         assert!(installed.render().contains("unverified"));
+    }
+
+    /// A stand-in vendor binary in `dir` that appends to `ran` each time it starts, then runs `body`.
+    fn stand_in(dir: &std::path::Path, body: &str) -> (std::path::PathBuf, std::path::PathBuf) {
+        use std::os::unix::fs::PermissionsExt as _;
+        let ran = dir.join("ran");
+        let path = dir.join("b10x-harness");
+        std::fs::write(
+            &path,
+            format!("#!/bin/sh\necho ran >> '{}'\n{body}\n", ran.display()),
+        )
+        .expect("the stand-in");
+        std::fs::set_permissions(&path, std::fs::Permissions::from_mode(0o700))
+            .expect("executable");
+        (path, ran)
+    }
+
+    /// `probe` on a thread of its own, so a read that never returns fails the case instead of
+    /// hanging it: `None` when no answer came within `bound`. A freshly written script can fail to
+    /// start (`ETXTBSY`) while another test thread forks; such an attempt never reached the
+    /// stand-in, so it is retried until `ran` shows one that did.
+    fn answered_within<T: Send + 'static>(
+        bound: std::time::Duration,
+        ran: std::path::PathBuf,
+        probe: impl Fn() -> T + Send + 'static,
+    ) -> Option<(T, std::time::Duration)> {
+        let (send, receive) = std::sync::mpsc::channel();
+        let started = std::time::Instant::now();
+        std::thread::spawn(move || {
+            for _ in 0..20 {
+                let answer = probe();
+                if ran.exists() {
+                    let _ = send.send(answer);
+                    return;
+                }
+                std::thread::sleep(std::time::Duration::from_millis(25));
+            }
+        });
+        receive
+            .recv_timeout(bound)
+            .ok()
+            .map(|answer| (answer, started.elapsed()))
+    }
+
+    /// `doctor` over a binary whose `--version` never exits refuses by name at its deadline, where
+    /// an unbounded read blocked for good (story:version-probe-everywhere-bounded, a65).
+    #[test]
+    fn doctor_refuses_a_version_that_never_exits_by_name_at_its_deadline() {
+        let dir = tempfile::tempdir().expect("a directory");
+        let (program, ran) = stand_in(dir.path(), "exec sleep 30");
+        let deadline = std::time::Duration::from_millis(300);
+        let child_path = format!("{}:/usr/bin:/bin", dir.path().display());
+        let (answer, elapsed) =
+            answered_within(std::time::Duration::from_secs(10), ran, move || {
+                installed_at(Kind::B10x, "b10x-harness", &program, &child_path, deadline)
+            })
+            .expect(
+                "story:version-probe-everywhere-bounded: doctor's --version read did not return",
+            );
+        let Err(Refusal::Io { detail }) = answer else {
+            panic!("a version that never came is refused, not reported: {answer:?}");
+        };
+        assert!(
+            detail.contains("--version") && detail.contains("did not exit within 300 ms"),
+            "{detail} (after {elapsed:?})"
+        );
+    }
+
+    /// The b10x launch's version read over a binary whose `--version` never exits ends at its
+    /// deadline with no version, which `--strict-version` refuses by name before the spawn
+    /// (story:version-probe-everywhere-bounded, a65).
+    #[test]
+    fn the_b10x_launch_version_read_of_a_binary_that_never_exits_ends_at_its_deadline() {
+        let dir = tempfile::tempdir().expect("a directory");
+        let (program, ran) = stand_in(dir.path(), "exec sleep 30");
+        let program = program.display().to_string();
+        let child_path = format!("{}:/usr/bin:/bin", dir.path().display());
+        let (version, elapsed) =
+            answered_within(std::time::Duration::from_secs(10), ran, move || {
+                crate::builder::b10x_version_within(
+                    &program,
+                    &child_path,
+                    std::time::Duration::from_millis(300),
+                )
+            })
+            .expect(
+                "story:version-probe-everywhere-bounded: the b10x launch's --version read did not \
+                 return",
+            );
+        assert_eq!(version, None, "after {elapsed:?}");
+        // `None` is also what a stand-in that failed at once reads as; only one that waited out the
+        // deadline was the binary that never exits.
+        assert!(
+            elapsed >= std::time::Duration::from_millis(300),
+            "answered after {elapsed:?}, before the deadline: the stand-in did not hang"
+        );
+    }
+
+    /// The b10x launch reads the version of a binary that printed it and exited, leaving a process
+    /// that holds its stdout open, once the drain grace has passed and not when that process exits
+    /// (a65 point 2), at the launch's own deadline.
+    #[test]
+    fn the_b10x_launch_reads_a_version_whose_leftover_process_holds_stdout_after_the_grace() {
+        let dir = tempfile::tempdir().expect("a directory");
+        let (program, ran) = stand_in(dir.path(), "echo 'b10x-harness 9.9.9'\nsleep 30 &\nexit 0");
+        let program = program.display().to_string();
+        let child_path = format!("{}:/usr/bin:/bin", dir.path().display());
+        let bound = crate::builder::VERSION_DRAIN_GRACE + std::time::Duration::from_secs(10);
+        let (version, elapsed) = answered_within(bound, ran, move || {
+            crate::builder::b10x_version(&program, &child_path)
+        })
+        .expect(
+            "story:version-probe-everywhere-bounded: the b10x launch's --version read waited on \
+             a pipe the exited binary's leftover process holds",
+        );
+        assert_eq!(version.as_deref(), Some("9.9.9"), "after {elapsed:?}");
     }
 
     /// The codex adapter drives a real binary (CX-M2), so `doctor codex` asks the machine rather than
