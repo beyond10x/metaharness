@@ -1,0 +1,13 @@
+{
+  "at": "2026-11-05T02:12:13Z",
+  "actor": "human:timo",
+  "artifact": "story:aep-version-reads-bounded",
+  "kind": "story",
+  "revision": 7,
+  "change": {
+    "change": "evidence",
+    "kind": "verification",
+    "source": "cargo test -p metaharness-aep --lib, -p metaharness-aep-eval --lib, -p metaharness-aep --test aep_binary_version_bounded, base vs unit: VERIFIED (base: the three AEP reads did not return, aep drive refused only after 75 s without naming the deadline; unit dd7d2a1: aep lib 90, aep-eval lib 23, public face 1 passed)",
+    "reference": "next/u1/scratch red-* vs green-*"
+  }
+}
