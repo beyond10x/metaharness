@@ -5,6 +5,14 @@ was amended and the amendment is named here.
 
 ## [Unreleased]
 
+### Changed
+
+- `metaharness-aep-eval` depends on `b10x-substrate-host` 0.20.0 by git revision `a88cc6423164ec586434b786b3b1103cc2a17c33` (tag `0.20.0`) with `default-features = false`, so neither Substrate's `git` feature (`curl`, `git2`, `gix`) nor its `kubernetes` feature (the `pod` adapter's client) is built. The eval uses only the `systemd` and `local` confinement adapters, and none of the items it takes is feature-gated. The workspace lock drops 128 package entries, among them git2, gix, curl, openssl-sys, aws-lc and the kubernetes client, and adds none. `tests/lock_confinement_only.rs` fails when any of `git2`, `gix`, `curl-sys` or `b10x-substrate-kubernetes-client` returns (`story:substrate-host-0-20-confinement-only`).
+
+### Fixed
+
+- `aep-eval` decides whether its process is below the cgroup root as Substrate's `probe_cgroup` does (`crates/substrate-host/src/probe.rs:931` at 0.20.0). It canonicalises the root and asks whether the unified `0::` cgroup path, joined under `/sys/fs/cgroup`, starts with it component by component. Before, it looked for the root's path anywhere in `/proc/self/cgroup`. So `/sys/fs/cgroup/user.slice` held `user.slice-other/…`, and a root given with `..` or through a symlink held nothing. The eval could skip the delegated scope the probe then found missing, or enter one it did not need. `/sys/fs/cgroup` itself still holds every process (`story:eval-cgroup-root-check-by-prefix`).
+
 ## [0.29.0] — 2026-11-05
 
 ### Changed

@@ -1348,11 +1348,34 @@ fn ensure_cgroup_scope(resolved: &Resolved) -> Result<(), String> {
 fn below_cgroup_root(cgroup_root: &Path) -> Result<bool, String> {
     let current = fs::read_to_string("/proc/self/cgroup")
         .map_err(|error| format!("read /proc/self/cgroup: {error}"))?;
-    let relative = cgroup_root
-        .strip_prefix("/sys/fs/cgroup")
-        .unwrap_or(cgroup_root)
-        .to_string_lossy();
-    Ok(current.contains(relative.as_ref()))
+    Ok(cgroup_below_root(
+        &current,
+        Path::new(CGROUP_MOUNT),
+        cgroup_root,
+    ))
+}
+
+const CGROUP_MOUNT: &str = "/sys/fs/cgroup";
+
+/// The rule of Substrate's `probe_cgroup` and `current_cgroup` at tag 0.20.0
+/// (`crates/substrate-host/src/probe.rs:931-945` and `:996-1001`): the process's cgroup is the
+/// unified hierarchy's `0::` line of `/proc/self/cgroup`, joined under the mount, and it is below
+/// the root when it starts with the root's canonical path, component by component. The root
+/// itself counts, so the mount as the root holds every process; a root that does not resolve
+/// holds none. Like the probe, the joined cgroup path is not canonicalised.
+fn cgroup_below_root(proc_self_cgroup: &str, mount: &Path, cgroup_root: &Path) -> bool {
+    let Some(current) = proc_self_cgroup
+        .lines()
+        .find_map(|line| line.strip_prefix("0::"))
+    else {
+        return false;
+    };
+    let Ok(root) = cgroup_root.canonicalize() else {
+        return false;
+    };
+    mount
+        .join(current.trim_start_matches('/'))
+        .starts_with(root)
 }
 
 /// Moves this process into a transient user scope with `Delegate=yes` by opening Substrate's
@@ -3200,6 +3223,105 @@ mod tests {
             invoking.is_empty(),
             "{program} is still named in code: {invoking:#?}"
         );
+    }
+
+    /// A stand-in cgroup mount, canonical as `/sys/fs/cgroup` is, holding `user.slice`,
+    /// `user.slice-other` and `system.slice` (story:eval-cgroup-root-check-by-prefix).
+    fn stand_in_cgroup_mount() -> (tempfile::TempDir, PathBuf) {
+        let directory = tempfile::tempdir().expect("a directory");
+        let mount = directory
+            .path()
+            .canonicalize()
+            .expect("canonical directory")
+            .join("cgroup");
+        for slice in [
+            "user.slice/user-1000.slice",
+            "user.slice-other",
+            "system.slice",
+        ] {
+            fs::create_dir_all(mount.join(slice)).expect("create a slice");
+        }
+        (directory, mount)
+    }
+
+    const IN_USER_SLICE: &str = "0::/user.slice/user-1000.slice/app.scope\n";
+
+    #[test]
+    fn a_cgroup_root_given_with_dot_dot_is_judged_by_its_canonical_path() {
+        let (_directory, mount) = stand_in_cgroup_mount();
+        assert!(cgroup_below_root(
+            IN_USER_SLICE,
+            &mount,
+            &mount.join("system.slice/../user.slice")
+        ));
+        assert!(!cgroup_below_root(
+            IN_USER_SLICE,
+            &mount,
+            &mount.join("user.slice/../system.slice")
+        ));
+    }
+
+    #[test]
+    fn a_cgroup_root_given_through_a_symlink_is_judged_by_its_target() {
+        let (directory, mount) = stand_in_cgroup_mount();
+        let to_user = directory.path().join("to-user");
+        let to_system = directory.path().join("to-system");
+        std::os::unix::fs::symlink(mount.join("user.slice"), &to_user).expect("link");
+        std::os::unix::fs::symlink(mount.join("system.slice"), &to_system).expect("link");
+        assert!(cgroup_below_root(IN_USER_SLICE, &mount, &to_user));
+        assert!(!cgroup_below_root(IN_USER_SLICE, &mount, &to_system));
+    }
+
+    /// `user.slice` holds `user.slice/…` and itself, and not `user.slice-other/…`, nor a cgroup
+    /// that merely names `user.slice` further down.
+    #[test]
+    fn a_sibling_whose_name_starts_with_the_roots_name_is_not_below_it() {
+        let (_directory, mount) = stand_in_cgroup_mount();
+        let root = mount.join("user.slice");
+        assert!(!cgroup_below_root(
+            "0::/user.slice-other/app.scope\n",
+            &mount,
+            &root
+        ));
+        assert!(!cgroup_below_root(
+            "0::/system.slice/user.slice/app.scope\n",
+            &mount,
+            &root
+        ));
+        assert!(cgroup_below_root("0::/user.slice\n", &mount, &root));
+        assert!(cgroup_below_root(IN_USER_SLICE, &mount, &root));
+    }
+
+    /// Only the unified hierarchy's `0::` line is the process's cgroup, as the probe reads it; a
+    /// v1 controller line naming the root does not count.
+    #[test]
+    fn only_the_unified_line_names_the_process_cgroup() {
+        let (_directory, mount) = stand_in_cgroup_mount();
+        let root = mount.join("user.slice");
+        assert!(!cgroup_below_root(
+            "1:name=systemd:/user.slice/user-1000.slice\n0::/system.slice/app.scope\n",
+            &mount,
+            &root
+        ));
+        assert!(!cgroup_below_root(
+            "1:name=systemd:/user.slice/user-1000.slice\n",
+            &mount,
+            &root
+        ));
+    }
+
+    /// The mount itself as the root, which `adversary_w8u7` passes, holds every process,
+    /// the mount's own root cgroup included; a root that does not resolve holds none.
+    #[test]
+    fn the_mount_as_root_holds_every_cgroup_and_an_unresolvable_root_holds_none() {
+        let (_directory, mount) = stand_in_cgroup_mount();
+        assert!(cgroup_below_root(IN_USER_SLICE, &mount, &mount));
+        assert!(cgroup_below_root("0::/\n", &mount, &mount));
+        assert!(!cgroup_below_root(
+            IN_USER_SLICE,
+            &mount,
+            &mount.join("user.slice/missing/..")
+        ));
     }
 
     /// A host where the `systemd` adapter cannot serve a scope is refused by the adapter's name
