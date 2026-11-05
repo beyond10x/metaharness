@@ -18,6 +18,9 @@ use std::time::Duration;
 
 use clap::{Args, Parser, Subcommand, ValueEnum};
 use serde_json::{Value, json};
+use substrate_host::confinement::local::{LocalPolicy, LocalRequest};
+use substrate_host::confinement::systemd::{InnerRequest, SystemdRequest};
+use substrate_host::confinement::{self, AdapterName, AdapterRequest};
 
 const TASK_ID: &str = "EVAL-1";
 const DRIVER_MOUNTED: &str = "/toolchain/driver/aep";
@@ -31,7 +34,6 @@ const PREFLIGHT_STORE: &str = ".engineering/preflight-planning/store";
 const PLUGIN_SUBPATH: &str = "plugins/aep-plan";
 const PLANNING_SKILL: &str = "skills/planning/SKILL.md";
 const LIVE_ENV: &str = "METAHARNESS_LIVE";
-const SCOPED_ENV: &str = "METAHARNESS_EVAL_SCOPED";
 
 /// Run the AEP comparison without hiding paid work behind a script.
 #[derive(Parser, Debug)]
@@ -1325,39 +1327,51 @@ fn ensure_cgroup_scope(resolved: &Resolved) -> Result<(), String> {
             resolved.cgroup_root.display()
         ));
     }
-    let current = fs::read_to_string("/proc/self/cgroup")
-        .map_err(|error| format!("read /proc/self/cgroup: {error}"))?;
-    let relative = resolved
-        .cgroup_root
-        .strip_prefix("/sys/fs/cgroup")
-        .unwrap_or(&resolved.cgroup_root)
-        .to_string_lossy();
-    if current.contains(relative.as_ref()) {
+    if below_cgroup_root(&resolved.cgroup_root)? {
         return Ok(());
     }
-    if env::var(SCOPED_ENV).as_deref() == Ok("1") {
-        return Err(format!(
-            "systemd scope did not place this process below {}",
-            resolved.cgroup_root.display()
-        ));
+    println!("entering a delegated scope from substrate's systemd adapter for its cgroup probe");
+    enter_delegated_scope(SystemdRequest::new(InnerRequest::Local(LocalRequest {
+        policy: LocalPolicy::Refuse,
+    })))?;
+    if below_cgroup_root(&resolved.cgroup_root)? {
+        return Ok(());
     }
-    let executable =
-        env::current_exe().map_err(|error| format!("resolve current binary: {error}"))?;
-    let mut command = Command::new("systemd-run");
-    command
-        .arg("--user")
-        .arg("--scope")
-        .arg("--quiet")
-        .arg("--setenv")
-        .arg(format!("{SCOPED_ENV}=1"))
-        .arg("--")
-        .arg(executable)
-        .args(env::args_os().skip(1));
-    println!("re-executing under the user manager for substrate's cgroup probe");
-    let status = command
-        .status()
-        .map_err(|error| format!("start systemd-run: {error}"))?;
-    std::process::exit(status.code().unwrap_or(1));
+    Err(format!(
+        "the `{}` confinement adapter's scope is not below {}",
+        AdapterName::Systemd.name(),
+        resolved.cgroup_root.display()
+    ))
+}
+
+/// Whether this process's own cgroup lies beneath `cgroup_root`, as substrate's probe requires.
+fn below_cgroup_root(cgroup_root: &Path) -> Result<bool, String> {
+    let current = fs::read_to_string("/proc/self/cgroup")
+        .map_err(|error| format!("read /proc/self/cgroup: {error}"))?;
+    let relative = cgroup_root
+        .strip_prefix("/sys/fs/cgroup")
+        .unwrap_or(cgroup_root)
+        .to_string_lossy();
+    Ok(current.contains(relative.as_ref()))
+}
+
+/// Moves this process into a transient user scope with `Delegate=yes` by opening Substrate's
+/// `systemd` confinement adapter (atlas ADR 0109 decision 6), the only confinement code the eval
+/// carries. The adapter is opened for that move alone: nothing runs through it, so its inner
+/// `local` is refused by policy, and the process stays in the scope after the adapter is dropped.
+/// Every child the eval starts afterwards, the harness among them, starts inside that scope.
+///
+/// A host where the adapter cannot serve a scope (no reachable user manager, no `systemctl`, a
+/// scope without the controllers it needs) is refused naming the adapter and the contract's code.
+fn enter_delegated_scope(request: SystemdRequest) -> Result<(), String> {
+    confinement::open(AdapterRequest::Systemd(request))
+        .map(drop)
+        .map_err(|error| {
+            format!(
+                "the `{}` confinement adapter serves no delegated scope on this host, and substrate's cgroup probe needs this process below the cgroup root: {error}",
+                AdapterName::Systemd.name()
+            )
+        })
 }
 
 fn check_native_binary(resolved: &Resolved) -> Result<(), String> {
@@ -3091,6 +3105,87 @@ mod tests {
             "the writer fence directory {} is outside the writable subtree {PREFLIGHT_PROCESS_WRITE_SUBTREE}",
             fence_directory.display()
         );
+    }
+
+    /// Every `.rs` file beneath `dir`, read.
+    fn rust_sources(dir: &Path, found: &mut Vec<(PathBuf, String)>) {
+        for entry in fs::read_dir(dir).unwrap() {
+            let path = entry.unwrap().path();
+            if path.is_dir() {
+                rust_sources(&path, found);
+            } else if path.extension() == Some(OsStr::new("rs")) {
+                let text = fs::read_to_string(&path).unwrap();
+                found.push((path, text));
+            }
+        }
+    }
+
+    /// The delegated scope substrate's probe needs comes from Substrate's `systemd` confinement
+    /// adapter (atlas ADR 0109 decision 6), so no source of this crate names the `systemd-run`
+    /// program as a string of its own. The needle is assembled so this test does not hold it.
+    #[test]
+    fn no_systemd_run_invocation_is_left_in_the_eval_source() {
+        let program = ["systemd", "run"].join("-");
+        let literal = format!("\"{program}\"");
+        let mut sources = Vec::new();
+        rust_sources(
+            &Path::new(env!("CARGO_MANIFEST_DIR")).join("src"),
+            &mut sources,
+        );
+        let names: Vec<_> = sources
+            .iter()
+            .filter_map(|(path, _)| path.file_name()?.to_str())
+            .collect();
+        assert!(
+            names.contains(&"lib.rs") && names.contains(&"main.rs"),
+            "the scan read {names:?}, not this crate's sources"
+        );
+        let invoking: Vec<_> = sources
+            .iter()
+            .filter(|(_, text)| text.contains(&literal))
+            .map(|(path, _)| path.display().to_string())
+            .collect();
+        assert!(
+            invoking.is_empty(),
+            "{literal} is still invoked in {invoking:?}"
+        );
+    }
+
+    /// A host where the `systemd` adapter cannot serve a scope is refused by the adapter's name
+    /// and code. The host is simulated through the adapter's own seam, the session bus its
+    /// request carries: unset, empty and a non-`unix:path=` address are each refused before the
+    /// adapter calls anything, so the real host's manager is never reached and nothing moves.
+    #[test]
+    fn a_host_without_a_user_manager_is_refused_naming_the_systemd_adapter() {
+        use substrate_host::confinement::ADAPTER_UNSERVED;
+        for session_bus in [
+            None,
+            Some(std::ffi::OsString::new()),
+            Some(std::ffi::OsString::from("unixexec:path=/bin/true")),
+        ] {
+            let before = fs::read_to_string("/proc/self/cgroup").unwrap();
+            let request = SystemdRequest {
+                inner: InnerRequest::Local(LocalRequest {
+                    policy: LocalPolicy::Refuse,
+                }),
+                session_bus: session_bus.clone(),
+            };
+            let error = enter_delegated_scope(request)
+                .expect_err("a host without a reachable user manager serves no scope");
+            assert!(
+                error.contains("`systemd` confinement adapter"),
+                "{session_bus:?}: the refusal does not name the adapter: {error}"
+            );
+            assert!(
+                error.contains(ADAPTER_UNSERVED),
+                "{session_bus:?}: the refusal does not carry {ADAPTER_UNSERVED}: {error}"
+            );
+            assert_eq!(
+                fs::read_to_string("/proc/self/cgroup").unwrap(),
+                before,
+                "{session_bus:?}: a refused open moved this process"
+            );
+        }
     }
 
     /// The confined preflight against an installed harness, a driver and a prepared project,
