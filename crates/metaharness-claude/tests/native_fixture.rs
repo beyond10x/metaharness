@@ -1249,6 +1249,7 @@ fn native_memory_canaries_in_the_cwd_and_an_ancestor_match_the_recorded_row() {
     let row = metaharness_claude::memory_canary(version).expect("a pinned version has a row");
     let mut measured = metaharness_claude::MemoryCanary {
         version: row.version,
+        measured_in: row.measured_in,
         planted: 0,
         control_sent: 0,
         launch_none: 0,
@@ -1291,9 +1292,15 @@ fn native_memory_canaries_in_the_cwd_and_an_ancestor_match_the_recorded_row() {
     // Amendment a36: H11 rests on this measurement, so the binary under test has to reproduce its
     // recorded row exactly; a pin move re-runs this lane. A leak is not a failure here: recorded,
     // it turns H11 to `gap` in the floor (decision C; coordinator decision D3).
+    // The record line is printed either way: a pin move puts it in the research page its row
+    // cites (a36 § 8).
+    eprintln!("{}", measured.measurement_record());
     assert_eq!(
-        measured, row,
-        "{version}: the measured memory canary is not the recorded row; leaked: {leaked:?}"
+        measured,
+        row,
+        "{version}: the measured memory canary is not the recorded row; measured {:?}; leaked: \
+         {leaked:?}",
+        measured.measurement_record()
     );
 }
 

@@ -454,6 +454,11 @@ pub const MEMORY_RULES_DIRECTORY: &str = ".claude/rules";
 pub struct MemoryCanary {
     /// The binary measured.
     pub version: &'static str,
+    /// The research page that records this measurement, relative to the repository root (a36 § 8).
+    /// The page holds exactly one line equal to [`MemoryCanary::measurement_record`] for this
+    /// version, and a test in `task check` reads it there. A row copied from another pin keeps
+    /// that pin's page, which has no line for the new version, so the copy fails.
+    pub measured_in: &'static str,
     /// Canaries planted: each of [`MEMORY_SHAPES`] in the cwd and in its parent.
     pub planted: usize,
     /// How many the positive control sent, the vendor run directly with
@@ -473,13 +478,32 @@ impl MemoryCanary {
     pub fn kept_out(&self) -> bool {
         self.control_sent == self.planted && self.launch_none == 0 && self.launch_loopback == 0
     }
+
+    /// The row's numbers as one line, the form the native canary case prints for the binary it
+    /// measured and the form [`MemoryCanary::measured_in`] has to hold (a36 § 8).
+    #[must_use]
+    pub fn measurement_record(&self) -> String {
+        format!(
+            "memory canary {}: planted {}, control sent {}, launch none {}, launch loopback {}",
+            self.version, self.planted, self.control_sent, self.launch_none, self.launch_loopback
+        )
+    }
 }
 
-/// What no memory canary row covers, in the words an `ok` H11 ends with (design amendment a36 § 6).
-/// The walk looks only above the cwd and the probe planted only there, so the policy directory's
-/// memory file is outside both.
-pub const MEMORY_NOT_PROBED: &str = "managed memory (/etc/claude-code/CLAUDE.md) is neither walked \
-                                     nor probed, so this row says nothing about it";
+/// What no memory canary row covers, in the words an `ok` H11 ends with (design amendment a36 § 6,
+/// widened by § 8). The probe planted each shape in the cwd and in its parent, the `.claude/rules`
+/// canary directly under that directory, and nothing in the config home. So four surfaces are
+/// unprobed. User memory is the config home's `CLAUDE.md`, which the launch writes none of. Memory
+/// files above the cwd's parent and `.claude/rules` files below its first level are named by the
+/// walk when it finds them. Managed memory, the policy directory's memory file, is outside both the
+/// walk and the probe.
+pub const MEMORY_NOT_PROBED: &str = "the canary planted each shape in the cwd and its parent only, \
+                                     so it did not probe user memory (a CLAUDE.md in the scratch \
+                                     config home), which the launch never writes, nor memory files \
+                                     above the cwd's parent or .claude/rules files below its first \
+                                     level, which the walk names when it finds them; managed memory \
+                                     (/etc/claude-code/CLAUDE.md) is neither walked nor probed, so \
+                                     this row says nothing about it";
 
 /// The memory canary of every pinned binary, one row per entry of [`PINNED_VERSIONS`] in the same
 /// order (design amendment a36).
@@ -490,15 +514,19 @@ pub const MEMORY_NOT_PROBED: &str = "managed memory (/etc/claude-code/CLAUDE.md)
 /// eight `CLAUDE.md`-family canaries, and the four `AGENTS.md` ones where no `CLAUDE.md`-family
 /// file sat in or above the cwd — and the production launch sent none under `none` or `loopback`.
 /// The same twelve and none on 2.1.309, measured the same way on 2026-10-23
-/// (`docs/research/2026-10-23-claude-code-2.1.309-adapter-surface.md`). User memory (a `CLAUDE.md`
-/// in the config home) and managed memory were not probed. A test holds
-/// the rows to the pin, so a pin without a row fails, the coupling [`MENTION_CANARIES`] has; it
-/// cannot tell a measured row from a copied one. The native fixture's canary case compares its
-/// measurement with the row of the binary under test; it is ignored in `task check`, so re-running
-/// it is a step of every pin move.
+/// (`docs/research/2026-10-23-claude-code-2.1.309-adapter-surface.md`). [`MEMORY_NOT_PROBED`]
+/// names what the probe did not reach. A test holds the rows to the pin, so a pin without a row
+/// fails, the coupling [`MENTION_CANARIES`] has. Each row also cites the page that records its
+/// measurement ([`MemoryCanary::measured_in`]), and a second test requires that page to hold the
+/// row's own [`MemoryCanary::measurement_record`] line (a36 § 8). A row copied from the previous
+/// pin therefore fails in `task check`, unless someone also writes a record for the new version
+/// into a research page by hand. The native fixture's canary case is the measurement: it compares
+/// what it measured with the row of the binary under test and prints the record line. It is
+/// ignored in `task check`, so running it is a step of every pin move.
 pub const MEMORY_CANARIES: [MemoryCanary; 3] = [
     MemoryCanary {
         version: "2.1.304",
+        measured_in: "docs/research/2026-10-21-claude-code-2.1.304-adapter-surface.md",
         planted: 12,
         control_sent: 12,
         launch_none: 0,
@@ -506,6 +534,7 @@ pub const MEMORY_CANARIES: [MemoryCanary; 3] = [
     },
     MemoryCanary {
         version: "2.1.305",
+        measured_in: "docs/research/2026-10-21-claude-code-2.1.304-adapter-surface.md",
         planted: 12,
         control_sent: 12,
         launch_none: 0,
@@ -513,6 +542,7 @@ pub const MEMORY_CANARIES: [MemoryCanary; 3] = [
     },
     MemoryCanary {
         version: "2.1.309",
+        measured_in: "docs/research/2026-10-23-claude-code-2.1.309-adapter-surface.md",
         planted: 12,
         control_sent: 12,
         launch_none: 0,

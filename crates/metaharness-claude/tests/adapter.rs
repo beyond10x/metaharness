@@ -168,8 +168,9 @@ fn every_pinned_version_records_its_mention_canary_and_the_context_channel_rests
 /// asks for a row per pin and a probe that could see every shape, never for zero leaks. The
 /// research page is where the numbers come from
 /// (`docs/research/2026-10-21-claude-code-2.1.304-adapter-surface.md`, § *H11: memory files*).
-/// Like the other two, this cannot tell a measured row from a copied one; the native fixture's
-/// canary case is the measurement.
+/// Like the other two, this alone cannot tell a measured row from a copied one;
+/// `every_memory_canary_row_cites_the_measurement_record_of_its_own_version` can (a36 § 8), and the
+/// native fixture's canary case is the measurement.
 #[test]
 fn every_pinned_version_records_its_memory_canary() {
     let listed: Vec<&str> = MEMORY_CANARIES.iter().map(|row| row.version).collect();
@@ -211,6 +212,126 @@ fn every_pinned_version_records_its_memory_canary() {
             ".claude/rules",
         ],
         "the binary's own list, in its order"
+    );
+}
+
+/// What is wrong with the measurement record each row cites (a36 § 8). Each row names the research
+/// page its numbers come from, and that page has to hold exactly one record line for the row's
+/// version, equal to [`MemoryCanary::measurement_record`]. That line is what the native canary case
+/// prints for the binary it measured. A row copied from the previous pin keeps the previous pin's
+/// page, which has no line for the new version, so the copy fails here, in `task check`, without a
+/// vendor binary.
+fn memory_canary_record_problems(rows: &[MemoryCanary]) -> Vec<String> {
+    let root = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("../..");
+    let mut problems = Vec::new();
+    for row in rows {
+        if !row.measured_in.starts_with("docs/research/")
+            || std::path::Path::new(row.measured_in)
+                .extension()
+                .is_none_or(|extension| extension != "md")
+            || row.measured_in.contains("..")
+        {
+            problems.push(format!(
+                "{}: cites {:?}, which is not a page under docs/research/",
+                row.version, row.measured_in
+            ));
+            continue;
+        }
+        let Ok(page) = std::fs::read_to_string(root.join(row.measured_in)) else {
+            problems.push(format!(
+                "{}: cites {}, which cannot be read",
+                row.version, row.measured_in
+            ));
+            continue;
+        };
+        let prefix = format!("memory canary {}:", row.version);
+        let records: Vec<&str> = page
+            .lines()
+            .map(str::trim)
+            .filter(|line| line.starts_with(&prefix))
+            .collect();
+        match records.as_slice() {
+            [record] if *record == row.measurement_record() => {}
+            [record] => problems.push(format!(
+                "{}: {} records {record:?}, and the row says {:?}",
+                row.version,
+                row.measured_in,
+                row.measurement_record()
+            )),
+            _ => problems.push(format!(
+                "{}: {} holds {} measurement records for this version, not one",
+                row.version,
+                row.measured_in,
+                records.len()
+            )),
+        }
+    }
+    problems
+}
+
+/// `story:h11-claims-match-what-was-measured`: every memory canary row cites the measurement
+/// record of its own version, and the record says what the row says. The check that makes a copied
+/// row fail at gate time (a36 § 8).
+#[test]
+fn every_memory_canary_row_cites_the_measurement_record_of_its_own_version() {
+    let problems = memory_canary_record_problems(&MEMORY_CANARIES);
+    assert!(problems.is_empty(), "{problems:#?}");
+}
+
+/// The pin move the check exists for: the next version pinned with the last row copied, only the
+/// version changed. It fails. So does a row whose numbers differ from its record, and a row that
+/// cites a page that is not there.
+#[test]
+fn a_pin_move_that_copies_the_previous_canary_row_fails_the_record_check() {
+    let previous = MEMORY_CANARIES[MEMORY_CANARIES.len() - 1];
+    let copied = MemoryCanary {
+        version: "2.1.999",
+        ..previous
+    };
+    let problems = memory_canary_record_problems(&[copied]);
+    assert_eq!(problems.len(), 1, "{problems:#?}");
+    assert!(
+        problems[0].contains("2.1.999") && problems[0].contains("0 measurement records"),
+        "{problems:#?}"
+    );
+
+    let edited = MemoryCanary {
+        launch_loopback: 1,
+        ..previous
+    };
+    let problems = memory_canary_record_problems(&[edited]);
+    assert_eq!(problems.len(), 1, "{problems:#?}");
+    assert!(problems[0].contains("the row says"), "{problems:#?}");
+
+    let nowhere = MemoryCanary {
+        measured_in: "docs/research/no-such-page.md",
+        ..previous
+    };
+    let problems = memory_canary_record_problems(&[nowhere]);
+    assert_eq!(problems.len(), 1, "{problems:#?}");
+    assert!(problems[0].contains("cannot be read"), "{problems:#?}");
+
+    let outside = MemoryCanary {
+        measured_in: "README.md",
+        ..previous
+    };
+    assert_eq!(memory_canary_record_problems(&[outside]).len(), 1);
+}
+
+/// The record line is the row, field by field, in the words the research pages use.
+#[test]
+fn a_memory_canary_measurement_record_spells_every_field() {
+    let row = MemoryCanary {
+        version: "2.1.999",
+        measured_in: "docs/research/x.md",
+        planted: 12,
+        control_sent: 11,
+        launch_none: 2,
+        launch_loopback: 3,
+    };
+    assert_eq!(
+        row.measurement_record(),
+        "memory canary 2.1.999: planted 12, control sent 11, launch none 2, launch loopback 3"
     );
 }
 

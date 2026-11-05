@@ -5827,6 +5827,36 @@ mod scratch_cwd_tests {
         assert_eq!(exit(&run), RunExit::Ok);
     }
 
+    /// `story:h11-claims-match-what-was-measured` (a36 § 8): an `ok` H11 on Claude says that its
+    /// value is the canary row recorded for the record's version and not a measurement of this
+    /// run, and names every surface that row did not probe: user memory in the config home, memory
+    /// files above the cwd's parent, `.claude/rules` files below depth one, and managed memory.
+    #[test]
+    fn an_ok_h11_says_it_is_the_versions_canary_row_and_names_every_unprobed_surface() {
+        let (_root, copy) = embedder_copy();
+        let (run, _log) = strict_run(&copy, true);
+        let (h11_verdict, h11_detail) = verdict(&run, HermeticRow::H11);
+        assert_eq!(h11_verdict, Verdict::Ok, "{h11_detail}");
+        let version = metaharness_claude::PINNED_VERSIONS[0];
+        assert!(
+            h11_detail.contains(&format!(
+                "not measured in this run: it is the memory canary recorded for {version}:"
+            )),
+            "the value is the version's canary row, not this run's measurement: {h11_detail}"
+        );
+        for unprobed in [
+            "user memory (a CLAUDE.md in the scratch config home)",
+            "memory files above the cwd's parent",
+            ".claude/rules files below its first level",
+            "managed memory (/etc/claude-code/CLAUDE.md)",
+        ] {
+            assert!(
+                h11_detail.contains(unprobed),
+                "the ok detail names {unprobed:?} as unprobed: {h11_detail}"
+            );
+        }
+    }
+
     /// The Claude walk looks for every shape the pinned loader reads above the cwd (a33's list,
     /// a36), and names each in H11 without refusing or failing the run.
     #[test]

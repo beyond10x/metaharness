@@ -90,7 +90,10 @@ and the fresh scratch config home: the adapter records the canary per pinned ver
 shape out. A version with no canary reads `unk`, because nobody measured it (amendment a62), and
 one whose canary reached a request reads `gap`. The ancestor
 walk looks for all six shapes and names what it finds in the H11 row; it refuses nothing. User memory
-(a `CLAUDE.md` in the config home) and managed memory were not probed. Design amendments **a33** and
+(a `CLAUDE.md` in the config home), memory files above the cwd's parent, `.claude/rules` files below
+its first level and managed memory were not probed. An `ok` H11 says so, and says that it is the
+version's recorded canary, not a measurement of the run. Each canary row cites the research page
+that records it, and a row copied to a new pin fails the gate. Design amendments **a33** and
 **a36**; evidence in `docs/research/2026-10-21-claude-code-2.1.304-adapter-surface.md` and, for
 2.1.309, `docs/research/2026-10-23-claude-code-2.1.309-adapter-surface.md`.
 

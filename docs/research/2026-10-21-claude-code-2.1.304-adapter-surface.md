@@ -124,7 +124,17 @@ the walk now looks for all six shapes and reports what it finds in the H11 row w
 the widened walk finding `~/.claude/CLAUDE.md` is information, and H11 rests on the launch control
 held to `MEMORY_CANARIES`, the twelve-canary result above per pinned version.
 
-User memory (`CLAUDE.md` in the scratch config home) and managed memory were not probed. The relayed
+The measurement record of each binary, the table above as the native canary case prints it and
+as each `MEMORY_CANARIES` row has to cite it (amendment a36 § 8):
+
+```text
+memory canary 2.1.304: planted 12, control sent 12, launch none 0, launch loopback 0
+memory canary 2.1.305: planted 12, control sent 12, launch none 0, launch loopback 0
+```
+
+The canaries sat in the cwd and its parent only, and the `.claude/rules` one directly under the
+directory. User memory (`CLAUDE.md` in the scratch config home), memory files above the cwd's
+parent, `.claude/rules` files below its first level and managed memory were not probed. The relayed
 2.1.305 observation (a `--cwd` canary `CLAUDE.md` not quoted under `--hermetic off`) agrees and was
 not reproduced as such.
 

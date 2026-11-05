@@ -1281,6 +1281,9 @@ pub(crate) fn memory_held_to_canary(
             ),
         );
     }
+    // a36 § 8: the value is the version's recorded row, not anything this run measured, and the
+    // detail says so before it quotes the row.
+    let measured = format!("this row is not measured in this run: it is {measured}");
     row(
         HermeticRow::H11,
         Verdict::Ok,
