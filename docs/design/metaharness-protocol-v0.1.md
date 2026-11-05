@@ -6232,10 +6232,18 @@ on Codex and b10x and read by neither launch.
    environment does not reach a run that declared none (H3). Both Codex routes, `exec` and
    `app-server`, spawn with `env_clear()` and that one map. Whether the vendor's shell tool hands it
    on to a command the model runs is the vendor's `shell_environment_policy`, which the scratch
-   config does not set; that is unverified on any pinned version.
+   config does not set; that is unverified on any pinned version. When the plan sets it, the
+   Codex H3 imposed control names it beside `PATH`, `TMPDIR` and `CODEX_HOME`.
 2. **b10x refuses it.** No caller passes `--actor` to b10x (`b10x_argv` emits none), and the loop
    starts the model's programs through its own confinement, so a variable set on the loop's process
    would not be shown to reach a store write. `check_spec` refuses it through `dropped_by_kind`,
    naming `--actor` and the kind, before anything starts.
+3. **A blank actor is refused on every kind.** An empty or whitespace-only `--actor` would reach a
+   Claude or Codex child as a blank `AEP_ACTOR`, which the subject refuses at every store write, so
+   the run would start and fail at its first write. `check_spec` refuses it, naming `--actor`.
+
+**Review.** Adversary pass 1 found the blank actor (point 3), the Codex H3 row that left
+`AEP_ACTOR` out (point 1) and the CLI reference row that named no kind; all three are fixed. The
+Claude H3 row has the same omission and is left to its own story.
 
 No new event or field; the wire's shape and `RunSpec`'s serde form are unchanged.

@@ -1588,8 +1588,13 @@ fn attest(
             HermeticRow::H3,
             format!(
                 "the child environment is constructed from an allowlist of {} keys plus PATH, \
-                 TMPDIR and CODEX_HOME",
-                INHERITED_KEYS.len()
+                 TMPDIR{}",
+                INHERITED_KEYS.len(),
+                if spec.actor.is_some() {
+                    ", CODEX_HOME and the declared AEP_ACTOR"
+                } else {
+                    " and CODEX_HOME"
+                }
             ),
         ),
         control_imposed(HermeticRow::H4, api_key_posture(spec.credentials)),
@@ -2161,6 +2166,56 @@ mod tests {
             "the declared actor is what reaches the child: {:?}",
             plan.env
         );
+    }
+
+    /// story:actor-reaches-every-launch, correction 1, as a class: every variable the child carries
+    /// beyond [`INHERITED_KEYS`] is named by an imposed control, so the attestation never says the
+    /// environment is smaller than it is. The one exception is the declared API key, which H4 names
+    /// by its class ("an API key") because the variable it travels under is the operator's choice
+    /// of the two.
+    #[test]
+    fn every_variable_the_child_carries_beyond_the_allowlist_is_named_by_an_imposed_control() {
+        let mut actor = spec();
+        actor.actor = Some("agent:x".to_owned());
+        let mut api_key = spec();
+        api_key.credentials = CredentialSource::ApiKey;
+        let mut api_key_world = context();
+        api_key_world
+            .inherited_env
+            .insert("OPENAI_API_KEY".to_string(), "sk-test".to_string());
+        let (loopback, loopback_world) = loopback_world();
+        let worlds = [
+            ("plain", spec(), context()),
+            ("actor", actor, context()),
+            ("api-key", api_key, api_key_world),
+            ("loopback", loopback, loopback_world),
+        ];
+        for (name, spec, world) in worlds {
+            let plan = plan_launch(&spec, &world).expect("plans");
+            for key in plan.env.keys() {
+                if INHERITED_KEYS.contains(&key.as_str()) {
+                    continue;
+                }
+                if key == "OPENAI_API_KEY" || key == "CODEX_API_KEY" {
+                    assert!(
+                        plan.attestation
+                            .imposed
+                            .iter()
+                            .any(|control| control.how.contains("an API key is in the child")),
+                        "{name}: the declared API key is not named by H4"
+                    );
+                    continue;
+                }
+                assert!(
+                    plan.attestation
+                        .imposed
+                        .iter()
+                        .any(|control| control.how.contains(key.as_str())),
+                    "{name}: the child carries {key} and no imposed control names it: {:#?}",
+                    plan.attestation.imposed
+                );
+            }
+        }
     }
 
     #[test]
