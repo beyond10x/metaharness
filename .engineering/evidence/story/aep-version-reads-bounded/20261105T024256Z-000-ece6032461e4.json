@@ -1,0 +1,15 @@
+{
+  "at": "2026-11-05T02:42:56Z",
+  "actor": "human:timo",
+  "artifact": "story:aep-version-reads-bounded",
+  "kind": "story",
+  "revision": 7,
+  "change": {
+    "change": "evidence",
+    "kind": "review_outcome",
+    "source": "review-result:wave-1105-u1-adversary-1",
+    "reference": "07b63f5 merged 8c8f5c1; doc commit",
+    "review": "review-result:wave-1105-u1-adversary-1",
+    "outcome": "fixed"
+  }
+}

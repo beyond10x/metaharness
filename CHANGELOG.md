@@ -5,6 +5,8 @@ was amended and the amendment is named here.
 
 ## [Unreleased]
 
+## [0.28.0] — 2026-11-05
+
 ### Fixed
 
 - A Claude run's H3 attestation names every variable the child gets beyond its allowlist and the four the row always named. It reads them off the plan's own environment, by name and never by value. That covers the declared `AEP_ACTOR` and, when the run's declarations set them, `CLAUDE_CODE_PROMPT_CACHE_TTL`, `ANTHROPIC_BASE_URL`, `ANTHROPIC_AUTH_TOKEN`, `CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC` and `ANTHROPIC_API_KEY`. Before, no imposed control named the first five. Nor did any name an endpoint run's placeholder `ANTHROPIC_API_KEY` once managed settings made H4 unavailable. A run that sets none of them keeps the old text (amendment a74, `story:claude-attestation-names-actor`).
