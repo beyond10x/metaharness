@@ -241,10 +241,13 @@ debug build silently replacing a release one changes what every other caller on 
 The harness release version is immutable, so the banner identifies the CLI contract while the git
 revision identifies the Rust crates this workspace compiled.
 
-The runner re-execs itself under `systemd-run --user --scope`. That is not cosmetic: substrate's
+When the runner's process is not below the cgroup root, it opens Substrate's `systemd`
+confinement adapter (`substrate_host::confinement`, atlas ADR 0109 decision 6), which moves it into
+a delegated user scope; it never builds its own `systemd-run`. That is not cosmetic: substrate's
 `probe_cgroup` requires the **calling process's own cgroup** to sit inside the configured root, so
 from an ordinary login shell the machine reports no exec facts and the loop publishes six tools
-instead of seven, with no error anywhere.
+instead of seven, with no error anywhere. A host where the adapter serves no scope is refused
+`confinement.adapter-unserved`, naming the `systemd` adapter.
 
 ### Reading the result
 
