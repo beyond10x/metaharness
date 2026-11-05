@@ -1,0 +1,15 @@
+{
+  "at": "2026-11-05T05:26:53Z",
+  "actor": "human:timo",
+  "artifact": "story:aep-eval-scope-through-substrate",
+  "kind": "story",
+  "revision": 7,
+  "change": {
+    "change": "evidence",
+    "kind": "review_outcome",
+    "source": "correction 1 1fbc97e merged e6755a5",
+    "reference": "e6755a5",
+    "review": "review-result:wave-0290-u4-adversary-1",
+    "outcome": "fixed"
+  }
+}

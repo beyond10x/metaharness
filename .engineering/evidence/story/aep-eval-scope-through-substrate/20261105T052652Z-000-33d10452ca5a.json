@@ -1,0 +1,13 @@
+{
+  "at": "2026-11-05T05:26:52Z",
+  "actor": "human:timo",
+  "artifact": "story:aep-eval-scope-through-substrate",
+  "kind": "story",
+  "revision": 7,
+  "change": {
+    "change": "evidence",
+    "kind": "verification",
+    "source": "U4 targeted lanes green after correction 1 (aep-eval lib 26, adversary_u4_scope 2, adversary_w8u7 18); free preflight inside the adapter scope published 7 tools (adversary pass 1)",
+    "reference": "1fbc97e"
+  }
+}
