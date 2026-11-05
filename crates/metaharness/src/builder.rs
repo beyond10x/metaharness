@@ -1927,6 +1927,26 @@ fn scratch_name_character(character: char) -> bool {
     character.is_ascii_alphanumeric() || matches!(character, '.' | '_' | '-')
 }
 
+/// Refuse a blank `--actor` on every kind (design amendment a74 § 3).
+///
+/// A blank actor would reach the child as a blank `AEP_ACTOR`, which the subject refuses at every
+/// store write: the run would start and fail at its first write. [`check_spec`] calls it, so the
+/// run is refused before anything starts.
+fn check_actor(spec: &RunSpec) -> Result<(), Refusal> {
+    if spec
+        .actor
+        .as_deref()
+        .is_some_and(|actor| actor.trim().is_empty())
+    {
+        return Err(Refusal::Launch {
+            detail: "--actor is blank: it names who the run's store writes are made as, and a \
+                     blank name is refused at every one of them; name the actor or drop the flag"
+                .to_owned(),
+        });
+    }
+    Ok(())
+}
+
 /// Refuse a `--scratch-name` that is not 1 to 64 bytes of the plain charset, is `.` or `..`, or
 /// ends in `.lock` (design amendment a72 § 2).
 ///
@@ -2687,19 +2707,7 @@ pub fn check_spec(spec: &RunSpec) -> Result<(), Refusal> {
     // A scratch name is 1 to 64 bytes of a plain charset (amendment a72), refused before anything
     // exists.
     check_scratch_name(spec)?;
-    // A blank actor would reach the child as a blank `AEP_ACTOR`, which the subject refuses at
-    // every store write: the run would start and fail at its first write (amendment a74).
-    if spec
-        .actor
-        .as_deref()
-        .is_some_and(|actor| actor.trim().is_empty())
-    {
-        return Err(Refusal::Launch {
-            detail: "--actor is blank: it names who the run's store writes are made as, and a \
-                     blank name is refused at every one of them; name the actor or drop the flag"
-                .to_owned(),
-        });
-    }
+    check_actor(spec)?;
     // `--context` on every kind (amendment a35): what a declaration can be refused for before
     // anything is read. The read itself, beneath the resolved tree, is each start's.
     crate::context::check_declared(spec)?;
