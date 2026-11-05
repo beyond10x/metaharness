@@ -46,7 +46,7 @@
 //! * **stderr** — retained whole. A child that dies before its terminal record leaves exit `3`
 //!   (*nobody found out*), and the only thing that says **why** is what it printed on the way out.
 
-use std::collections::BTreeMap;
+use std::collections::{BTreeMap, BTreeSet};
 use std::io::{BufRead, BufReader, Write};
 use std::path::{Path, PathBuf};
 use std::process::{Child, ChildStdin, Command, Stdio};
@@ -56,7 +56,9 @@ use std::time::Duration;
 
 use serde_json::Value;
 
-use crate::process::{HarnessProcess, LaunchPlanView, ProcessRunner, copy_credentials};
+use crate::process::{
+    HarnessProcess, HookOutcome, LaunchPlanView, ProcessRunner, copy_credentials,
+};
 
 /// How long one poll of the child's stream waits before the channel is looked at again.
 const POLL: Duration = Duration::from_millis(20);
@@ -84,7 +86,8 @@ struct HookRequest {
     key: String,
     /// The call this hook is holding, when the input carried one (row **V22**).
     tool_use_id: Option<String>,
-    /// Whether the answer has been written.
+    /// Whether the answer has been written, or the program has said what it did with the call:
+    /// either way no hook is waiting on it any more.
     answered: bool,
     /// How many idle polls this request has been waiting through.
     waited: u32,
@@ -101,6 +104,7 @@ pub struct HookChannel {
     root: PathBuf,
     requests: PathBuf,
     responses: PathBuf,
+    outcomes: PathBuf,
 }
 
 impl HookChannel {
@@ -123,6 +127,7 @@ impl HookChannel {
         let channel = Self::at(root);
         std::fs::create_dir_all(&channel.requests)?;
         std::fs::create_dir_all(&channel.responses)?;
+        std::fs::create_dir_all(&channel.outcomes)?;
         Ok(channel)
     }
 
@@ -134,6 +139,7 @@ impl HookChannel {
             root: paths.root,
             requests: paths.requests,
             responses: paths.responses,
+            outcomes: paths.outcomes,
         }
     }
 
@@ -181,6 +187,67 @@ impl HookChannel {
             });
         }
         found.sort_by(|left, right| left.key.cmp(&right.key));
+        Ok(found)
+    }
+
+    /// Every outcome the hook programs have reported since the last look (design amendment a41
+    /// § 11), each settling the request it names.
+    ///
+    /// An outcome names its request's key, and the call is the one that request carried. An
+    /// outcome with no request behind it is the program's report that it could not publish one,
+    /// and it carries the vendor's input itself. An outcome that names no call this side can read
+    /// is left unreported: there is no call to attach it to, and inventing one would be worse.
+    fn collect_outcomes(
+        &self,
+        requests: &mut BTreeMap<String, HookRequest>,
+        seen: &mut BTreeSet<String>,
+    ) -> std::io::Result<Vec<HookOutcome>> {
+        let entries = match std::fs::read_dir(&self.outcomes) {
+            Ok(entries) => entries,
+            Err(error) if error.kind() == std::io::ErrorKind::NotFound => return Ok(Vec::new()),
+            Err(error) => return Err(error),
+        };
+        let mut names = Vec::new();
+        for entry in entries {
+            if let Some(name) = entry?.file_name().to_str()
+                && !seen.contains(name)
+                && metaharness_claude::ProgramOutcome::parse_file_name(name).is_some()
+            {
+                names.push(name.to_string());
+            }
+        }
+        names.sort();
+        let mut found = Vec::new();
+        for name in names {
+            let Some((key, outcome)) = metaharness_claude::ProgramOutcome::parse_file_name(&name)
+            else {
+                continue;
+            };
+            let call_id = if let Some(request) = requests.get_mut(key) {
+                request.answered = true;
+                request.tool_use_id.clone()
+            } else {
+                std::fs::read_to_string(self.outcomes.join(&name))
+                    .ok()
+                    .and_then(|raw| metaharness_claude::parse_hook_input(&raw).ok())
+                    .and_then(|input| input.tool_use_id)
+            };
+            seen.insert(name);
+            let Some(call_id) = call_id else {
+                continue;
+            };
+            found.push(match outcome {
+                metaharness_claude::ProgramOutcome::Forwarded
+                | metaharness_claude::ProgramOutcome::Abstained => {
+                    HookOutcome::Delivered { call_id }
+                }
+                metaharness_claude::ProgramOutcome::Refused(refusal) => HookOutcome::Refused {
+                    call_id,
+                    cause: refusal.cause().to_string(),
+                    reason: refusal.reason(),
+                },
+            });
+        }
         Ok(found)
     }
 
@@ -311,6 +378,8 @@ impl ProcessRunner for SpawnRunner {
             stderr: captured,
             channel,
             requests: BTreeMap::new(),
+            outcomes_seen: BTreeSet::new(),
+            outcomes: Vec::new(),
             parked: BTreeMap::new(),
             transcript: plan.transcript.to_path_buf(),
             stream_ended: false,
@@ -404,6 +473,10 @@ pub struct SpawnedProcess {
     stderr: Arc<Mutex<String>>,
     channel: HookChannel,
     requests: BTreeMap<String, HookRequest>,
+    /// The outcome files already read, by name.
+    outcomes_seen: BTreeSet<String>,
+    /// Outcomes read and not yet taken by the run loop.
+    outcomes: Vec<HookOutcome>,
     parked: BTreeMap<String, Option<Value>>,
     transcript: PathBuf,
     stream_ended: bool,
@@ -474,6 +547,12 @@ impl SpawnedProcess {
         for request in self.channel.collect(&self.requests)? {
             self.requests.insert(request.key.clone(), request);
         }
+        // After the requests, so an outcome always finds the request it settles: the program
+        // publishes its request before it reports.
+        let outcomes = self
+            .channel
+            .collect_outcomes(&mut self.requests, &mut self.outcomes_seen)?;
+        self.outcomes.extend(outcomes);
         self.flush()
     }
 
@@ -536,6 +615,15 @@ impl HarnessProcess for SpawnedProcess {
         Self::stderr(self)
     }
 
+    /// A child that reads its decisions on stdin has no hook program to report.
+    fn reports_hook_outcomes(&self) -> bool {
+        self.stdin.is_none()
+    }
+
+    fn take_hook_outcomes(&mut self) -> Vec<HookOutcome> {
+        std::mem::take(&mut self.outcomes)
+    }
+
     fn next_line(&mut self) -> std::io::Result<Option<String>> {
         loop {
             match self.poll_line()? {
@@ -552,7 +640,13 @@ impl HarnessProcess for SpawnedProcess {
             return Ok(crate::ProcessPoll::Ended);
         }
         match self.lines.recv_timeout(POLL) {
-            Ok(line) => Ok(crate::ProcessPoll::Line(line)),
+            Ok(line) => {
+                // Again before the line is handed on: a program that reported and exited may
+                // have released the line this read, and its outcome must reach the run loop
+                // first (design amendment a41 § 11).
+                self.pump()?;
+                Ok(crate::ProcessPoll::Line(line))
+            }
             Err(RecvTimeoutError::Timeout) => {
                 self.tick_waiting();
                 if self.waiting_past_grace() {

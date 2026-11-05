@@ -47,6 +47,16 @@
 //! documents or a document without a decision as a success that decided nothing. So an answer
 //! is forwarded only in the shape metaharness writes one: empty for abstain, or one line that
 //! opens as a `PreToolUse` allow or deny and closes with `}}`.
+//!
+//! # What it did with the call, said beside the request
+//!
+//! Design amendment a41 § 11. A refusal the program makes on its own is a decision the vendor
+//! honours and metaharness never made, so the program says what it did with every call it held:
+//! one file under `outcomes/`, named `<key>.<outcome>` ([`ProgramOutcome`]), written before it
+//! prints and exits. The key is the request's, so metaharness correlates the outcome through the
+//! request it already read. When nothing could be published, the outcome file carries the vendor's
+//! input instead, which names the call. The run loop records a decision only once the program has
+//! said it reached the vendor, and records the program's own deny when it did not.
 
 use std::path::{Path, PathBuf};
 
@@ -74,7 +84,10 @@ const REQUESTS_DIR: &str = "requests";
 /// Where metaharness writes the answer.
 const RESPONSES_DIR: &str = "responses";
 
-/// The decision channel's three paths, derived from one scratch root.
+/// Where the program says what it did with each call (design amendment a41 § 11).
+const OUTCOMES_DIR: &str = "outcomes";
+
+/// The decision channel's paths, derived from one scratch root.
 ///
 /// A value rather than three arguments, because the program and the reader have to agree about
 /// all three and a caller that passed them separately could pass two of them from one run and
@@ -87,6 +100,8 @@ pub struct HookChannelPaths {
     pub requests: PathBuf,
     /// Where metaharness writes hook responses.
     pub responses: PathBuf,
+    /// Where the program reports what it did with each call (design amendment a41 § 11).
+    pub outcomes: PathBuf,
 }
 
 impl HookChannelPaths {
@@ -108,7 +123,86 @@ impl HookChannelPaths {
             root: root.to_path_buf(),
             requests: root.join(REQUESTS_DIR),
             responses: root.join(RESPONSES_DIR),
+            outcomes: root.join(OUTCOMES_DIR),
         }
+    }
+}
+
+/// A call the program refused on its own, and so a decision nobody in metaharness made.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum ProgramRefusal {
+    /// It could not publish the request: no channel to reach metaharness over.
+    NoChannel,
+    /// Its own backstop ran out before an answer arrived.
+    Unanswered,
+    /// The answer it found is not a hook decision in the shape metaharness writes one (a41 § 5).
+    Unreadable,
+}
+
+impl ProgramRefusal {
+    /// Every refusal the program can make.
+    pub const ALL: [Self; 3] = [Self::NoChannel, Self::Unanswered, Self::Unreadable];
+
+    /// The cause as one word, which is also the outcome file's suffix.
+    #[must_use]
+    pub fn cause(self) -> &'static str {
+        match self {
+            Self::NoChannel => "no-channel",
+            Self::Unanswered => "unanswered",
+            Self::Unreadable => "unreadable",
+        }
+    }
+
+    /// The reason the program gave the vendor, as it printed it.
+    #[must_use]
+    pub fn reason(self) -> String {
+        match self {
+            Self::NoChannel => no_channel_reason(),
+            Self::Unanswered => unanswered_reason(),
+            Self::Unreadable => unreadable_answer_reason(),
+        }
+    }
+}
+
+/// What the program did with one call (design amendment a41 § 11).
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum ProgramOutcome {
+    /// It printed the allow or deny metaharness wrote.
+    Forwarded,
+    /// The answer was empty, so it printed nothing and the vendor's own permission pipeline
+    /// decides the call.
+    Abstained,
+    /// It refused the call itself.
+    Refused(ProgramRefusal),
+}
+
+impl ProgramOutcome {
+    /// The outcome file's suffix.
+    #[must_use]
+    pub fn word(self) -> &'static str {
+        match self {
+            Self::Forwarded => "forwarded",
+            Self::Abstained => "abstained",
+            Self::Refused(refusal) => refusal.cause(),
+        }
+    }
+
+    /// The key and the outcome an outcome file's name carries, or `None` for a name the program
+    /// does not write (a file still being written starts with `.`).
+    #[must_use]
+    pub fn parse_file_name(name: &str) -> Option<(&str, Self)> {
+        if name.starts_with('.') {
+            return None;
+        }
+        let (key, word) = name.rsplit_once('.')?;
+        if key.is_empty() {
+            return None;
+        }
+        let outcome = [Self::Forwarded, Self::Abstained]
+            .into_iter()
+            .chain(ProgramRefusal::ALL.into_iter().map(Self::Refused))
+            .find(|outcome| outcome.word() == word)?;
+        Some((key, outcome))
     }
 }
 
@@ -229,39 +323,67 @@ pub fn shell_quote_path(path: &Path) -> Result<String, PathNotUtf8> {
 pub fn hook_program(channel: &HookChannelPaths) -> Result<String, PathNotUtf8> {
     let requests = shell_quote_path(&channel.requests)?;
     let responses = shell_quote_path(&channel.responses)?;
+    let outcomes = shell_quote_path(&channel.outcomes)?;
     let ticks = HOOK_WAIT_SECONDS * 10;
     let unanswered = deny_body(unanswered_reason());
     let no_channel = deny_body(no_channel_reason());
     let unreadable = deny_body(unreadable_answer_reason());
     let allow = shell_quote(ALLOW_OPENING);
     let deny = shell_quote(DENY_OPENING);
+    let no_channel_word = ProgramRefusal::NoChannel.cause();
+    let unanswered_word = ProgramRefusal::Unanswered.cause();
+    let unreadable_word = ProgramRefusal::Unreadable.cause();
+    let forwarded_word = ProgramOutcome::Forwarded.word();
+    let abstained_word = ProgramOutcome::Abstained.word();
     Ok(format!(
         r#"#!/bin/sh
 # metaharness PreToolUse seam. Generated per run; edited by nobody.
 #
 # It publishes the vendor's hook input verbatim and waits for metaharness to answer it. It parses
 # no JSON: metaharness does that in Rust, and correlates by the tool_use_id the input carries.
+# Whatever it does with the call, it says so under OUTCOMES before it prints, so a refusal of its
+# own reaches metaharness's record instead of metaharness's own decision.
 set -u
 
 REQUESTS={requests}
 RESPONSES={responses}
+OUTCOMES={outcomes}
 TICKS={ticks}
 NL='
 '
+tmp=
+key=
+published=
+
+# One file per call, named <key>.<outcome>. With no request published, the file carries the
+# vendor's input instead, which names the call. A report that cannot be written changes nothing
+# the vendor is told.
+report() {{
+    if [ -n "$published" ]; then
+        printf '' 2>/dev/null > "$OUTCOMES/$key.$1"
+    else
+        out=$(mktemp "$OUTCOMES/.pending.XXXXXXXX" 2>/dev/null) || return 0
+        {{ if [ -n "$tmp" ]; then cat "$tmp"; fi; cat; }} 2>/dev/null > "$out"
+        mv -f "$out" "$OUTCOMES/${{out##*/.pending.}}.$1" 2>/dev/null
+    fi
+    return 0
+}}
 
 fail_closed() {{
+    report "$2"
     printf '%s\n' "$1"
     exit 0
 }}
 
 umask 077
 
-tmp=$(mktemp "$REQUESTS/.pending.XXXXXXXX" 2>/dev/null) || fail_closed '{no_channel}'
+tmp=$(mktemp "$REQUESTS/.pending.XXXXXXXX" 2>/dev/null) || fail_closed '{no_channel}' {no_channel_word}
 key=${{tmp##*/.pending.}}
 
-cat > "$tmp" || fail_closed '{no_channel}'
+cat > "$tmp" || fail_closed '{no_channel}' {no_channel_word}
 # Published under one rename, so metaharness never reads a half-written request.
-mv -f "$tmp" "$REQUESTS/$key.json" || fail_closed '{no_channel}'
+mv -f "$tmp" "$REQUESTS/$key.json" || fail_closed '{no_channel}' {no_channel_word}
+published=1
 
 tick=0
 while [ "$tick" -lt "$TICKS" ]; do
@@ -276,9 +398,11 @@ while [ "$tick" -lt "$TICKS" ]; do
                 *"$NL"*) reply= ;;
             esac
             case $reply in
-                {allow}*'}}}}' | {deny}*'}}}}') printf '%s\n' "$reply" ;;
-                *) fail_closed '{unreadable}' ;;
+                {allow}*'}}}}' | {deny}*'}}}}') report {forwarded_word}; printf '%s\n' "$reply" ;;
+                *) fail_closed '{unreadable}' {unreadable_word} ;;
             esac
+        else
+            report {abstained_word}
         fi
         exit 0
     fi
@@ -286,7 +410,7 @@ while [ "$tick" -lt "$TICKS" ]; do
     tick=$((tick + 1))
 done
 
-fail_closed '{unanswered}'
+fail_closed '{unanswered}' {unanswered_word}
 "#
     ))
 }
@@ -521,7 +645,98 @@ mod tests {
         let channel = HookChannelPaths::under(&base.join("run"));
         std::fs::create_dir_all(&channel.requests).expect("requests");
         std::fs::create_dir_all(&channel.responses).expect("responses");
+        std::fs::create_dir_all(&channel.outcomes).expect("outcomes");
         channel
+    }
+
+    /// Every outcome file the program wrote, as `(name, bytes)`.
+    fn reported(channel: &HookChannelPaths) -> Vec<(String, Vec<u8>)> {
+        let mut found: Vec<(String, Vec<u8>)> = std::fs::read_dir(&channel.outcomes)
+            .expect("outcomes")
+            .filter_map(Result::ok)
+            .map(|entry| {
+                (
+                    entry.file_name().to_string_lossy().into_owned(),
+                    std::fs::read(entry.path()).expect("an outcome"),
+                )
+            })
+            .collect();
+        found.sort();
+        found
+    }
+
+    /// Design amendment a41 § 11: every path the program can take says what it did with the
+    /// call, in one file named for the request it published; a path that published nothing
+    /// carries the vendor's input instead, which names the call.
+    #[test]
+    fn every_path_reports_what_it_did_with_the_call_beside_its_request() {
+        let replies: [(&[u8], ProgramOutcome); 3] = [
+            (ANSWER, ProgramOutcome::Forwarded),
+            (b"", ProgramOutcome::Abstained),
+            (
+                b"the call is fine\n",
+                ProgramOutcome::Refused(ProgramRefusal::Unreadable),
+            ),
+        ];
+        for (reply, expected) in replies {
+            let base = tempfile::tempdir().expect("a directory");
+            let channel = ready_channel(base.path());
+            let program = hook_program(&channel).expect("a UTF-8 channel");
+            drive(base.path(), &program, &channel, Some(reply));
+            let outcomes = reported(&channel);
+            assert_eq!(outcomes.len(), 1, "{expected:?}: {outcomes:?}");
+            let (key, outcome) =
+                ProgramOutcome::parse_file_name(&outcomes[0].0).expect("a name the program writes");
+            assert_eq!(outcome, expected);
+            assert!(outcomes[0].1.is_empty(), "{expected:?}");
+            assert!(channel.requests.join(format!("{key}.json")).exists());
+        }
+
+        let base = tempfile::tempdir().expect("a directory");
+        let channel = ready_channel(base.path());
+        let budget = format!("\nTICKS={}\n", HOOK_WAIT_SECONDS * 10);
+        let program = hook_program(&channel)
+            .expect("a UTF-8 channel")
+            .replace(&budget, "\nTICKS=3\n");
+        drive(base.path(), &program, &channel, None);
+        let outcomes = reported(&channel);
+        assert_eq!(outcomes.len(), 1, "{outcomes:?}");
+        assert_eq!(
+            ProgramOutcome::parse_file_name(&outcomes[0].0).map(|(_, outcome)| outcome),
+            Some(ProgramOutcome::Refused(ProgramRefusal::Unanswered))
+        );
+
+        let base = tempfile::tempdir().expect("a directory");
+        let channel = ready_channel(base.path());
+        std::fs::remove_dir(&channel.requests).expect("the request directory is gone");
+        let program = hook_program(&channel).expect("a UTF-8 channel");
+        let output = drive(base.path(), &program, &channel, None);
+        assert_eq!(denial_reason(&output, "no channel"), no_channel_reason());
+        let outcomes = reported(&channel);
+        assert_eq!(outcomes.len(), 1, "{outcomes:?}");
+        assert_eq!(
+            ProgramOutcome::parse_file_name(&outcomes[0].0).map(|(_, outcome)| outcome),
+            Some(ProgramOutcome::Refused(ProgramRefusal::NoChannel))
+        );
+        assert_eq!(outcomes[0].1, INPUT, "the outcome carries the call");
+    }
+
+    #[test]
+    fn an_outcome_name_parses_only_as_the_program_writes_it() {
+        for refusal in ProgramRefusal::ALL {
+            let name = format!("k1.{}", refusal.cause());
+            assert_eq!(
+                ProgramOutcome::parse_file_name(&name),
+                Some(("k1", ProgramOutcome::Refused(refusal)))
+            );
+            assert!(
+                refusal.reason().contains("the call did not run"),
+                "{refusal:?}"
+            );
+        }
+        for name in [".pending.k1", "k1", ".forwarded", "k1.allowed", "k1.json"] {
+            assert_eq!(ProgramOutcome::parse_file_name(name), None, "{name}");
+        }
     }
 
     /// The reason in the one `deny` the program printed, after checking that the program

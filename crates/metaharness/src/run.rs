@@ -28,7 +28,7 @@ use metaharness_protocol::{
 use serde_json::Value;
 
 use crate::clock::Clock;
-use crate::process::HarnessProcess;
+use crate::process::{HarnessProcess, HookOutcome};
 use metaharness_protocol::HarnessSeam;
 
 /// A single run-loop polling observation, separate from the event wire.
@@ -87,6 +87,38 @@ pub mod warning {
     /// it. A warning and never a failure: the run itself is over, and losing its verdict over
     /// a capture that was best-effort by construction would cost more than the copy was worth.
     pub const RETAIN_FAILED: &str = "RETAIN_FAILED";
+    /// The Claude hook program refused a call on its own: it could not reach its channel, its
+    /// backstop ran out, or the answer was not a hook decision (design amendment a41 § 11). The
+    /// call's `tool.decided` is the program's deny, never metaharness's own verdict.
+    pub const HOOK_PROGRAM_REFUSED: &str = "HOOK_PROGRAM_REFUSED";
+    /// The run ended with a decision the hook program never said it handed the vendor. The
+    /// decision is recorded as metaharness made it, and this names the call whose outcome nobody
+    /// saw (design amendment a41 § 11).
+    pub const HOOK_OUTCOME_UNSEEN: &str = "HOOK_OUTCOME_UNSEEN";
+    /// metaharness abstained and the hook program passed the call on with no decision, so Claude
+    /// Code's own permission pipeline decided it. An abstained call is outside the seam's
+    /// fail-closed claim (design amendment a41 § 11).
+    pub const VENDOR_PIPELINE_DECIDES: &str = "VENDOR_PIPELINE_DECIDES";
+}
+
+/// A decision written to a hook program and not yet recorded, because the program has not said
+/// what it did with it (design amendment a41 § 11).
+#[derive(Debug, Clone)]
+struct HeldDecision {
+    decision: Decision,
+    by: DecidedBy,
+    seam: Seam,
+    latency_ms: Option<u64>,
+}
+
+/// When a decision metaharness writes is recorded (design amendment a41 § 11).
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum Recording {
+    /// As it is written: nothing between metaharness and the vendor reports on it.
+    AsWritten,
+    /// When the Claude hook program says what it did with it: handed it to the vendor, or
+    /// refused the call itself.
+    WhenTheHookReports,
 }
 
 /// The vendor hook timeout metaharness assumes when the adapter's plan states none.
@@ -288,6 +320,13 @@ pub struct Run {
     saw_terminal_record: bool,
     events: Vec<Event>,
     warned_no_frame: bool,
+    /// Whether this run's decisions go through the Claude hook program, which reports what it did
+    /// with each one, or are recorded as written (design amendment a41 § 11).
+    recording: Recording,
+    /// Decisions the hook program has been written and has not yet reported on, by call.
+    held: BTreeMap<String, HeldDecision>,
+    /// Calls the hook program refused before metaharness decided them: the reason it gave.
+    refused_by_program: BTreeMap<String, String>,
     /// The surface a b10x loop's `started` line published (design amendment a75). Flat until such
     /// a line says otherwise: the launch passes no `--surface`, and the loop's default is `flat`.
     loop_surface: LoopSurface,
@@ -371,6 +410,12 @@ impl Run {
                     .push(operation.name().to_string());
             }
         }
+        let recording = if parts.spec.kind == Kind::Claude && parts.process.reports_hook_outcomes()
+        {
+            Recording::WhenTheHookReports
+        } else {
+            Recording::AsWritten
+        };
         Self {
             spec: parts.spec,
             stream: parts.stream,
@@ -395,6 +440,9 @@ impl Run {
             saw_terminal_record: false,
             events: Vec::new(),
             warned_no_frame: false,
+            recording,
+            held: BTreeMap::new(),
+            refused_by_program: BTreeMap::new(),
             loop_surface: LoopSurface::Flat,
             launch: parts.launch,
             scratch: parts.scratch,
@@ -547,7 +595,11 @@ impl Run {
                 .close_stream()
                 .map_or(EventPoll::Ended, |line| EventPoll::Event(Box::new(line))));
         }
-        match self.process.poll_line() {
+        let polled = self.process.poll_line();
+        // Before the line is admitted: what the hook program did with a call is settled before
+        // anything the vendor wrote after it, its result included (design amendment a41 § 11).
+        self.settle_hook_outcomes();
+        match polled {
             Ok(ProcessPoll::Line(line)) => {
                 self.bridge.set_census(self.census.clone());
                 let emissions = self.bridge.push_line(&line);
@@ -827,8 +879,12 @@ impl Run {
                 };
             }
             let closes_window = matches!(emission.event, Event::TurnEnded { .. });
+            let opens = matches!(emission.event, Event::SessionStarted { .. });
             self.outbox
                 .push_back(self.with_context_files(self.with_reach(emission)));
+            if opens {
+                self.warn_abstaining_on_every_call();
+            }
             if closes_window {
                 self.abandon_pending("the turn ended", warning::PENDING_CALL_ABANDONED);
             }
@@ -1110,6 +1166,32 @@ impl Run {
             .unwrap_or_default()
     }
 
+    /// `frame` mode with no frame on the Claude hook seam abstains on every call, and says so once,
+    /// at the opening record, before any call (design amendment a41 § 11).
+    ///
+    /// Every call, because the frame cannot arrive later: the adapter refuses `frame.set`. At the
+    /// opening record and not at the first call, because an abstained call is decided by the
+    /// vendor's own permission pipeline, outside the seam's fail-closed claim, and a reader learns
+    /// that before it reads the first such call, or from a run that made none. A run with no hook
+    /// program (a scripted or replayed one) keeps the warning at its first call, as before.
+    fn warn_abstaining_on_every_call(&mut self) {
+        if self.recording == Recording::AsWritten
+            || self.warned_no_frame
+            || self.spec.decisions != DecisionMode::Frame
+            || self.frame.is_some()
+        {
+            return;
+        }
+        self.warned_no_frame = true;
+        self.warn(
+            warning::NO_FRAME_IN_FORCE,
+            "this run is in frame mode and no frame is in force, so metaharness abstains on every \
+             call and Claude Code's own permission pipeline decides each one; an abstained call is \
+             outside the seam's fail-closed claim (design amendment a41 § 11)"
+                .to_string(),
+        );
+    }
+
     fn frame_verdict(&mut self, tool: &str, input: &Value) -> (Decision, DecidedBy, Seam) {
         let Some(frame) = self.frame.clone() else {
             if !self.warned_no_frame {
@@ -1272,17 +1354,138 @@ impl Run {
         by: DecidedBy,
         latency_ms: Option<u64>,
     ) -> std::io::Result<()> {
+        if let Some(reason) = self.refused_by_program.remove(&call.call_id) {
+            // The hook program refused this call before metaharness decided it, so a decision
+            // written now would reach nobody: the record holds what the vendor was told.
+            self.record_program_refusal(&call.call_id, call.seam, reason, latency_ms);
+            return Ok(());
+        }
         let line = self.bridge.decision_line(&call.call_id, &decision);
         self.process.write_line(&line)?;
-        self.count(&decision, call.seam, by);
-        self.outbox.push_back(Emission::untimed(Event::ToolDecided {
-            call_id: call.call_id.clone(),
+        let held = HeldDecision {
             decision,
-            decided_by: by,
+            by,
             seam: call.seam,
             latency_ms,
-        }));
+        };
+        if self.recording == Recording::AsWritten {
+            self.record_decision(&call.call_id, held, false);
+            return Ok(());
+        }
+        // Held until the program says what it did with it (design amendment a41 § 11). A second
+        // decision for one call, as on a mutated request, releases the first as it stood.
+        if let Some(earlier) = self.held.insert(call.call_id.clone(), held) {
+            self.record_decision(&call.call_id, earlier, false);
+        }
         Ok(())
+    }
+
+    /// Record one decision metaharness made. `delivered` is the hook program's word that the
+    /// answer reached the vendor, which is what makes an abstain the vendor pipeline's call.
+    fn record_decision(&mut self, call_id: &str, held: HeldDecision, delivered: bool) {
+        self.count(&held.decision, held.seam, held.by);
+        let abstained = matches!(held.decision, Decision::Abstain);
+        self.outbox.push_back(Emission::untimed(Event::ToolDecided {
+            call_id: call_id.to_string(),
+            decision: held.decision,
+            decided_by: held.by,
+            seam: held.seam,
+            latency_ms: held.latency_ms,
+        }));
+        if abstained && delivered {
+            self.warn(
+                warning::VENDOR_PIPELINE_DECIDES,
+                format!(
+                    "metaharness abstained on {call_id} and the hook program passed it on with no \
+                     decision, so Claude Code's own permission pipeline decided this call; this \
+                     record does not say what that pipeline decided, and an abstained call is \
+                     outside the seam's fail-closed claim (design amendment a41 § 11)"
+                ),
+            );
+        }
+    }
+
+    /// Record the hook program's own deny for a call: the decision the vendor honoured.
+    fn record_program_refusal(
+        &mut self,
+        call_id: &str,
+        seam: Seam,
+        reason: String,
+        latency_ms: Option<u64>,
+    ) {
+        let decision = Decision::Deny { reason };
+        self.count(&decision, seam, DecidedBy::Adapter);
+        self.outbox.push_back(Emission::untimed(Event::ToolDecided {
+            call_id: call_id.to_string(),
+            decision,
+            decided_by: DecidedBy::Adapter,
+            seam,
+            latency_ms,
+        }));
+    }
+
+    /// Settle every outcome the hook program has reported (design amendment a41 § 11).
+    ///
+    /// A delivered decision is recorded as metaharness made it. A refusal is recorded as the
+    /// program's deny in place of whatever metaharness decided: the held decision is dropped, a
+    /// pending call is closed (a later `tool.decide` for it is `TOO_LATE`), and a call not yet
+    /// presented is denied when it is. A call already recorded gets the warning alone.
+    fn settle_hook_outcomes(&mut self) {
+        if self.recording == Recording::AsWritten {
+            return;
+        }
+        for outcome in self.process.take_hook_outcomes() {
+            match outcome {
+                HookOutcome::Delivered { call_id } => {
+                    if let Some(held) = self.held.remove(&call_id) {
+                        self.record_decision(&call_id, held, true);
+                    }
+                }
+                HookOutcome::Refused {
+                    call_id,
+                    cause,
+                    reason,
+                } => {
+                    self.warn(
+                        warning::HOOK_PROGRAM_REFUSED,
+                        format!(
+                            "the hook program refused {call_id} itself ({cause}), so the call did \
+                             not run whatever metaharness decided; the deny recorded for it is the \
+                             program's (design amendment a41 § 11)"
+                        ),
+                    );
+                    if let Some(held) = self.held.remove(&call_id) {
+                        self.record_program_refusal(&call_id, held.seam, reason, held.latency_ms);
+                    } else if let Some(index) =
+                        self.pending.iter().position(|call| call.call_id == call_id)
+                    {
+                        let call = self.pending.remove(index);
+                        let latency = call
+                            .armed_at_ms
+                            .map(|armed| self.clock.now_ms().saturating_sub(armed));
+                        self.record_program_refusal(&call_id, call.seam, reason, latency);
+                    } else if !self.presented.contains_key(&call_id) {
+                        self.refused_by_program.insert(call_id, reason);
+                    }
+                }
+            }
+        }
+    }
+
+    /// The run is over and the hook program never reported on these decisions: each is recorded
+    /// as metaharness made it, with a warning naming the call (design amendment a41 § 11).
+    fn release_unreported(&mut self) {
+        for (call_id, held) in std::mem::take(&mut self.held) {
+            self.record_decision(&call_id, held, false);
+            self.warn(
+                warning::HOOK_OUTCOME_UNSEEN,
+                format!(
+                    "the hook program never reported what it did with {call_id}, so the decision \
+                     recorded for it is metaharness's and nothing shows it reached the vendor \
+                     (design amendment a41 § 11)"
+                ),
+            );
+        }
     }
 
     fn count(&mut self, decision: &Decision, seam: Seam, by: DecidedBy) {
@@ -1434,6 +1637,8 @@ impl Run {
         if self.process.wait().is_ok() {
             self.native_termination = self.process.termination();
         }
+        self.settle_hook_outcomes();
+        self.release_unreported();
         self.abandon_pending("the stream ended", warning::PENDING_CALL_ABANDONED);
         self.report_silent_child();
         self.retain_wire();
