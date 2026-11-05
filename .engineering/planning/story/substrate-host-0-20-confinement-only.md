@@ -2,7 +2,7 @@
 format: aep.planning-md/3
 id: story:substrate-host-0-20-confinement-only
 kind: story
-status: active
+status: implemented
 title: The AEP eval links substrate-host 0.20.0 without its git and kubernetes stacks
 summary: Pin substrate-host 0.20.0 by rev with default-features = false; the lock drops git2, gix, curl and the kubernetes client
 tags:
@@ -12,10 +12,11 @@ scope:
   path: Cargo.lock
 - confidence: inferred
   path: crates/metaharness-aep-eval/Cargo.toml
-revision: 5
+revision: 6
 transitions:
 - {from: "draft", to: "proposed", at: "2026-11-05T11:09:21Z", actor: "human:timo", revision: 2}
 - {from: "proposed", to: "active", at: "2026-11-05T11:09:22Z", actor: "human:timo", revision: 3}
+- {from: "active", to: "implemented", at: "2026-11-05T11:56:18Z", actor: "human:timo", revision: 6, decided_on: {"recorded":{"test_result":1,"review_outcome":1}}}
 ---
 ## Scheduling
 

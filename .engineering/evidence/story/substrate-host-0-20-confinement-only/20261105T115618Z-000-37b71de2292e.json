@@ -1,0 +1,13 @@
+{
+  "at": "2026-11-05T11:56:18Z",
+  "actor": "human:timo",
+  "artifact": "story:substrate-host-0-20-confinement-only",
+  "kind": "story",
+  "revision": 5,
+  "change": {
+    "change": "evidence",
+    "kind": "test_result",
+    "source": "local staged gate G1-G5",
+    "reference": "fd8bec4"
+  }
+}

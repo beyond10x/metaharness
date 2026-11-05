@@ -2,7 +2,7 @@
 format: aep.planning-md/3
 id: story:eval-cgroup-root-check-by-prefix
 kind: story
-status: active
+status: implemented
 title: The AEP eval judges below-the-cgroup-root by canonical prefix, as Substrate's probe does
 summary: 'From the U4 adversary pass of the 0.29.0 wave: below_cgroup_root is a substring match'
 tags:
@@ -12,10 +12,11 @@ relations:
 scope:
 - confidence: inferred
   path: crates/metaharness-aep-eval/src/lib.rs
-revision: 4
+revision: 5
 transitions:
 - {from: "draft", to: "proposed", at: "2026-11-05T11:09:21Z", actor: "human:timo", revision: 2}
 - {from: "proposed", to: "active", at: "2026-11-05T11:09:21Z", actor: "human:timo", revision: 3}
+- {from: "active", to: "implemented", at: "2026-11-05T11:56:19Z", actor: "human:timo", revision: 5, decided_on: {"recorded":{"test_result":1,"review_outcome":1}}}
 ---
 ## Scheduling
 
