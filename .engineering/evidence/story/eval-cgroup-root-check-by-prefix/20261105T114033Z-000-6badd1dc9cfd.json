@@ -1,0 +1,15 @@
+{
+  "at": "2026-11-05T11:40:33Z",
+  "actor": "human:timo",
+  "artifact": "story:eval-cgroup-root-check-by-prefix",
+  "kind": "story",
+  "revision": 4,
+  "change": {
+    "change": "evidence",
+    "kind": "review_outcome",
+    "source": "aep:adversary",
+    "reference": "7ddb9b4",
+    "review": "review-result:wave-0300-u1-adversary-1",
+    "outcome": "fixed"
+  }
+}
