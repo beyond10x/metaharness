@@ -1,0 +1,13 @@
+{
+  "at": "2026-11-05T02:41:40Z",
+  "actor": "human:timo",
+  "artifact": "story:cli-reference-effort-row-names-b10x",
+  "kind": "story",
+  "revision": 5,
+  "change": {
+    "change": "evidence",
+    "kind": "verification",
+    "source": "cargo test -p metaharness-cli --test website_claims, base vs unit: VERIFIED (the new row check red on the old row: left {} right {b10x}; unit 2f67914: 15 passed)",
+    "reference": "next/u4/scratch a-cli.log vs g-cli.log"
+  }
+}

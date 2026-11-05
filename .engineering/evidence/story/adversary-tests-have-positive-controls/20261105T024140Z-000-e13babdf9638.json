@@ -1,0 +1,13 @@
+{
+  "at": "2026-11-05T02:41:40Z",
+  "actor": "human:timo",
+  "artifact": "story:adversary-tests-have-positive-controls",
+  "kind": "story",
+  "revision": 5,
+  "change": {
+    "change": "evidence",
+    "kind": "verification",
+    "source": "named mutants, before vs after: VERIFIED (ESS evaluating nothing: the session-close case was ok before, red after at :306; empty root store: the new TLS canary case red with UnknownIssuer; unit 2f67914: session close 3, tls 5 passed)",
+    "reference": "next/u4/scratch m1-before.log, m2-tls.log vs g-aep.log, g-tls.log"
+  }
+}
