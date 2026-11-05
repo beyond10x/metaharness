@@ -1,0 +1,13 @@
+{
+  "at": "2026-11-05T00:37:32Z",
+  "actor": "human:timo",
+  "artifact": "story:ess-pin-0-86-0",
+  "kind": "story",
+  "revision": 10,
+  "change": {
+    "change": "evidence",
+    "kind": "verification",
+    "source": "ess 0.86.0: specify validate --strict-requires on spec and spec/monetary, and verify conform synthesize, base vs unit: VERIFIED (base a075269: all three refused, ess-inputs requires 0.77.0; unit c638edb: both valid, synthesis 142 scenarios equal to the committed suite). Cargo lanes deferred to the staged full gate.",
+    "reference": "u5/scratch/final-suite.json; merged 6491871"
+  }
+}

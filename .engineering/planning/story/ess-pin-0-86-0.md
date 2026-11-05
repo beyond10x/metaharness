@@ -8,9 +8,15 @@ scope:
 - confidence: cited
   path: .github/workflows/gate.yml
 - confidence: cited
+  path: CHANGELOG.md
+- confidence: cited
   path: README.md
 - confidence: cited
   path: crates/metaharness-aep/src/drive/ess_conformance.rs
+- confidence: cited
+  path: crates/metaharness-aep/tests/adversary_ess_pin_0_66_0.rs
+- confidence: cited
+  path: crates/metaharness-aep/tests/adversary_session_close_absent_fields.rs
 - confidence: cited
   path: spec/conformance.json
 - confidence: cited
@@ -19,7 +25,9 @@ scope:
   path: spec/ess-inputs.yaml
 - confidence: cited
   path: spec/monetary/ess-inputs.yaml
-revision: 10
+- confidence: cited
+  path: website/docs/quickstart.md
+revision: 14
 transitions:
 - {from: "draft", to: "proposed", at: "2026-11-05T00:31:35Z", actor: "human:timo", revision: 2}
 - {from: "proposed", to: "active", at: "2026-11-05T00:31:35Z", actor: "human:timo", revision: 3}
