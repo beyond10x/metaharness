@@ -5,6 +5,8 @@ was amended and the amendment is named here.
 
 ## [Unreleased]
 
+## [0.29.0] — 2026-11-05
+
 ### Changed
 
 - `aep-eval` no longer re-executes itself under its own `systemd-run --user --scope`. When its process is not below the cgroup root, it opens Substrate's `systemd` confinement adapter (`substrate_host::confinement`, atlas ADR 0109 decision 6), which moves the process into a delegated user scope. The eval runs nothing through that adapter. A host where the adapter cannot serve a scope, such as one without a reachable user manager, is refused with `confinement.adapter-unserved`, naming the `systemd` adapter, and `METAHARNESS_EVAL_SCOPED` is gone. `metaharness-aep-eval` depends on `b10x-substrate-host` 0.19.2 by git revision `aeab475f37730a49914066b2494910d62c6073de` (`story:aep-eval-scope-through-substrate`).
