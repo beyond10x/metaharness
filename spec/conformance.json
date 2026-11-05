@@ -5348,6 +5348,9 @@
           "step": "expect_outcome"
         },
         {
+          "step": "expect_no_error"
+        },
+        {
           "event": "metaharness.observations.ToolOutcomeRead",
           "payload": {
             "failed": false,
@@ -5386,6 +5389,9 @@
             "outcome": "command-failure"
           },
           "step": "expect_outcome"
+        },
+        {
+          "step": "expect_no_error"
         },
         {
           "event": "metaharness.observations.ToolOutcomeRead",
@@ -5428,6 +5434,9 @@
           "step": "expect_outcome"
         },
         {
+          "step": "expect_no_error"
+        },
+        {
           "event": "metaharness.observations.ToolOutcomeRead",
           "payload": {
             "failed": false,
@@ -5468,6 +5477,9 @@
           "step": "expect_outcome"
         },
         {
+          "step": "expect_no_error"
+        },
+        {
           "event": "metaharness.observations.ToolOutcomeRead",
           "payload": {
             "failed": true,
@@ -5506,6 +5518,9 @@
             "outcome": "failure-without-code"
           },
           "step": "expect_outcome"
+        },
+        {
+          "step": "expect_no_error"
         },
         {
           "event": "metaharness.observations.ToolOutcomeRead",
@@ -10596,6 +10611,9 @@
           "step": "expect_outcome"
         },
         {
+          "step": "expect_no_error"
+        },
+        {
           "event": "metaharness.session.AuditedRunExited",
           "payload": {
             "audit": "no-verdict",
@@ -10700,6 +10718,9 @@
           "step": "expect_outcome"
         },
         {
+          "step": "expect_no_error"
+        },
+        {
           "event": "metaharness.session.StreamClassified",
           "payload": {
             "reason": "budget"
@@ -10780,6 +10801,9 @@
             "outcome": "failed-or-unknown-terminal"
           },
           "step": "expect_outcome"
+        },
+        {
+          "step": "expect_no_error"
         },
         {
           "event": "metaharness.session.StreamClassified",
@@ -13940,6 +13964,9 @@
           "step": "expect_outcome"
         },
         {
+          "step": "expect_no_error"
+        },
+        {
           "command": "metaharness.spending.NarrowResumedCap",
           "input": {
             "assumed_micro_usd_per_run": {
@@ -13963,6 +13990,9 @@
             "outcome": "cap-narrowed"
           },
           "step": "expect_outcome"
+        },
+        {
+          "step": "expect_no_error"
         },
         {
           "command": "metaharness.spending.NarrowResumedCap",

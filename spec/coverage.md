@@ -4,7 +4,7 @@ This is a bounded retrofit of Metaharness's observable boundaries. It preserves
 frame/1 and adapter ownership. It does not claim to specify every event,
 credential rule, process-isolation mechanism or vendor version.
 
-ESS 0.77.0 validates both manifests. The core model uses ess/29;
+ESS 0.86.0 validates both manifests. The core model uses ess/29;
 conformance.json is a declared-coverage ess-conformance/35 suite. Regenerate it:
 
 ```console
@@ -12,14 +12,14 @@ ess verify conform synthesize --path spec --scenarios spec --suite-format 5 --st
 ```
 
 `--scenarios spec` selects the authored scenarios `spec/ess-inputs.yaml` lists;
-without it ESS selects none and writes the 114 generated ones only.
+without it ESS selects none and writes the 136 generated ones only.
 `task check` validates both manifests, checks suite drift, and executes the
 production target in `crates/metaharness-aep/src/drive/ess_conformance.rs`.
-CI installs ESS 0.77.0 from commit
-`f692aabbb0fcd321eca0a9eef86e12b25a7601f4`. Use that compiler locally.
+CI installs ESS 0.86.0 from commit
+`8d26c81f74f4374316d5ee565c2da43dd81a16a8`. Use that compiler locally.
 
-The committed count is **120 selected scenarios** (114 generated, 6 authored):
-120 passed, zero failed, skipped, unsupported or synthesis refusals. Unknown suite versions, steps,
+The committed count is **142 selected scenarios** (136 generated, 6 authored):
+142 passed, zero failed, skipped, unsupported or synthesis refusals. Unknown suite versions, steps,
 bindings, shapes and predicates fail closed. The target handles only the
 constructs this suite uses; extending the specification may require extending it.
 
@@ -226,7 +226,7 @@ ones each differ from the one before only in two `captured_at` stamps and one
 context digest, and the 0.20.0 one only in the two stamps, so the only
 expectation each moved is the `transcript_digest` of
 `SummarizeRecord/outcome/harness-record-summarized` (`spec/domains/trace.yaml`;
-`spec/conformance.json` regenerated on ESS 0.77.0, 120 scenarios). The
+`spec/conformance.json` regenerated on ESS 0.86.0, 142 scenarios). The
 secret-named key route a50 adds (`--api-key-secret`) is
 covered by Rust tests and by no scenario here; it is one of the credential
 rules this suite does not claim. Reading a vendor record through
@@ -676,3 +676,21 @@ readers write the same adapter id, so the target names the session's
 `NormalizeRecord` outcome from its opening node, which states no offered tools,
 and its `ProjectVendorRecord` outcome from the document's `metaharness.source`.
 No guard-negate mutation audit was run for the three new guards.
+
+ESS 0.86.0 (`8d26c81f74f4374316d5ee565c2da43dd81a16a8`) regenerates the suite
+at 142 scenarios (136 generated, 6 authored), zero refused, with the same
+coverage section and digests. Every scenario keeps its id. An authored act
+whose `outcome:` names a branch that declares no error now also requires that
+no error came back: an `expect_no_error` step follows its `expect_outcome`
+(ESS 0.86.0, story:authored-success-step-asserts-no-error). Ten such steps are
+added, in five authored scenarios:
+
+- `codex-mediated-exec-exit-reaches-tool-result`: five acts.
+- `narrowed-cap-below-assumed-charge`: two acts.
+- `audited-run-child-exit-zero-with-unknown-controls-exits-three`,
+  `close-unsteered-budget-word-outranks-positive-verdict` and
+  `close-unsteered-explicit-error-outranks-success`: one act each.
+
+`finite-charge-above-positive-cap` and every generated scenario are
+unchanged when compared as JSON values. The target already reads
+`expect_no_error`, which the generated suite used before.
