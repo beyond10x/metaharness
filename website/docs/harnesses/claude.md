@@ -81,7 +81,7 @@ exits 3 ("nobody found out"), never 1, for the version alone (design amendment a
 `--strict-version` reads the resolved binary's `--version` before the spawn and
 refuses one that is not pinned; 2.1.303 and 2.1.308 are refused.
 
-Memory files: at each pin no memory file in the working directory or above it reached the model
+Memory files: at each pin no memory file in the working directory or its parent reached the model
 under the launch's `--setting-sources ""` — `CLAUDE.md`, `.claude/CLAUDE.md`, `CLAUDE.local.md`,
 `.claude/rules/*.md`, `AGENTS.md` or `.claude/AGENTS.md`, twelve canaries in the cwd and its parent,
 all twelve sent by the same binary with the project and local sources on. H11 rests on that control
@@ -90,10 +90,12 @@ and the fresh scratch config home: the adapter records the canary per pinned ver
 shape out. A version with no canary reads `unk`, because nobody measured it (amendment a62), and
 one whose canary reached a request reads `gap`. The ancestor
 walk looks for all six shapes and names what it finds in the H11 row; it refuses nothing. User memory
-(a `CLAUDE.md` in the config home), memory files above the cwd's parent, `.claude/rules` files below
-its first level and managed memory were not probed. An `ok` H11 says so, and says that it is the
-version's recorded canary, not a measurement of the run. Each canary row cites the research page
-that records it, and a row copied to a new pin fails the gate. Design amendments **a33** and
+(a `CLAUDE.md` in the config home), memory files above the cwd's parent, files more than one level
+deep in `.claude/rules` and managed memory were not probed. An `ok` H11 says so, and says that it
+is the version's recorded canary, not a measurement taken now. Each canary row cites the research
+page that records it. A row copied to a new pin fails the gate unless someone also adds a matching
+measurement record line to the cited page, and the gate cannot tell a typed line from a measured
+one. Design amendments **a33** and
 **a36**; evidence in `docs/research/2026-10-21-claude-code-2.1.304-adapter-surface.md` and, for
 2.1.309, `docs/research/2026-10-23-claude-code-2.1.309-adapter-surface.md`.
 

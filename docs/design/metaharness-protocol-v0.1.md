@@ -2834,7 +2834,8 @@ unavailable with *"the operator declared the tree as the run's context by naming
 as though the tree's memory files were in context. It now says the tree is the operator's, so
 metaharness claims nothing about it, and that `--setting-sources ""` kept memory files in and above
 the cwd out of every request at both pins — the binary's behaviour, not a control. (a36: the H11 row of the a6 case is
-unchanged; the count in its `why` covers the six shapes.)
+unchanged; the count in its `why` covers the six shapes.) *(a36 § 8: the `why` now says the cwd and
+its parent, the only directories the canary probed, not "in and above the cwd".)*
 
 No event or frame wire change. `FloorInputs` gains `builtin_plugins` and `endpoint_key_posture`;
 `contract_result`'s provider reads `claude 2.1.304, 2.1.305`; the c1 refusal fixture for a memory
@@ -3181,7 +3182,8 @@ through the launch under `credentials: none` and under `loopback` (zero and zero
 2.1.304 and 2.1.305 are the research page's table. A test holds the rows to the pin, as it holds
 `BUILTIN_PLUGINS` and `MENTION_CANARIES`, so a pin move without a row fails before it lands; like
 those, it cannot tell a measured row from a copied one *(superseded by § 8: each row cites its
-measurement record, and a copied row fails in `task check`)*. The native fixture's canary case compares
+measurement record, and a copied row fails in `task check` unless a matching measurement record
+line is added to the cited page; the gate cannot tell a typed line from a measured one)*. The native fixture's canary case compares
 what it measured against the row of the binary under test, so re-running it on the new binary is a
 step of every pin move — the guard the decision names. A row in which a canary reached a request is recordable (coordinator decision D3): the pin test asks for a row per pinned version and a control that saw every shape, never for zero leaks, and the native case requires its measurement to equal the row, so a binary that leaks is pinned with a row the floor reads as `gap` (3). It is ignored in `task check`, which does not
 run it.
@@ -3240,15 +3242,18 @@ parts of §§ 2 and 6 it names.
   the evidence into the record would need a new probe inside every run. The exception is the
   smaller honest change.
 - *The `ok` detail.* Before it quotes the row, the detail says
-  `this row is not measured in this run: it is the memory canary recorded for <version>: …`. It
-  ends with `MEMORY_NOT_PROBED`, which now names all four unprobed surfaces. The probe planted each
-  shape in the cwd and its parent only, with the `.claude/rules` canary directly under that
-  directory. So user memory (a `CLAUDE.md` in the scratch config home, which the launch never
-  writes) was not probed. Nor were memory files above the cwd's parent or `.claude/rules` files
-  below its first level, which the walk names when it finds them. Managed memory
-  (`/etc/claude-code/CLAUDE.md`) is neither walked nor probed. The `gap` and `unk` details are
-  unchanged.
-- *A copied row fails at gate time.* `MemoryCanary` gains `measured_in`, the research page that
+  `this is not a measurement taken now: it is the memory canary recorded for <version>: …`. The
+  sentence names no run, because `metaharness doctor` (through `qualify`) renders the same row for
+  a binary it only asked for its version. It ends with `MEMORY_NOT_PROBED`, which now names all
+  four unprobed surfaces. The probe planted each shape in the cwd and its parent only, with the
+  `.claude/rules` canary directly under that directory. So user memory (a `CLAUDE.md` in the
+  scratch config home, which the launch never writes) was not probed. Nor were memory files above
+  the cwd's parent or files more than one level deep in `.claude/rules`, which the walk names when
+  it finds them. Managed memory (`/etc/claude-code/CLAUDE.md`) is neither walked nor probed. The
+  `gap` and `unk` details are unchanged. The a6 `why` of an operator-named `--cwd` now says the
+  launch kept memory files in the cwd and its parent out, the only directories the canary probed,
+  where it said "in and above the cwd".
+- *A silently copied row fails at gate time.* `MemoryCanary` gains `measured_in`, the research page that
   records the row, relative to the repository root and under `docs/research/`. That page has to
   hold exactly one line for the row's version, equal to `MemoryCanary::measurement_record`:
   `memory canary <version>: planted <n>, control sent <n>, launch none <n>, launch loopback <n>`.
@@ -3257,9 +3262,10 @@ parts of §§ 2 and 6 it names.
   `crates/metaharness-claude/tests/adapter.rs` reads each cited page in `task check`, with no
   vendor binary. A pin move that copies the previous row keeps the previous pin's page, which has
   no line for the new version, and fails there. `a_pin_move_that_copies_the_previous_canary_row_fails_the_record_check`
-  holds that. The check still cannot tell a record line pasted from the native case from one
-  written by hand. What it adds is that a copy has to be a deliberate, reviewable line in a
-  research page, not a silent duplicate of a row. The records for 2.1.304, 2.1.305 and 2.1.309
+  holds that. A copied row passes when someone also adds a matching measurement record line to the
+  cited page, and the check cannot tell a line pasted from the native case from one typed by hand.
+  What it adds is that a copy has to be a deliberate, reviewable line in a research page, not a
+  silent duplicate of a row. The records for 2.1.304, 2.1.305 and 2.1.309
   restate the tables of the two research pages § 2 cites.
 
 ### Amendment a37 — channel paths are quoted for the shell, escaped for TOML, and refused when not UTF-8 or naming a Claude plugin variable (2026-10-21)

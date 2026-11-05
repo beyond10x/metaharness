@@ -148,6 +148,26 @@ mod qualify {
         }
     }
 
+    /// `story:h11-claims-match-what-was-measured` (a36 § 8): qualifying a binary starts no run, so
+    /// its `ok` H11 says it is the version's recorded canary and not a measurement, without
+    /// speaking of a run.
+    #[test]
+    fn a_pinned_claudes_ok_h11_is_the_recorded_canary_and_names_no_run() {
+        for pinned in metaharness_claude::PINNED_VERSIONS {
+            let fake = Fake::new("claude", &format!("{pinned} (Claude Code)"));
+            let found = qualified(Kind::Claude, &fake, HermeticMode::Strict);
+            let detail = &row(&found, HermeticRow::H11).row.detail;
+            assert!(
+                detail.contains(&format!(
+                    "this is not a measurement taken now: it is the memory canary recorded for \
+                     {pinned}:"
+                )),
+                "{pinned}: {detail}"
+            );
+            assert!(!detail.contains(" run"), "{pinned}: {detail}");
+        }
+    }
+
     const RESULT: &str = r#"{"type":"result","subtype":"success","is_error":false}"#;
 
     /// The floor a strict Claude run over a declared scratch copy reads for an opening record on
