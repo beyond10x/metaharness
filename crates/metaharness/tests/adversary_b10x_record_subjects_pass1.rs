@@ -44,7 +44,10 @@ fn routed_warning(entry: &str) -> String {
 /// after its one `tool-requested` line, which is left as recorded: the verbs loop writes the same
 /// `operation` and `subjects` for a routed bare name as the flat loop writes for the entry.
 fn on_the_verbs_surface(record: &str, flat: &str, entry: &str) -> Vec<String> {
-    assert!(record.contains(flat), "the record publishes the flat surface");
+    assert!(
+        record.contains(flat),
+        "the record publishes the flat surface"
+    );
     record
         .replacen(flat, VERBS_PUBLICATION, 1)
         .lines()

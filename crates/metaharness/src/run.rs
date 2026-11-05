@@ -1017,14 +1017,19 @@ impl Run {
         if let Some(catalogue) = &self.catalogue {
             return catalogue.subjects_as(tool, input, self.entry_naming());
         }
-        if self.publishes_verbs() {
+        if self.publishes_verbs()
+            && (self.spec.kind != Kind::B10x
+                || metaharness_tools::resolve_verb(tool, input, self.verb_surface()).is_some())
+        {
             return metaharness_tools::subjects_of_verb(tool, input, self.verb_surface());
         }
         if self.spec.kind == Kind::B10x {
-            // A flat b10x loop publishes each entry as its own tool, so the call is the entry and
-            // its input is the arguments. Its operation resolves through the rendering; its
-            // subject has to as well, or a frame's scope would admit it with any path (amendments
-            // a61, a75). A name that is no entry — `tool_invoke` here — touches nothing.
+            // A call that is not a verb is an entry called by its own name and its input is the
+            // arguments: published that way on a flat loop, and routed to the entry and performed
+            // on a verbs loop (harness `Verbs::invoked_entry`). Its operation resolves through the
+            // rendering; its subject has to as well, or a frame's scope would admit it with any
+            // path (amendments a61, a75). A name that is no entry — `tool_invoke` on a flat
+            // loop — touches nothing.
             return metaharness_tools::subjects_of_entry(tool, input);
         }
         metaharness_tools::subjects_of_vendor_call(input)
@@ -1084,26 +1089,20 @@ impl Run {
                 }
             };
         }
-        if self.publishes_verbs() {
-            if let Some(resolved) =
+        if self.publishes_verbs()
+            && let Some(resolved) =
                 metaharness_tools::resolve_verb(tool, input, self.verb_surface())
-            {
-                return match resolved {
-                    metaharness_tools::Resolved::Operations(operations) => operations,
-                    // A question about the catalogue and an uncovered call both answer empty
-                    // here. They are told apart where it matters — `frame_verdict` admits the
-                    // first and refuses the second — and the record does not pretend to a
-                    // distinction its one field cannot carry.
-                    metaharness_tools::Resolved::Catalogue
-                    | metaharness_tools::Resolved::Unknown => Vec::new(),
-                };
-            }
-            // A b10x loop that published the verbs published no entry as a tool of its own, so a
-            // flat entry name there reached nothing and is not read through the rendering
-            // (design amendment a75).
-            if self.spec.kind == Kind::B10x {
-                return Vec::new();
-            }
+        {
+            return match resolved {
+                metaharness_tools::Resolved::Operations(operations) => operations,
+                // A question about the catalogue and an uncovered call both answer empty here.
+                // They are told apart where it matters — `frame_verdict` admits the first and
+                // refuses the second — and the record does not pretend to a distinction its one
+                // field cannot carry.
+                metaharness_tools::Resolved::Catalogue | metaharness_tools::Resolved::Unknown => {
+                    Vec::new()
+                }
+            };
         }
         self.operation_of_tool
             .get(tool)

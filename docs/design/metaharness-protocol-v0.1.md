@@ -6275,10 +6275,25 @@ published, was recorded as `file.read` with its subject.
 2. **On a flat run a call is the entry it names.** Its operation resolves through the rendering
    table, as before, and its subject is the entry's, read from the call's own arguments by the
    catalogue's rule (`subjects_of_entry`). A `tool_invoke` there is a name the loop never
-   published: no operation, no subject, and under a frame `UNCOVERED_TOOL`, as on any other run.
-3. **On a verbs run a call is a verb.** A `tool_invoke` resolves to the entry inside it
-   (`HarnessLoop`, a32 § 2). A flat entry name on such a run is a tool the loop did not publish, and
-   it resolves to no operation and no subject rather than through the rendering table.
+   published, and the loop refuses it before its approver (harness
+   `3eca074:crates/harness-loop/src/lib.rs:4297-4317`): it writes the call's `tool-requested`, a
+   `warning{code: "unpublished-tool"}` and a failed `tool-completed`, and no `approval-required`,
+   which is the shape of `fixtures/enforcement/unpublished.jsonl`. So the call reaches the run with
+   no seam on every decision mode, the caller seam included: no frame judges it and no
+   `UNCOVERED_TOOL` is written. The record shows a `tool.requested` on `seam: none` with
+   `decision_required: false` and no operation and no subject, the `unpublished-tool` warning, and a
+   `tool.result` with `is_error: true`: the loop's own refusal, not a metaharness decision.
+3. **On a verbs run a call is a verb, or the entry it was routed to.** A `tool_invoke` resolves to
+   the entry inside it (`HarnessLoop`, a32 § 2). A bare entry name is not published there, but the
+   pinned loop routes it to that entry and performs it under the same gate (`Verbs::invoked_entry`,
+   harness `3eca074:crates/harness-catalogue/src/verbs.rs:100-124`) and says so with
+   `warning{code: "unpublished-tool-routed"}` (`crates/harness-loop/src/lib.rs:4320-4349`); its
+   `tool-requested` line names the entry's `operation` and `subjects` as a flat call's does.
+   metaharness reads it as that entry, as before this amendment: its operation through the
+   rendering table and its subjects from the record or the entry's arguments. A frame judges it as
+   the entry, so a frame that admits `file.write` admits a routed `file_write`, and a subject scope
+   still refuses it on a path it excludes. A name that is neither a verb nor an entry resolves to
+   nothing.
 4. **The adapter carries the subjects the loop recorded.** The loop's `tool-requested` names its
    `subjects` in the same scheme-prefixed form (`"subjects": ["file:README.md"]` on the golden
    line). `B10xSeam` now copies them onto `tool.requested`, and the run keeps them where it fills
@@ -6294,7 +6309,13 @@ the same subjects from the arguments; a `tool_invoke` on a flat run loses the op
 it was wrongly given (§ 2).
 
 **Unverified (invariant 4).** No `--surface verbs` b10x run was driven; § 3 is read from the
-pinned harness source (`crates/harness-cli/src/lib.rs`, `Surface`) and asserted on a constructed
-`started` line.
+pinned harness source (`crates/harness-cli/src/lib.rs`, `Surface`; `verbs.rs` and `lib.rs` as cited)
+and asserted on constructed `started`, `tool-requested` and `warning` lines.
+
+**Review.** Adversary pass 1 found that the first draft of § 3 read a bare entry name on a verbs
+run as no operation and no subject, against the pinned loop, which routes and performs it
+(`crates/metaharness/tests/adversary_b10x_record_subjects_pass1.rs`, three cases). The run now reads
+it as its entry, as the base did, and § 2 now says what the record of a refused flat-run
+`tool_invoke` shows instead of a frame verdict it never gets.
 
 No new event or field; the wire's shape is unchanged.

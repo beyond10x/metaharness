@@ -7,7 +7,7 @@ was amended and the amendment is named here.
 
 ### Fixed
 
-- A b10x record keeps the subjects the loop reported: `tool.requested` carries the `subjects` of the loop's `tool-requested` line (the golden `file_read` names `file:README.md`), and a call whose line names none is read from the entry's arguments. A b10x run reads its calls on the surface its loop published: flat, the default and what the launch gets, unless the `started` line published `tool_invoke`. A `tool_invoke` on a flat run, which the loop refuses, now names no operation and no subject instead of the entry inside it; on a verbs run a flat entry name does the same (amendment a75, `story:b10x-record-keeps-the-loops-subjects`).
+- A b10x record keeps the subjects the loop reported: `tool.requested` carries the `subjects` of the loop's `tool-requested` line (the golden `file_read` names `file:README.md`), and a call whose line names none is read from the entry's arguments. A b10x run reads its calls on the surface its loop published: flat, the default and what the launch gets, unless the `started` line published `tool_invoke`. A `tool_invoke` on a flat run, which the loop refuses, now names no operation and no subject instead of the entry inside it. On a verbs run a bare entry name, which the loop routes to its entry and performs, still reads as that entry (amendment a75, `story:b10x-record-keeps-the-loops-subjects`).
 
 ## [0.27.0] — 2026-11-05
 
