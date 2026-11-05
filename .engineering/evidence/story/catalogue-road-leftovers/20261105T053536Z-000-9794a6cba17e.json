@@ -1,0 +1,13 @@
+{
+  "at": "2026-11-05T05:35:36Z",
+  "actor": "human:timo",
+  "artifact": "story:catalogue-road-leftovers",
+  "kind": "story",
+  "revision": 11,
+  "change": {
+    "change": "evidence",
+    "kind": "verification",
+    "source": "U2 targeted lanes green after correction 1 (metaharness lib 169, caller_catalogue 17, adversary_u2 pass 1 4, tools lib 41, tools caller_catalogue 28, catalogue adversary files)",
+    "reference": "17a82fc"
+  }
+}

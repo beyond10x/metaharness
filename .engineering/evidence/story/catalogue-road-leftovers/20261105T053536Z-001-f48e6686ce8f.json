@@ -1,0 +1,15 @@
+{
+  "at": "2026-11-05T05:35:36Z",
+  "actor": "human:timo",
+  "artifact": "story:catalogue-road-leftovers",
+  "kind": "story",
+  "revision": 11,
+  "change": {
+    "change": "evidence",
+    "kind": "review_outcome",
+    "source": "correction 1 17a82fc merged 3fd5666",
+    "reference": "3fd5666",
+    "review": "review-result:wave-0290-u2-adversary-1",
+    "outcome": "fixed"
+  }
+}

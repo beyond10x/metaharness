@@ -22,7 +22,7 @@ scope:
   path: crates/metaharness-tools/src/server.rs
 - confidence: inferred
   path: crates/metaharness/src/run.rs
-revision: 10
+revision: 11
 transitions:
 - {from: "draft", to: "proposed", at: "2026-11-05T03:32:35Z", actor: "human:timo", revision: 5}
 - {from: "proposed", to: "active", at: "2026-11-05T03:32:36Z", actor: "human:timo", revision: 6}
@@ -73,3 +73,16 @@ Each point is from reading. The implementor shows each one red on base before ch
 
 Inferred: `crates/metaharness/src/run.rs`, `crates/metaharness-tools/src/caller.rs`,
 `crates/metaharness-tools/src/server.rs`, `crates/metaharness-tools/Cargo.toml`, `CHANGELOG.md`.
+
+## Withdrawn
+
+The wave lead withdrew the `rev` pin of `b10x-tool-contract` from the 0.29.0 wave (2026-11-05):
+
+- Harness pulls `beyond10x/tools` by `tag = "0.5.0"` through its own dependencies.
+- So a `rev` pin in `crates/metaharness-tools/Cargo.toml` adds a second `b10x-tool-contract` package to the
+  lock instead of changing one source string.
+- Cargo refuses a `[patch]` that points at the same source.
+- The lock already fixes the commit (`99e36ed`).
+
+The pin follows when harness pins tools by `rev`, under `epic:layer-pins-follow-their-owners`. The
+implementor's two patches are kept outside the repository.
