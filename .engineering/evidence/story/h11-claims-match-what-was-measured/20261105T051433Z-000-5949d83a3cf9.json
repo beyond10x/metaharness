@@ -1,0 +1,13 @@
+{
+  "at": "2026-11-05T05:14:33Z",
+  "actor": "human:timo",
+  "artifact": "story:h11-claims-match-what-was-measured",
+  "kind": "story",
+  "revision": 8,
+  "change": {
+    "change": "evidence",
+    "kind": "verification",
+    "source": "U3 targeted lanes green after correction 1 (claude lib 162, adapter 18, adversary pass 1 3, metaharness lib 169, qualify 8, audit 103, adversary_w5u1_h11 9, adversary_scratch_cwd 4)",
+    "reference": "c983d2a"
+  }
+}

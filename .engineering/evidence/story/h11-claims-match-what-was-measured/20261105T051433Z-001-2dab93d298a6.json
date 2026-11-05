@@ -1,0 +1,15 @@
+{
+  "at": "2026-11-05T05:14:33Z",
+  "actor": "human:timo",
+  "artifact": "story:h11-claims-match-what-was-measured",
+  "kind": "story",
+  "revision": 8,
+  "change": {
+    "change": "evidence",
+    "kind": "review_outcome",
+    "source": "correction 1 c983d2a merged 502240d",
+    "reference": "502240d",
+    "review": "review-result:wave-0290-u3-adversary-1",
+    "outcome": "fixed"
+  }
+}
