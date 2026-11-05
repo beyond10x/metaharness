@@ -2,12 +2,22 @@
 format: aep.planning-md/3
 id: story:aep-eval-scope-through-substrate
 kind: story
-status: draft
+status: active
 title: The AEP eval takes its delegated scope from Substrate's systemd adapter, not its own systemd-run
 summary: 'ADR 0109: drop the eval''s systemd-run re-exec for the confinement contract''s systemd adapter'
 tags:
 - adr-0109
-revision: 2
+scope:
+- confidence: inferred
+  path: Cargo.lock
+- confidence: inferred
+  path: crates/metaharness-aep-eval/Cargo.toml
+- confidence: inferred
+  path: crates/metaharness-aep-eval/src/lib.rs
+revision: 7
+transitions:
+- {from: "draft", to: "proposed", at: "2026-11-05T03:32:36Z", actor: "human:timo", revision: 3}
+- {from: "proposed", to: "active", at: "2026-11-05T03:32:36Z", actor: "human:timo", revision: 4}
 ---
 ## Outcome
 

@@ -2,7 +2,7 @@
 format: aep.planning-md/3
 id: story:claude-seam-runs-only-a-pinned-binary
 kind: story
-status: draft
+status: archived
 title: The Claude seam runs only a binary whose onFailure reading is recorded
 summary: With the decision hook installed, an off-pin Claude binary is refused by name before the spawn.
 owner: metaharness
@@ -12,7 +12,9 @@ refs:
 relations:
 - informed_by: review-result:adr0096-w6u1-review
 - informed_by: story:claude-seam-fails-closed
-revision: 1
+revision: 3
+transitions:
+- {from: "draft", to: "archived", at: "2026-11-05T03:32:43Z", actor: "human:timo", revision: 3}
 ---
 # Story: the Claude seam runs only a binary whose onFailure reading is recorded
 
@@ -45,3 +47,9 @@ records an `onFailure` reading for, and refuses any other binary by name before 
 
 Inferred: `crates/metaharness-claude/src/builder.rs`, `crates/metaharness-claude/src/launch.rs`,
 `crates/metaharness-protocol/src/spec.rs`, `docs/design/metaharness-protocol-v0.1.md`, `CHANGELOG.md`.
+
+## Rejected
+
+Rejected on 2026-11-05 by `approval-record:accept-drafts-0-29-0`. Amendment a62 (release 0.20.0) decided the
+opposite: an off-pin vendor version is reported, never refused, and `--strict-version` stays the opt-in
+refusal. Archived, because a story cannot move from draft to rejected.

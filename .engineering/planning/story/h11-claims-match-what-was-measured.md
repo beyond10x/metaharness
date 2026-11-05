@@ -2,7 +2,7 @@
 format: aep.planning-md/3
 id: story:h11-claims-match-what-was-measured
 kind: story
-status: draft
+status: active
 title: Claude's H11 claims match what was measured
 summary: An ok H11 on Claude names its source and every unprobed surface, and a pin move without a re-measured canary fails a check.
 owner: metaharness
@@ -12,7 +12,19 @@ refs:
 relations:
 - decomposes: epic:session-format
 - informed_by: review-result:adr0096-w5-independent-review
-revision: 1
+scope:
+- confidence: inferred
+  path: AGENTS.md
+- confidence: inferred
+  path: crates/metaharness-claude/src/lib.rs
+- confidence: inferred
+  path: crates/metaharness-claude/tests/adapter.rs
+- confidence: inferred
+  path: crates/metaharness/src/audit.rs
+revision: 8
+transitions:
+- {from: "draft", to: "proposed", at: "2026-11-05T03:32:35Z", actor: "human:timo", revision: 3}
+- {from: "proposed", to: "active", at: "2026-11-05T03:32:35Z", actor: "human:timo", revision: 4}
 ---
 # Story: Claude's H11 claims match what was measured
 
@@ -30,14 +42,20 @@ re-measured whenever a pin moves.
 
 - Since `story:claude-h11-memory-walk-shapes` (amendment a36), Claude's H11 `ok` is computed from the launch
   attestation and the version-keyed `MEMORY_CANARIES` table, not from the run's record
-  (`crates/metaharness/src/audit.rs:1072-1124`, `crates/metaharness-claude/src/lib.rs:371-389`). AGENTS.md
-  invariant 3 asserts hermeticity from the run's own record and is not amended for a36 (s2-1, s3-1, s4-1).
-- The `ok` text is wider than the probe: `MEMORY_NOT_PROBED` (`lib.rs:353-356`) names only managed memory,
-  while user memory in the config home (s2-2), ancestors above the cwd's parent (s2-4, s4-5) and
+  (`crates/metaharness/src/audit.rs`, `memory_held_to_canary` at about line 1236;
+  `crates/metaharness-claude/src/lib.rs`, `MEMORY_CANARIES` at about line 498, read at `9192a90`). AGENTS.md
+  invariant 3 (about line 83) asserts hermeticity from the run's own record and is not amended for a36
+  (s2-1, s3-1, s4-1).
+- The `ok` text is wider than the probe: `MEMORY_NOT_PROBED` (`lib.rs` about line 480) names only managed
+  memory, while user memory in the config home (s2-2), ancestors above the cwd's parent (s2-4, s4-5) and
   `.claude/rules` below depth one (s4-4) were not probed either.
 - The canary re-probe a36 requires at each pin move is `#[ignore]`
-  (`crates/metaharness-claude/tests/native_fixture.rs:1052`), and the gate-time pin test
-  (`tests/adapter.rs:131-161`) accepts any self-consistent row (s4-2).
+  (`crates/metaharness-claude/tests/native_fixture.rs`, the memory canary case at about line 1226), and the
+  gate-time pin test in `tests/adapter.rs` accepts any self-consistent row (s4-2). The pins are now 2.1.304,
+  2.1.305 and 2.1.309 (`PINNED_VERSIONS`, `lib.rs` about line 210).
+- a62 (0.20.0) made H11 read `unk` for a record version with no canary. That leaves the findings above
+  open; it only changes the off-pin case.
+- Line references refreshed at `9192a90` when the story was accepted for the 0.29.0 wave.
 
 ## Acceptance
 

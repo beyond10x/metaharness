@@ -2,7 +2,7 @@
 format: aep.planning-md/3
 id: story:catalogue-road-leftovers
 kind: story
-status: draft
+status: active
 title: Catalogue road leftovers
 summary: Ask-mode record, catalogue-named denial, revision pin, FIFO race and argument value types on the caller-catalogue road.
 owner: metaharness
@@ -13,7 +13,19 @@ relations:
 - decomposes: epic:loom-agent-work-through-metaharness
 - informed_by: review-result:adr0096-w5-independent-review
 - informed_by: review-result:adr0096-w5-catalogue-adversary-2
-revision: 1
+scope:
+- confidence: inferred
+  path: crates/metaharness-tools/Cargo.toml
+- confidence: inferred
+  path: crates/metaharness-tools/src/caller.rs
+- confidence: inferred
+  path: crates/metaharness-tools/src/server.rs
+- confidence: inferred
+  path: crates/metaharness/src/run.rs
+revision: 10
+transitions:
+- {from: "draft", to: "proposed", at: "2026-11-05T03:32:35Z", actor: "human:timo", revision: 5}
+- {from: "proposed", to: "active", at: "2026-11-05T03:32:36Z", actor: "human:timo", revision: 6}
 ---
 # Story: catalogue road leftovers
 
@@ -26,31 +38,36 @@ the deviation reported by unit 4's fix round 2.
 ## Outcome
 
 The caller-catalogue road records what it decided under every decision mode, names its own cause, pins its
-format crate by revision, and checks argument value types.
+format crate by revision, and does not block on a catalogue path swapped for a FIFO.
 
 ## Context
 
-- Ask mode: under `DecisionMode::Ask` a call resolving to no catalogue entry goes to the embedder, which may
-  allow it; the server then refuses, but the record says allowed (`crates/metaharness/src/run.rs:811`,
-  `:851`; s8-3).
+Read again at `9192a90` when the story was accepted for the 0.29.0 wave, and narrowed to what is still open.
+The type check (fix round 2's deviation) shipped: `tools/call` answers `isError` and performs nothing when
+an argument value is not of the declared type (CHANGELOG), so it is out of this story.
+
+- Ask mode: under `DecisionMode::Ask` a call is put to the embedder (`crates/metaharness/src/run.rs`, the
+  `ask` branch at about line 910) before anything says it resolved to no catalogue entry. The embedder may
+  allow it; the server then refuses, but the record says allowed (s8-3).
 - Wording: a call outside the catalogue is denied with the vocabulary reason and warning, not one naming the
-  run's catalogue (`run.rs:1018-1035`; s8-4).
-- Pin: `b10x-tool-contract` is pinned by `tag = "0.2.0"` (`crates/metaharness-tools/Cargo.toml`), not by
-  revision as invariant 10 pins harness; the lock holds `60d4d0e` (s7-5, s10-4).
-- Race: a FIFO swapped in between the regular-file check and the open makes the open block
-  (`crates/metaharness-tools/src/caller.rs`, the read path; s7-3); the post-open re-check is reachable only
-  by that race (adversary pass 2, finding 5).
-- Types: the argument check added in fix round 2 checks keys, not value types; a string where a number
-  belongs reaches the harness verb, which refuses it (fix round 2 report, deviations).
+  run's catalogue (s8-4).
+- Pin: `b10x-tool-contract` is pinned by `tag = "0.5.0"` of `beyond10x/tools`
+  (`crates/metaharness-tools/Cargo.toml:16`), not by `rev` as invariant 10 pins harness (s7-5, s10-4).
+- Race: `crates/metaharness-tools/src/caller.rs` checks the path's metadata, then opens it with a plain
+  `File::open` (about lines 550-560). A FIFO swapped in between makes the open block before the post-open
+  re-check can refuse it (s7-3; adversary pass 2, finding 5).
+
+Each point is from reading. The implementor shows each one red on base before changing it.
 
 ## Acceptance
 
 - expected_before: today a catalogue run under `--decisions ask` can record an allow for a tool the catalogue
   never offered; a catalogue miss is denied with vocabulary wording; the manifest pins tool-contract by tag;
-  a FIFO raced in blocks the open; a wrongly typed argument reaches the verb. After: the ask branch records
-  a deny naming the catalogue for a call that resolves to no entry; the deny and warning name the run's
-  catalogue; the manifest pins tool-contract by `rev`; the open does not block on a FIFO; a wrongly typed
-  argument gets `isError` naming the entry and the field, and nothing runs.
+  a FIFO raced in blocks the open. After: the ask branch records a deny naming the catalogue for a call that
+  resolves to no entry, and the embedder is not asked about it; the deny and warning name the run's
+  catalogue; the manifest pins tool-contract by `rev` (the commit the lock already holds, so only the lock's source
+  string changes); the open does not block on a FIFO and refuses it by name. Each is pinned by a test that is red
+  on base.
 
 ## Scope
 
