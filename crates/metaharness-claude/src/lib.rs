@@ -55,7 +55,8 @@ mod vectors;
 
 pub use bridge::{ClaudeSeam, ClaudeSeams};
 pub use hook::{
-    HOOK_WAIT_SECONDS, HookChannelPaths, PathNotUtf8, hook_program, shell_quote, shell_quote_path,
+    HOOK_WAIT_SECONDS, HookChannelPaths, PathNotUtf8, ProgramOutcome, ProgramRefusal, hook_program,
+    shell_quote, shell_quote_path,
 };
 pub use launch::{
     CredentialCopy, ENDPOINT_KEY_POSTURE, HOOK_COMMAND_PLUGIN_VARIABLES, HOOK_TIMEOUT_SECONDS,

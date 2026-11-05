@@ -211,8 +211,44 @@ pub enum ProcessPoll {
     Ended,
 }
 
+/// What a hook program reported doing with one call (design amendment a41 § 11).
+///
+/// The program is the vendor's party to the call, not metaharness's: what it hands the vendor is
+/// what the vendor honours. So the run loop records a decision as reaching the vendor only once
+/// the program says it did, and records the program's own deny when it refused instead.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum HookOutcome {
+    /// The program handed the vendor the answer metaharness wrote: a decision, or the empty
+    /// answer that is abstain.
+    Delivered {
+        /// The call.
+        call_id: String,
+    },
+    /// The program refused the call itself, so no answer of metaharness's reached the vendor.
+    Refused {
+        /// The call.
+        call_id: String,
+        /// The cause, as one word.
+        cause: String,
+        /// The reason the program gave the vendor.
+        reason: String,
+    },
+}
+
 /// A started child, as a line stream and a line sink.
 pub trait HarnessProcess {
+    /// Whether a hook program reports what it did with each decision this process is written
+    /// (design amendment a41 § 11). `false` unless the runner installed such a program; the run
+    /// loop then records each decision as it writes it.
+    fn reports_hook_outcomes(&self) -> bool {
+        false
+    }
+
+    /// The outcomes reported since the last call, oldest first.
+    fn take_hook_outcomes(&mut self) -> Vec<HookOutcome> {
+        Vec::new()
+    }
+
     /// The next line the child wrote, or `None` at end of stream.
     ///
     /// **`None` means the stream ended and nothing else.** A child that is blocked waiting on a

@@ -551,7 +551,7 @@ ran"* without inventing a fake result, which is fabricating an observation.
 | `usage` | per-request or per-turn tokens, cache reads and creations, per-model split, and since amendment a9 **`thinking_tokens`, `iterations`, `speed` and `cost_usd`** | costs are read from what the vendor reported, never computed | folded into `run_outcome.usage` / `requests` |
 | `rate_limit` | status, window, utilization, overage flag | a billing guard: *this run must not have been paid for out of overage* is a fact about money nothing else carries | `rate_limit` |
 | `command.result` | `id`, `ok` or `refused { code, reason }` | § 5.4 | — |
-| `warning` | code, message | metaharness has something to say. Distinct from `opaque`, which means *the vendor said something we could not read* | — |
+| `warning` | code, message | metaharness has something to say. Distinct from `opaque`, which means *the vendor said something we could not read*. Each code is named in the amendment that adds it; a41 § 11 adds `HOOK_PROGRAM_REFUSED`, `HOOK_OUTCOME_UNSEEN` and `VENDOR_PIPELINE_DECIDES` | — |
 | `opaque` | vendor `type`, vendor `subtype`, digest of the raw record, source line | **required.** An adapter that cannot map a vendor record emits this and never drops it | `opaque` |
 
 **Decision D4 — `opaque` is mandatory and unconditional.** The failure it prevents is the one
@@ -3813,6 +3813,90 @@ vendor's handling of it is unknown (`codex-0.153.4-hook-failure.txt`).
 sorted order, so `"onFailure": "block"` sits between `command` and `timeout`. No C1 fixture and no
 spawn vector carries the settings document, and none of them moved. The hook program's text moved
 (§ 5). Its output for every reply metaharness writes did not.
+
+**11. What the program refuses, and what abstains, reach the record (2026-11-05).** This section
+answers two findings of the wave-6 review: `story:claude-hook-refusals-reach-the-record` and
+`story:claude-seam-abstain-is-recorded-as-vendor-decided`.
+
+*The defect.* The program refuses a call on its own in three cases (§ 6): it cannot reach its
+channel, its own budget runs out, or the answer is not a hook decision (§ 5). None of these reached
+metaharness. `tool.decided` was metaharness's own decision, emitted when metaharness decided, and
+row V23 puts that before the hook runs. So the record could say `allow` for a call the vendor was
+told to deny.
+
+*The mechanism: a file the program writes beside the request.* The other candidate was to read
+what the vendor reports back. It was not chosen, for three reasons. The program is ours, so its
+words are known and a `/bin/sh` test drives every path. What the Claude transcript records for a
+call a hook denied was never captured in this repository (§ 8, first item), so a record claim would
+rest on an undriven vendor surface (invariant 4). And neither route may need a paid run.
+
+- The channel gains `outcomes/` beside `requests/` and `responses/`. The program writes one file
+  per call, `<key>.<outcome>`, where the outcome is `forwarded`, `abstained`, `no-channel`,
+  `unanswered` or `unreadable` (`ProgramOutcome`). It writes the file **before** it prints.
+- A published request has a key, and its outcome file is empty: metaharness reads the call from the
+  request it already holds. When nothing was published, the file carries the vendor's input
+  instead, read from stdin or from the half-written request, which names the call. That file is
+  written under `mktemp` and one rename.
+- A report that cannot be written changes nothing the vendor is told. What the program prints is
+  unchanged on every path, for every reply.
+
+*What the run loop records.* This applies to a Claude run whose process reports outcomes, which is
+the spawn runner with this channel. A decision is written to the channel as before. Its
+`tool.decided`, and its place in the census, wait for the program's report:
+
+| the program reports | the record |
+|---|---|
+| `forwarded` or `abstained` | the decision as metaharness made it |
+| a refusal, for a decision written | the program's deny in place of metaharness's: `tool.decided` with `decision: deny`, `decided_by: adapter` and the program's own reason, after `warning{code: "HOOK_PROGRAM_REFUSED"}` naming the call and the cause |
+| a refusal, for a call not yet presented | the same deny, emitted when the call is presented; nothing is written to the channel for it |
+| a refusal, for a pending `ask` call | the same deny, and the call is closed: a later `tool.decide` for it is `TOO_LATE` |
+| nothing, by the time the run ends | the decision as made, followed by `warning{code: "HOOK_OUTCOME_UNSEEN"}` naming the call |
+
+The spawn runner reads the channel again after each line it reads and before it hands that line
+on. The run loop settles outcomes before it admits the line. So a call's `tool.decided` still
+precedes its `tool.result`. On this route `tool.decided` now follows the hook's run, not the
+`tool_use` record. A scripted or replayed run has no program and records each decision as written,
+as before.
+
+*Abstain is outside the fail-closed claim.* This amendment's claim is that a call the seam produced
+no decision for is refused. An abstain is a decision: it lets the vendor's own permission pipeline
+decide (§ 5's first case, a3). What that pipeline then does depends on the vendor's settings, not on
+the seam, so the seam claims nothing about it. The record says so in two places:
+
+- When the program reports `abstained`, `warning{code: "VENDOR_PIPELINE_DECIDES"}` naming the call
+  follows its `tool.decided`.
+- A `frame` run with no frame abstains on every call, because the adapter refuses `frame.set`. On
+  this route it warns `NO_FRAME_IN_FORCE` once, right after the opening record and before any call,
+  whether or not a call is made. A run with no program keeps that warning at its first call.
+
+What the vendor then decides for an abstained call is inferred, not driven.
+
+*What moved.* Event wire: three new warning codes, `HOOK_PROGRAM_REFUSED`, `HOOK_OUTCOME_UNSEEN` and
+`VENDOR_PIPELINE_DECIDES`. `NO_FRAME_IN_FORCE` moves on the hook route. There is no new event, no
+new field and no new `decided_by` value. No golden, C1 fixture or spawn vector moved. Seam: the
+channel gains `outcomes/`, and the program's text gains the reports.
+
+*Still unverified, or not covered.*
+
+- The program writes a request whose input carries no `tool_use_id`, and that request is never
+  answered (`spawn::tests::a_request_without_a_correlation_key_is_left_for_the_hooks_own_backstop`).
+  Its outcome names no call this side can read, so it is not reported.
+- A program the vendor kills at its 60 s timeout reports nothing, and the call reads
+  `HOOK_OUTCOME_UNSEEN`.
+- A channel root that is gone takes `outcomes/` with it, and nothing reaches the record.
+
+*Tests.*
+
+- `hook::tests::every_path_reports_what_it_did_with_the_call_beside_its_request`
+- `hook::tests::an_outcome_name_parses_only_as_the_program_writes_it`
+- In `crates/metaharness/tests/claude_hook_record.rs`, through the builder's Claude start, the real
+  program, the spawn runner and the Claude seam, with a `/bin/sh` vendor:
+  - one case per refusal (`a_call_the_program_cannot_publish_…`,
+    `a_call_the_programs_backstop_refuses_…`, `a_call_whose_answer_the_program_cannot_read_…`);
+  - `an_allow_the_program_forwarded_is_recorded_as_the_frames_allow`;
+  - `a_decision_no_hook_program_reported_on_is_recorded_with_a_warning_naming_the_call`;
+  - `an_abstained_call_is_recorded_as_decided_by_the_vendor_pipeline`;
+  - `a_run_that_abstains_on_every_call_warns_once_at_start`.
 
 ### Amendment a42 — `trace-ir-summary/1`, the one projection of a `trace-ir/1` document (2026-10-21)
 
