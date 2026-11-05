@@ -910,3 +910,43 @@ fn a_fifo_swapped_in_after_the_path_was_looked_at_is_refused_without_blocking() 
     );
     assert!(words.contains("catalogue.yaml"), "{words}");
 }
+
+/// Correction 1 (F1): the rule the run loop reads for what a catalogue run's server performs is the
+/// harness catalogue that server is built on, entry by entry: writable, holding no program, as the
+/// Codex runner and `mcp-serve --writable --catalogue` build it.
+#[test]
+fn a_catalogue_server_performs_what_the_harness_catalogue_it_is_built_on_publishes() {
+    let dir = tree();
+    let served = Catalogue::of(LocalOperations::unconfined(dir.path(), Vec::new()).expect("opens"));
+    let entries: Vec<&str> = harness_catalogue::entry_names().into_values().collect();
+    assert!(entries.contains(&"run"), "{entries:?}");
+    for entry in entries {
+        assert!(
+            harness_catalogue::tools_operation(entry).is_some(),
+            "{entry} is a mapped entry"
+        );
+        assert_eq!(
+            crate::caller::served_beside_a_caller_catalogue(entry),
+            served.get(entry).is_some(),
+            "{entry}"
+        );
+    }
+}
+
+/// Correction 1 (F3): a socket swapped in after the path was looked at makes `open(2)` fail with
+/// `ENXIO` before there is a descriptor to ask. It is refused by what the path now is, not by the
+/// platform's "No such device or address".
+#[cfg(unix)]
+#[test]
+fn a_socket_swapped_in_after_the_path_was_looked_at_is_refused_as_no_longer_a_regular_file() {
+    let dir = tempfile::tempdir().expect("a directory");
+    let socket = dir.path().join("catalogue.yaml");
+    let _listener = std::os::unix::net::UnixListener::bind(&socket).expect("a socket");
+    let error = crate::caller::open_regular(&socket).expect_err("a socket is not a catalogue");
+    assert_eq!(error.code(), CATALOGUE_UNREADABLE, "{error}");
+    let words = error.to_string();
+    assert!(words.contains("no longer a regular file"), "{words}");
+    assert!(words.contains("a socket"), "{words}");
+    assert!(!words.contains("os error"), "{words}");
+    assert!(words.contains("catalogue.yaml"), "{words}");
+}

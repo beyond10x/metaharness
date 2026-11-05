@@ -746,6 +746,19 @@ impl CallerCatalogue {
         self.entries.iter().find(|entry| entry.published == name)
     }
 
+    /// Whether a vendor-named call reaches an entry the run's server performs: one this catalogue
+    /// publishes, whose contract name harness maps, to a harness entry a server handed a caller's
+    /// catalogue publishes.
+    ///
+    /// [`CallerCatalogue::resolve_as`] answers what the call **is**; this answers whether anything
+    /// in the run does it. They differ on a `process.run` entry: it is `shell`, and the server
+    /// publishes no `run` beside a catalogue, so nothing performs it.
+    #[must_use]
+    pub fn performs_as(&self, tool: &str, naming: EntryNaming) -> bool {
+        self.performed_as(tool, naming)
+            .is_some_and(served_beside_a_caller_catalogue)
+    }
+
     /// The harness entry a vendor-named call is performed as, when it is one.
     fn performed_as(&self, tool: &str, naming: EntryNaming) -> Option<&'static str> {
         self.entries
@@ -755,13 +768,30 @@ impl CallerCatalogue {
     }
 }
 
+/// Whether the server a run launches for a caller's catalogue publishes harness entry `entry`.
+///
+/// That server may write (the Claude launch passes `mcp-serve --writable`, and the Codex runner
+/// opens the workspace with `LocalOperations::unconfined`) and starts no program: a catalogue
+/// beside `--allow-program` is refused, and the Codex runner passes an empty program set. Harness
+/// publishes no `run` entry for an empty set, so `run` is the one mapped entry it does not perform.
+/// `a_catalogue_server_performs_what_the_harness_catalogue_it_is_built_on_publishes` holds this to
+/// the harness catalogue such a server is built on.
+pub(crate) fn served_beside_a_caller_catalogue(entry: &str) -> bool {
+    entry != "run"
+}
+
 /// Opens `path` for reading and refuses it unless the file opened is a regular file.
 ///
 /// The file opened is asked again: the path may have been replaced since it was looked at. The
 /// open is `O_NONBLOCK`, so a FIFO swapped in between is opened at once and refused by name rather
 /// than waited on until a writer appears, and `O_NOCTTY`, so a terminal swapped in never becomes
-/// the process's controlling terminal on the way to being refused. On a regular file neither flag
-/// changes what a read returns.
+/// the process's controlling terminal on the way to being refused. `O_NONBLOCK` is left set on the
+/// descriptor: on a regular file it changes nothing a read returns.
+///
+/// A socket, or a device with nothing behind it, swapped in fails the open itself with `ENXIO` or
+/// `ENODEV`, before there is a descriptor to ask. The path is looked at again and refused as no
+/// longer a regular file, naming what it is now, rather than by the platform's words for the
+/// error.
 pub(crate) fn open_regular(path: &Path) -> Result<std::fs::File, CatalogueError> {
     use rustix::fs::{Mode, OFlags};
     let unreadable = |detail: String| CatalogueError::Unreadable {
@@ -774,7 +804,22 @@ pub(crate) fn open_regular(path: &Path) -> Result<std::fs::File, CatalogueError>
         Mode::empty(),
     )
     .map(std::fs::File::from)
-    .map_err(|errno| unreadable(std::io::Error::from(errno).to_string()))?;
+    .map_err(|errno| {
+        if errno == rustix::io::Errno::NXIO || errno == rustix::io::Errno::NODEV {
+            let now = std::fs::metadata(path)
+                .ok()
+                .filter(|metadata| !metadata.is_file())
+                .map_or_else(
+                    || "something else".to_owned(),
+                    |metadata| kind_of(&metadata).to_owned(),
+                );
+            return unreadable(format!(
+                "it is no longer a regular file: it is {now} now, and only a regular file is read \
+                 as a catalogue"
+            ));
+        }
+        unreadable(std::io::Error::from(errno).to_string())
+    })?;
     let opened = file
         .metadata()
         .map_err(|error| unreadable(error.to_string()))?;
@@ -786,9 +831,20 @@ pub(crate) fn open_regular(path: &Path) -> Result<std::fs::File, CatalogueError>
 
 /// The refusal for a path that is not a regular file, naming what it is.
 fn not_regular(path: &Path, metadata: &std::fs::Metadata) -> CatalogueError {
+    let what = kind_of(metadata);
+    CatalogueError::Unreadable {
+        path: path.to_path_buf(),
+        detail: format!(
+            "it is {what}, not a regular file, and only a regular file is read as a catalogue"
+        ),
+    }
+}
+
+/// What a path that is not a regular file is, in words.
+fn kind_of(metadata: &std::fs::Metadata) -> &'static str {
     use std::os::unix::fs::FileTypeExt;
     let kind = metadata.file_type();
-    let what = if kind.is_dir() {
+    if kind.is_dir() {
         "a directory"
     } else if kind.is_fifo() {
         "a FIFO"
@@ -800,12 +856,6 @@ fn not_regular(path: &Path, metadata: &std::fs::Metadata) -> CatalogueError {
         "a socket"
     } else {
         "something else"
-    };
-    CatalogueError::Unreadable {
-        path: path.to_path_buf(),
-        detail: format!(
-            "it is {what}, not a regular file, and only a regular file is read as a catalogue"
-        ),
     }
 }
 

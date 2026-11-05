@@ -1010,3 +1010,83 @@ fn under_ask_a_call_outside_the_catalogue_is_denied_without_asking_the_embedder(
         "{kind:?}: the deny reached the vendor"
     );
 }
+
+/// `story:catalogue-road-leftovers`, correction 1 (F1): an entry harness maps and the run's server
+/// does not perform is outside the catalogue under a frame too. The fixture moved to toolset
+/// `process` publishes `process.run` as `run_program`; harness maps it to `run`, and a server
+/// handed a catalogue starts no program, so it publishes no `run`. A frame admitting `shell` must
+/// not allow the call: the server would refuse it, and the record would say allowed.
+#[test]
+fn under_a_frame_admitting_shell_an_entry_nothing_performs_is_denied_naming_the_catalogue() {
+    let dir = tempfile::tempdir().expect("a directory");
+    let text = std::fs::read_to_string(fixture())
+        .expect("the fixture reads")
+        .replace("toolset: fs\n", "toolset: process\n")
+        .replace("fs.", "process.")
+        .replace("process.read", "process.run")
+        .replace(
+            "renderings: {claude: Read, codex: read_file, mcp: fs_read}",
+            "renderings: {mcp: run_program}",
+        );
+    let path = written(dir.path(), "caller-catalogue.yaml", &text);
+    let caller = CallerCatalogue::read(&path).expect("a process.run entry is a catalogue");
+    let offered = caller.offered_tools_as(metaharness_tools::EntryNaming::Bare);
+    assert_eq!(offered, ["run_program", "fs_stat"]);
+    let meta = json!({"timestamp": "2026-10-29T10:00:00.000Z", "type": "session_meta",
+        "payload": {"id": "th-fixture", "cli_version": "0.160.0", "cwd": "/w",
+            "dynamic_tools": offered
+                .iter()
+                .map(|name| json!({"type": "function", "name": name, "description": "d",
+                    "inputSchema": {"type": "object"}}))
+                .collect::<Vec<_>>()}});
+    let script = vec![
+        ScriptStep::line(meta.to_string()),
+        ScriptStep::line(
+            r#"{"timestamp":"2026-10-29T10:00:01.000Z","type":"turn_context","payload":{"turn_id":"tu-1","model":"m","personality":"pragmatic"}}"#,
+        ),
+        ScriptStep::line(metaharness_codex::dynamic_tool_call_line(
+            "rpc-1",
+            &json!({"threadId": "th-fixture", "turnId": "tu-1", "callId": "call-1",
+                "namespace": null, "tool": "run_program", "arguments": {"path": "README.md"}}),
+        )),
+        ScriptStep::line(
+            r#"{"timestamp":"2026-10-29T10:00:05.000Z","type":"event_msg","payload":{"type":"task_complete","turn_id":"tu-1"}}"#,
+        ),
+    ];
+    let log = ScriptedLog::new();
+    let mut runner = ScriptedRunner::new(script, log.clone());
+    let mut run = builder(Kind::Codex)
+        .with_catalogue(&path)
+        .with_decisions(DecisionMode::Frame)
+        .with_frame(frame_admitting(OperationSet::of([
+            Operation::FileRead,
+            Operation::Shell,
+        ])))
+        .start_with_clock(
+            Input::Prompt("run it".to_owned()),
+            &mut runner,
+            &mut metaharness::CodexSeams,
+            Box::new(ManualClock::new()),
+        )
+        .expect("the run starts");
+    run.drain().expect("drains");
+
+    let decisions = decided(run.events());
+    assert_eq!(decisions.len(), 1, "{decisions:?}");
+    let denied = denials(run.events());
+    assert_eq!(denied.len(), 1, "not allowed: {decisions:?}");
+    let (call_id, reason, by) = &denied[0];
+    assert_eq!(call_id, "call-1");
+    assert_eq!(*by, DecidedBy::Frame, "{reason}");
+    assert!(reason.contains("run_program"), "{reason}");
+    assert!(
+        reason.contains("nothing in this run performs it"),
+        "{reason}"
+    );
+    assert!(reason.contains("toolset process"), "{reason}");
+    assert!(reason.contains("this run's catalogue"), "{reason}");
+    assert!(!reason.contains("vocabulary"), "{reason}");
+    let warnings = uncovered(run.events());
+    assert_eq!(warnings.len(), 1, "{warnings:?}");
+    assert!(warnings[0].contains("this run's catalogue"), "{warnings:?}");
+}
