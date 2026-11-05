@@ -3269,6 +3269,22 @@ with `'` and no backslash parses the same in both. The base build wrote the path
 on these roots too. Nothing here shows that Codex uses the login shell, and nothing shows that it
 does not.
 
+**Evidence labels for the Codex reading (story:vendor-claims-labelled, 2026-11-05).** The Codex pin
+is now 0.153.4 and 0.160.0 (`metaharness-codex::PINNED_VERSIONS`).
+
+- **Observed at both pins: the quotes are removed before the hook program runs.** On 2026-10-23 both
+  lanes of `crates/metaharness-codex/tests/native_fixture.rs` passed, 8 of 8 each
+  (`docs/research/2026-10-23-codex-0.160.0-record-surface.md` § The native fixture). They ran at
+  the pin commit `7164df8`, whose `build_hook` writes this quoted path (since `aff22dc`). In
+  `actual_codex_reports_command_success_failure_and_hook_denial` the hook was answered and its denial
+  kept the command's marker unwritten. So neither pin took the quotes as part of a file name.
+- **Unverified: that a shell removes them, and which shell.** `-lc` comes from the 0.153.4 strings
+  only. Nothing in this repository re-reads it at 0.160.0, and no driven run shows it. Nothing
+  records a fixture root containing `'`, `\` or `$`, so those runs cannot tell a POSIX `sh` from
+  fish, or from a word splitter with no shell at all. The paragraph above still stands.
+- The adapter comment on `build_hook` in `crates/metaharness-codex/src/launch.rs` carries the same
+  two labels. Before this, it said as fact that the pinned binary hands the string to a shell.
+
 **2. TOML strings escape control characters.** The Codex `config.toml` writer's basic-string
 quoting escaped only `\` and `"`. It now also escapes `\b`, `\t`, `\n`, `\f` and `\r`, and writes
 every other control character (U+0000–U+001F, U+007F) as `\uXXXX`. These are TOML's basic-string
@@ -3358,7 +3374,19 @@ which is the string the vendor reads. It runs in `plan_launch`, so it comes afte
 the working directory, the context files and any loopback proxy exist. It comes before anything is
 written for the child or spawned. The proxy and the scratch directory are removed when the refusal
 drops them. A near miss plans as before: `$CLAUDE_PLUGIN_ROOT` without braces, an unclosed brace, or
-`${CLAUDE_PROJECT_DIR}`, which the shell form neither substitutes nor checks.
+`${CLAUDE_PROJECT_DIR}`.
+
+**Unverified (invariant 4; story:vendor-claims-labelled, 2026-11-05): that Claude neither
+substitutes nor checks `${CLAUDE_PROJECT_DIR}` in a shell-form settings hook `command`.** The
+reading rests on the list of the runner's reads of `command` above. That list comes from the
+strings of 2.1.304 and 2.1.305. The 2.1.309 page (`docs/research/2026-10-23-claude-code-2.1.309-adapter-surface.md`)
+re-reads only the two plugin literals and their error text. No run drove a hook `command`
+containing `${CLAUDE_PROJECT_DIR}`, and a driven run of one is the open check. Two things are
+checked locally, with no vendor involved.
+`a_root_naming_a_plugin_variable_is_refused_and_its_near_misses_plan` plans such a root and finds
+the literal intact in `command`. It also finds that `/bin/sh -c` reads the quoted `command` back as
+the one program path, with the literal unexpanded. So if the vendor's shell is `/bin/sh` (§ 1, from
+the strings), that shell does not substitute it.
 
 Codex and b10x are not refused. Nothing found shows that either reads these literals in a hook
 `command`. Codex 0.153.4 does carry both names next to its hooks code (`codex-0.153.4.strings`),
@@ -6251,5 +6279,21 @@ on Codex and b10x and read by neither launch.
 **Review.** Adversary pass 1 found the blank actor (point 3), the Codex H3 row that left
 `AEP_ACTOR` out (point 1) and the CLI reference row that named no kind; all three are fixed. The
 Claude H3 row has the same omission and is left to its own story.
+
+**4. The Claude H3 row names what the child gets (story:claude-attestation-names-actor,
+2026-11-05).** The Claude H3 imposed control now reads the plan's constructed environment. It
+names every variable beyond `INHERITED_KEYS` and the four it always named (`PATH`, `TMPDIR`,
+`CLAUDE_CONFIG_DIR`, `CLAUDE_CODE_DISABLE_AUTO_MEMORY=1`), by name and never by value. Under
+`--actor` that is "the declared AEP_ACTOR". The same class test as Codex's checks it: every
+variable the child carries beyond the allowlist is named by an imposed control. Before the fix it
+found five more variables that no imposed control named. They are `CLAUDE_CODE_PROMPT_CACHE_TTL`
+(a71), `ANTHROPIC_BASE_URL` (a declared endpoint or the loopback proxy), `ANTHROPIC_AUTH_TOKEN`
+(loopback) and `CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC` (a33, on `none` and `loopback`). The
+fifth is an endpoint run's placeholder `ANTHROPIC_API_KEY` once managed settings move H4 to
+unavailable. Making the Codex-style change, the actor alone, turned the acceptance case green and
+left the class case red on those five. So the row is derived from the environment instead of being
+restated from the spec. A plan that adds none of them keeps the H3 sentence it had, and no recorded
+fixture holds that sentence. H4 is unchanged, including the endpoint posture the floor reads word
+for word.
 
 No new event or field; the wire's shape and `RunSpec`'s serde form are unchanged.

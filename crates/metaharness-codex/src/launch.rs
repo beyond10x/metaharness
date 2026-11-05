@@ -1284,9 +1284,19 @@ fn needs_call_seam(spec: &RunSpec) -> bool {
 /// F6); here it would be a run that fails on its own configuration. Either way the assertion is
 /// the same and it is a value a test reads (§ 8.4 O7).
 ///
-/// The `command` is the program's path as one single-quoted shell word (amendment a37): the
-/// pinned binary hands the string to a shell, so an unquoted root with a space in it would run
-/// the wrong program.
+/// The `command` is the program's path as one single-quoted shell word (amendment a37), so an
+/// unquoted root with a space in it cannot run the wrong program. What each pin does with it, by
+/// label (a37 § 1, story:vendor-claims-labelled):
+///
+/// - **Observed** at 0.153.4 and 0.160.0: the quotes are removed before the program runs. Both
+///   lanes of `tests/native_fixture.rs` passed on 2026-10-23 with this quoted `command`, and in
+///   `actual_codex_reports_command_success_failure_and_hook_denial` the hook was answered and its
+///   denial kept the command's marker unwritten
+///   (`docs/research/2026-10-23-codex-0.160.0-record-surface.md` § The native fixture).
+/// - **Unverified**: that a shell removes them, and which one. `-lc` beside
+///   `hooks/src/engine/command_runner.rs` comes from the 0.153.4 binary's strings, not from a
+///   driven run. Nothing records a fixture root with a `'`, `\` or `$` in it, so those runs do
+///   not tell a POSIX `sh` from fish or from a word splitter with no shell at all.
 fn build_hook(hook_path: &Path) -> Result<Value, LaunchRefusal> {
     let command = crate::shell_quote_path(hook_path)
         .map_err(|refusal| LaunchRefusal::PathNotUtf8 { path: refusal.path })?;
@@ -2408,8 +2418,10 @@ mod tests {
         (root, world)
     }
 
-    /// Amendment a37: the vendor runs the hook `command` through a shell, so an awkward scratch
-    /// root must still name exactly one word, and that word is the program the launch installs.
+    /// Amendment a37: the vendor reads the hook `command` with shell quoting. That the quotes are
+    /// removed is observed at both pins; which shell removes them is unverified (see
+    /// `build_hook`). So an awkward scratch root must still name exactly one word to `/bin/sh`,
+    /// and that word is the program the launch installs.
     #[test]
     fn the_vendor_hook_command_is_one_shell_word_naming_the_program() {
         let (root, world) = awkward_world();
