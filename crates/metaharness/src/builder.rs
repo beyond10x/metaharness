@@ -2687,6 +2687,19 @@ pub fn check_spec(spec: &RunSpec) -> Result<(), Refusal> {
     // A scratch name is 1 to 64 bytes of a plain charset (amendment a72), refused before anything
     // exists.
     check_scratch_name(spec)?;
+    // A blank actor would reach the child as a blank `AEP_ACTOR`, which the subject refuses at
+    // every store write: the run would start and fail at its first write (amendment a74).
+    if spec
+        .actor
+        .as_deref()
+        .is_some_and(|actor| actor.trim().is_empty())
+    {
+        return Err(Refusal::Launch {
+            detail: "--actor is blank: it names who the run's store writes are made as, and a \
+                     blank name is refused at every one of them; name the actor or drop the flag"
+                .to_owned(),
+        });
+    }
     // `--context` on every kind (amendment a35): what a declaration can be refused for before
     // anything is read. The read itself, beneath the resolved tree, is each start's.
     crate::context::check_declared(spec)?;
@@ -4926,6 +4939,31 @@ mod b10x_launch_tests {
         let mut claude = RunSpec::new(Kind::Claude);
         claude.prompt_cache_ttl = Some(metaharness_protocol::PromptCacheTtl::OneHour);
         assert!(check_spec(&claude).is_ok(), "Claude Code takes the class");
+    }
+
+    /// story:actor-reaches-every-launch, correction 1. A blank `--actor` would reach a vendor child
+    /// as a blank `AEP_ACTOR`, which the subject refuses at every store write, so the run would
+    /// start and fail at its first write. It is refused before anything starts, on every kind.
+    #[test]
+    fn a_blank_actor_is_refused_by_name_on_every_kind() {
+        for kind in [Kind::Claude, Kind::Codex, Kind::B10x] {
+            for blank in ["", "   ", "\t"] {
+                let mut spec = RunSpec::new(kind);
+                spec.actor = Some(blank.to_owned());
+                match check_spec(&spec) {
+                    Err(Refusal::Launch { detail }) => {
+                        assert!(detail.contains("--actor"), "{kind:?} {blank:?}: {detail}");
+                        assert!(detail.contains("blank"), "{kind:?} {blank:?}: {detail}");
+                    }
+                    other => panic!("{kind:?} {blank:?} should be refused, got {other:?}"),
+                }
+            }
+        }
+        for kind in [Kind::Claude, Kind::Codex] {
+            let mut spec = RunSpec::new(kind);
+            spec.actor = Some("agent:x".to_owned());
+            assert!(check_spec(&spec).is_ok(), "{kind:?} carries a named actor");
+        }
     }
 
     fn spec() -> RunSpec {

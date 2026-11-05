@@ -15,7 +15,7 @@ was amended and the amendment is named here.
 ### Fixed
 
 - `metaharness doctor` and every b10x launch read `--version` through the bounded probe of amendment a65 (a minute, then at most 5 seconds of draining after the binary exits): a binary that never exits is refused by name, and a leftover process holding its stdout no longer blocks them. A strict b10x launch now refuses through the same refusal as Claude and Codex, so a late binary is named by its deadline, and `doctor` names each cause apart: could not be run, exited N with the tail of its stderr, no version token, or late (`story:version-probe-everywhere-bounded`).
-- `--actor` is no longer accepted and dropped: a Codex run sets `AEP_ACTOR` in the child's environment from it, as a Claude run does, never from the operator's own environment; a b10x run refuses it by name before anything starts (amendment a74, `story:actor-reaches-every-launch`).
+- `--actor` is no longer accepted and dropped: a Codex run sets `AEP_ACTOR` in the child's environment from it, as a Claude run does, never from the operator's own environment, and its H3 attestation names it; a b10x run refuses it by name before anything starts, and every kind refuses a blank one (amendment a74, `story:actor-reaches-every-launch`).
 
 ## [0.26.2] — 2026-10-30
 

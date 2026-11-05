@@ -99,7 +99,7 @@ sometimes exactly what a test wants.
 | `--subscription-token-file <FILE>`, `--subscription-token-env <NAME>`, `--subscription-token-pointer <POINTER>` | A subscription token for a route that takes one instead of an API key; the pointer selects a field inside a JSON source. Not interchangeable with `--credentials api-key`. |
 | `--effort <LEVEL>` | Reasoning effort in the vendor's vocabulary, passed through and validated by the vendor. |
 | `--prompt-cache-ttl <TTL>` | The prompt-cache class a `claude` run writes with, `5m` or `1h`; without it the vendor chooses. `codex` and `b10x` refuse it. Each `usage` event's `cache_creation_5m_input_tokens` and `cache_creation_1h_input_tokens` say which class the writes took. Read from the 2.1.309 binary, not yet driven. |
-| `--actor <ACTOR>` | Who the run's store writes are made *as*, carried to the child as `AEP_ACTOR` — declared, never inherited. |
+| `--actor <ACTOR>` | Who the run's store writes are made *as*, carried to a `claude` or `codex` child as `AEP_ACTOR` — declared, never inherited. `b10x` refuses it, and every kind refuses a blank one. |
 | `--retain-dir <DIR>` | Copy the raw vendor wire out of the scratch root before it is deleted. |
 
 **`--credentials api-key`** is a declaration: without it, `ANTHROPIC_API_KEY` is not in the child
