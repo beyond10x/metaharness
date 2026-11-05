@@ -83,7 +83,10 @@ Each is a claim that can be checked. Breaking one is a design change, not a refa
 3. **Absence of evidence is not a property.** Hermeticity, tool restriction and denial behaviour are
    asserted from the run's own record — never from configuration, a directory layout or a flag that
    was passed. A run that pinned nothing is *nobody found out*, not *nothing moved*; that confusion
-   made `--hermetic strict` unpassable once and is amendment a4.
+   made `--hermetic strict` unpassable once and is amendment a4. One recorded exception: Claude's
+   H11 `ok` rests on the launch attestation held to the memory canary recorded for the record's
+   version, not on the run's record, and its detail says so
+   ([a36 § 8](docs/design/metaharness-protocol-v0.1.md#amendment-a36--claude-h11-rests-on-the-launchs-own-control-and-the-ancestor-walk-reports-2026-10-21)).
 4. **Every adapter claim about a vendor binary is pinned to a version and verified against it, or
    labelled unverified.** A vendor surface nobody has driven is documented as undriven.
 5. **Nothing under `evals/` runs in `task check`.** A paid run is never part of a gate. The subject
