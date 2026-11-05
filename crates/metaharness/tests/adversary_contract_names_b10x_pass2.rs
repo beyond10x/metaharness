@@ -147,17 +147,28 @@ fn a_b10x_run_that_published_the_verbs_reads_tool_invoke_as_its_entry() {
     );
 }
 
-/// On a run that published the verbs, a flat entry name is a tool the loop did not publish, and it
-/// is not read through the rendering table as if it had been.
+/// On a run that published the verbs, a bare entry name is not published, but the pinned loop
+/// routes it to that entry and performs it under the same gate (harness
+/// `3eca074:crates/harness-catalogue/src/verbs.rs`, `Verbs::invoked_entry`), and says so with
+/// `unpublished-tool-routed` (`crates/harness-loop/src/lib.rs`). Its line names the entry's
+/// `operation` and `subjects` as a flat call's does, and metaharness reads it as that entry.
 #[test]
-fn a_flat_entry_name_on_a_b10x_run_that_published_the_verbs_names_no_effect() {
-    let unpublished = r#"{"kind":"tool-requested","call_id":"call_b10x_001","name":"file_read","arguments":{"path":"README.md"}}"#;
+fn a_bare_entry_name_a_verbs_b10x_loop_routed_reads_as_its_entry() {
+    let routed = r#"{"kind":"tool-requested","call_id":"call_b10x_001","name":"dir_list","arguments":{"path":"src"},"operation":"dir.list","subjects":["file:src"]}"#;
+    let warning = r#"{"kind":"warning","code":"unpublished-tool-routed","message":"the model called `dir_list` directly; this run publishes it behind a verb, so the call was routed to that entry under the same gate"}"#;
+    let record: Vec<String> = recorded_loop_published(VERBS_PUBLICATION, Some(routed))
+        .into_iter()
+        .flat_map(|line| {
+            if line == routed {
+                vec![line, warning.to_owned()]
+            } else {
+                vec![line]
+            }
+        })
+        .collect();
     assert_eq!(
-        what_metaharness_recorded_of(recorded_loop_published(
-            VERBS_PUBLICATION,
-            Some(unpublished)
-        )),
-        (Vec::new(), Vec::new())
+        what_metaharness_recorded_of(record),
+        (vec!["dir.list".to_owned()], vec!["file:src".to_owned()])
     );
 }
 
