@@ -3100,3 +3100,86 @@ fn native_failure_is_not_hidden_by_successful_metaharness_transport() {
  std::fs::write(&transcript,serde_json::json!({"event":"stream.closed","process":{"kind":"exited","code":0}}).to_string()+"\n").unwrap();
  assert!(matches!(metaharness_outcome(Ok(std::process::ExitStatus::from_raw(0)),"",&transcript),StepOutcome::Nothing));
 }
+
+/// `--aep-binary`'s `--version` read under metaharness's bounded probe (story:aep-version-reads-bounded,
+/// a65 point 4), at a short deadline. The production deadline is driven through `drive::run` in
+/// `tests/aep_binary_version_bounded.rs`.
+#[cfg(all(test, unix))]
+mod selected_version {
+    use super::require_selected_version;
+    use std::path::{Path, PathBuf};
+    use std::time::{Duration, Instant};
+
+    /// A stand-in `aep` in `dir` that appends to `ran` each time it starts, then runs `body`.
+    fn stand_in(dir: &Path, body: &str) -> (PathBuf, PathBuf) {
+        use std::os::unix::fs::PermissionsExt as _;
+        let ran = dir.join("ran");
+        let path = dir.join("aep");
+        std::fs::write(&path, format!("#!/bin/sh\necho ran >> '{}'\n{body}\n", ran.display()))
+            .expect("the stand-in");
+        std::fs::set_permissions(&path, std::fs::Permissions::from_mode(0o700))
+            .expect("executable");
+        (path, ran)
+    }
+
+    /// The check on a thread of its own, so a read that never returns fails the case instead of
+    /// hanging it. A freshly written script can fail to start (`ETXTBSY`) while another test thread
+    /// forks; such an attempt never reached the stand-in, so it is retried until `ran` shows one
+    /// that did.
+    fn checked_within(bound: Duration, program: PathBuf, ran: PathBuf, deadline: Duration)
+        -> Option<(Result<(), String>, Duration)> {
+        let (send, receive) = std::sync::mpsc::channel();
+        let started = Instant::now();
+        std::thread::spawn(move || {
+            for _ in 0..20 {
+                let answer = require_selected_version(&program, deadline).map_err(|e| format!("{e:#}"));
+                if ran.exists() {
+                    let _ = send.send(answer);
+                    return;
+                }
+                std::thread::sleep(Duration::from_millis(25));
+            }
+        });
+        receive.recv_timeout(bound).ok().map(|answer| (answer, started.elapsed()))
+    }
+
+    #[test]
+    fn a_selected_aep_whose_version_never_exits_is_refused_by_name_at_its_deadline() {
+        let dir = tempfile::tempdir().expect("a directory");
+        let (program, ran) = stand_in(dir.path(), "exec sleep 30");
+        let named = program.display().to_string();
+        let deadline = Duration::from_millis(300);
+        let (answer, elapsed) = checked_within(Duration::from_secs(10), program, ran, deadline)
+            .expect("story:aep-version-reads-bounded: the --aep-binary --version read did not return");
+        let refusal = answer.expect_err("a version that never came is refused");
+        assert!(
+            refusal.contains(&format!("{named} --version did not exit within 300 ms and was killed")),
+            "{refusal} (after {elapsed:?})"
+        );
+        assert!(elapsed >= deadline, "answered after {elapsed:?}, before the deadline: the stand-in did not hang");
+    }
+
+    /// The bounded read admits the version this runner links and refuses another, as the unbounded
+    /// one did.
+    #[test]
+    fn a_selected_aep_is_admitted_on_the_linked_version_and_refused_on_another() {
+        for (reported, admitted) in [(aep_cli::VERSION, true), ("0.54.0", false)] {
+            let dir = tempfile::tempdir().expect("a directory");
+            let (program, ran) = stand_in(dir.path(), &format!("echo 'aep {reported}'"));
+            let (answer, elapsed) =
+                checked_within(Duration::from_secs(15), program, ran, Duration::from_secs(20))
+                    .expect("the --aep-binary --version read did not return");
+            match answer {
+                Ok(()) => assert!(admitted, "{reported} was admitted (after {elapsed:?})"),
+                Err(refusal) => {
+                    assert!(!admitted, "{reported} was refused: {refusal}");
+                    assert!(
+                        refusal.contains("selected AEP executable must implement version")
+                            && refusal.contains(reported),
+                        "{refusal}"
+                    );
+                }
+            }
+        }
+    }
+}

@@ -13,6 +13,7 @@ path = "src/main.rs"
 
 [dependencies]
 clap = { workspace = true, features = ["env"] }
+metaharness = { path = "../metaharness" }
 metaharness-b10x = { path = "../metaharness-b10x" }
 metaharness-protocol = { path = "../metaharness-protocol" }
 rustix = { workspace = true }

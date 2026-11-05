@@ -146,6 +146,19 @@ fn preflight_child_path(cases: &[Case], out: &Path) -> Result<()> {
 /// Takes the `PATH` rather than reading `HOME` itself, so a test can point it at a tree it built
 /// instead of at the developer's own `~/.local/bin`.
 fn child_path_refusals(cases: &[Case], child_path: &str) -> Vec<RunRefusal> {
+    child_path_refusals_within(cases, child_path, metaharness::VERSION_PROBE_DEADLINE)
+}
+
+/// [`child_path_refusals`] with the child `aep`'s `--version` read through metaharness's bounded
+/// probe within `deadline` and the drain grace (a65 point 4, story:aep-version-reads-bounded). A
+/// child that could not be run, or did not exit within `deadline` and was killed, is a mismatch
+/// whose finding names the binary, its `--version` and, when killed, the deadline; what one that
+/// exited printed is read as before.
+fn child_path_refusals_within(
+    cases: &[Case],
+    child_path: &str,
+    deadline: std::time::Duration,
+) -> Vec<RunRefusal> {
     let mut refusals = Vec::new();
     match resolve_on_path("aep", child_path) {
         // An absence is a warning and not a refusal: a case may not run `aep` at all, and the
@@ -155,13 +168,15 @@ fn child_path_refusals(cases: &[Case], child_path: &str) -> Vec<RunRefusal> {
              fail inside the session. `task install` in the aep checkout writes one to ~/.local/bin"
         ),
         Some(child) => {
-            let reported = std::process::Command::new(&child)
-                .arg("--version")
-                .output()
-                .map(|output| String::from_utf8_lossy(&output.stdout).trim().to_owned())
-                .unwrap_or_default();
-            let found =
-                version_token(&reported).unwrap_or_else(|| format!("unreadable: {reported:?}"));
+            let mut command = std::process::Command::new(&child);
+            command.arg("--version");
+            let read = metaharness::probe_command(&mut command, deadline);
+            let found = if let metaharness::ProbeRead::Exited { .. } = read {
+                let reported = read.stdout().trim().to_owned();
+                version_token(&reported).unwrap_or_else(|| format!("unreadable: {reported:?}"))
+            } else {
+                format!("unreadable: {}", read.refusal(&command).unwrap_or_default())
+            };
             let own = aep_cli::VERSION;
             if found != own {
                 refusals.push(RunRefusal::ChildAepMismatch {

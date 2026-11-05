@@ -83,7 +83,10 @@ pub use auditor::{
     AuditorInvoker, AuditorRun, AuditorVerdict, FakeAuditor, ProcessAuditor, auditor_argv,
     count_verdict_rows, run_auditor,
 };
-pub use builder::{Input, Metaharness, check_spec, start_refusals};
+pub use builder::{
+    Input, Metaharness, ProbeRead, VERSION_DRAIN_GRACE, VERSION_PROBE_DEADLINE, check_spec,
+    probe_command, start_refusals,
+};
 pub use clock::{Clock, ManualClock, SystemClock};
 pub use custody::{CredentialCustody, CustodyError};
 pub use doctor::{FlagFault, Installed, flag_surface, installed};

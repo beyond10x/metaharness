@@ -3367,18 +3367,22 @@ fn list_declared_copy_memory_files(
 /// an idle machine; Claude Code's starts a Node runtime, which took more than five seconds at load
 /// average 33 to 63 (the takt 0.17.0 trial, finding F4), so the deadline is a minute. A binary that
 /// does not exit in this long is not one a strict run should start.
-pub(crate) const VERSION_PROBE_DEADLINE: std::time::Duration = std::time::Duration::from_secs(60);
+///
+/// Every [`probe_command`] caller reads under this deadline (a65 point 4): `doctor`'s `--version`
+/// and `run --help`, the b10x launch's `--version`, `metaharness aep drive`'s `--aep-binary`, the
+/// AEP eval's child `aep` and `aep-eval`'s installed harness.
+pub const VERSION_PROBE_DEADLINE: std::time::Duration = std::time::Duration::from_secs(60);
 
 /// How long the probe keeps reading a binary's stdout after the binary itself has exited (a65).
 ///
 /// What the binary printed before it exited is already in the pipe; only a process it left behind
 /// can hold the pipe open past its exit, and that process's output is not the binary's answer. So
 /// an exited binary costs at most this long more, not the rest of [`VERSION_PROBE_DEADLINE`].
-pub(crate) const VERSION_DRAIN_GRACE: std::time::Duration = std::time::Duration::from_secs(5);
+pub const VERSION_DRAIN_GRACE: std::time::Duration = std::time::Duration::from_secs(5);
 
 /// The most stdout bytes the probe keeps (a65). The rest is read and discarded, so a child that
 /// writes without end is drained rather than left blocked, and holds no unbounded buffer.
-const VERSION_STDOUT_MAX: usize = 64 * 1024;
+pub(crate) const VERSION_STDOUT_MAX: usize = 64 * 1024;
 
 /// What asking a vendor binary for its `--version` produced.
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -3427,6 +3431,71 @@ impl VersionRead {
     }
 }
 
+/// What a bounded probe of a binary came to: the answer of a short command that needs no model,
+/// such as `--version` or `run --help`, or why there was none (a65 point 4).
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum ProbeRead {
+    /// It exited.
+    Exited {
+        /// The exit code, or `None` when a signal ended it.
+        code: Option<i32>,
+        /// What it printed on stdout, at most 64 KiB of it (a65 point 3).
+        stdout: Vec<u8>,
+        /// Whether bytes past that cap were read and dropped, so the last bytes kept may be cut.
+        capped: bool,
+        /// When it exited unsuccessfully, at most 2 KiB from the end of what it wrote on stderr,
+        /// trimmed. Empty when it exited zero: its stderr is then not waited for.
+        stderr: String,
+    },
+    /// It could not be started, or its output could not be read, or it could not be waited on:
+    /// what the platform said.
+    NotRun(String),
+    /// It did not exit within this deadline, and was killed and reaped.
+    TimedOut(std::time::Duration),
+}
+
+impl ProbeRead {
+    /// Whether it exited zero.
+    #[must_use]
+    pub fn succeeded(&self) -> bool {
+        matches!(self, Self::Exited { code: Some(0), .. })
+    }
+
+    /// What it printed on stdout, decoded lossily; empty when it did not exit.
+    #[must_use]
+    pub fn stdout(&self) -> String {
+        match self {
+            Self::Exited { stdout, .. } => String::from_utf8_lossy(stdout).into_owned(),
+            Self::NotRun(_) | Self::TimedOut(_) => String::new(),
+        }
+    }
+
+    /// Why `command` gave no answer, naming its program and its arguments: it could not be run
+    /// (what the platform said), it did not exit within the deadline and was killed (naming the
+    /// deadline), or it exited unsuccessfully (its code, or a signal, and the tail of its stderr).
+    /// `None` when it exited zero.
+    #[must_use]
+    pub fn refusal(&self, command: &std::process::Command) -> Option<String> {
+        let command = std::iter::once(command.get_program())
+            .chain(command.get_args())
+            .map(|part| part.to_string_lossy())
+            .collect::<Vec<_>>()
+            .join(" ");
+        match self {
+            Self::Exited { code: Some(0), .. } => None,
+            Self::Exited { code, stderr, .. } => Some(format!(
+                "{command} exited {}: {stderr}",
+                code.map_or_else(|| "on a signal".to_string(), |code| code.to_string()),
+            )),
+            Self::NotRun(error) => Some(format!("{command} could not be run: {error}")),
+            Self::TimedOut(deadline) => Some(format!(
+                "{command} did not exit within {} ms and was killed",
+                deadline.as_millis()
+            )),
+        }
+    }
+}
+
 /// [`vendor_version_read`], reduced to the outcome a version check reads.
 pub(crate) fn vendor_version(
     program: &std::path::Path,
@@ -3450,24 +3519,60 @@ pub(crate) fn vendor_version(
 /// the child's own output. At most [`VERSION_STDOUT_MAX`] bytes are kept; a token the cap cuts is
 /// dropped. Stderr is drained on a thread of its own as well, keeping only its last
 /// [`VERSION_STDERR_TAIL`] bytes, and is waited for only when the binary failed, within the same
-/// grace.
+/// grace. The read itself is [`probe_command`]'s.
 pub(crate) fn vendor_version_read(
     program: &std::path::Path,
     env: &BTreeMap<String, String>,
     deadline: std::time::Duration,
 ) -> VersionRead {
+    let mut command = std::process::Command::new(program);
+    command.arg("--version").env_clear().envs(env);
+    match probe_command(&mut command, deadline) {
+        ProbeRead::NotRun(error) => VersionRead::NotRun(error),
+        ProbeRead::TimedOut(deadline) => VersionRead::TimedOut(deadline),
+        ProbeRead::Exited { code, stderr, .. } if code != Some(0) => {
+            VersionRead::Failed { code, stderr }
+        }
+        ProbeRead::Exited { stdout, capped, .. } => match version_token(stdout, capped) {
+            VersionProbe::Reported(version) => VersionRead::Reported(version),
+            VersionProbe::Unreadable | VersionProbe::TimedOut(_) => VersionRead::NoToken,
+        },
+    }
+}
+
+/// Run `command` and read its answer within `deadline` and the drain grace, without a model call
+/// (a65; any argv since point 4).
+///
+/// The caller builds `command`: its program, its arguments (`--version`, `run --help`) and its
+/// environment, which is this process's own unless the caller clears it. The probe sets its
+/// stdio: stdin closed, stdout and stderr piped. A child still running at the deadline is killed
+/// and reaped, and the read is [`ProbeRead::TimedOut`] with that deadline. Its stdout is read on a
+/// thread of its own, so a child that fills the pipe before it exits is drained rather than left
+/// blocked. Once the child
+/// has exited, the read waits for end of file at most [`VERSION_DRAIN_GRACE`] longer (and never
+/// past `deadline`), then takes what the pipe delivered by then: a process the child left behind
+/// that keeps the pipe open holds the probe for the grace, not for the deadline. At most 64 KiB of
+/// stdout is kept, and [`ProbeRead::Exited`] says whether more was dropped. Stderr is drained on a
+/// thread of its own as well, keeping only its last 2 KiB, and is waited for only when the binary
+/// failed, within the same grace.
+///
+/// [`VERSION_PROBE_DEADLINE`] is the deadline every caller in this workspace passes; a test passes
+/// a shorter one. [`ProbeRead::refusal`] names the binary, the argv and, for a killed child, the
+/// deadline.
+#[must_use]
+pub fn probe_command(
+    command: &mut std::process::Command,
+    deadline: std::time::Duration,
+) -> ProbeRead {
     use std::sync::mpsc::RecvTimeoutError;
-    let mut child = match std::process::Command::new(program)
-        .arg("--version")
-        .env_clear()
-        .envs(env)
+    let mut child = match command
         .stdin(std::process::Stdio::null())
         .stdout(std::process::Stdio::piped())
         .stderr(std::process::Stdio::piped())
         .spawn()
     {
         Ok(child) => child,
-        Err(error) => return VersionRead::NotRun(error.to_string()),
+        Err(error) => return ProbeRead::NotRun(error.to_string()),
     };
     let started = std::time::Instant::now();
     let stderr = StderrTail::drain(child.stderr.take());
@@ -3487,7 +3592,7 @@ pub(crate) fn vendor_version_read(
             Ok(None) if started.elapsed() >= deadline => {
                 let _ = child.kill();
                 let _ = child.wait();
-                return VersionRead::TimedOut(deadline);
+                return ProbeRead::TimedOut(deadline);
             }
             Ok(None) => {
                 // Drain while waiting, so a child that fills the pipe is never left blocked on it.
@@ -3496,9 +3601,7 @@ pub(crate) fn vendor_version_read(
                     Ok(Err(error)) => {
                         let _ = child.kill();
                         let _ = child.wait();
-                        return VersionRead::NotRun(format!(
-                            "its stdout could not be read: {error}"
-                        ));
+                        return ProbeRead::NotRun(format!("its stdout could not be read: {error}"));
                     }
                     Err(RecvTimeoutError::Timeout) => {}
                     Err(RecvTimeoutError::Disconnected) => {
@@ -3510,7 +3613,7 @@ pub(crate) fn vendor_version_read(
             Err(error) => {
                 let _ = child.kill();
                 let _ = child.wait();
-                return VersionRead::NotRun(format!("it could not be waited on: {error}"));
+                return ProbeRead::NotRun(format!("it could not be waited on: {error}"));
             }
         }
     };
@@ -3521,7 +3624,7 @@ pub(crate) fn vendor_version_read(
         match receiver.recv_timeout(remaining) {
             Ok(Ok(chunk)) => keep(chunk, &mut stdout, &mut capped),
             Ok(Err(error)) => {
-                return VersionRead::NotRun(format!("its stdout could not be read: {error}"));
+                return ProbeRead::NotRun(format!("its stdout could not be read: {error}"));
             }
             Err(RecvTimeoutError::Disconnected) => eof = true,
             // The grace is over and something the child left behind still holds the pipe:
@@ -3529,15 +3632,16 @@ pub(crate) fn vendor_version_read(
             Err(RecvTimeoutError::Timeout) => break,
         }
     }
-    if !status.success() {
-        return VersionRead::Failed {
-            code: status.code(),
-            stderr: stderr.until(drain_until),
-        };
-    }
-    match version_token(stdout, capped) {
-        VersionProbe::Reported(version) => VersionRead::Reported(version),
-        VersionProbe::Unreadable | VersionProbe::TimedOut(_) => VersionRead::NoToken,
+    let stderr = if status.success() {
+        String::new()
+    } else {
+        stderr.until(drain_until)
+    };
+    ProbeRead::Exited {
+        code: status.code(),
+        stdout,
+        capped,
+        stderr,
     }
 }
 
