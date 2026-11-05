@@ -3274,8 +3274,9 @@ is now 0.153.4 and 0.160.0 (`metaharness-codex::PINNED_VERSIONS`).
 
 - **Observed at both pins: the quotes are removed before the hook program runs.** On 2026-10-23 both
   lanes of `crates/metaharness-codex/tests/native_fixture.rs` passed, 8 of 8 each
-  (`docs/research/2026-10-23-codex-0.160.0-record-surface.md` § The native fixture). They ran at
-  the pin commit `7164df8`, whose `build_hook` writes this quoted path (since `aff22dc`). In
+  (`docs/research/2026-10-23-codex-0.160.0-record-surface.md` § The native fixture). The research
+  page names no commit; they ran on the tree later committed as `7164df8`, whose `build_hook`
+  writes this quoted path (since `aff22dc`). In
   `actual_codex_reports_command_success_failure_and_hook_denial` the hook was answered and its denial
   kept the command's marker unwritten. So neither pin took the quotes as part of a file name.
 - **Unverified: that a shell removes them, and which shell.** `-lc` comes from the 0.153.4 strings
