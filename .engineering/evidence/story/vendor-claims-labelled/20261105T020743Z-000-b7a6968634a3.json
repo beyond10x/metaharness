@@ -1,0 +1,13 @@
+{
+  "at": "2026-11-05T02:07:43Z",
+  "actor": "human:timo",
+  "artifact": "story:vendor-claims-labelled",
+  "kind": "story",
+  "revision": 6,
+  "change": {
+    "change": "evidence",
+    "kind": "verification",
+    "source": "review of the diff at fc44860: a37 section 6 and the Codex and Claude build_hook comments cite the native fixture runs or say unverified; no driven run added",
+    "reference": "fc44860"
+  }
+}

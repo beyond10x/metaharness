@@ -1,0 +1,13 @@
+{
+  "at": "2026-11-05T02:07:43Z",
+  "actor": "human:timo",
+  "artifact": "story:claude-attestation-names-actor",
+  "kind": "story",
+  "revision": 4,
+  "change": {
+    "change": "evidence",
+    "kind": "verification",
+    "source": "cargo test -p metaharness-claude --lib, base vs unit: VERIFIED (base c076386: 2 red, the actor case and the class case; unit fc44860: 160 passed)",
+    "reference": "next/u3/scratch/red-claude.log vs green-claude.log"
+  }
+}
