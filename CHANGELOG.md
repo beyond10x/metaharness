@@ -5,7 +5,7 @@ was amended and the amendment is named here.
 
 ## [Unreleased]
 
-- `metaharness doctor` and every b10x launch read `--version` through the bounded probe of amendment a65 (a minute, then at most 5 seconds of draining after the binary exits): a binary that never exits is refused by name, and a leftover process holding its stdout no longer blocks them (`story:version-probe-everywhere-bounded`).
+- `metaharness doctor` and every b10x launch read `--version` through the bounded probe of amendment a65 (a minute, then at most 5 seconds of draining after the binary exits): a binary that never exits is refused by name, and a leftover process holding its stdout no longer blocks them. A strict b10x launch now refuses through the same refusal as Claude and Codex, so a late binary is named by its deadline, and `doctor` names each cause apart: could not be run, exited N with the tail of its stderr, no version token, or late (`story:version-probe-everywhere-bounded`).
 
 ## [0.26.2] — 2026-10-30
 

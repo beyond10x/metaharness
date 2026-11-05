@@ -651,21 +651,19 @@ fn start_b10x(
         .get("PATH")
         .expect("the b10x base environment always carries PATH")
         .clone();
-    let (program, observed_version) = b10x_program(runner, &named, &child_path)?;
+    let (program, probe) = b10x_program(runner, &named, &child_path)?;
+    // The shared refusal, so a probe killed at its deadline is named as late rather than as
+    // unreadable, as the Claude and Codex launches name it (a33, a34).
     if spec.strict_version
-        && !observed_version
-            .as_ref()
-            .is_some_and(|version| metaharness_b10x::PINNED_VERSIONS.contains(&version.as_str()))
+        && let Some(refusal) =
+            strict_version_refusal(&probe, &program, &metaharness_b10x::PINNED_VERSIONS)
     {
-        return Err(Refusal::Launch {
-            detail: format!(
-                "--strict-version requires one of {:?}; {} reported {}",
-                metaharness_b10x::PINNED_VERSIONS,
-                program,
-                observed_version.as_deref().unwrap_or("no readable version")
-            ),
-        });
+        return Err(refusal);
     }
+    let observed_version = match probe {
+        VersionProbe::Reported(version) => Some(version),
+        VersionProbe::Unreadable | VersionProbe::TimedOut(_) => None,
+    };
     // Constructed, never inherited. `PATH` is the one variable the loop always needs and the one
     // whose absence made every launch of this arm fail before it read an argument. The base also
     // points profile discovery at scratch: harness 0.8.0 reads `$XDG_CONFIG_HOME/b10x/harness.toml`,
@@ -868,9 +866,9 @@ fn b10x_program(
     runner: &dyn ProcessRunner,
     named: &str,
     child_path: &str,
-) -> Result<(String, Option<String>), Refusal> {
+) -> Result<(String, VersionProbe), Refusal> {
     if !runner.requires_executable() {
-        return Ok((named.to_owned(), None));
+        return Ok((named.to_owned(), VersionProbe::Unreadable));
     }
     let program = metaharness_b10x::resolve_program(named, child_path)
         .ok_or_else(|| Refusal::Launch {
@@ -888,23 +886,20 @@ fn b10x_program(
 
 /// The version the b10x launch reads from `program`, within [`VERSION_PROBE_DEADLINE`] and the
 /// drain grace (a65, story:version-probe-everywhere-bounded).
-pub(crate) fn b10x_version(program: &str, child_path: &str) -> Option<String> {
+pub(crate) fn b10x_version(program: &str, child_path: &str) -> VersionProbe {
     b10x_version_within(program, child_path, VERSION_PROBE_DEADLINE)
 }
 
 /// [`b10x_version`] under `deadline`, through [`vendor_version`] with only the child's `PATH`, as
-/// `qualify` asks. A binary that is unreadable or did not exit in time reports no version, which
-/// `--strict-version` refuses before the spawn.
+/// `qualify` asks. `--strict-version` refuses an unreadable or late probe before the spawn, by
+/// [`strict_version_refusal`], which names a late one's deadline.
 pub(crate) fn b10x_version_within(
     program: &str,
     child_path: &str,
     deadline: std::time::Duration,
-) -> Option<String> {
+) -> VersionProbe {
     let env = BTreeMap::from([("PATH".to_owned(), child_path.to_owned())]);
-    match vendor_version(Path::new(program), &env, deadline) {
-        VersionProbe::Reported(version) => Some(version),
-        VersionProbe::Unreadable | VersionProbe::TimedOut(_) => None,
-    }
+    vendor_version(Path::new(program), &env, deadline)
 }
 
 /// A decision mode the adapter does not deliver is refused by name, and so is a frame the
@@ -3368,6 +3363,51 @@ pub(crate) enum VersionProbe {
     TimedOut(std::time::Duration),
 }
 
+/// The most stderr bytes a failing `--version` keeps: its tail, which is where a loader or runtime
+/// error says why (story:version-probe-everywhere-bounded).
+const VERSION_STDERR_TAIL: usize = 2 * 1024;
+
+/// What asking a vendor binary for its `--version` came to, with the cause [`VersionProbe`] folds
+/// into `Unreadable` kept apart, for a reader that names it (`doctor`).
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub(crate) enum VersionRead {
+    /// It exited zero and printed this version token.
+    Reported(String),
+    /// It exited zero and printed nothing that reads as a version.
+    NoToken,
+    /// It could not be started, or its output could not be read: what the platform said.
+    NotRun(String),
+    /// It exited unsuccessfully: its exit code (`None` on a signal) and the tail of its stderr.
+    Failed {
+        /// The exit code, or `None` when a signal ended it.
+        code: Option<i32>,
+        /// At most [`VERSION_STDERR_TAIL`] bytes from the end of what it wrote on stderr, trimmed.
+        stderr: String,
+    },
+    /// It did not exit within this deadline, and was killed.
+    TimedOut(std::time::Duration),
+}
+
+impl VersionRead {
+    /// The outcome a version check reads: every cause that yields no version is `Unreadable`.
+    pub(crate) fn probe(self) -> VersionProbe {
+        match self {
+            Self::Reported(version) => VersionProbe::Reported(version),
+            Self::TimedOut(deadline) => VersionProbe::TimedOut(deadline),
+            Self::NoToken | Self::NotRun(_) | Self::Failed { .. } => VersionProbe::Unreadable,
+        }
+    }
+}
+
+/// [`vendor_version_read`], reduced to the outcome a version check reads.
+pub(crate) fn vendor_version(
+    program: &std::path::Path,
+    env: &BTreeMap<String, String>,
+    deadline: std::time::Duration,
+) -> VersionProbe {
+    vendor_version_read(program, env, deadline).probe()
+}
+
 /// The version a vendor binary reports for `--version`, read without a model call and within
 /// `deadline` (a33; the Codex launch since a34; a65).
 ///
@@ -3380,29 +3420,107 @@ pub(crate) enum VersionProbe {
 /// what the pipe delivered by then: a process the child left behind that keeps the pipe open holds
 /// the probe for the grace, not for the deadline, and what it wrote inside the grace is read with
 /// the child's own output. At most [`VERSION_STDOUT_MAX`] bytes are kept; a token the cap cuts is
-/// dropped.
-pub(crate) fn vendor_version(
+/// dropped. Stderr is drained on a thread of its own as well, keeping only its last
+/// [`VERSION_STDERR_TAIL`] bytes, and is waited for only when the binary failed, within the same
+/// grace.
+pub(crate) fn vendor_version_read(
     program: &std::path::Path,
     env: &BTreeMap<String, String>,
     deadline: std::time::Duration,
-) -> VersionProbe {
-    use std::io::Read as _;
+) -> VersionRead {
     use std::sync::mpsc::RecvTimeoutError;
-    let Ok(mut child) = std::process::Command::new(program)
+    let mut child = match std::process::Command::new(program)
         .arg("--version")
         .env_clear()
         .envs(env)
         .stdin(std::process::Stdio::null())
         .stdout(std::process::Stdio::piped())
-        .stderr(std::process::Stdio::null())
+        .stderr(std::process::Stdio::piped())
         .spawn()
-    else {
-        return VersionProbe::Unreadable;
+    {
+        Ok(child) => child,
+        Err(error) => return VersionRead::NotRun(error.to_string()),
     };
     let started = std::time::Instant::now();
-    // Chunks as they are read; the sender is dropped at end of file, so `Disconnected` is EOF.
+    let stderr = StderrTail::drain(child.stderr.take());
+    let receiver = stdout_chunks(child.stdout.take());
+    let mut stdout = Vec::new();
+    // Whether bytes past the cap were read and dropped: then the last token kept may be cut.
+    let mut capped = false;
+    let keep = |chunk: Vec<u8>, stdout: &mut Vec<u8>, capped: &mut bool| {
+        let room = VERSION_STDOUT_MAX.saturating_sub(stdout.len());
+        *capped |= chunk.len() > room;
+        stdout.extend_from_slice(&chunk[..chunk.len().min(room)]);
+    };
+    let mut eof = false;
+    let status = loop {
+        match child.try_wait() {
+            Ok(Some(status)) => break status,
+            Ok(None) if started.elapsed() >= deadline => {
+                let _ = child.kill();
+                let _ = child.wait();
+                return VersionRead::TimedOut(deadline);
+            }
+            Ok(None) => {
+                // Drain while waiting, so a child that fills the pipe is never left blocked on it.
+                match receiver.recv_timeout(std::time::Duration::from_millis(10)) {
+                    Ok(Ok(chunk)) => keep(chunk, &mut stdout, &mut capped),
+                    Ok(Err(error)) => {
+                        let _ = child.kill();
+                        let _ = child.wait();
+                        return VersionRead::NotRun(format!(
+                            "its stdout could not be read: {error}"
+                        ));
+                    }
+                    Err(RecvTimeoutError::Timeout) => {}
+                    Err(RecvTimeoutError::Disconnected) => {
+                        eof = true;
+                        std::thread::sleep(std::time::Duration::from_millis(10));
+                    }
+                }
+            }
+            Err(error) => {
+                let _ = child.kill();
+                let _ = child.wait();
+                return VersionRead::NotRun(format!("it could not be waited on: {error}"));
+            }
+        }
+    };
+    let exited = std::time::Instant::now();
+    let drain_until = (exited + VERSION_DRAIN_GRACE).min(started + deadline);
+    while !eof {
+        let remaining = drain_until.saturating_duration_since(std::time::Instant::now());
+        match receiver.recv_timeout(remaining) {
+            Ok(Ok(chunk)) => keep(chunk, &mut stdout, &mut capped),
+            Ok(Err(error)) => {
+                return VersionRead::NotRun(format!("its stdout could not be read: {error}"));
+            }
+            Err(RecvTimeoutError::Disconnected) => eof = true,
+            // The grace is over and something the child left behind still holds the pipe:
+            // what the pipe delivered by then is read (a65 point 2).
+            Err(RecvTimeoutError::Timeout) => break,
+        }
+    }
+    if !status.success() {
+        return VersionRead::Failed {
+            code: status.code(),
+            stderr: stderr.until(drain_until),
+        };
+    }
+    match version_token(stdout, capped) {
+        VersionProbe::Reported(version) => VersionRead::Reported(version),
+        VersionProbe::Unreadable | VersionProbe::TimedOut(_) => VersionRead::NoToken,
+    }
+}
+
+/// A `--version`'s stdout as chunks, read on a thread of its own as they arrive. The sender is
+/// dropped at end of file, so `Disconnected` is EOF.
+fn stdout_chunks(
+    pipe: Option<std::process::ChildStdout>,
+) -> std::sync::mpsc::Receiver<std::io::Result<Vec<u8>>> {
+    use std::io::Read as _;
     let (sender, receiver) = std::sync::mpsc::channel::<std::io::Result<Vec<u8>>>();
-    if let Some(mut pipe) = child.stdout.take() {
+    if let Some(mut pipe) = pipe {
         std::thread::spawn(move || {
             let mut buffer = [0_u8; 4096];
             loop {
@@ -3421,66 +3539,60 @@ pub(crate) fn vendor_version(
                 }
             }
         });
-    } else {
-        drop(sender);
     }
-    let mut stdout = Vec::new();
-    // Whether bytes past the cap were read and dropped: then the last token kept may be cut.
-    let mut capped = false;
-    let keep = |chunk: Vec<u8>, stdout: &mut Vec<u8>, capped: &mut bool| {
-        let room = VERSION_STDOUT_MAX.saturating_sub(stdout.len());
-        *capped |= chunk.len() > room;
-        stdout.extend_from_slice(&chunk[..chunk.len().min(room)]);
-    };
-    let mut eof = false;
-    let status = loop {
-        match child.try_wait() {
-            Ok(Some(status)) => break status,
-            Ok(None) if started.elapsed() >= deadline => {
-                let _ = child.kill();
-                let _ = child.wait();
-                return VersionProbe::TimedOut(deadline);
-            }
-            Ok(None) => {
-                // Drain while waiting, so a child that fills the pipe is never left blocked on it.
-                match receiver.recv_timeout(std::time::Duration::from_millis(10)) {
-                    Ok(Ok(chunk)) => keep(chunk, &mut stdout, &mut capped),
-                    Ok(Err(_)) => {
-                        let _ = child.kill();
-                        let _ = child.wait();
-                        return VersionProbe::Unreadable;
-                    }
-                    Err(RecvTimeoutError::Timeout) => {}
-                    Err(RecvTimeoutError::Disconnected) => {
-                        eof = true;
-                        std::thread::sleep(std::time::Duration::from_millis(10));
+    receiver
+}
+
+/// The last [`VERSION_STDERR_TAIL`] bytes of a `--version`'s stderr, read on a thread of its own so
+/// a child that fills the pipe is drained rather than left blocked.
+struct StderrTail {
+    kept: std::sync::Arc<std::sync::Mutex<Vec<u8>>>,
+    /// Disconnected once the reader reached end of file.
+    closed: std::sync::mpsc::Receiver<()>,
+}
+
+impl StderrTail {
+    fn drain(pipe: Option<std::process::ChildStderr>) -> Self {
+        use std::io::Read as _;
+        let kept = std::sync::Arc::new(std::sync::Mutex::new(Vec::<u8>::new()));
+        let (open, closed) = std::sync::mpsc::channel::<()>();
+        if let Some(mut pipe) = pipe {
+            let tail = std::sync::Arc::clone(&kept);
+            std::thread::spawn(move || {
+                let _open = open;
+                let mut buffer = [0_u8; 4096];
+                loop {
+                    match pipe.read(&mut buffer) {
+                        Ok(0) => break,
+                        Ok(read) => {
+                            let mut kept = tail
+                                .lock()
+                                .unwrap_or_else(std::sync::PoisonError::into_inner);
+                            kept.extend_from_slice(&buffer[..read]);
+                            let excess = kept.len().saturating_sub(VERSION_STDERR_TAIL);
+                            kept.drain(..excess);
+                        }
+                        Err(error) if error.kind() == std::io::ErrorKind::Interrupted => {}
+                        Err(_) => break,
                     }
                 }
-            }
-            Err(_) => {
-                let _ = child.kill();
-                let _ = child.wait();
-                return VersionProbe::Unreadable;
-            }
+            });
         }
-    };
-    let exited = std::time::Instant::now();
-    let drain_until = (exited + VERSION_DRAIN_GRACE).min(started + deadline);
-    while !eof {
-        let remaining = drain_until.saturating_duration_since(std::time::Instant::now());
-        match receiver.recv_timeout(remaining) {
-            Ok(Ok(chunk)) => keep(chunk, &mut stdout, &mut capped),
-            Ok(Err(_)) => return VersionProbe::Unreadable,
-            Err(RecvTimeoutError::Disconnected) => eof = true,
-            // The grace is over and something the child left behind still holds the pipe:
-            // what the pipe delivered by then is read (a65 point 2).
-            Err(RecvTimeoutError::Timeout) => break,
-        }
+        Self { kept, closed }
     }
-    if !status.success() {
-        return VersionProbe::Unreadable;
+
+    /// What was read by end of file, or by `until`, whichever comes first: what the binary wrote
+    /// before it exited is in the pipe, and a process it left behind holding stderr costs the rest
+    /// of the grace, not more.
+    fn until(self, until: std::time::Instant) -> String {
+        let remaining = until.saturating_duration_since(std::time::Instant::now());
+        let _ = self.closed.recv_timeout(remaining);
+        let kept = self
+            .kept
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner);
+        String::from_utf8_lossy(&kept).trim().to_owned()
     }
-    version_token(stdout, capped)
 }
 
 /// The version token in what a `--version` printed: the first word that starts with a digit, as
@@ -4671,7 +4783,7 @@ mod b10x_launch_tests {
         let scripted = crate::ScriptedRunner::new(Vec::new(), crate::ScriptedLog::new());
         assert_eq!(
             super::b10x_program(&scripted, "b10x-harness", path).unwrap(),
-            ("b10x-harness".to_owned(), None)
+            ("b10x-harness".to_owned(), super::VersionProbe::Unreadable)
         );
         let real = crate::SpawnRunner::default();
         assert!(matches!(
