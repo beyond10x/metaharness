@@ -2696,7 +2696,7 @@ not driven through the b10x binary. Found by the adversary's second pass and lef
 (`story:b10x-record-keeps-the-loops-subjects`, pre-existing): `Run` reads every b10x call as a call
 through `tool_invoke`, so a flat `file_read` on a b10x record loses the subject the loop itself
 recorded; its acceptance case is `crates/metaharness/tests/adversary_contract_names_b10x_pass2.rs`,
-ignored until that story lands.
+ignored until that story lands. *(Closed by a75: the case runs.)*
 
 **5. A contract name that asks for the digest guard is refused, because nothing runs it.**
 tool-contract/1 (tools 0.2.0, `60d4d0e3`, `contracts/code-editor/v1alpha1/contract.yaml:52,78,97,119,143`)
@@ -6297,3 +6297,48 @@ fixture holds that sentence. H4 is unchanged, including the endpoint posture the
 for word.
 
 No new event or field; the wire's shape and `RunSpec`'s serde form are unchanged.
+
+### Amendment a75 — a b10x record keeps the loop's subjects, read on the surface the loop published (2026-11-05)
+
+`story:b10x-record-keeps-the-loops-subjects`, under `epic:loom-agent-work-through-metaharness`,
+closing the pre-existing finding a32 § 4 left to its own story. `Run` read every b10x call as a
+call through the three verbs: `publishes_verbs` was true for any b10x run. The loop metaharness
+launches publishes its entries flat, so that reading was wrong in two ways. The adapter dropped
+the subjects the loop recorded for each call, so a flat call's subject reached the record only
+through a special case that read the entry's arguments (a61 § 6). A made-up
+`tool_invoke {"name": "file_read", …}` on a flat run, which the loop refuses as a tool it never
+published, was recorded as `file.read` with its subject.
+
+1. **The surface is the one the loop published.** At the pin (harness 0.22.0, `3eca074`) the
+   loop's `started` line names what it published in `published_tools`, read into
+   `session.started.offered_tools`. The golden capture's is `["file_read", "dir_list", "search",
+   "find"]`: `b10x-harness run --surface` defaults to `flat` and the b10x launch passes none. A b10x
+   run publishes the verbs only when its `started` line published `tool_invoke`, which only
+   `--surface verbs` does. Until a `started` line says otherwise the run is flat, the loop's
+   default.
+2. **On a flat run a call is the entry it names.** Its operation resolves through the rendering
+   table, as before, and its subject is the entry's, read from the call's own arguments by the
+   catalogue's rule (`subjects_of_entry`). A `tool_invoke` there is a name the loop never
+   published: no operation, no subject, and under a frame `UNCOVERED_TOOL`, as on any other run.
+3. **On a verbs run a call is a verb.** A `tool_invoke` resolves to the entry inside it
+   (`HarnessLoop`, a32 § 2). A flat entry name on such a run is a tool the loop did not publish, and
+   it resolves to no operation and no subject rather than through the rendering table.
+4. **The adapter carries the subjects the loop recorded.** The loop's `tool-requested` names its
+   `subjects` in the same scheme-prefixed form (`"subjects": ["file:README.md"]` on the golden
+   line). `B10xSeam` now copies them onto `tool.requested`, and the run keeps them where it fills
+   the field (`Run::described`). `operations` stays the run's to resolve (§ 8.4 O6): the loop's
+   `operation` is not copied. Where the record names no subjects the run reads the entry's
+   arguments, so a flat call's subjects come from the loop's record or from the entry's arguments.
+
+**What the replayed streams show.** Every seam-only expectation whose captured `tool-requested`
+carries `subjects` gains that one field and nothing else: the golden `loop.expected.jsonl`, the
+enforcement `approval-denied` and `budget-stop` expectations, and the caller `allow` and `deny`
+expectations. Through a run, a flat call's stream does not change, because a61 § 6 already filled
+the same subjects from the arguments; a `tool_invoke` on a flat run loses the operation and subject
+it was wrongly given (§ 2).
+
+**Unverified (invariant 4).** No `--surface verbs` b10x run was driven; § 3 is read from the
+pinned harness source (`crates/harness-cli/src/lib.rs`, `Surface`) and asserted on a constructed
+`started` line.
+
+No new event or field; the wire's shape is unchanged.

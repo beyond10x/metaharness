@@ -356,11 +356,21 @@ impl HarnessSeam for B10xSeam {
             })],
             "tool-requested" => {
                 let announced = Emission::untimed(Event::ToolRequested {
-                    // Left empty here on purpose, exactly as `operations` is: what a call touches
-                    // is resolved by whoever holds the run's published rendering, and an adapter
-                    // that answered for itself would be a second owner of one rule (design § 8.4
-                    // O6).
-                    subjects: Vec::new(),
+                    // **Read from the record, not resolved here.** The loop names what each call
+                    // touches in the same `file:`/`proc:` form (`"subjects": ["file:README.md"]`
+                    // on the golden line), so carrying it is reporting what the loop recorded,
+                    // not a second owner of the rule. A record that names none leaves it empty,
+                    // and the run reads the entry's arguments (design amendment a75).
+                    subjects: value
+                        .get("subjects")
+                        .and_then(Value::as_array)
+                        .map(|subjects| {
+                            subjects
+                                .iter()
+                                .filter_map(|subject| subject.as_str().map(ToOwned::to_owned))
+                                .collect()
+                        })
+                        .unwrap_or_default(),
                     // Left empty here on purpose: the resolution needs the adapter\'s *published*
                     // rendering, which the loop holds and an adapter must not (design § 8.4 O6).
                     operations: Vec::new(),
@@ -1685,6 +1695,25 @@ mod caller_tests {
         let finished = seam.finish();
         assert_eq!(finished.len(), 1);
         assert_eq!(seam_of(&finished[0].event), Some(Seam::None));
+    }
+
+    /// The subjects the loop recorded for a call ride on its `tool.requested`, held or asked
+    /// (design amendment a75); its `operation` stays the run's to resolve.
+    #[test]
+    fn the_subjects_the_loop_recorded_ride_on_the_question() {
+        let mut seam = caller();
+        assert_eq!(seam.push_line(REQUESTED), NOTHING);
+        let asked = seam.push_line(ASKED);
+        let Event::ToolRequested {
+            subjects,
+            operations,
+            ..
+        } = &asked[0].event
+        else {
+            panic!("a question is a tool.requested")
+        };
+        assert_eq!(subjects, &vec!["file:a".to_owned()]);
+        assert!(operations.is_empty(), "{operations:?}");
     }
 
     /// A question with no announcement before it is still a question the loop is blocked on.

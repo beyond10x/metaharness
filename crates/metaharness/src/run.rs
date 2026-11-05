@@ -240,6 +240,14 @@ pub(crate) struct LaunchFacts {
     pub(crate) context_files: Vec<metaharness_protocol::ContextFile>,
 }
 
+/// How a b10x loop published its catalogue, as its `started` line states it (design amendment
+/// a75): each entry as a tool of its own, or the three verbs over it.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum LoopSurface {
+    Flat,
+    Verbs,
+}
+
 /// One live run: events out, commands in.
 ///
 /// Synchronous and blocking (design D10), because the embedder this exists to serve is
@@ -280,6 +288,9 @@ pub struct Run {
     saw_terminal_record: bool,
     events: Vec<Event>,
     warned_no_frame: bool,
+    /// The surface a b10x loop's `started` line published (design amendment a75). Flat until such
+    /// a line says otherwise: the launch passes no `--surface`, and the loop's default is `flat`.
+    loop_surface: LoopSurface,
     pub(crate) launch: LaunchFacts,
     pub(crate) scratch: Option<crate::builder::ScratchRoot>,
     /// The raw vendor wire this run writes, as absolute paths into the scratch: the retained
@@ -384,6 +395,7 @@ impl Run {
             saw_terminal_record: false,
             events: Vec::new(),
             warned_no_frame: false,
+            loop_surface: LoopSurface::Flat,
             launch: parts.launch,
             scratch: parts.scratch,
             wire: parts.wire,
@@ -797,6 +809,23 @@ impl Run {
                 self.admit_call(emission)?;
                 continue;
             }
+            if self.spec.kind == Kind::B10x
+                && let Event::SessionStarted {
+                    offered_tools: Some(offered),
+                    ..
+                } = &emission.event
+            {
+                // The surface the loop published, from its own record (invariant 3): the three
+                // verbs only if it offered `tool_invoke`, which its flat surface never does.
+                self.loop_surface = if offered
+                    .iter()
+                    .any(|tool| tool == metaharness_tools::INVOKE_VERB)
+                {
+                    LoopSurface::Verbs
+                } else {
+                    LoopSurface::Flat
+                };
+            }
             let closes_window = matches!(emission.event, Event::TurnEnded { .. });
             self.outbox
                 .push_back(self.with_context_files(self.with_reach(emission)));
@@ -968,10 +997,10 @@ impl Run {
     ///
     /// Two runs publish them, for different reasons. `--tool-surface owned` is metaharness serving
     /// the catalogue over MCP. **`b10x` is the same catalogue bound in-process** — which is why
-    /// `--tool-surface owned` is refused for that kind as meaningless rather than unsupported. Its
-    /// surface is `native` because there is no vendor surface being replaced, and reading that as
-    /// *no verbs here* left every call on this arm resolving to nothing: the arm reached the matrix
-    /// with an empty `operations` on every act, which is the blindness this field was added to end.
+    /// `--tool-surface owned` is refused for that kind as meaningless rather than unsupported — and
+    /// publishes the verbs only when its loop's `started` line did; its default `flat` surface
+    /// publishes each entry under its own name, which the rendering resolves (design amendment
+    /// a75).
     /// What a call would touch, in the neutral `file:`/`proc:` form.
     ///
     /// Two roads and the same rule about which to take as [`Run::resolve`]. A run that publishes
@@ -989,16 +1018,14 @@ impl Run {
             return catalogue.subjects_as(tool, input, self.entry_naming());
         }
         if self.publishes_verbs() {
-            // The b10x loop publishes its entries flat by default, so a call that is not one of
-            // the verbs is an entry called by its own name, and its input is the arguments. Its
-            // operation already resolved through the rendering; its subject has to as well, or a
-            // frame's scope would admit it with any path (amendment a61).
-            if self.spec.kind == Kind::B10x
-                && metaharness_tools::resolve_verb(tool, input, self.verb_surface()).is_none()
-            {
-                return metaharness_tools::subjects_of_entry(tool, input);
-            }
             return metaharness_tools::subjects_of_verb(tool, input, self.verb_surface());
+        }
+        if self.spec.kind == Kind::B10x {
+            // A flat b10x loop publishes each entry as its own tool, so the call is the entry and
+            // its input is the arguments. Its operation resolves through the rendering; its
+            // subject has to as well, or a frame's scope would admit it with any path (amendments
+            // a61, a75). A name that is no entry — `tool_invoke` here — touches nothing.
+            return metaharness_tools::subjects_of_entry(tool, input);
         }
         metaharness_tools::subjects_of_vendor_call(input)
     }
@@ -1023,12 +1050,17 @@ impl Run {
     /// catalogue bound in-process, which is why `owned` is refused for that kind as meaningless
     /// rather than unsupported.
     ///
+    /// A b10x run publishes them only when its loop did (design amendment a75). The loop's default
+    /// surface is `flat`, which publishes each entry as its own tool, and the launch passes no
+    /// `--surface`; reading such a run as verbs laundered a `tool_invoke` the loop had refused into
+    /// the entry it named.
+    ///
     /// A run serving a caller's catalogue publishes no verbs (amendment a40): its server offers
     /// the catalogue's entries and nothing else, so a call named `tool_invoke` there is a tool
     /// nobody offered and must not be read as whatever entry it names.
     fn publishes_verbs(&self) -> bool {
         (self.spec.tool_surface == ToolSurface::Owned && self.catalogue.is_none())
-            || self.spec.kind == Kind::B10x
+            || (self.spec.kind == Kind::B10x && self.loop_surface == LoopSurface::Verbs)
     }
 
     /// The name a caller's catalogue entry reaches this run's record under (amendment a66 § 5):
@@ -1052,20 +1084,26 @@ impl Run {
                 }
             };
         }
-        if self.publishes_verbs()
-            && let Some(resolved) =
+        if self.publishes_verbs() {
+            if let Some(resolved) =
                 metaharness_tools::resolve_verb(tool, input, self.verb_surface())
-        {
-            return match resolved {
-                metaharness_tools::Resolved::Operations(operations) => operations,
-                // A question about the catalogue and an uncovered call both answer empty here.
-                // They are told apart where it matters — `frame_verdict` admits the first and
-                // refuses the second — and the record does not pretend to a distinction its one
-                // field cannot carry.
-                metaharness_tools::Resolved::Catalogue | metaharness_tools::Resolved::Unknown => {
-                    Vec::new()
-                }
-            };
+            {
+                return match resolved {
+                    metaharness_tools::Resolved::Operations(operations) => operations,
+                    // A question about the catalogue and an uncovered call both answer empty
+                    // here. They are told apart where it matters — `frame_verdict` admits the
+                    // first and refuses the second — and the record does not pretend to a
+                    // distinction its one field cannot carry.
+                    metaharness_tools::Resolved::Catalogue
+                    | metaharness_tools::Resolved::Unknown => Vec::new(),
+                };
+            }
+            // A b10x loop that published the verbs published no entry as a tool of its own, so a
+            // flat entry name there reached nothing and is not read through the rendering
+            // (design amendment a75).
+            if self.spec.kind == Kind::B10x {
+                return Vec::new();
+            }
         }
         self.operation_of_tool
             .get(tool)
