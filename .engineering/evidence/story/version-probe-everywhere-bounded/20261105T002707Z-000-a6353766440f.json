@@ -1,0 +1,15 @@
+{
+  "at": "2026-11-05T00:27:07Z",
+  "actor": "human:timo",
+  "artifact": "story:version-probe-everywhere-bounded",
+  "kind": "story",
+  "revision": 5,
+  "change": {
+    "change": "evidence",
+    "kind": "review_outcome",
+    "source": "review-result:wave-1104-u2-adversary-1",
+    "reference": "78d119e",
+    "review": "review-result:wave-1104-u2-adversary-1",
+    "outcome": "fixed"
+  }
+}
