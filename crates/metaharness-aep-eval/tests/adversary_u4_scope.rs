@@ -2,11 +2,11 @@
 //!
 //! Two surfaces.
 //!
-//! - Acceptance 1, the source scan. The unit's scan looks for the program name between two
-//!   double quotes, so an invocation by absolute path, or inside a shell string, is not seen. The
-//!   unit's matcher is two lines inside its test function, so it is replicated here verbatim
-//!   (`format!("\"{program}\"")` and `str::contains`) and fed a hand-built source holding such an
-//!   invocation. A scan that reads every code line of `src/` is the replacement this file offers.
+//! - Acceptance 1, the source scan. The unit's first scan looked for the program name between
+//!   two double quotes, so an invocation by absolute path, or inside a shell string, was not seen.
+//!   The two cases that showed it against a copy of that matcher were removed when correction 1
+//!   replaced it with a scan of every code line, whose negative controls now live in the unit's own
+//!   test. The case below reads every code line of `src/` independently of the unit's scan.
 //! - Acceptance 2, at the eval's entry point. The unit pins the refusal on `enter_delegated_scope`
 //!   with a hand-built request; nothing drives `ensure_cgroup_scope`, the function `preflight`
 //!   and `driven --arm b10x` call. Here the built `aep-eval preflight` runs with no session bus
