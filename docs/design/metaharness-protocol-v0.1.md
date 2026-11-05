@@ -3721,6 +3721,26 @@ under the operator's `TMPDIR`. It said "Nothing was started" though it fires aft
 write, after a loopback proxy has started when the run uses one, and after the `--strict-version`
 probe when that flag is set. Decisions 3 and 6 now say when it runs and what its message says.
 
+**Corrected in 0.29.0 (`story:catalogue-road-leftovers`).** Three findings from the wave-5 review,
+each pinned by a test that was red first. (1) Decision 7 named the frame and no-frame cases and not
+`--decisions ask`. Under `ask` a call that resolves to no entry the run performs was put to the
+embedder. An embedder that allowed it left an allow in the record for a call the server refused.
+Now such a call is never put to the embedder. It is `Deny` with `decided_by: adapter` and
+`UNCOVERED_TOOL`, and its `tool.requested` carries `decision_required: false`. An entry the run
+performs is asked as before. Codex reaches this branch. A Claude catalogue run under `ask` is
+refused at launch (V4, `LaunchRefusal::Shadowed`), because the owned surface's bare
+`--allowedTools mcp__metaharness` would approve every entry before the seam is asked. (2) Under a
+frame and under `ask`, the deny reason and the `UNCOVERED_TOOL` message for such a call named the
+operation vocabulary. They now name the run's catalogue by its `toolset`, its `version` and the
+`--catalogue` path, and they tell an entry the catalogue publishes and nothing performs (`is in
+this run's catalogue … and nothing in this run performs it`) from a name it never offered (`is not
+in this run's catalogue …`), as the server's refusal does. The code stays `UNCOVERED_TOOL`. With no
+frame the call is still `Abstain` with `NO_FRAME_IN_FORCE`. (3) Decision 3's second regular-file
+check ran on a file opened with a plain `open`, so a FIFO swapped in after the path was looked at
+held the open until a writer appeared. The open is now `O_NONBLOCK | O_NOCTTY`, so a FIFO opens at
+once and is refused as `catalogue-unreadable`, and the detail names what the path is: a FIFO, a
+character or block device, a socket or a directory.
+
 ### Amendment a41 — the Claude seam hook fails closed (2026-10-21)
 
 Operator decision, 2026-10-21. This answers the open question a37 § 5 left for Claude.

@@ -9,8 +9,9 @@
 use std::path::{Path, PathBuf};
 
 use metaharness::protocol::{
-    CredentialSource, Decision, DecisionMode, Digest, Event, EvidenceLine, Frame, Handoff, Kind,
-    NodeRef, Operation, OperationSet, RunSpec, StepRef, SubjectScope, ToolSurface, WorkflowRef,
+    Command, CredentialSource, DecidedBy, Decision, DecisionMode, Digest, Event, EvidenceLine,
+    Frame, Handoff, Kind, NodeRef, Operation, OperationSet, RunSpec, StepRef, SubjectScope,
+    ToolSurface, WorkflowRef,
 };
 use metaharness::{
     CATALOGUE_MALFORMED, CATALOGUE_NAME_DUPLICATE, CATALOGUE_NEEDS_OWNED_SURFACE,
@@ -787,4 +788,225 @@ fn without_a_catalogue_the_owned_launch_is_unchanged() {
         .expect("--mcp-config");
     let config = std::fs::read_to_string(config_path).expect("the config was written");
     assert!(!config.contains("--catalogue"), "{config}");
+}
+
+/// The calls a Claude run under the fixture makes: the one entry the build performs, an entry it
+/// publishes and nothing performs, a verb the catalogue run does not publish, and a vendor tool.
+fn claude_calls() -> [(&'static str, &'static str, Value); 4] {
+    [
+        (
+            "toolu_1",
+            "mcp__metaharness__fs_read",
+            json!({"path": "README.md"}),
+        ),
+        (
+            "toolu_2",
+            "mcp__metaharness__fs_stat",
+            json!({"path": "README.md"}),
+        ),
+        (
+            "toolu_3",
+            "mcp__metaharness__tool_invoke",
+            json!({"name": "file_read", "arguments": {"path": "README.md"}}),
+        ),
+        ("toolu_4", "Read", json!({"file_path": "README.md"})),
+    ]
+}
+
+/// A started run of `kind` under the fixture catalogue, from the vendor's own records.
+fn catalogue_run(
+    kind: Kind,
+    decisions: DecisionMode,
+    frame: Option<Frame>,
+) -> (metaharness::Run, ScriptedLog) {
+    let caller = CallerCatalogue::read(&fixture()).expect("the fixture reads");
+    let log = ScriptedLog::new();
+    let builder = builder(kind)
+        .with_catalogue(fixture())
+        .with_decisions(decisions);
+    let builder = match frame {
+        Some(frame) => builder.with_frame(frame),
+        None => builder,
+    };
+    let input = Input::Prompt("read the readme".to_owned());
+    let clock = Box::new(ManualClock::new());
+    let run = if kind == Kind::Codex {
+        let offered = caller.offered_tools_as(metaharness_tools::EntryNaming::Bare);
+        let mut runner = ScriptedRunner::new(codex_app_server_stream(&offered), log.clone());
+        builder.start_with_clock(input, &mut runner, &mut metaharness::CodexSeams, clock)
+    } else {
+        let mut runner = ScriptedRunner::new(
+            claude_stream(&caller.offered_tools(), &claude_calls()),
+            log.clone(),
+        );
+        builder.start_with_clock(input, &mut runner, &mut ClaudeSeams, clock)
+    }
+    .expect("the run starts");
+    (run, log)
+}
+
+/// The vendor names of the calls the fixture's stream makes outside what the run performs.
+fn missed(kind: Kind) -> Vec<&'static str> {
+    if kind == Kind::Codex {
+        vec!["fs_stat", "shell"]
+    } else {
+        vec![
+            "mcp__metaharness__fs_stat",
+            "mcp__metaharness__tool_invoke",
+            "Read",
+        ]
+    }
+}
+
+/// Each `tool.decided` deny: the call, its reason and who decided it.
+fn denials(events: &[Event]) -> Vec<(String, String, DecidedBy)> {
+    events
+        .iter()
+        .filter_map(|event| match event {
+            Event::ToolDecided {
+                call_id,
+                decision: Decision::Deny { reason },
+                decided_by,
+                ..
+            } => Some((call_id.clone(), reason.clone(), *decided_by)),
+            _ => None,
+        })
+        .collect()
+}
+
+/// The `UNCOVERED_TOOL` warnings' messages.
+fn uncovered(events: &[Event]) -> Vec<String> {
+    events
+        .iter()
+        .filter_map(|event| match event {
+            Event::Warning { code, message } if code == warning::UNCOVERED_TOOL => {
+                Some(message.clone())
+            }
+            _ => None,
+        })
+        .collect()
+}
+
+/// A text that names the run's catalogue: its toolset, its version and the file it was read
+/// from, and not the operation vocabulary.
+fn names_the_catalogue(text: &str) {
+    assert!(text.contains("this run's catalogue"), "{text}");
+    assert!(text.contains("toolset fs"), "{text}");
+    assert!(text.contains("version v1alpha1"), "{text}");
+    assert!(text.contains("caller-catalogue.yaml"), "{text}");
+    assert!(!text.contains("vocabulary"), "{text}");
+}
+
+/// `story:catalogue-road-leftovers` (s8-4): under a frame, a call outside the catalogue is denied,
+/// and the deny and the warning name the run's catalogue, not the operation vocabulary, on Claude
+/// and on Codex.
+#[test]
+fn a_call_outside_the_catalogue_is_denied_naming_the_catalogue_and_not_the_vocabulary() {
+    for kind in [Kind::Claude, Kind::Codex] {
+        let (mut run, _log) = catalogue_run(
+            kind,
+            DecisionMode::Frame,
+            Some(frame_admitting(OperationSet::of([Operation::FileRead]))),
+        );
+        run.drain().expect("drains");
+        let denied = denials(run.events());
+        assert_eq!(denied.len(), missed(kind).len(), "{kind:?}: {denied:?}");
+        for ((_, reason, by), tool) in denied.iter().zip(missed(kind)) {
+            assert_eq!(*by, DecidedBy::Frame, "{kind:?}: {reason}");
+            assert!(reason.contains(tool), "{kind:?}: {reason}");
+            names_the_catalogue(reason);
+        }
+        let warnings = uncovered(run.events());
+        assert_eq!(warnings.len(), missed(kind).len(), "{kind:?}: {warnings:?}");
+        for message in &warnings {
+            names_the_catalogue(message);
+        }
+        // The entry published and performed by nothing is told apart from a name never offered.
+        assert!(
+            denied
+                .iter()
+                .any(|(_, reason, _)| reason.contains("nothing in this run performs")),
+            "{kind:?}: {denied:?}"
+        );
+    }
+}
+
+/// `story:catalogue-road-leftovers` (s8-3): under `--decisions ask`, a call that resolves to no
+/// entry the run performs is not put to the embedder. The record holds the adapter's deny naming
+/// the catalogue, so it can never say allowed for a call the server refuses. The entry the run
+/// performs is still asked, and the embedder's allow is recorded.
+///
+/// Codex is the kind that reaches this branch. A Claude catalogue run under `ask` is refused at
+/// launch (V4: the owned surface's bare `--allowedTools mcp__metaharness` would approve every
+/// entry before the seam is asked), and that refusal is held here too, so the Codex run is not the
+/// only kind by accident.
+#[test]
+fn under_ask_a_call_outside_the_catalogue_is_denied_without_asking_the_embedder() {
+    let refusal = refused_before_the_spawn(
+        builder(Kind::Claude)
+            .with_catalogue(fixture())
+            .with_decisions(DecisionMode::Ask),
+    );
+    assert!(
+        refusal
+            .to_string()
+            .contains("--allowedTools mcp__metaharness"),
+        "{refusal}"
+    );
+    let kind = Kind::Codex;
+    let (mut run, log) = catalogue_run(kind, DecisionMode::Ask, None);
+    let mut asked = Vec::new();
+    while let Some(line) = run.next_event().expect("reads") {
+        if let Event::ToolRequested {
+            call_id,
+            name,
+            decision_required: true,
+            ..
+        } = line.event
+        {
+            // An embedder that allows whatever it is asked: the case where the record used to
+            // say allowed for a call the server then refused.
+            asked.push(name);
+            run.send(Command::ToolDecide {
+                call_id,
+                decision: Decision::Allow,
+            })
+            .expect("answered");
+        }
+    }
+    assert_eq!(
+        asked,
+        ["fs_read"],
+        "{kind:?}: only the entry the run performs is asked"
+    );
+    assert!(run.pending_calls().is_empty(), "{kind:?}");
+
+    let decisions = decided(run.events());
+    assert_eq!(
+        decisions.len(),
+        1 + missed(kind).len(),
+        "{kind:?}: {decisions:?}"
+    );
+    assert!(
+        !decisions[1..]
+            .iter()
+            .any(|decision| matches!(decision, Decision::Allow)),
+        "{kind:?}: no call outside the catalogue is recorded allowed: {decisions:?}"
+    );
+    let denied = denials(run.events());
+    assert_eq!(denied.len(), missed(kind).len(), "{kind:?}: {denied:?}");
+    for ((_, reason, by), tool) in denied.iter().zip(missed(kind)) {
+        assert_eq!(*by, DecidedBy::Adapter, "{kind:?}: {reason}");
+        assert!(reason.contains(tool), "{kind:?}: {reason}");
+        names_the_catalogue(reason);
+    }
+    let warnings = uncovered(run.events());
+    assert_eq!(warnings.len(), missed(kind).len(), "{kind:?}: {warnings:?}");
+    for message in &warnings {
+        names_the_catalogue(message);
+    }
+    assert!(
+        log.written().iter().any(|line| line.contains("deny")),
+        "{kind:?}: the deny reached the vendor"
+    );
 }

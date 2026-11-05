@@ -75,7 +75,8 @@ pub mod warning {
     /// approved under the earlier decision.
     pub const REQUEST_MUTATED: &str = "REQUEST_MUTATED";
     /// A tool was called that no operation in the v0.1 vocabulary renders to, so the frame has
-    /// no way to admit it (design § 7.8).
+    /// no way to admit it (design § 7.8). On a run serving a caller's catalogue: the call resolves
+    /// to no entry the run performs, and the message names that catalogue (amendment a40 § 7).
     pub const UNCOVERED_TOOL: &str = "UNCOVERED_TOOL";
     /// The child produced no terminal record, and this is what it said on the way out.
     ///
@@ -983,8 +984,16 @@ impl Run {
                 self.capabilities.support("tool.decide"),
                 CommandSupport::Honoured
             );
+        // A call outside the run's catalogue is never put to the embedder: the server performs
+        // nothing for it whatever the answer, so an allow would be a record of something that
+        // did not happen (amendment a40 § 7).
+        let outside = if ask {
+            self.outside_catalogue(&name)
+        } else {
+            None
+        };
 
-        if ask {
+        if ask && outside.is_none() {
             if !already_pending {
                 self.pending.push(PendingCall {
                     call_id: call_id.clone(),
@@ -1016,9 +1025,23 @@ impl Run {
         // `tool.decided` is emitted all the same — the census counts every mode and a
         // frame-mode run is fully audited (design D5). `observe` takes the same road with a
         // verdict that reads no frame: it allows, and it says the mode did.
-        let (decision, by, seam) = match self.spec.decisions {
-            DecisionMode::Observe => (Decision::Allow, DecidedBy::Observe, self.seam),
-            DecisionMode::Frame | DecisionMode::Ask => self.frame_verdict(&name, &input),
+        let (decision, by, seam) = if let Some(outside) = outside {
+            self.warn(
+                warning::UNCOVERED_TOOL,
+                format!("{outside}, so metaharness denied it and did not ask the embedder"),
+            );
+            (
+                Decision::Deny {
+                    reason: format!("{outside}, so this run does not admit it"),
+                },
+                DecidedBy::Adapter,
+                self.seam,
+            )
+        } else {
+            match self.spec.decisions {
+                DecisionMode::Observe => (Decision::Allow, DecidedBy::Observe, self.seam),
+                DecisionMode::Frame | DecisionMode::Ask => self.frame_verdict(&name, &input),
+            }
         };
         self.outbox.push_back(Emission {
             at,
@@ -1150,6 +1173,45 @@ impl Run {
         }
     }
 
+    /// What a call is when it resolves to no entry of the run's catalogue that the run performs,
+    /// naming the catalogue: its toolset, its version and the file it was read from. `None` on a
+    /// run without a catalogue and for an entry the run performs (amendment a40 § 7).
+    ///
+    /// An entry the catalogue publishes and nothing performs is told apart from a name it never
+    /// offered, as the server's own refusal tells them apart.
+    fn outside_catalogue(&self, tool: &str) -> Option<String> {
+        let catalogue = self.catalogue.as_ref()?;
+        let naming = self.entry_naming();
+        if !matches!(
+            catalogue.resolve_as(tool, naming),
+            metaharness_tools::Resolved::Unknown
+        ) {
+            return None;
+        }
+        let read_from = self
+            .spec
+            .catalogue
+            .as_ref()
+            .map(|path| format!(", read from --catalogue {}", path.display()))
+            .unwrap_or_default();
+        let named = format!(
+            "this run's catalogue (toolset {}, version {}{read_from})",
+            catalogue.toolset(),
+            catalogue.version()
+        );
+        Some(
+            if catalogue
+                .offered_tools_as(naming)
+                .iter()
+                .any(|offered| offered == tool)
+            {
+                format!("{tool} is in {named} and nothing in this run performs it")
+            } else {
+                format!("{tool} is not in {named}")
+            },
+        )
+    }
+
     fn resolve(&self, tool: &str, input: &Value) -> Vec<String> {
         // Only an entry the catalogue published resolves; everything else is uncovered.
         if let Some(catalogue) = &self.catalogue {
@@ -1239,6 +1301,19 @@ impl Run {
         }
 
         let operations = self.resolve(tool, input);
+        if let Some(outside) = self.outside_catalogue(tool) {
+            self.warn(
+                warning::UNCOVERED_TOOL,
+                format!("{outside}, so the frame has no way to admit it"),
+            );
+            return (
+                Decision::Deny {
+                    reason: format!("{outside}, so this step does not admit it"),
+                },
+                DecidedBy::Frame,
+                self.seam,
+            );
+        }
         if operations.is_empty() {
             self.warn(
                 warning::UNCOVERED_TOOL,
