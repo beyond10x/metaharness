@@ -1178,14 +1178,13 @@ impl Run {
     /// run without a catalogue and for an entry the run performs (amendment a40 § 7).
     ///
     /// An entry the catalogue publishes and nothing performs is told apart from a name it never
-    /// offered, as the server's own refusal tells them apart.
+    /// offered, as the server's own refusal tells them apart. "Performs" is the server's rule
+    /// ([`metaharness_tools::CallerCatalogue::performs_as`]), not the harness mapping alone: a
+    /// `process.run` entry resolves to `shell` and no server handed a catalogue publishes `run`.
     fn outside_catalogue(&self, tool: &str) -> Option<String> {
         let catalogue = self.catalogue.as_ref()?;
         let naming = self.entry_naming();
-        if !matches!(
-            catalogue.resolve_as(tool, naming),
-            metaharness_tools::Resolved::Unknown
-        ) {
+        if catalogue.performs_as(tool, naming) {
             return None;
         }
         let read_from = self

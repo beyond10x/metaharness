@@ -162,7 +162,13 @@ impl Server {
                  has are {names}."
             ));
         };
-        if harness_catalogue::harness_operation(&entry.contract_name).is_none() {
+        // Performed only when harness maps the contract name to an entry this server's own
+        // catalogue publishes. A `process.run` entry maps to `run`, which a server holding no
+        // program publishes not at all; passing it on would have the verb layer refuse it in
+        // harness's words, naming `run` and listing entries the caller never published.
+        let performed = harness_catalogue::harness_operation(&entry.contract_name)
+            .filter(|harness| self.verbs.catalogue().get(harness).is_some());
+        if performed.is_none() {
             return failed(&format!(
                 "`{}` is in this run's catalogue as `{}`, and nothing in this run performs it, so \
                  nothing was done.",

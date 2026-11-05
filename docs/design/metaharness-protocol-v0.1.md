@@ -3733,7 +3733,26 @@ frame the call is still `Abstain` with `NO_FRAME_IN_FORCE`. (3) Decision 3's sec
 check ran on a file opened with a plain `open`, so a FIFO swapped in after the path was looked at
 held the open until a writer appeared. The open is now `O_NONBLOCK | O_NOCTTY`, so a FIFO opens at
 once and is refused as `catalogue-unreadable`, and the detail names what the path is: a FIFO, a
-character or block device, a socket or a directory.
+character or block device, a socket or a directory. `O_NONBLOCK` is left set on the descriptor; on
+a regular file it changes nothing a read returns.
+
+**Corrected after the 0.29.0 adversary pass.** Three findings, each pinned by a test that was red
+first. (1) "An entry the run performs" was read from the harness mapping alone. A `process.run`
+entry maps to harness `run`, and a server handed a catalogue holds no program (`--allow-program`
+beside `--catalogue` is refused, and the Codex runner passes an empty set), so harness publishes no
+`run` there. Such an entry was put to the embedder under `ask`, and allowed under a frame admitting
+`shell`, while the server refused it. Now an entry counts as performed only when harness maps it to
+an entry that server publishes (`CallerCatalogue::performs_as`, every mapped entry but `run`). A
+test holds that rule to the harness catalogue the server is built on. Outside that set the call is
+denied as an entry nothing in the run performs, under `ask` and under a frame. Its
+`tool.requested` still names the operation the entry is (`shell`), because that says what the call
+was. (2) For such an entry the server passed the call to the verb layer, whose refusal named
+harness's `run` and listed harness entries the caller never published. The server's catalogue check
+now asks its own harness catalogue and refuses such an entry the way it refuses any entry nothing
+performs: "`<published>` is in this run's catalogue as `<contract name>`, and nothing in this run
+performs it". (3) A socket swapped in after the path was looked at fails the open with `ENXIO`
+before a descriptor exists. `ENXIO` and `ENODEV` on that open are now refused as "no longer a
+regular file", naming what the path is now, instead of in the platform's words.
 
 ### Amendment a41 — the Claude seam hook fails closed (2026-10-21)
 
