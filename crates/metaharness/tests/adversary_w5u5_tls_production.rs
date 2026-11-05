@@ -374,3 +374,130 @@ fn an_upstream_that_closes_mid_handshake_gets_no_credential() {
         forwarded,
     );
 }
+
+/// One DER element at the head of `input`: its tag, its contents and what follows it. Short and
+/// one- or two-byte long lengths only, which is every name in the compiled-in roots this reads.
+fn der_element(input: &[u8]) -> Option<(u8, &[u8], &[u8])> {
+    let (&tag, rest) = input.split_first()?;
+    let (&first, rest) = rest.split_first()?;
+    let (length, rest) = match first {
+        0x00..=0x7f => (usize::from(first), rest),
+        0x81 => (usize::from(*rest.first()?), &rest[1..]),
+        0x82 => (
+            (usize::from(*rest.first()?) << 8) | usize::from(*rest.get(1)?),
+            rest.get(2..)?,
+        ),
+        _ => return None,
+    };
+    (rest.len() >= length).then(|| (tag, &rest[..length], &rest[length..]))
+}
+
+/// The arcs of a DER-encoded object identifier.
+fn oid_arcs(bytes: &[u8]) -> Option<Vec<u64>> {
+    let (&first, rest) = bytes.split_first()?;
+    let mut arcs = vec![u64::from(first / 40), u64::from(first % 40)];
+    let mut arc = 0u64;
+    for &byte in rest {
+        arc = (arc << 7) | u64::from(byte & 0x7f);
+        if byte & 0x80 == 0 {
+            arcs.push(arc);
+            arc = 0;
+        }
+    }
+    Some(arcs)
+}
+
+/// A trust anchor's subject as an `rcgen` name: one attribute per relative name, each a
+/// `PrintableString` or a `UTF8String`. `None` for a subject this cannot spell.
+fn distinguished_name(subject: &[u8]) -> Option<rcgen::DistinguishedName> {
+    let mut name = rcgen::DistinguishedName::new();
+    let mut rest = subject;
+    while !rest.is_empty() {
+        let (0x31, set, after) = der_element(rest)? else {
+            return None;
+        };
+        let (0x30, attribute, []) = der_element(set)? else {
+            return None;
+        };
+        let (0x06, oid, value) = der_element(attribute)? else {
+            return None;
+        };
+        let (tag, text, []) = der_element(value)? else {
+            return None;
+        };
+        let text = std::str::from_utf8(text).ok()?;
+        let value = match tag {
+            0x13 => rcgen::DnValue::PrintableString(text.try_into().ok()?),
+            0x0c => rcgen::DnValue::Utf8String(text.to_owned()),
+            _ => return None,
+        };
+        name.push(rcgen::DnType::from_oid(&oid_arcs(oid)?), value);
+        rest = after;
+    }
+    Some(name)
+}
+
+/// The DER object identifier of the P-256 curve, as it appears in a trust anchor's key.
+const P256: [u8; 8] = [0x2a, 0x86, 0x48, 0xce, 0x3d, 0x03, 0x01, 0x07];
+
+/// A certificate authority generated here, with a fresh P-256 key, whose subject is byte for
+/// byte the subject of a P-256 root in `webpki_roots::TLS_SERVER_ROOTS`: the roots the production
+/// build compiles in. Returned with that root's subject.
+fn impostor_of_a_compiled_in_root() -> (Vec<u8>, rcgen::CertifiedIssuer<'static, rcgen::KeyPair>) {
+    for anchor in webpki_roots::TLS_SERVER_ROOTS {
+        let key = anchor.subject_public_key_info.as_ref();
+        if !key.windows(P256.len()).any(|window| window == P256) {
+            continue;
+        }
+        let subject = anchor.subject.as_ref();
+        let Some(name) = distinguished_name(subject) else {
+            continue;
+        };
+        let mut params = rcgen::CertificateParams::new(Vec::<String>::new()).unwrap();
+        params.distinguished_name = name;
+        params.is_ca = rcgen::IsCa::Ca(rcgen::BasicConstraints::Unconstrained);
+        params.key_usages = vec![
+            rcgen::KeyUsagePurpose::KeyCertSign,
+            rcgen::KeyUsagePurpose::CrlSign,
+        ];
+        let issuer =
+            rcgen::CertifiedIssuer::self_signed(params, rcgen::KeyPair::generate().unwrap())
+                .unwrap();
+        if issuer
+            .der()
+            .windows(subject.len())
+            .any(|window| window == subject)
+        {
+            return (subject.to_vec(), issuer);
+        }
+    }
+    panic!("no P-256 root in webpki_roots::TLS_SERVER_ROOTS has a subject this case can spell");
+}
+
+/// The positive control for the refusals above. An issuer named exactly as a root of
+/// `webpki_roots::TLS_SERVER_ROOTS`, under a key that root does not hold, is found in the
+/// production build's store and fails on its signature: the refusal names `BadSignature`, not
+/// `UnknownIssuer`. A production trust line holding no roots, or roots other than the compiled-in
+/// ones, refuses this issuer as unknown, exactly as it refuses the out-of-roots issuers above, and
+/// only this case tells the two apart.
+#[test]
+fn the_production_build_finds_an_issuer_named_as_a_compiled_in_root_in_its_store() {
+    let (subject, ca) = impostor_of_a_compiled_in_root();
+    let (port, upstream) = one_connection(tls_upstream(server_for_loopback(
+        &ca,
+        &[&rustls::version::TLS13],
+    )));
+    let (head, body, observed, forwarded) = through_production(port, upstream);
+    assert_refused_without_the_credential(
+        "named as a compiled-in root",
+        &head,
+        &body,
+        &observed,
+        forwarded,
+    );
+    assert!(
+        body.contains("BadSignature") && !body.contains("UnknownIssuer"),
+        "the production build did not find the issuer {subject:02x?} among its roots; a store \
+         holding webpki_roots::TLS_SERVER_ROOTS finds it and refuses the signature: {body}"
+    );
+}

@@ -11,7 +11,7 @@
 
 use std::fs;
 use std::path::{Path, PathBuf};
-use std::process::Command;
+use std::process::{Command, ExitStatus};
 
 use metaharness::protocol::{DecisionMode, Event, Kind};
 use metaharness::{
@@ -156,7 +156,43 @@ fn interpreted(spec: &Path, scenarios: &Path) -> (Value, String) {
         String::from_utf8_lossy(&output.stderr)
     );
     let bytes = fs::read(&report).unwrap_or_else(|_| panic!("no report written:\n{text}"));
-    (serde_json::from_slice(&bytes).unwrap(), text)
+    let report = serde_json::from_slice(&bytes).unwrap();
+    assert_ran(output.status, &report, &text);
+    (report, text)
+}
+
+/// The report is of a run ESS made and finished. It was not stopped by a signal, it met no error,
+/// the specification's own generated scenarios ran, and the exit status is the one the report's
+/// verdict gives. ESS 0.86.0 exits 1 on every run of this specification, because the interpreted
+/// target reports ten of its generated scenarios `unsupported`, so the exit is held to the
+/// report's verdict rather than to `success()`, which no run here reaches.
+fn assert_ran(status: ExitStatus, report: &Value, text: &str) {
+    let head = || text.chars().take(2000).collect::<String>();
+    assert!(
+        status.code().is_some(),
+        "ess was stopped by a signal: {status}\n{}",
+        head()
+    );
+    assert_eq!(
+        report["counts"]["error"],
+        0,
+        "ess met an error in the run:\n{}",
+        head()
+    );
+    assert!(
+        report["coverage"]["counts"]["generated"]
+            .as_u64()
+            .is_some_and(|generated| generated > 0),
+        "ess ran none of the specification's own scenarios:\n{}",
+        head()
+    );
+    assert_eq!(
+        status.success(),
+        report["conformance_status"] == "passed",
+        "ess exited {status} on a {} verdict:\n{}",
+        report["conformance_status"],
+        head()
+    );
 }
 
 fn passed(report: &Value) -> Vec<String> {
@@ -170,6 +206,23 @@ fn passed(report: &Value) -> Vec<String> {
 
 fn id(name: &str) -> String {
     format!("metaharness.session/authored/{name}")
+}
+
+/// The authored scenarios ESS decided against: those it ran and failed, and those it refused
+/// because the command's guards decide the input otherwise than the scenario expects
+/// (`ESS-AUTHOR-041`). A scenario refused for any other reason was never decided.
+fn decided_against(report: &Value) -> Vec<String> {
+    let failed = report["outcomes"]["failed"].as_array().unwrap().iter();
+    let refused = report["coverage"]["refused"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .filter(|refusal| refusal["code"] == "ESS-AUTHOR-041")
+        .map(|refusal| &refusal["scenario"]);
+    failed
+        .chain(refused)
+        .map(|id| id.as_str().unwrap().to_owned())
+        .collect()
 }
 
 /// A vendor record leaves an absent field out; it does not write `null`. The reference model must
@@ -204,12 +257,19 @@ fn every_shape_with_absent_keys_omitted_is_decided_as_production_closes_it() {
 
 /// The grid is not vacuous: an expectation production does not produce is never passed. Each shape
 /// is sent with the next outcome in rotation and its matching payload.
+///
+/// The positive control: beside each wrong expectation the same run carries the shape with the
+/// expectation production gives, and every one of those must pass, and every wrong one must be
+/// decided against rather than dropped. Without them a run that evaluated no authored shape (a
+/// scenario ESS refuses before running it, a domain it does not know) passes no wrong expectation
+/// either, and the case would hold.
 #[test]
 fn a_wrong_expectation_is_never_passed_for_any_shape() {
     let dir = tempfile::tempdir().unwrap();
     let all = shapes();
     for (name, input) in &all {
-        let wrong = match production_reason(input).as_str() {
+        let reason = production_reason(input);
+        let wrong = match reason.as_str() {
             "completed" => "budget",
             "budget" => "error",
             _ => "completed",
@@ -219,8 +279,14 @@ fn a_wrong_expectation_is_never_passed_for_any_shape() {
             scenario(name, input, wrong),
         )
         .unwrap();
+        let control = format!("{name}-control");
+        fs::write(
+            dir.path().join(format!("{control}.yaml")),
+            scenario(&control, input, &reason),
+        )
+        .unwrap();
     }
-    let (report, _) = interpreted(&repository_root().join("spec"), dir.path());
+    let (report, text) = interpreted(&repository_root().join("spec"), dir.path());
     let held = passed(&report);
     let wrongly: Vec<&String> = all
         .iter()
@@ -231,6 +297,28 @@ fn a_wrong_expectation_is_never_passed_for_any_shape() {
         wrongly.is_empty(),
         "{} wrong expectations passed: {wrongly:?}",
         wrongly.len()
+    );
+    let unheld: Vec<String> = all
+        .iter()
+        .map(|(name, _)| format!("{name}-control"))
+        .filter(|control| !held.contains(&id(control)))
+        .collect();
+    assert!(
+        unheld.is_empty(),
+        "{} of 216 right expectations not passed in the run that passed no wrong one: {unheld:?}\n{}",
+        unheld.len(),
+        text.chars().take(4000).collect::<String>()
+    );
+    let decided = decided_against(&report);
+    let undecided: Vec<&String> = all
+        .iter()
+        .map(|(name, _)| name)
+        .filter(|name| !decided.contains(&id(name)))
+        .collect();
+    assert!(
+        undecided.is_empty(),
+        "{} of 216 wrong expectations neither failed nor refused by the guards: {undecided:?}",
+        undecided.len()
     );
 }
 
