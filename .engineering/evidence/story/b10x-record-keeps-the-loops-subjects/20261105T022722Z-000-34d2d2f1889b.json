@@ -1,0 +1,15 @@
+{
+  "at": "2026-11-05T02:27:22Z",
+  "actor": "human:timo",
+  "artifact": "story:b10x-record-keeps-the-loops-subjects",
+  "kind": "story",
+  "revision": 8,
+  "change": {
+    "change": "evidence",
+    "kind": "review_outcome",
+    "source": "review-result:wave-1105-u2-adversary-1",
+    "reference": "0e1587d merged f7a7f32",
+    "review": "review-result:wave-1105-u2-adversary-1",
+    "outcome": "fixed"
+  }
+}
