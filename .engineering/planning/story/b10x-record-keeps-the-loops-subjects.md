@@ -10,7 +10,18 @@ refs:
 relations:
 - decomposes: epic:loom-agent-work-through-metaharness
 - informed_by: review-result:adr0096-w3-contract-names-adversary-2
-revision: 3
+scope:
+- confidence: inferred
+  path: crates/metaharness-b10x/fixtures/golden/loop.expected.jsonl
+- confidence: inferred
+  path: crates/metaharness-b10x/src/seam.rs
+- confidence: inferred
+  path: crates/metaharness-tools/src/resolve.rs
+- confidence: inferred
+  path: crates/metaharness/src/run.rs
+- confidence: inferred
+  path: crates/metaharness/tests/adversary_contract_names_b10x_pass2.rs
+revision: 8
 transitions:
 - {from: "draft", to: "proposed", at: "2026-11-04T07:33:27Z", actor: "human:timo", revision: 2}
 - {from: "proposed", to: "active", at: "2026-11-04T07:33:27Z", actor: "human:timo", revision: 3}

@@ -12,7 +12,12 @@ refs:
 relations:
 - decomposes: epic:session-format
 - informed_by: review-result:adr0096-w5-independent-review
-revision: 3
+scope:
+- confidence: cited
+  path: crates/metaharness-aep/tests/adversary_session_close_absent_fields.rs
+- confidence: cited
+  path: crates/metaharness/tests/adversary_w5u5_tls_production.rs
+revision: 5
 transitions:
 - {from: "draft", to: "proposed", at: "2026-11-04T07:33:27Z", actor: "human:timo", revision: 2}
 - {from: "proposed", to: "active", at: "2026-11-04T07:33:27Z", actor: "human:timo", revision: 3}

@@ -2,13 +2,25 @@
 format: aep.planning-md/3
 id: story:aep-version-reads-bounded
 kind: story
-status: draft
+status: active
 title: The AEP crates read --version under the probe deadline
 tags:
 - from-finding
 relations:
 - derived_from: review-result:wave-1104-u2-adversary-1
-revision: 1
+scope:
+- confidence: cited
+  path: crates/metaharness-aep-eval/src/lib.rs
+- confidence: cited
+  path: crates/metaharness-aep/src/drive.rs
+- confidence: cited
+  path: crates/metaharness-aep/src/eval.rs
+- confidence: cited
+  path: crates/metaharness/src/builder.rs
+revision: 7
+transitions:
+- {from: "draft", to: "proposed", at: "2026-11-05T01:50:52Z", actor: "human:timo", revision: 2}
+- {from: "proposed", to: "active", at: "2026-11-05T01:50:52Z", actor: "human:timo", revision: 3}
 ---
 ## Context
 

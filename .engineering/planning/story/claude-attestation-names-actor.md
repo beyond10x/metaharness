@@ -2,13 +2,19 @@
 format: aep.planning-md/3
 id: story:claude-attestation-names-actor
 kind: story
-status: draft
+status: active
 title: The Claude attestation names the declared AEP_ACTOR
 tags:
 - from-finding
 relations:
 - derived_from: review-result:wave-1104-u3-adversary-1
-revision: 1
+scope:
+- confidence: cited
+  path: crates/metaharness-claude/src/launch.rs
+revision: 4
+transitions:
+- {from: "draft", to: "proposed", at: "2026-11-05T01:50:52Z", actor: "human:timo", revision: 2}
+- {from: "proposed", to: "active", at: "2026-11-05T01:50:52Z", actor: "human:timo", revision: 3}
 ---
 ## Context
 
