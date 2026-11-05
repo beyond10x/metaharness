@@ -75,7 +75,7 @@ pub struct FloorInputs<'a> {
 }
 
 /// One pinned version's memory canary, as the adapter records it (amendment a36): how many
-/// memory files were planted in and above the cwd, how many the binary sent to a request with
+/// memory files were planted in the cwd and its parent, how many the binary sent to a request with
 /// the project and local sources on (the control), and how many reached a request through the
 /// launch's own argv and environment.
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -1281,9 +1281,10 @@ pub(crate) fn memory_held_to_canary(
             ),
         );
     }
-    // a36 § 8: the value is the version's recorded row, not anything this run measured, and the
-    // detail says so before it quotes the row.
-    let measured = format!("this row is not measured in this run: it is {measured}");
+    // a36 § 8: the value is the version's recorded row, not a measurement taken now, and the
+    // detail says so before it quotes the row. The sentence names no run, because `qualify`
+    // renders the same row for a binary it only asked for its version.
+    let measured = format!("this is not a measurement taken now: it is {measured}");
     row(
         HermeticRow::H11,
         Verdict::Ok,

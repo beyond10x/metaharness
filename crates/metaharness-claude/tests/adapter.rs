@@ -220,7 +220,8 @@ fn every_pinned_version_records_its_memory_canary() {
 /// version, equal to [`MemoryCanary::measurement_record`]. That line is what the native canary case
 /// prints for the binary it measured. A row copied from the previous pin keeps the previous pin's
 /// page, which has no line for the new version, so the copy fails here, in `task check`, without a
-/// vendor binary.
+/// vendor binary, unless someone also adds a matching line to the cited page. This cannot tell a
+/// typed line from a measured one.
 fn memory_canary_record_problems(rows: &[MemoryCanary]) -> Vec<String> {
     let root = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("../..");
     let mut problems = Vec::new();

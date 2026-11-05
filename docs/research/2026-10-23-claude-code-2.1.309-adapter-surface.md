@@ -111,8 +111,8 @@ names).
 `MEMORY_CANARIES` gains `{2.1.309, planted 12, control_sent 12, launch_none 0, launch_loopback 0}`;
 the fixture case compares what it measured with that row field by field, so a copied row would
 have failed it. 2.1.305 measured the same today. User memory and managed memory were not probed
-(unverified), nor were memory files above the cwd's parent or `.claude/rules` files below its first
-level.
+(unverified), nor were memory files above the cwd's parent or files more than one level deep in
+`.claude/rules`.
 
 The measurement record of 2.1.309, the table above as the native canary case prints it and as its
 `MEMORY_CANARIES` row has to cite it (amendment a36 § 8):

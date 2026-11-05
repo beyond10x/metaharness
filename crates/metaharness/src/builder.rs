@@ -5828,9 +5828,10 @@ mod scratch_cwd_tests {
     }
 
     /// `story:h11-claims-match-what-was-measured` (a36 § 8): an `ok` H11 on Claude says that its
-    /// value is the canary row recorded for the record's version and not a measurement of this
-    /// run, and names every surface that row did not probe: user memory in the config home, memory
-    /// files above the cwd's parent, `.claude/rules` files below depth one, and managed memory.
+    /// value is the canary row recorded for the record's version and not a measurement taken now,
+    /// and names every surface that row did not probe: user memory in the config home, memory
+    /// files above the cwd's parent, files more than one level deep in `.claude/rules`, and
+    /// managed memory.
     #[test]
     fn an_ok_h11_says_it_is_the_versions_canary_row_and_names_every_unprobed_surface() {
         let (_root, copy) = embedder_copy();
@@ -5840,14 +5841,14 @@ mod scratch_cwd_tests {
         let version = metaharness_claude::PINNED_VERSIONS[0];
         assert!(
             h11_detail.contains(&format!(
-                "not measured in this run: it is the memory canary recorded for {version}:"
+                "this is not a measurement taken now: it is the memory canary recorded for {version}:"
             )),
-            "the value is the version's canary row, not this run's measurement: {h11_detail}"
+            "the value is the version's canary row, not a measurement taken now: {h11_detail}"
         );
         for unprobed in [
             "user memory (a CLAUDE.md in the scratch config home)",
             "memory files above the cwd's parent",
-            ".claude/rules files below its first level",
+            "files more than one level deep in .claude/rules",
             "managed memory (/etc/claude-code/CLAUDE.md)",
         ] {
             assert!(

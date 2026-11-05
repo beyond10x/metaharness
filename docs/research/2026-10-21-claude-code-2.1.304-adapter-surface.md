@@ -100,7 +100,7 @@ the same string in both binaries).
 | the production launch (`--setting-sources ""`), `none` | none | none | observed |
 | the production launch, `loopback` | none | none | observed |
 
-So at both pins no memory file of any shape in the cwd or an ancestor reaches the model under the
+So at both pins no memory file of any shape in the cwd or its parent reaches the model under the
 launch, and the control shows the probe would have seen each one. The mechanism, from the binary:
 project-memory discovery returns nothing unless the `projectSettings` source is on
 (`CLAUDE.local.md`: `localSettings`), `cc-plugin-agents-md`'s ancestor walk is off on the same
@@ -134,7 +134,7 @@ memory canary 2.1.305: planted 12, control sent 12, launch none 0, launch loopba
 
 The canaries sat in the cwd and its parent only, and the `.claude/rules` one directly under the
 directory. User memory (`CLAUDE.md` in the scratch config home), memory files above the cwd's
-parent, `.claude/rules` files below its first level and managed memory were not probed. The relayed
+parent, files more than one level deep in `.claude/rules` and managed memory were not probed. The relayed
 2.1.305 observation (a `--cwd` canary `CLAUDE.md` not quoted under `--hermetic off`) agrees and was
 not reproduced as such.
 

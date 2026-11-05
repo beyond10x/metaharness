@@ -1996,8 +1996,9 @@ fn attest(
             format!(
                 "the ancestor walk from the operator's directory found {} memory file(s) above \
                  it, and the tree is the operator's, so metaharness claims nothing about it; \
-                 the launch still passes --setting-sources \"\", which kept memory files in and \
-                 above the cwd out of every request at 2.1.304, 2.1.305 and 2.1.309 (a33, a36)",
+                 the launch still passes --setting-sources \"\", which kept memory files in the \
+                 cwd and its parent out of every request at 2.1.304, 2.1.305 and 2.1.309, the \
+                 only directories the canary probed (a33, a36)",
                 context.memory_ancestors.len()
             ),
         ));

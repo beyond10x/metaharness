@@ -457,7 +457,9 @@ pub struct MemoryCanary {
     /// The research page that records this measurement, relative to the repository root (a36 § 8).
     /// The page holds exactly one line equal to [`MemoryCanary::measurement_record`] for this
     /// version, and a test in `task check` reads it there. A row copied from another pin keeps
-    /// that pin's page, which has no line for the new version, so the copy fails.
+    /// that pin's page, which has no line for the new version, so the copy fails unless someone
+    /// also adds a matching line to the cited page. The test cannot tell a typed line from a
+    /// measured one.
     pub measured_in: &'static str,
     /// Canaries planted: each of [`MEMORY_SHAPES`] in the cwd and in its parent.
     pub planted: usize,
@@ -494,16 +496,16 @@ impl MemoryCanary {
 /// widened by § 8). The probe planted each shape in the cwd and in its parent, the `.claude/rules`
 /// canary directly under that directory, and nothing in the config home. So four surfaces are
 /// unprobed. User memory is the config home's `CLAUDE.md`, which the launch writes none of. Memory
-/// files above the cwd's parent and `.claude/rules` files below its first level are named by the
-/// walk when it finds them. Managed memory, the policy directory's memory file, is outside both the
-/// walk and the probe.
+/// files above the cwd's parent and files more than one level deep in `.claude/rules` are named by
+/// the walk when it finds them. Managed memory, the policy directory's memory file, is outside both
+/// the walk and the probe.
 pub const MEMORY_NOT_PROBED: &str = "the canary planted each shape in the cwd and its parent only, \
                                      so it did not probe user memory (a CLAUDE.md in the scratch \
                                      config home), which the launch never writes, nor memory files \
-                                     above the cwd's parent or .claude/rules files below its first \
-                                     level, which the walk names when it finds them; managed memory \
-                                     (/etc/claude-code/CLAUDE.md) is neither walked nor probed, so \
-                                     this row says nothing about it";
+                                     above the cwd's parent or files more than one level deep in \
+                                     .claude/rules, which the walk names when it finds them; managed \
+                                     memory (/etc/claude-code/CLAUDE.md) is neither walked nor \
+                                     probed, so this row says nothing about it";
 
 /// The memory canary of every pinned binary, one row per entry of [`PINNED_VERSIONS`] in the same
 /// order (design amendment a36).
