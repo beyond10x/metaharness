@@ -2,7 +2,7 @@
 format: aep.planning-md/3
 id: story:claude-hook-refusals-reach-the-record
 kind: story
-status: active
+status: implemented
 title: Refusals made by the Claude hook program reach the record
 summary: A call the hook program refuses on its own is recorded as denied with its cause, never as allowed.
 owner: metaharness
@@ -19,10 +19,11 @@ scope:
   path: crates/metaharness/src/run.rs
 - confidence: inferred
   path: crates/metaharness/src/spawn.rs
-revision: 6
+revision: 7
 transitions:
 - {from: "draft", to: "proposed", at: "2026-11-05T03:32:35Z", actor: "human:timo", revision: 2}
 - {from: "proposed", to: "active", at: "2026-11-05T03:32:35Z", actor: "human:timo", revision: 3}
+- {from: "active", to: "implemented", at: "2026-11-05T05:45:03Z", actor: "human:timo", revision: 7, decided_on: {"recorded":{"test_result":1,"review_outcome":1,"verification":1}}}
 ---
 # Story: refusals made by the Claude hook program reach the record
 

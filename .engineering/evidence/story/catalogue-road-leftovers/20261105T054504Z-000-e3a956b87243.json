@@ -1,0 +1,13 @@
+{
+  "at": "2026-11-05T05:45:04Z",
+  "actor": "human:timo",
+  "artifact": "story:catalogue-road-leftovers",
+  "kind": "story",
+  "revision": 11,
+  "change": {
+    "change": "evidence",
+    "kind": "test_result",
+    "source": "local full gate G1-G5 (ess validate, fmt, docs check, workspace clippy -D warnings, cargo test --locked over every workspace crate: 585+226+871 passed, 0 failed)",
+    "reference": "f022041"
+  }
+}

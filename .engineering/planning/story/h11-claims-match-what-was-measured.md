@@ -2,7 +2,7 @@
 format: aep.planning-md/3
 id: story:h11-claims-match-what-was-measured
 kind: story
-status: active
+status: implemented
 title: Claude's H11 claims match what was measured
 summary: An ok H11 on Claude names its source and every unprobed surface, and a pin move without a re-measured canary fails a check.
 owner: metaharness
@@ -21,10 +21,11 @@ scope:
   path: crates/metaharness-claude/tests/adapter.rs
 - confidence: inferred
   path: crates/metaharness/src/audit.rs
-revision: 8
+revision: 9
 transitions:
 - {from: "draft", to: "proposed", at: "2026-11-05T03:32:35Z", actor: "human:timo", revision: 3}
 - {from: "proposed", to: "active", at: "2026-11-05T03:32:35Z", actor: "human:timo", revision: 4}
+- {from: "active", to: "implemented", at: "2026-11-05T05:45:03Z", actor: "human:timo", revision: 9, decided_on: {"recorded":{"test_result":1,"review_outcome":1,"verification":1}}}
 ---
 # Story: Claude's H11 claims match what was measured
 

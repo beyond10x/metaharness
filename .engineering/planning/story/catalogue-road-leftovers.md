@@ -2,7 +2,7 @@
 format: aep.planning-md/3
 id: story:catalogue-road-leftovers
 kind: story
-status: active
+status: implemented
 title: Catalogue road leftovers
 summary: Ask-mode record, catalogue-named denial, revision pin, FIFO race and argument value types on the caller-catalogue road.
 owner: metaharness
@@ -22,10 +22,11 @@ scope:
   path: crates/metaharness-tools/src/server.rs
 - confidence: inferred
   path: crates/metaharness/src/run.rs
-revision: 11
+revision: 12
 transitions:
 - {from: "draft", to: "proposed", at: "2026-11-05T03:32:35Z", actor: "human:timo", revision: 5}
 - {from: "proposed", to: "active", at: "2026-11-05T03:32:36Z", actor: "human:timo", revision: 6}
+- {from: "active", to: "implemented", at: "2026-11-05T05:45:04Z", actor: "human:timo", revision: 12, decided_on: {"recorded":{"test_result":1,"review_outcome":1,"verification":1}}}
 ---
 # Story: catalogue road leftovers
 

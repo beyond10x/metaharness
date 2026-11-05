@@ -2,7 +2,7 @@
 format: aep.planning-md/3
 id: story:claude-seam-abstain-is-recorded-as-vendor-decided
 kind: story
-status: active
+status: implemented
 title: A Claude seam abstain is recorded as decided by the vendor
 summary: An abstained Claude tool call names the vendor pipeline as its decider, and a41 names abstain as outside the fail-closed claim.
 owner: metaharness
@@ -19,10 +19,11 @@ scope:
   path: crates/metaharness/src/run.rs
 - confidence: inferred
   path: docs/design/metaharness-protocol-v0.1.md
-revision: 6
+revision: 7
 transitions:
 - {from: "draft", to: "proposed", at: "2026-11-05T03:32:35Z", actor: "human:timo", revision: 2}
 - {from: "proposed", to: "active", at: "2026-11-05T03:32:35Z", actor: "human:timo", revision: 3}
+- {from: "active", to: "implemented", at: "2026-11-05T05:45:03Z", actor: "human:timo", revision: 7, decided_on: {"recorded":{"test_result":1,"review_outcome":1,"verification":1}}}
 ---
 # Story: a Claude seam abstain is recorded as decided by the vendor
 
