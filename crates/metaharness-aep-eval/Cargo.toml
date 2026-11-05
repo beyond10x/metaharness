@@ -12,7 +12,7 @@ name = "aep-eval"
 path = "src/main.rs"
 
 [dependencies]
-b10x-substrate-host = { git = "https://github.com/beyond10x/substrate", rev = "aeab475f37730a49914066b2494910d62c6073de" }
+b10x-substrate-host = { git = "https://github.com/beyond10x/substrate", rev = "a88cc6423164ec586434b786b3b1103cc2a17c33", default-features = false }
 clap = { workspace = true, features = ["env"] }
 metaharness = { path = "../metaharness" }
 metaharness-b10x = { path = "../metaharness-b10x" }
