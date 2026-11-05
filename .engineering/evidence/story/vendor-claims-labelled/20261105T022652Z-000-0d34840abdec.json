@@ -1,0 +1,15 @@
+{
+  "at": "2026-11-05T02:26:52Z",
+  "actor": "human:timo",
+  "artifact": "story:vendor-claims-labelled",
+  "kind": "story",
+  "revision": 6,
+  "change": {
+    "change": "evidence",
+    "kind": "review_outcome",
+    "source": "review-result:wave-1105-u3-adversary-1",
+    "reference": "68f2b79 merged 91f62dc; citation wording fix",
+    "review": "review-result:wave-1105-u3-adversary-1",
+    "outcome": "fixed"
+  }
+}
