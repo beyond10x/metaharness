@@ -1,0 +1,15 @@
+{
+  "at": "2026-11-05T00:32:42Z",
+  "actor": "human:timo",
+  "artifact": "story:actor-reaches-every-launch",
+  "kind": "story",
+  "revision": 6,
+  "change": {
+    "change": "evidence",
+    "kind": "review_outcome",
+    "source": "review-result:wave-1104-u3-adversary-1",
+    "reference": "4de8c59",
+    "review": "review-result:wave-1104-u3-adversary-1",
+    "outcome": "fixed"
+  }
+}
