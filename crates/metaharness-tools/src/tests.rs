@@ -869,3 +869,44 @@ fn a_contract_write_giving_the_digest_as_null_reads_as_without_it_and_is_perform
         );
     }
 }
+
+/// `story:catalogue-road-leftovers` (s7-3): the path is looked at, then opened. A FIFO swapped in
+/// between reaches the open, and the open must neither wait for a writer nor read it: it is
+/// refused by name. The open is driven on the FIFO directly, as it is after the swap, from a
+/// thread, so a blocking open fails this test within ten seconds instead of hanging it.
+#[cfg(unix)]
+#[test]
+fn a_fifo_swapped_in_after_the_path_was_looked_at_is_refused_without_blocking() {
+    let dir = tempfile::tempdir().expect("a directory");
+    let fifo = dir.path().join("catalogue.yaml");
+    let made = std::process::Command::new("mkfifo")
+        .arg(&fifo)
+        .status()
+        .expect("mkfifo runs");
+    assert!(made.success(), "mkfifo made the pipe");
+
+    let (sender, receiver) = std::sync::mpsc::channel();
+    let opening = fifo.clone();
+    let opener = std::thread::spawn(move || {
+        let opened = crate::caller::open_regular(&opening);
+        sender.send(opened.map(drop)).expect("the test is waiting");
+    });
+    let outcome = receiver.recv_timeout(std::time::Duration::from_secs(10));
+    if outcome.is_err() {
+        // Release the blocked open with a writer, so the thread ends, then fail.
+        drop(std::fs::OpenOptions::new().write(true).open(&fifo));
+        opener.join().expect("the opener ends");
+        panic!("opening a FIFO blocked for ten seconds waiting for a writer");
+    }
+    opener.join().expect("the opener ends");
+    let error = outcome
+        .expect("answered")
+        .expect_err("a FIFO is not read as a catalogue");
+    assert_eq!(error.code(), CATALOGUE_UNREADABLE, "{error}");
+    let words = error.to_string();
+    assert!(
+        words.contains("it is a FIFO, not a regular file"),
+        "{words}"
+    );
+    assert!(words.contains("catalogue.yaml"), "{words}");
+}

@@ -537,28 +537,11 @@ impl CallerCatalogue {
             path: path.to_path_buf(),
             detail,
         };
-        let not_regular = |metadata: &std::fs::Metadata| {
-            let what = if metadata.is_dir() {
-                "a directory"
-            } else {
-                "something else"
-            };
-            unreadable(format!(
-                "it is {what}, not a regular file, and only a regular file is read as a catalogue"
-            ))
-        };
         let metadata = std::fs::metadata(path).map_err(|error| unreadable(error.to_string()))?;
         if !metadata.is_file() {
-            return Err(not_regular(&metadata));
+            return Err(not_regular(path, &metadata));
         }
-        let file = std::fs::File::open(path).map_err(|error| unreadable(error.to_string()))?;
-        // The file opened is asked again: the path may have been replaced since it was looked at.
-        let opened = file
-            .metadata()
-            .map_err(|error| unreadable(error.to_string()))?;
-        if !opened.is_file() {
-            return Err(not_regular(&opened));
-        }
+        let file = open_regular(path)?;
         let mut bytes = Vec::new();
         file.take(CATALOGUE_BYTES_MAX + 1)
             .read_to_end(&mut bytes)
@@ -648,6 +631,18 @@ impl CallerCatalogue {
         let entries =
             entries(&contract).map_err(|problems| CatalogueError::malformed(path, problems))?;
         Ok(Self { contract, entries })
+    }
+
+    /// The document's `toolset`, the first half of the name a refusal gives the catalogue.
+    #[must_use]
+    pub fn toolset(&self) -> &str {
+        &self.contract.toolset
+    }
+
+    /// The document's `version`, the second half of that name.
+    #[must_use]
+    pub fn version(&self) -> &str {
+        &self.contract.version
     }
 
     /// The entries, in document order.
@@ -757,6 +752,60 @@ impl CallerCatalogue {
             .iter()
             .find(|entry| naming.name(&entry.published) == tool)
             .and_then(|entry| harness_catalogue::harness_operation(&entry.contract_name))
+    }
+}
+
+/// Opens `path` for reading and refuses it unless the file opened is a regular file.
+///
+/// The file opened is asked again: the path may have been replaced since it was looked at. The
+/// open is `O_NONBLOCK`, so a FIFO swapped in between is opened at once and refused by name rather
+/// than waited on until a writer appears, and `O_NOCTTY`, so a terminal swapped in never becomes
+/// the process's controlling terminal on the way to being refused. On a regular file neither flag
+/// changes what a read returns.
+pub(crate) fn open_regular(path: &Path) -> Result<std::fs::File, CatalogueError> {
+    use rustix::fs::{Mode, OFlags};
+    let unreadable = |detail: String| CatalogueError::Unreadable {
+        path: path.to_path_buf(),
+        detail,
+    };
+    let file = rustix::fs::open(
+        path,
+        OFlags::RDONLY | OFlags::CLOEXEC | OFlags::NONBLOCK | OFlags::NOCTTY,
+        Mode::empty(),
+    )
+    .map(std::fs::File::from)
+    .map_err(|errno| unreadable(std::io::Error::from(errno).to_string()))?;
+    let opened = file
+        .metadata()
+        .map_err(|error| unreadable(error.to_string()))?;
+    if !opened.is_file() {
+        return Err(not_regular(path, &opened));
+    }
+    Ok(file)
+}
+
+/// The refusal for a path that is not a regular file, naming what it is.
+fn not_regular(path: &Path, metadata: &std::fs::Metadata) -> CatalogueError {
+    use std::os::unix::fs::FileTypeExt;
+    let kind = metadata.file_type();
+    let what = if kind.is_dir() {
+        "a directory"
+    } else if kind.is_fifo() {
+        "a FIFO"
+    } else if kind.is_char_device() {
+        "a character device"
+    } else if kind.is_block_device() {
+        "a block device"
+    } else if kind.is_socket() {
+        "a socket"
+    } else {
+        "something else"
+    };
+    CatalogueError::Unreadable {
+        path: path.to_path_buf(),
+        detail: format!(
+            "it is {what}, not a regular file, and only a regular file is read as a catalogue"
+        ),
     }
 }
 

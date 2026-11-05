@@ -1424,6 +1424,7 @@ dependencies = [
  "b10x-harness-catalogue",
  "b10x-harness-wire",
  "b10x-tool-contract",
+ "rustix",
  "serde_json",
  "serde_yaml_ng",
  "tempfile",
