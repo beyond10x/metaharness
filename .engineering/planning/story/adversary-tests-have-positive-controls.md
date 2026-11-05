@@ -2,7 +2,7 @@
 format: aep.planning-md/3
 id: story:adversary-tests-have-positive-controls
 kind: story
-status: active
+status: implemented
 title: Adversary tests have positive controls
 summary: Two kept adversary tests turn red when what they guard stops working.
 owner: metaharness
@@ -17,10 +17,11 @@ scope:
   path: crates/metaharness-aep/tests/adversary_session_close_absent_fields.rs
 - confidence: cited
   path: crates/metaharness/tests/adversary_w5u5_tls_production.rs
-revision: 5
+revision: 6
 transitions:
 - {from: "draft", to: "proposed", at: "2026-11-04T07:33:27Z", actor: "human:timo", revision: 2}
 - {from: "proposed", to: "active", at: "2026-11-04T07:33:27Z", actor: "human:timo", revision: 3}
+- {from: "active", to: "implemented", at: "2026-11-05T02:52:36Z", actor: "human:timo", revision: 6, decided_on: {"recorded":{"test_result":1,"verification":1}}}
 ---
 # Story: adversary tests have positive controls
 

@@ -2,7 +2,7 @@
 format: aep.planning-md/3
 id: story:doctor-run-help-probe-bounded
 kind: story
-status: active
+status: implemented
 title: doctor bounds its run --help probe as it bounds --version
 summary: 'From U2: doctor.rs run --help runs through .output() with no deadline'
 tags:
@@ -14,10 +14,11 @@ scope:
   path: crates/metaharness/src/builder.rs
 - confidence: cited
   path: crates/metaharness/src/doctor.rs
-revision: 5
+revision: 6
 transitions:
 - {from: "draft", to: "proposed", at: "2026-11-05T01:50:52Z", actor: "human:timo", revision: 2}
 - {from: "proposed", to: "active", at: "2026-11-05T01:50:52Z", actor: "human:timo", revision: 3}
+- {from: "active", to: "implemented", at: "2026-11-05T02:52:37Z", actor: "human:timo", revision: 6, decided_on: {"recorded":{"test_result":1,"review_outcome":1,"verification":1}}}
 ---
 ## Scheduling
 

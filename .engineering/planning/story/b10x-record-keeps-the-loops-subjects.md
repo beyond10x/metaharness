@@ -2,7 +2,7 @@
 format: aep.planning-md/3
 id: story:b10x-record-keeps-the-loops-subjects
 kind: story
-status: active
+status: implemented
 title: A b10x record keeps the subject the loop reported for each call
 refs:
 - provider: atlas
@@ -21,10 +21,11 @@ scope:
   path: crates/metaharness/src/run.rs
 - confidence: inferred
   path: crates/metaharness/tests/adversary_contract_names_b10x_pass2.rs
-revision: 8
+revision: 9
 transitions:
 - {from: "draft", to: "proposed", at: "2026-11-04T07:33:27Z", actor: "human:timo", revision: 2}
 - {from: "proposed", to: "active", at: "2026-11-04T07:33:27Z", actor: "human:timo", revision: 3}
+- {from: "active", to: "implemented", at: "2026-11-05T02:52:37Z", actor: "human:timo", revision: 9, decided_on: {"recorded":{"test_result":1,"review_outcome":1,"verification":1}}}
 ---
 # Story: a b10x record keeps the subject the loop reported for each call
 

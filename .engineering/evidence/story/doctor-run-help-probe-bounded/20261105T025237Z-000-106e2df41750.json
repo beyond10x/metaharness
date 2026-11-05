@@ -1,0 +1,13 @@
+{
+  "at": "2026-11-05T02:52:37Z",
+  "actor": "human:timo",
+  "artifact": "story:doctor-run-help-probe-bounded",
+  "kind": "story",
+  "revision": 5,
+  "change": {
+    "change": "evidence",
+    "kind": "test_result",
+    "source": "local full gate G1-G5 (ess validate, fmt, docs check, workspace clippy -D warnings, cargo test --locked over every workspace crate: 566+226+855 passed, 0 failed)",
+    "reference": "819ca2c"
+  }
+}
