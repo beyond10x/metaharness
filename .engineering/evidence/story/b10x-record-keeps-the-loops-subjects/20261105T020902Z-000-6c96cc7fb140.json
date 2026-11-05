@@ -1,0 +1,13 @@
+{
+  "at": "2026-11-05T02:09:02Z",
+  "actor": "human:timo",
+  "artifact": "story:b10x-record-keeps-the-loops-subjects",
+  "kind": "story",
+  "revision": 8,
+  "change": {
+    "change": "evidence",
+    "kind": "verification",
+    "source": "cargo test -p metaharness --test adversary_contract_names_b10x_pass2 and -p metaharness-b10x --lib, base vs unit: VERIFIED (base c076386: 3 of the pass2 cases and the seam subjects case red; unit 341b3db: pass2 6 passed, b10x lib 66 passed; golden moves only in subjects)",
+    "reference": "next/u2/scratch/red.log vs green.log"
+  }
+}
