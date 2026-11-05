@@ -1,0 +1,15 @@
+{
+  "at": "2026-11-05T05:07:51Z",
+  "actor": "human:timo",
+  "artifact": "story:claude-hook-refusals-reach-the-record",
+  "kind": "story",
+  "revision": 6,
+  "change": {
+    "change": "evidence",
+    "kind": "review_outcome",
+    "source": "correction 1 e492f8c merged 52bc3a8",
+    "reference": "52bc3a8",
+    "review": "review-result:wave-0290-u1-adversary-1",
+    "outcome": "fixed"
+  }
+}

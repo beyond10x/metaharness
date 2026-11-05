@@ -1,0 +1,13 @@
+{
+  "at": "2026-11-05T05:07:51Z",
+  "actor": "human:timo",
+  "artifact": "story:claude-seam-abstain-is-recorded-as-vendor-decided",
+  "kind": "story",
+  "revision": 6,
+  "change": {
+    "change": "evidence",
+    "kind": "verification",
+    "source": "U1 targeted lanes green in the unit tree after correction 1 (claude_hook_record 7, adversary pass 1 3, metaharness lib 168, run_loop 57, stream_closed 21, metaharness-claude lib 162)",
+    "reference": "e492f8c"
+  }
+}
