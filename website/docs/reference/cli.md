@@ -20,7 +20,7 @@ and `tests/website_claims.rs` fail when this table and the binary disagree. `cap
 | `run <KIND>` | Run a harness session: events as JSON lines on stdout, commands as JSON lines on stdin. |
 | `capabilities <KIND>` | What an adapter says it can do: declared tiers, pinned versions, operation rendering. |
 | `conformance <KIND>` | The free conformance vectors: no model, no network, no credential. |
-| `doctor <KIND>` | The installed vendor version against the adapter's pin. |
+| `doctor <KIND>` | The installed vendor version against the adapter's pin. Each `--version` and `run --help` read waits at most 60 seconds, and a `run --help` longer than 64 KiB is refused by name. |
 | `project <EVENTS>...` | Project an event stream into `trace-ir/1`, byte-stable, or render one or two runs as one static page (`--html`); `--from <FORMAT>` reads a vendor record through its adapter's production reader instead (design amendment a28); `--to trace-ir-summary` writes the document's summary instead (a42). |
 | `audit --transcript <FILE>` | Judge a transcript offline. **Refuses with exit 2**. |
 | `mcp-serve` | Serve the owned tool surface over MCP on stdio. Not typed by an operator: its client is the harness, which starts it from the `--mcp-config` that `run --tool-surface owned` (or `--catalogue`) writes, naming this binary. |

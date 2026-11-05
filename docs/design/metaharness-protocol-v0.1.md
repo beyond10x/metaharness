@@ -5593,8 +5593,8 @@ refusal texts are the same.
 4. *Extended 2026-11-05 (`story:aep-version-reads-bounded`, `story:doctor-run-help-probe-bounded`):*
    the probe takes any command a caller builds, not only `--version`, and is public as
    `metaharness::probe_command` beside `VERSION_PROBE_DEADLINE` and `VERSION_DRAIN_GRACE`; the
-   caller keeps its own program, argv and environment. Every child this workspace runs only
-   to read an answer, with no model, goes through it under the same deadline, grace and caps:
+   caller keeps its own program, argv and environment. Every `--version` and `run --help` read
+   of a vendor, harness or `aep` binary goes through it under the same deadline, grace and caps:
    besides point 1's callers, `doctor`'s `--version` and the b10x launch's `--version`
    (`story:version-probe-everywhere-bounded`), `doctor b10x`'s `run --help`, the `--version` of
    `metaharness aep drive`'s `--aep-binary`, of the AEP eval's child `aep`, and of the installed
@@ -5604,7 +5604,9 @@ refusal texts are the same.
    `qualify` and `doctor`'s `--version` give the child only its constructed `PATH`, and the four
    reads that inherited this process's environment still do. What each caller reads from an
    exited child is unchanged, with one addition: a `run --help` longer than the 64 KiB stdout cap
-   is refused by name, because flags judged against a cut help would read as faults.
+   is refused by name, because flags judged against a cut help would read as faults. Other
+   answer-only children are not bounded by it: `aep-eval` still reads `git rev-parse HEAD` and
+   `id -u` through its unbounded `output()` helper (adversary pass 1 on this extension).
 
 ### Amendment a66 — Codex carries a caller's catalogue over `codex app-server` (2026-10-29)
 
