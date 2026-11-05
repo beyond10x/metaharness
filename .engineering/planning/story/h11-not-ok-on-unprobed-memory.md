@@ -2,14 +2,26 @@
 format: aep.planning-md/3
 id: story:h11-not-ok-on-unprobed-memory
 kind: story
-status: draft
+status: active
 title: A Claude H11 is not ok when memory sits in a surface the canary never probed
 summary: 'From the U3 adversary pass of the 0.29.0 wave: the walk finds memory above the parent or in deep rules and H11 still reads ok'
 tags:
 - from-finding
 relations:
 - derived_from: review-result:wave-0290-u3-adversary-1
-revision: 1
+scope:
+- confidence: inferred
+  path: crates/metaharness-claude/src/lib.rs
+- confidence: inferred
+  path: crates/metaharness/src/audit.rs
+- confidence: inferred
+  path: crates/metaharness/src/builder.rs
+- confidence: inferred
+  path: docs/design/metaharness-protocol-v0.1.md
+revision: 7
+transitions:
+- {from: "draft", to: "proposed", at: "2026-11-05T11:09:21Z", actor: "human:timo", revision: 2}
+- {from: "proposed", to: "active", at: "2026-11-05T11:09:21Z", actor: "human:timo", revision: 3}
 ---
 ## Scheduling
 

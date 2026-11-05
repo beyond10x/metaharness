@@ -2,14 +2,20 @@
 format: aep.planning-md/3
 id: story:eval-cgroup-root-check-by-prefix
 kind: story
-status: draft
+status: active
 title: The AEP eval judges below-the-cgroup-root by canonical prefix, as Substrate's probe does
 summary: 'From the U4 adversary pass of the 0.29.0 wave: below_cgroup_root is a substring match'
 tags:
 - from-finding
 relations:
 - derived_from: review-result:wave-0290-u4-adversary-1
-revision: 1
+scope:
+- confidence: inferred
+  path: crates/metaharness-aep-eval/src/lib.rs
+revision: 4
+transitions:
+- {from: "draft", to: "proposed", at: "2026-11-05T11:09:21Z", actor: "human:timo", revision: 2}
+- {from: "proposed", to: "active", at: "2026-11-05T11:09:21Z", actor: "human:timo", revision: 3}
 ---
 ## Scheduling
 
