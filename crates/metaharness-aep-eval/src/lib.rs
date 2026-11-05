@@ -1357,8 +1357,11 @@ fn below_cgroup_root(cgroup_root: &Path) -> Result<bool, String> {
 
 const CGROUP_MOUNT: &str = "/sys/fs/cgroup";
 
-/// The rule of Substrate's `probe_cgroup` and `current_cgroup` at tag 0.20.0
-/// (`crates/substrate-host/src/probe.rs:931-945` and `:996-1001`): the process's cgroup is the
+/// The rule of Substrate's `probe_cgroup` and `current_cgroup`. The probe that decides runs inside
+/// the harness, whose built-in Substrate is 0.14.0 at the pinned 0.22.0 (`0b9d50c`,
+/// `crates/substrate-host/src/probe.rs:834-848` and `:899-904`). The eval's own pin, 0.20.0, has
+/// the same rule at `:931-945` and `:996-1001`, so a harness pin move is what re-checks it. The
+/// process's cgroup is the
 /// unified hierarchy's `0::` line of `/proc/self/cgroup`, joined under the mount, and it is below
 /// the root when it starts with the root's canonical path, component by component. The root
 /// itself counts, so the mount as the root holds every process; a root that does not resolve

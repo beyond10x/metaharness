@@ -11,7 +11,7 @@ was amended and the amendment is named here.
 
 ### Fixed
 
-- `aep-eval` decides whether its process is below the cgroup root as Substrate's `probe_cgroup` does (`crates/substrate-host/src/probe.rs:931` at 0.20.0). It canonicalises the root and asks whether the unified `0::` cgroup path, joined under `/sys/fs/cgroup`, starts with it component by component. Before, it looked for the root's path anywhere in `/proc/self/cgroup`. So `/sys/fs/cgroup/user.slice` held `user.slice-other/…`, and a root given with `..` or through a symlink held nothing. The eval could skip the delegated scope the probe then found missing, or enter one it did not need. `/sys/fs/cgroup` itself still holds every process (`story:eval-cgroup-root-check-by-prefix`).
+- `aep-eval` decides whether its process is below the cgroup root as Substrate's `probe_cgroup` does. The probe that decides runs in the harness, whose built-in Substrate is 0.14.0 at the pinned 0.22.0 (`crates/substrate-host/src/probe.rs:834`); the eval's own pin, 0.20.0, has the same rule at `:931`. It canonicalises the root and asks whether the unified `0::` cgroup path, joined under `/sys/fs/cgroup`, starts with it component by component. Before, it looked for the root's path anywhere in `/proc/self/cgroup`. So `/sys/fs/cgroup/user.slice` held `user.slice-other/…`, and a root given with `..` or through a symlink held nothing. The eval could skip the delegated scope the probe then found missing, or enter one it did not need. `/sys/fs/cgroup` itself still holds every process (`story:eval-cgroup-root-check-by-prefix`).
 
 ## [0.29.0] — 2026-11-05
 
