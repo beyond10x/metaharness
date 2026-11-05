@@ -5,6 +5,11 @@ was amended and the amendment is named here.
 
 ## [Unreleased]
 
+### Fixed
+
+- A Claude run's H3 attestation names every variable the child gets beyond its allowlist and the four the row always named. It reads them off the plan's own environment, by name and never by value. That covers the declared `AEP_ACTOR` and, when the run's declarations set them, `CLAUDE_CODE_PROMPT_CACHE_TTL`, `ANTHROPIC_BASE_URL`, `ANTHROPIC_AUTH_TOKEN`, `CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC` and `ANTHROPIC_API_KEY`. Before, no imposed control named the first five. Nor did any name an endpoint run's placeholder `ANTHROPIC_API_KEY` once managed settings made H4 unavailable. A run that sets none of them keeps the old text (amendment a74, `story:claude-attestation-names-actor`).
+- Two claims about what a vendor does with the hook `command` now carry their evidence labels (amendment a37, `story:vendor-claims-labelled`). On Codex 0.153.4 and 0.160.0, the quoted `command` reaching the hook program is observed. That a shell runs it, and which shell, is unverified. That Claude neither substitutes nor checks `${CLAUDE_PROJECT_DIR}` in a hook `command` is unverified.
+
 ## [0.27.0] — 2026-11-05
 
 ### Changed

@@ -956,6 +956,14 @@ pub fn plan_launch(spec: &RunSpec, context: &LaunchContext) -> Result<LaunchPlan
     guard_shadowing(spec, &args)?;
     let env = build_env(spec, context, &config_home)?;
     let hook = build_hook(&context.scratch_root.join(HOOK_FILE))?;
+    let attestation = attest(
+        spec,
+        context,
+        &config_home,
+        &plugin_installs,
+        &marketplace_installs,
+        &env,
+    );
 
     Ok(LaunchPlan {
         program: ADAPTER_ID.to_string(),
@@ -967,13 +975,7 @@ pub fn plan_launch(spec: &RunSpec, context: &LaunchContext) -> Result<LaunchPlan
         settings: build_settings(&hook),
         mcp_config,
         hook,
-        attestation: attest(
-            spec,
-            context,
-            &config_home,
-            &plugin_installs,
-            &marketplace_installs,
-        ),
+        attestation,
         plugin_installs,
         marketplace_installs,
         scratch_files,
@@ -1842,7 +1844,9 @@ fn bare_allowed_tools(args: &[String]) -> Vec<String> {
 ///
 /// The `command` is the program's path as one single-quoted shell word (amendment a37): the
 /// pinned binary hands the string to a shell, so an unquoted root with a space in it would run
-/// the wrong program.
+/// the wrong program. That reading (shell form, `/bin/sh -c` off Windows) comes from the strings
+/// of 2.1.304 and 2.1.305, not from a driven run; no page in `docs/research/` re-reads it at
+/// 2.1.309 (a37 § 1).
 fn build_hook(hook_path: &Path) -> Result<Value, LaunchRefusal> {
     let command = crate::shell_quote_path(hook_path)
         .map_err(|refusal| LaunchRefusal::PathNotUtf8 { path: refusal.path })?;
@@ -1911,6 +1915,7 @@ fn attest(
     config_home: &Path,
     plugin_installs: &[PluginInstall],
     marketplace_installs: &[PluginInstall],
+    env: &BTreeMap<String, String>,
 ) -> HermeticAttestation {
     let home = config_home.display();
     let mut imposed = vec![
@@ -1923,15 +1928,7 @@ fn attest(
             HermeticRow::H2,
             "--setting-sources with an empty value; the vendor's parser reads \"\" as no sources",
         ),
-        control_imposed(
-            HermeticRow::H3,
-            format!(
-                "the child environment is constructed from an allowlist of {} keys plus PATH, \
-                 TMPDIR, CLAUDE_CONFIG_DIR and {DISABLE_AUTO_MEMORY}=1, which turns auto-memory \
-                 off so no per-run memory path enters the system prompt (a70)",
-                INHERITED_KEYS.len()
-            ),
-        ),
+        control_imposed(HermeticRow::H3, environment_posture(env)),
         control_imposed(HermeticRow::H5, "--strict-mcp-config"),
         control_imposed(
             HermeticRow::H8,
@@ -2185,6 +2182,46 @@ fn api_key_posture(spec: &RunSpec) -> String {
     }
 }
 
+/// The variables every plan sets beside [`INHERITED_KEYS`], which H3 has always named.
+const ALWAYS_SET: [&str; 4] = ["PATH", "TMPDIR", "CLAUDE_CONFIG_DIR", DISABLE_AUTO_MEMORY];
+
+/// H3's `how`: the allowlist, [`ALWAYS_SET`], and then every other variable the plan's own
+/// environment holds, by name and never by value (story:claude-attestation-names-actor).
+///
+/// Read off the constructed environment rather than restated from the spec, so the row cannot
+/// name less than the child gets: the declared `AEP_ACTOR`, the prompt-cache TTL, the endpoint or
+/// loopback variables, the traffic switch and a declared or placeholder `ANTHROPIC_API_KEY` each
+/// appear exactly when [`build_env`] put them there. A plan that sets none of them keeps the
+/// sentence it always had.
+fn environment_posture(env: &BTreeMap<String, String>) -> String {
+    let fixed = format!(
+        "the child environment is constructed from an allowlist of {} keys plus PATH, TMPDIR, \
+         CLAUDE_CONFIG_DIR and {DISABLE_AUTO_MEMORY}=1, which turns auto-memory off so no per-run \
+         memory path enters the system prompt (a70)",
+        INHERITED_KEYS.len()
+    );
+    let declared: Vec<&str> = env
+        .keys()
+        .map(String::as_str)
+        .filter(|key| !INHERITED_KEYS.contains(key) && !ALWAYS_SET.contains(key))
+        .map(|key| {
+            if key == "AEP_ACTOR" {
+                "the declared AEP_ACTOR"
+            } else {
+                key
+            }
+        })
+        .collect();
+    if declared.is_empty() {
+        fixed
+    } else {
+        format!(
+            "{fixed}; the run's declarations add {}",
+            declared.join(", ")
+        )
+    }
+}
+
 /// Inputs metaharness reports and does **not** claim to have removed.
 ///
 /// Both are named by the design rather than discovered here, and both would otherwise be read
@@ -2320,6 +2357,94 @@ mod tests {
             Some("agent:EVAL-1.1"),
             "the declared actor is what reaches the child: {:?}",
             plan.env
+        );
+    }
+
+    /// story:claude-attestation-names-actor. `RunSpec::actor` says the attestation records the
+    /// declared actor as imposed, so the H3 row that lists what the constructed environment holds
+    /// names `AEP_ACTOR` when the run declared one, and only then.
+    #[test]
+    fn the_h3_row_names_the_declared_actor_and_only_a_declared_one() {
+        let h3 = |spec: &RunSpec| {
+            plan_launch(spec, &context())
+                .expect("plans")
+                .attestation
+                .imposed
+                .into_iter()
+                .find(|control| control.row == HermeticRow::H3)
+                .expect("H3 is imposed")
+                .how
+        };
+        let mut spec = spec();
+        let without = h3(&spec);
+        assert!(
+            !without.contains("AEP_ACTOR"),
+            "a run that declared no actor names none: {without}"
+        );
+        spec.actor = Some("agent:x".to_owned());
+        let with = h3(&spec);
+        assert!(
+            with.contains("AEP_ACTOR"),
+            "the declared actor is named as imposed: {with}"
+        );
+    }
+
+    /// story:claude-attestation-names-actor, as a class: every variable the child carries beyond
+    /// [`INHERITED_KEYS`] is named by an imposed control, so the attestation never says the
+    /// environment is smaller than it is. One world per way `build_env` adds a variable.
+    #[test]
+    fn every_variable_the_child_carries_beyond_the_allowlist_is_named_by_an_imposed_control() {
+        let mut actor = spec();
+        actor.actor = Some("agent:x".to_owned());
+        let mut ttl = spec();
+        ttl.prompt_cache_ttl = Some(metaharness_protocol::PromptCacheTtl::FiveMinutes);
+        let mut api_key = spec();
+        api_key.credentials = CredentialSource::ApiKey;
+        let mut api_key_world = context();
+        api_key_world
+            .inherited_env
+            .insert("ANTHROPIC_API_KEY".to_string(), "sk-test".to_string());
+        let mut none = spec();
+        none.credentials = CredentialSource::None;
+        let mut endpoint = none.clone();
+        endpoint.model_endpoint = Some("https://llmgw.example/".to_string());
+        // Managed settings move H4 to unavailable, so the placeholder key is named by no H4
+        // imposed control there.
+        let mut managed_world = context();
+        managed_world.managed_settings =
+            vec![PathBuf::from("/etc/claude-code/managed-settings.json")];
+        let (loopback, loopback_world) = loopback_world();
+        let worlds = [
+            ("plain", spec(), context()),
+            ("actor", actor, context()),
+            ("prompt-cache-ttl", ttl, context()),
+            ("api-key", api_key, api_key_world),
+            ("none", none, context()),
+            ("endpoint", endpoint.clone(), context()),
+            ("endpoint-under-managed-settings", endpoint, managed_world),
+            ("loopback", loopback, loopback_world),
+        ];
+        let mut unnamed = Vec::new();
+        for (name, spec, world) in worlds {
+            let plan = plan_launch(&spec, &world).expect("plans");
+            for key in plan.env.keys() {
+                if INHERITED_KEYS.contains(&key.as_str()) {
+                    continue;
+                }
+                if !plan
+                    .attestation
+                    .imposed
+                    .iter()
+                    .any(|control| control.how.contains(key.as_str()))
+                {
+                    unnamed.push(format!("{name}: {key}"));
+                }
+            }
+        }
+        assert_eq!(
+            unnamed,
+            [] as [String; 0],
+            "the child carries these and no imposed control names them"
         );
     }
 
@@ -3773,9 +3898,10 @@ mod tests {
             .collect()
     }
 
-    /// Amendment a37: the vendor runs the hook `command` through a shell, so a scratch root
-    /// carrying a quote, a parameter, a backtick, a space and a newline must still name exactly
-    /// one word, and that word is the program the launch installs.
+    /// Amendment a37: the vendor runs the hook `command` through a shell (`/bin/sh -c`, read from
+    /// the strings of 2.1.304 and 2.1.305 and not driven), so a scratch root carrying a quote, a
+    /// parameter, a backtick, a space and a newline must still name exactly one word, and that
+    /// word is the program the launch installs.
     #[test]
     fn the_vendor_hook_command_is_one_shell_word_naming_the_program() {
         let root = PathBuf::from("/scratch/it's \"q\" $HOME `true` a b\nc");
@@ -3811,9 +3937,16 @@ mod tests {
         assert!(refusal.to_string().contains("not UTF-8"), "{refusal}");
     }
 
-    /// Amendment a37 § 3: the pinned hook runner reads exactly `${CLAUDE_PLUGIN_ROOT}` and
+    /// Amendment a37 § 6: the pinned hook runner reads exactly `${CLAUDE_PLUGIN_ROOT}` and
     /// `${CLAUDE_PLUGIN_DATA}` in a settings hook's `command`, so a root carrying either is
     /// refused by name, and a root that only resembles one plans with its text intact.
+    ///
+    /// What this does **not** show (invariant 4, story:vendor-claims-labelled): that the vendor
+    /// leaves a near miss such as `${CLAUDE_PROJECT_DIR}` unsubstituted and unchecked. That is
+    /// read from the strings of 2.1.304 and 2.1.305, and no run drove such a `command`. The case
+    /// checks the plan, and that `/bin/sh -c` reads the quoted `command` as the one program path
+    /// with the near miss unexpanded. That is the shell half, if the vendor's shell is `/bin/sh`
+    /// (a37 § 1).
     #[test]
     fn a_root_naming_a_plugin_variable_is_refused_and_its_near_misses_plan() {
         for (name, variable) in [
@@ -3851,6 +3984,16 @@ mod tests {
                 .as_str()
                 .expect("a command string");
             assert!(command.contains(near), "{near}: {command}");
+            assert_eq!(
+                shell_words(command),
+                vec![
+                    hook_program_path(&root)
+                        .to_str()
+                        .expect("a UTF-8 path")
+                        .to_owned()
+                ],
+                "{near}: the shell reads the near miss as written"
+            );
         }
     }
 
