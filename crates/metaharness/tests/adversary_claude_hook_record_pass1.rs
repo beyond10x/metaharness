@@ -275,9 +275,12 @@ fn a_decision_no_hook_program_reported_on_still_precedes_the_calls_result() {
     );
 }
 
-/// The program forwarded metaharness's allow and the call ran. An outcome file in `outcomes/`
-/// that the program did not write must not turn the record into a deny for that call: the record
-/// would then hide a call that ran, the opposite of the defect § 11 fixes.
+/// **An accepted limit, pinned** (design amendment a41 § 11). `outcomes/` has the same trust as
+/// `responses/`: anything running with the run's uid can write both. A file planted in
+/// `outcomes/` naming a call is trusted as the program's report. Here it turns the record into
+/// the program's deny for a call whose real program then forwarded metaharness's allow, so the
+/// call ran. No mechanism closes this short of a new trust boundary, and the coordinator accepted
+/// it as a limit. If this case goes red, the limit moved: update a41 § 11 with it.
 #[test]
 fn an_outcome_the_program_did_not_write_does_not_record_a_deny_for_a_call_it_forwarded() {
     let driven = drive(Vendor::ForgedOutcome);
@@ -288,10 +291,15 @@ fn an_outcome_the_program_did_not_write_does_not_record_a_deny_for_a_call_it_for
         "precondition: the real program forwarded the allow, so the call ran: {:?}",
         driven.hook_stdout
     );
-    assert_eq!(
-        decisions(&driven.run),
-        vec![(Decision::Allow, DecidedBy::Frame)],
-        "the record says what the vendor was not told; events: {:?}",
+    let decided = decisions(&driven.run);
+    assert!(
+        matches!(
+            decided.as_slice(),
+            [(Decision::Deny { reason }, DecidedBy::Adapter)]
+                if reason.contains("could not be reached over its decision channel")
+        ),
+        "accepted limit (a41 § 11): a planted outcome file is trusted as the program's report, \
+         the same trust as responses/; got {decided:?}; events: {:?}",
         kinds(&driven.run)
     );
 }

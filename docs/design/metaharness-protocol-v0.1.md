@@ -3848,15 +3848,15 @@ the spawn runner with this channel. A decision is written to the channel as befo
 |---|---|
 | `forwarded` or `abstained` | the decision as metaharness made it |
 | a refusal, for a decision written | the program's deny in place of metaharness's: `tool.decided` with `decision: deny`, `decided_by: adapter` and the program's own reason, after `warning{code: "HOOK_PROGRAM_REFUSED"}` naming the call and the cause |
-| a refusal, for a call not yet presented | the same deny, emitted when the call is presented; nothing is written to the channel for it |
+| a refusal, for a call not yet presented | the same deny, in place of the decision when metaharness takes it; nothing is written to the channel for it. In `frame` and `observe` that is at presentation. In `ask` the call is still presented with `decision_required: true`, and the deny lands when the embedder or the deadline decides; if the turn or the stream ends first, the call is abandoned as any pending call is, and its deny is "the turn ended" (or "the stream ended"). Reachable only when the hook runs before the `tool_use` record, against row V23's measured order |
 | a refusal, for a pending `ask` call | the same deny, and the call is closed: a later `tool.decide` for it is `TOO_LATE` |
-| nothing, by the time the run ends | the decision as made, followed by `warning{code: "HOOK_OUTCOME_UNSEEN"}` naming the call |
+| nothing, by the time the vendor moves past the call | the decision as made, followed by `warning{code: "HOOK_OUTCOME_UNSEEN"}` naming the call. Released before the line that moves past it: the call's `tool.result`, or else `session.ended`, whose census then counts it (§ 6.2: the census in `session.ended` counts every `tool.decided`). Whatever is still held when the stream ends without a terminal record is released at wind-up |
 
 The spawn runner reads the channel again after each line it reads and before it hands that line
 on. The run loop settles outcomes before it admits the line. So a call's `tool.decided` still
-precedes its `tool.result`. On this route `tool.decided` now follows the hook's run, not the
-`tool_use` record. A scripted or replayed run has no program and records each decision as written,
-as before.
+precedes its `tool.result`, and every decision precedes `session.ended`. On this route
+`tool.decided` now follows the hook's run, not the `tool_use` record. A scripted or replayed run
+has no program and records each decision as written, as before.
 
 *Abstain is outside the fail-closed claim.* This amendment's claim is that a call the seam produced
 no decision for is refused. An abstain is a decision: it lets the vendor's own permission pipeline
@@ -3884,6 +3884,13 @@ channel gains `outcomes/`, and the program's text gains the reports.
 - A program the vendor kills at its 60 s timeout reports nothing, and the call reads
   `HOOK_OUTCOME_UNSEEN`.
 - A channel root that is gone takes `outcomes/` with it, and nothing reaches the record.
+- **Accepted limit: `outcomes/` has the same trust as `responses/`.** Anything running with the
+  run's uid can write both. A file planted in `outcomes/` that names a call is trusted as the
+  program's report: a planted refusal records a deny for a call the real program then forwarded,
+  and that call ran. The program cannot prove authorship to a reader that shares its uid without a
+  new trust boundary, so none is claimed; the coordinator accepted this limit on 2026-11-05.
+  `adversary_claude_hook_record_pass1::an_outcome_the_program_did_not_write_does_not_record_a_deny_for_a_call_it_forwarded`
+  pins today's behaviour.
 
 *Tests.*
 
@@ -3897,6 +3904,10 @@ channel gains `outcomes/`, and the program's text gains the reports.
   - `a_decision_no_hook_program_reported_on_is_recorded_with_a_warning_naming_the_call`;
   - `an_abstained_call_is_recorded_as_decided_by_the_vendor_pipeline`;
   - `a_run_that_abstains_on_every_call_warns_once_at_start`.
+- In `crates/metaharness/tests/adversary_claude_hook_record_pass1.rs`:
+  `the_census_in_session_ended_counts_a_decision_no_hook_program_reported_on`,
+  `a_decision_no_hook_program_reported_on_still_precedes_the_calls_result`, and the accepted limit
+  above.
 
 ### Amendment a42 — `trace-ir-summary/1`, the one projection of a `trace-ir/1` document (2026-10-21)
 

@@ -880,6 +880,21 @@ impl Run {
             }
             let closes_window = matches!(emission.event, Event::TurnEnded { .. });
             let opens = matches!(emission.event, Event::SessionStarted { .. });
+            let mut emission = emission;
+            // A decision the hook program never reported on is recorded before the vendor's
+            // line that moves past it: the call's result, or the terminal record, whose census
+            // must count it (design § 6.2, amendment a41 § 11).
+            if let Event::ToolResult { call_id, .. } = &emission.event {
+                let call_id = call_id.clone();
+                self.release_unreported_call(&call_id);
+            }
+            if matches!(emission.event, Event::SessionEnded { .. }) && self.release_unreported() {
+                // The seam stamped the census it was handed before this line was read; the
+                // decisions released just now belong in it.
+                if let Event::SessionEnded { census, .. } = &mut emission.event {
+                    *census = self.census.clone();
+                }
+            }
             self.outbox
                 .push_back(self.with_context_files(self.with_reach(emission)));
             if opens {
@@ -1472,20 +1487,34 @@ impl Run {
         }
     }
 
-    /// The run is over and the hook program never reported on these decisions: each is recorded
-    /// as metaharness made it, with a warning naming the call (design amendment a41 § 11).
-    fn release_unreported(&mut self) {
-        for (call_id, held) in std::mem::take(&mut self.held) {
-            self.record_decision(&call_id, held, false);
-            self.warn(
-                warning::HOOK_OUTCOME_UNSEEN,
-                format!(
-                    "the hook program never reported what it did with {call_id}, so the decision \
-                     recorded for it is metaharness's and nothing shows it reached the vendor \
-                     (design amendment a41 § 11)"
-                ),
-            );
+    /// The session is ending and the hook program never reported on these decisions: each is
+    /// recorded as metaharness made it, with a warning naming the call (design amendment a41
+    /// § 11). Returns whether anything was released, so the caller can re-stamp a census it
+    /// already took.
+    fn release_unreported(&mut self) -> bool {
+        let calls: Vec<String> = self.held.keys().cloned().collect();
+        for call_id in &calls {
+            self.release_unreported_call(call_id);
         }
+        !calls.is_empty()
+    }
+
+    /// The vendor has moved past this call, by its result or by ending the session, and the hook
+    /// program never reported on its decision: record it as metaharness made it, before the line
+    /// that moved past it, with a warning naming the call (design amendment a41 § 11).
+    fn release_unreported_call(&mut self, call_id: &str) {
+        let Some(held) = self.held.remove(call_id) else {
+            return;
+        };
+        self.record_decision(call_id, held, false);
+        self.warn(
+            warning::HOOK_OUTCOME_UNSEEN,
+            format!(
+                "the hook program never reported what it did with {call_id}, so the decision \
+                 recorded for it is metaharness's and nothing shows it reached the vendor (design \
+                 amendment a41 § 11)"
+            ),
+        );
     }
 
     fn count(&mut self, decision: &Decision, seam: Seam, by: DecidedBy) {
