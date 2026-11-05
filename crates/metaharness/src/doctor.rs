@@ -229,30 +229,38 @@ pub fn flag_surface(kind: Kind) -> Result<Option<Vec<FlagFault>>, Refusal> {
     }
     let child_path = metaharness_b10x::child_path(std::env::var("HOME").ok().as_deref());
     let program = resolve_on("b10x-harness", &child_path)?;
-    let program = program.display().to_string();
-    let output = std::process::Command::new(&program)
-        .args(["run", "--help"])
-        .output()
-        .map_err(|error| Refusal::Io {
-            detail: format!("{program} run --help could not be run: {error}"),
-        })?;
-    if !output.status.success() {
+    flag_surface_at(&program, crate::builder::VERSION_PROBE_DEADLINE).map(Some)
+}
+
+/// [`flag_surface`] past the `PATH` walk: `program`'s `run --help`, read through the launch's own
+/// bounded probe within `deadline` and the drain grace (a65 point 4,
+/// story:doctor-run-help-probe-bounded). A binary that does not exit within `deadline` is killed and
+/// refused by name, and so is one that could not be run or exited unsuccessfully (its status and
+/// the tail of its stderr). A help longer than the probe keeps is refused too: flags judged
+/// against a cut help would read as faults the binary does not have.
+pub(crate) fn flag_surface_at(
+    program: &std::path::Path,
+    deadline: std::time::Duration,
+) -> Result<Vec<FlagFault>, Refusal> {
+    use crate::builder::{ProbeRead, VERSION_STDOUT_MAX, probe_command};
+    let mut command = std::process::Command::new(program);
+    command.args(["run", "--help"]);
+    let read = probe_command(&mut command, deadline);
+    if let Some(detail) = read.refusal(&command) {
+        return Err(Refusal::Io { detail });
+    }
+    if let ProbeRead::Exited { capped: true, .. } = read {
         return Err(Refusal::Io {
             detail: format!(
-                "{program} run --help exited {}: {}",
-                output
-                    .status
-                    .code()
-                    .map_or_else(|| "on a signal".to_string(), |code| code.to_string()),
-                String::from_utf8_lossy(&output.stderr).trim()
+                "{} run --help printed more than the {} bytes the probe keeps, so the help was \
+                 not read whole and no flag is judged against it",
+                program.display(),
+                VERSION_STDOUT_MAX
             ),
         });
     }
-    let declared = declared_flags(&String::from_utf8_lossy(&output.stdout));
-    Ok(Some(faults_against(
-        &declared,
-        metaharness_b10x::emitted_flags(),
-    )))
+    let declared = declared_flags(&read.stdout());
+    Ok(faults_against(&declared, metaharness_b10x::emitted_flags()))
 }
 
 /// The comparison itself, apart from the process that supplies one side of it.
@@ -716,6 +724,96 @@ Options:
             panic!("{refusal:?}");
         };
         assert!(detail.contains("--version could not be run: "), "{detail}");
+    }
+
+    /// `doctor b10x`'s `run --help` probe over a binary that answers `--version` and never exits on
+    /// `run --help` refuses by name at its deadline, naming the binary and the probe, where an
+    /// unbounded read blocked for good (story:doctor-run-help-probe-bounded, a65 point 4).
+    #[test]
+    fn doctor_refuses_a_run_help_that_never_exits_by_name_at_its_deadline() {
+        let dir = tempfile::tempdir().expect("a directory");
+        let (program, ran) = stand_in(
+            dir.path(),
+            "if [ \"$1\" = --version ]; then echo 'b10x-harness 9.9.9'; exit 0; fi\nexec sleep 30",
+        );
+        let named = program.display().to_string();
+        let deadline = std::time::Duration::from_millis(300);
+        let (answer, elapsed) =
+            answered_within(std::time::Duration::from_secs(10), ran, move || {
+                flag_surface_at(&program, deadline)
+            })
+            .expect(
+                "story:doctor-run-help-probe-bounded: doctor's run --help probe did not return",
+            );
+        let Err(Refusal::Io { detail }) = answer else {
+            panic!("a help that never came is refused, not judged: {answer:?}");
+        };
+        assert!(
+            detail.contains(&format!(
+                "{named} run --help did not exit within 300 ms and was killed"
+            )),
+            "{detail} (after {elapsed:?})"
+        );
+        assert!(
+            elapsed >= deadline,
+            "answered after {elapsed:?}, before the deadline: the stand-in did not hang"
+        );
+    }
+
+    /// A `run --help` longer than the probe keeps is refused by name rather than judged from a cut
+    /// help, whose missing flags would read as faults (story:doctor-run-help-probe-bounded).
+    #[test]
+    fn doctor_refuses_a_run_help_longer_than_the_probe_keeps() {
+        let dir = tempfile::tempdir().expect("a directory");
+        let (program, ran) = stand_in(
+            dir.path(),
+            "head -c 70000 /dev/zero | tr '\\000' 'x'\necho\nexit 0",
+        );
+        let deadline = std::time::Duration::from_secs(20);
+        let (answer, elapsed) =
+            answered_within(std::time::Duration::from_secs(15), ran, move || {
+                flag_surface_at(&program, deadline)
+            })
+            .expect("doctor's run --help probe did not return");
+        let Err(Refusal::Io { detail }) = answer else {
+            panic!("a cut help is refused, not judged: {answer:?} (after {elapsed:?})");
+        };
+        assert!(
+            detail.contains("run --help printed more than the 65536 bytes"),
+            "{detail}"
+        );
+    }
+
+    /// The bounded `run --help` probe hands the binary exactly `run --help` and reads the help it
+    /// prints: a stand-in that prints a help only for that argv, and fails on any other, is judged
+    /// against what it declared (story:doctor-run-help-probe-bounded).
+    #[test]
+    fn doctor_reads_the_help_a_run_help_prints_through_the_bounded_probe() {
+        let dir = tempfile::tempdir().expect("a directory");
+        let (program, ran) = stand_in(
+            dir.path(),
+            "if [ \"$1 $2\" = 'run --help' ]; then echo 'Usage: b10x-harness run [OPTIONS]'; \
+             echo '      --not-an-adapter-flag'; exit 0; fi\necho \"argv: $*\" >&2\nexit 2",
+        );
+        let deadline = std::time::Duration::from_secs(20);
+        let (answer, elapsed) =
+            answered_within(std::time::Duration::from_secs(15), ran, move || {
+                flag_surface_at(&program, deadline)
+            })
+            .expect("doctor's run --help probe did not return");
+        let faults = answer.unwrap_or_else(|refusal| panic!("{refusal:?} (after {elapsed:?})"));
+        let emitted = metaharness_b10x::emitted_flags();
+        assert_eq!(
+            faults.len(),
+            emitted.len(),
+            "a help declaring none of the adapter's flags faults every one: {faults:?}"
+        );
+        assert!(
+            faults
+                .iter()
+                .all(|fault| matches!(fault, FlagFault::Unknown { .. })),
+            "{faults:?}"
+        );
     }
 
     /// The codex adapter drives a real binary (CX-M2), so `doctor codex` asks the machine rather than

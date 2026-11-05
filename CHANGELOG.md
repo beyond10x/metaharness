@@ -5,6 +5,10 @@ was amended and the amendment is named here.
 
 ## [Unreleased]
 
+### Fixed
+
+- `metaharness doctor b10x`'s `run --help` probe, the `--version` of `metaharness aep drive --aep-binary`, the AEP eval's child `aep` and the harness `aep-eval` checks are read through the bounded probe of amendment a65 (a minute, then at most 5 seconds of draining after the binary exits), now public as `metaharness::probe_command` for any command a caller builds (a65 point 4). A binary that never exits is refused by name, naming the binary, the argv and the deadline, where each read blocked for good. A `run --help` longer than 64 KiB is refused rather than judged from a cut help. `metaharness-aep-eval` now depends on `metaharness` (`story:aep-version-reads-bounded`, `story:doctor-run-help-probe-bounded`).
+
 ## [0.27.0] — 2026-11-05
 
 ### Changed

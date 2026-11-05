@@ -2847,22 +2847,7 @@ impl ExecutionHost for Host {
         )?;
         let binary = b10x.aep_binary.as_ref().context("pass --aep-binary pointing to the planning executable built from this runner's pinned AEP source")?;
         let binary = fs::canonicalize(binary).context("resolving the selected AEP executable")?;
-        let output = Process::new(&binary)
-            .arg("--version")
-            .output()
-            .context("checking the selected AEP executable")?;
-        let banner = String::from_utf8_lossy(&output.stdout);
-        if !output.status.success()
-            || !banner
-                .split_whitespace()
-                .any(|word| word == aep_cli::VERSION)
-        {
-            bail!(
-                "selected AEP executable must implement version {}; got {}",
-                aep_cli::VERSION,
-                banner.trim()
-            );
-        }
+        require_selected_version(&binary, metaharness::VERSION_PROBE_DEADLINE)?;
         b10x.aep_binary = Some(binary.clone());
         let working_directory = fs::canonicalize(&inputs.project)
             .context("resolving the explicitly selected project directory")?;
@@ -2893,6 +2878,36 @@ impl ExecutionHost for Host {
             }),
         })
     }
+}
+
+/// The selected `--aep-binary` reports the version this runner links, its `--version` read through
+/// metaharness's bounded probe within `deadline` and the drain grace (a65 point 4,
+/// story:aep-version-reads-bounded). One that could not be run, or did not exit within `deadline`
+/// and was killed, is refused by a message naming the binary, its `--version` and, when killed,
+/// the deadline. One that exited unsuccessfully, or reported another version, is refused as before.
+fn require_selected_version(binary: &Path, deadline: std::time::Duration) -> Result<()> {
+    let mut command = Process::new(binary);
+    command.arg("--version");
+    let read = metaharness::probe_command(&mut command, deadline);
+    if let metaharness::ProbeRead::NotRun(_) | metaharness::ProbeRead::TimedOut(_) = read {
+        bail!(
+            "checking the selected AEP executable: {}",
+            read.refusal(&command).unwrap_or_default()
+        );
+    }
+    let banner = read.stdout();
+    if !read.succeeded()
+        || !banner
+            .split_whitespace()
+            .any(|word| word == aep_cli::VERSION)
+    {
+        bail!(
+            "selected AEP executable must implement version {}; got {}",
+            aep_cli::VERSION,
+            banner.trim()
+        );
+    }
+    Ok(())
 }
 
 include!("drive_tests.rs");

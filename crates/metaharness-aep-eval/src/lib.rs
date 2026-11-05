@@ -1375,8 +1375,8 @@ fn check_native_binary(resolved: &Resolved) -> Result<(), String> {
             .arg("HEAD"),
         None,
     )?;
-    let version = output(Command::new(&resolved.b10x_binary).arg("--version"), None)?;
-    validate_native_pin(checkout.stdout.trim(), version.stdout.trim()).map_err(|reason| {
+    let banner = native_banner(&resolved.b10x_binary, metaharness::VERSION_PROBE_DEADLINE)?;
+    validate_native_pin(checkout.stdout.trim(), banner.trim()).map_err(|reason| {
         format!(
             "{reason}; refresh the checkout to harness {} at {} and install it with `cargo install --path {}/crates/harness-cli --root $HOME/.local --force`",
             metaharness_b10x::PINNED_VERSIONS[0],
@@ -1390,6 +1390,22 @@ fn check_native_binary(resolved: &Resolved) -> Result<(), String> {
         metaharness_b10x::HARNESS_REVISION
     );
     Ok(())
+}
+
+/// What the installed harness prints for `--version`, read through metaharness's bounded probe
+/// within `deadline` and the drain grace (a65 point 4, story:aep-version-reads-bounded). One that
+/// could not be run, or did not exit within `deadline` and was killed, is refused by a message
+/// naming the binary, its `--version` and, when killed, the deadline. What one that exited printed
+/// is returned whatever its status, as the unbounded read returned it; the pin check reads it.
+fn native_banner(binary: &Path, deadline: Duration) -> Result<String, String> {
+    let mut command = Command::new(binary);
+    command.arg("--version");
+    let read = metaharness::probe_command(&mut command, deadline);
+    if let metaharness::ProbeRead::Exited { .. } = read {
+        Ok(read.stdout())
+    } else {
+        Err(read.refusal(&command).unwrap_or_default())
+    }
 }
 
 fn validate_native_pin(checkout_revision: &str, binary_banner: &str) -> Result<(), String> {
@@ -2242,6 +2258,81 @@ mod tests {
     #[test]
     fn protected_scope_probe_exercises_the_refusal_without_a_model() {
         preflight_protected_scope().unwrap();
+    }
+
+    /// The installed harness's `--version` is read under metaharness's bounded probe: one that
+    /// never exits is refused at the deadline by a message naming the binary, its `--version` and
+    /// the deadline, where an unbounded read blocked the eval for good
+    /// (story:aep-version-reads-bounded, a65 point 4).
+    #[cfg(unix)]
+    #[test]
+    fn a_native_binary_whose_version_never_exits_is_refused_by_name_at_its_deadline() {
+        use std::os::unix::fs::PermissionsExt as _;
+        let directory = tempfile::tempdir().expect("a directory");
+        let ran = directory.path().join("ran");
+        let binary = directory.path().join("b10x-harness");
+        fs::write(
+            &binary,
+            format!(
+                "#!/bin/sh\necho ran >> '{}'\nexec sleep 30\n",
+                ran.display()
+            ),
+        )
+        .expect("the stand-in");
+        fs::set_permissions(&binary, fs::Permissions::from_mode(0o700)).expect("executable");
+        let named = format!(
+            "{} --version did not exit within 300 ms and was killed",
+            binary.display()
+        );
+        let deadline = Duration::from_millis(300);
+        let (send, receive) = std::sync::mpsc::channel();
+        let started = std::time::Instant::now();
+        thread::spawn(move || {
+            // A freshly written script can fail to start (`ETXTBSY`) while another test thread
+            // forks; such an attempt never reached the stand-in, so it is retried.
+            for _ in 0..20 {
+                let answer = native_banner(&binary, deadline);
+                if ran.exists() {
+                    let _ = send.send(answer);
+                    return;
+                }
+                thread::sleep(Duration::from_millis(25));
+            }
+        });
+        let answer = receive.recv_timeout(Duration::from_secs(10)).expect(
+            "story:aep-version-reads-bounded: the native binary's --version read did not return",
+        );
+        let elapsed = started.elapsed();
+        let refusal = answer.expect_err("a version that never came is refused");
+        assert!(refusal.contains(&named), "{refusal} (after {elapsed:?})");
+        assert!(
+            elapsed >= deadline,
+            "answered after {elapsed:?}, before the deadline: the stand-in did not hang"
+        );
+    }
+
+    /// The bounded read hands back the banner a native binary prints, which the pin check reads
+    /// whole, as the unbounded read did.
+    #[cfg(unix)]
+    #[test]
+    fn a_native_binary_banner_is_read_through_the_bounded_probe() {
+        use std::os::unix::fs::PermissionsExt as _;
+        let directory = tempfile::tempdir().expect("a directory");
+        let binary = directory.path().join("b10x-harness");
+        let expected = format!("b10x-harness {}", metaharness_b10x::PINNED_VERSIONS[0]);
+        fs::write(&binary, format!("#!/bin/sh\necho '{expected}'\n")).expect("the stand-in");
+        fs::set_permissions(&binary, fs::Permissions::from_mode(0o700)).expect("executable");
+        let mut banner = Err(String::new());
+        for _ in 0..20 {
+            banner = native_banner(&binary, Duration::from_secs(20));
+            if banner.is_ok() {
+                break;
+            }
+            thread::sleep(Duration::from_millis(25));
+        }
+        let banner = banner.expect("the banner is read");
+        validate_native_pin(metaharness_b10x::HARNESS_REVISION, banner.trim())
+            .expect("the pinned banner is admitted");
     }
 
     #[test]

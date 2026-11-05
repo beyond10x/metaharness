@@ -5561,6 +5561,22 @@ runtime, and its start time on a loaded machine is not bounded by the binary.
 Not changed: a non-zero exit is unreadable, a version printed only on stderr is unread, and the
 refusal texts are the same.
 
+4. *Extended 2026-11-05 (`story:aep-version-reads-bounded`, `story:doctor-run-help-probe-bounded`):*
+   the probe takes any command a caller builds, not only `--version`, and is public as
+   `metaharness::probe_command` beside `VERSION_PROBE_DEADLINE` and `VERSION_DRAIN_GRACE`; the
+   caller keeps its own program, argv and environment. Every child this workspace runs only
+   to read an answer, with no model, goes through it under the same deadline, grace and caps:
+   besides point 1's callers, `doctor`'s `--version` and the b10x launch's `--version`
+   (`story:version-probe-everywhere-bounded`), `doctor b10x`'s `run --help`, the `--version` of
+   `metaharness aep drive`'s `--aep-binary`, of the AEP eval's child `aep`, and of the installed
+   harness `aep-eval` checks. A child still running at the deadline is killed, reaped and refused
+   by a message naming the binary, the argv and the deadline; one that could not be run is
+   refused naming the binary and the argv. The environment is the caller's: the launches,
+   `qualify` and `doctor`'s `--version` give the child only its constructed `PATH`, and the four
+   reads that inherited this process's environment still do. What each caller reads from an
+   exited child is unchanged, with one addition: a `run --help` longer than the 64 KiB stdout cap
+   is refused by name, because flags judged against a cut help would read as faults.
+
 ### Amendment a66 — Codex carries a caller's catalogue over `codex app-server` (2026-10-29)
 
 `story:codex-catalogue-on-app-server`. Replaces a40 § 2's Codex row: a Codex run with `--catalogue`

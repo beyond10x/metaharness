@@ -325,6 +325,48 @@ fn plan_of(arm: Arm, harness: Harness) -> Plan {
         assert!(matches!(refusals.as_slice(), [RunRefusal::ChildAepMismatch { found, own, .. }]
             if found == "0.54.0" && own == aep_cli::VERSION), "{refusals:?}");
     }
+
+    /// The child `aep`'s `--version` is read under metaharness's bounded probe: one that never
+    /// exits is refused at the deadline as a mismatch whose finding names the binary, its
+    /// `--version` and the deadline, where an unbounded read blocked the eval for good
+    /// (story:aep-version-reads-bounded, a65 point 4).
+    #[cfg(unix)]
+    #[test]
+    fn a_child_aep_whose_version_never_exits_is_refused_by_name_at_its_deadline() {
+        use std::os::unix::fs::PermissionsExt as _;
+        let directory = tempfile::tempdir().expect("isolated executable directory");
+        let ran = directory.path().join("ran");
+        let child = directory.path().join("aep");
+        std::fs::write(&child, format!("#!/bin/sh\necho ran >> '{}'\nexec sleep 30\n", ran.display()))
+            .expect("the stand-in");
+        std::fs::set_permissions(&child, std::fs::Permissions::from_mode(0o700)).expect("executable");
+        let child_path = directory.path().to_str().unwrap().to_owned();
+        let deadline = std::time::Duration::from_millis(300);
+        let (send, receive) = std::sync::mpsc::channel();
+        let started = std::time::Instant::now();
+        let marker = ran.clone();
+        std::thread::spawn(move || {
+            // A freshly written script can fail to start (`ETXTBSY`) while another test thread
+            // forks; such an attempt never reached the stand-in, so it is retried.
+            for _ in 0..20 {
+                let case = plan_of(Arm::Raw, Harness::Claude).case;
+                let refusals = child_path_refusals_within(&[case], &child_path, deadline);
+                if marker.exists() {
+                    let _ = send.send(refusals);
+                    return;
+                }
+                std::thread::sleep(std::time::Duration::from_millis(25));
+            }
+        });
+        let refusals = receive
+            .recv_timeout(std::time::Duration::from_secs(10))
+            .expect("story:aep-version-reads-bounded: the child aep's --version read did not return");
+        let elapsed = started.elapsed();
+        let named = format!("{} --version did not exit within 300 ms and was killed", child.display());
+        assert!(matches!(refusals.as_slice(), [RunRefusal::ChildAepMismatch { found, .. }]
+            if found.contains(&named)), "{refusals:?} (after {elapsed:?})");
+        assert!(elapsed >= deadline, "answered after {elapsed:?}, before the deadline: the stand-in did not hang");
+    }
 #[test]
     fn a_pinned_plugin_reaches_the_argv_with_the_bytes_the_operator_wrote() {
         // *Verbatim* is a claim about bytes, so it is asserted on bytes. The parse splits on the
