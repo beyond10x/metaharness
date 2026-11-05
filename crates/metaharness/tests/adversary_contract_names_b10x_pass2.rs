@@ -17,9 +17,27 @@ use metaharness::{Input, ManualClock, Metaharness, ScriptedLog, ScriptedRunner};
 
 const B10X_RECORDED_LOOP: &str = include_str!("../../metaharness-b10x/fixtures/golden/loop.jsonl");
 
+/// The recorded `started` line's publication, and the one `--surface verbs` would have written in
+/// its place (harness `3eca074:crates/harness-cli/src/lib.rs`, `Surface::Verbs`: `tool_search`,
+/// `tool_describe`, `tool_invoke` over the catalogue).
+const FLAT_PUBLICATION: &str = r#""published_tools":["file_read","dir_list","search","find"]"#;
+const VERBS_PUBLICATION: &str =
+    r#""published_tools":["tool_search","tool_describe","tool_invoke"]"#;
+
 /// The recorded loop, with its one `tool-requested` line replaced by `replacement` when given.
 fn recorded_loop(replacement: Option<&str>) -> Vec<String> {
+    recorded_loop_published(FLAT_PUBLICATION, replacement)
+}
+
+/// The recorded loop with its `started` line publishing `publication` instead of the recorded
+/// flat surface, and its one `tool-requested` line replaced by `replacement` when given.
+fn recorded_loop_published(publication: &str, replacement: Option<&str>) -> Vec<String> {
+    assert!(
+        B10X_RECORDED_LOOP.contains(FLAT_PUBLICATION),
+        "the recorded loop publishes the flat surface"
+    );
     B10X_RECORDED_LOOP
+        .replacen(FLAT_PUBLICATION, publication, 1)
         .lines()
         .map(|line| match replacement {
             Some(replacement) if line.contains(r#""kind":"tool-requested""#) => {
@@ -32,7 +50,12 @@ fn recorded_loop(replacement: Option<&str>) -> Vec<String> {
 
 /// The `operations` and `subjects` metaharness put on the run's one `tool.requested`.
 fn what_metaharness_recorded(replacement: Option<&str>) -> (Vec<String>, Vec<String>) {
-    let mut runner = ScriptedRunner::of_lines(recorded_loop(replacement), ScriptedLog::new());
+    what_metaharness_recorded_of(recorded_loop(replacement))
+}
+
+/// The same, over the given loop record.
+fn what_metaharness_recorded_of(record: Vec<String>) -> (Vec<String>, Vec<String>) {
+    let mut runner = ScriptedRunner::of_lines(record, ScriptedLog::new());
     let mut seams = metaharness_b10x::B10xSeams::new(
         Some(metaharness_b10x::PINNED_VERSIONS[0].to_owned()),
         None,
@@ -77,12 +100,9 @@ fn a_contract_name_on_a_b10x_record_read_through_the_b10x_seam_names_no_effect()
 /// What the recorded call touched, as the b10x loop itself recorded it, reaches metaharness's
 /// record.
 ///
-/// `Run::subjects` sends every b10x call to `subjects_of_verb` because the run "publishes the
-/// verbs" (`run.rs:880-885`, `publishes_verbs` at `:907-909`), and `subjects_of_verb` answers empty
-/// for any tool that is not `tool_invoke` (`resolve.rs:161-163`). The loop metaharness launches
-/// publishes its entries flat, so its calls are `file_read`, never `tool_invoke`.
+/// The loop metaharness launches publishes its entries flat, so its calls are `file_read`, never
+/// `tool_invoke`, and the run reads them on the surface the loop published (design amendment a75).
 #[test]
-#[ignore = "pre-existing; the acceptance case of story:b10x-record-keeps-the-loops-subjects"]
 fn the_file_a_flat_b10x_call_read_is_on_metaharness_record() {
     let (operations, subjects) = what_metaharness_recorded(None);
     assert_eq!(
@@ -95,5 +115,61 @@ fn the_file_a_flat_b10x_call_read_is_on_metaharness_record() {
         vec!["file:README.md".to_owned()],
         "the loop recorded `subjects: [\"file:README.md\"]` for this call; metaharness's \
          `tool.requested` for it names none"
+    );
+}
+
+/// A `tool_invoke` on a flat b10x run is a tool the loop never published: the loop refused it, so
+/// the record names no effect, even when the entry inside it is a harness name the loop has.
+///
+/// The loop records no `operation` and no `subjects` for it, because its flat surface looks the
+/// call up by its own name and finds none (harness `3eca074:crates/harness-catalogue/src/flat.rs`,
+/// `Flat::subjects_of`: "An unknown name touches nothing").
+#[test]
+fn a_harness_name_behind_tool_invoke_on_a_flat_b10x_record_names_no_effect() {
+    let refused = r#"{"kind":"tool-requested","call_id":"call_b10x_001","name":"tool_invoke","arguments":{"name":"file_read","arguments":{"path":"README.md"}}}"#;
+    assert_eq!(
+        what_metaharness_recorded(Some(refused)),
+        (Vec::new(), Vec::new()),
+        "the loop published `file_read` flat and refused `tool_invoke`"
+    );
+}
+
+/// A b10x run whose loop published the three verbs reads a `tool_invoke` as the entry it names.
+#[test]
+fn a_b10x_run_that_published_the_verbs_reads_tool_invoke_as_its_entry() {
+    let invoked = r#"{"kind":"tool-requested","call_id":"call_b10x_001","name":"tool_invoke","arguments":{"name":"file_read","arguments":{"path":"README.md"}},"operation":"file.read","subjects":["file:README.md"]}"#;
+    assert_eq!(
+        what_metaharness_recorded_of(recorded_loop_published(VERBS_PUBLICATION, Some(invoked))),
+        (
+            vec!["file.read".to_owned()],
+            vec!["file:README.md".to_owned()]
+        )
+    );
+}
+
+/// On a run that published the verbs, a flat entry name is a tool the loop did not publish, and it
+/// is not read through the rendering table as if it had been.
+#[test]
+fn a_flat_entry_name_on_a_b10x_run_that_published_the_verbs_names_no_effect() {
+    let unpublished = r#"{"kind":"tool-requested","call_id":"call_b10x_001","name":"file_read","arguments":{"path":"README.md"}}"#;
+    assert_eq!(
+        what_metaharness_recorded_of(recorded_loop_published(
+            VERBS_PUBLICATION,
+            Some(unpublished)
+        )),
+        (Vec::new(), Vec::new())
+    );
+}
+
+/// A flat call's subjects come from the loop's own record where it names them, and not only from
+/// the arguments. The record here is constructed so the two readings differ, which only shows
+/// whose answer the run kept; the loop computes its subjects by the same catalogue rule.
+#[test]
+fn a_flat_b10x_call_keeps_the_subjects_the_loop_recorded() {
+    let recorded = r#"{"kind":"tool-requested","call_id":"call_b10x_001","name":"file_read","arguments":{"path":"README.md"},"operation":"file.read","subjects":["file:docs/README.md"]}"#;
+    assert_eq!(
+        what_metaharness_recorded(Some(recorded)).1,
+        vec!["file:docs/README.md".to_owned()],
+        "the record's subjects win over a reading of the arguments"
     );
 }
