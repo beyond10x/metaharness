@@ -5,6 +5,8 @@ was amended and the amendment is named here.
 
 ## [Unreleased]
 
+## [0.30.0] — 2026-11-05
+
 ### Changed
 
 - `metaharness-aep-eval` depends on `b10x-substrate-host` 0.20.0 by git revision `a88cc6423164ec586434b786b3b1103cc2a17c33` (tag `0.20.0`) with `default-features = false`, so neither Substrate's `git` feature (`curl`, `git2`, `gix`) nor its `kubernetes` feature (the `pod` adapter's client) is built. The eval uses only the `systemd` and `local` confinement adapters, and none of the items it takes is feature-gated. The workspace lock drops 128 package entries, among them git2, gix, curl, openssl-sys, aws-lc and the kubernetes client, and adds none. `tests/lock_confinement_only.rs` fails when any of `git2`, `gix`, `curl-sys` or `b10x-substrate-kubernetes-client` returns (`story:substrate-host-0-20-confinement-only`).
