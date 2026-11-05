@@ -2,7 +2,7 @@
 format: aep.planning-md/3
 id: story:ess-pin-0-86-0
 kind: story
-status: active
+status: implemented
 title: Specify against ESS 0.86.0
 scope:
 - confidence: cited
@@ -27,10 +27,11 @@ scope:
   path: spec/monetary/ess-inputs.yaml
 - confidence: cited
   path: website/docs/quickstart.md
-revision: 14
+revision: 15
 transitions:
 - {from: "draft", to: "proposed", at: "2026-11-05T00:31:35Z", actor: "human:timo", revision: 2}
 - {from: "proposed", to: "active", at: "2026-11-05T00:31:35Z", actor: "human:timo", revision: 3}
+- {from: "active", to: "implemented", at: "2026-11-05T01:04:33Z", actor: "human:timo", revision: 15, decided_on: {"recorded":{"test_result":1,"verification":1}}}
 ---
 ## Context
 

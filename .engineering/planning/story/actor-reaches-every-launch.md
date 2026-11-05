@@ -2,7 +2,7 @@
 format: aep.planning-md/3
 id: story:actor-reaches-every-launch
 kind: story
-status: active
+status: implemented
 title: Every launch carries --actor, or check_spec refuses it on the kinds that do not
 summary: Codex and b10x accept --actor and drop it; aep drive passes it to Codex
 relations:
@@ -14,10 +14,11 @@ scope:
   path: crates/metaharness/src/builder.rs
 - confidence: cited
   path: crates/metaharness/tests/adversary_check_spec_pass1.rs
-revision: 6
+revision: 7
 transitions:
 - {from: "draft", to: "proposed", at: "2026-11-04T07:33:27Z", actor: "human:timo", revision: 2}
 - {from: "proposed", to: "active", at: "2026-11-04T07:33:27Z", actor: "human:timo", revision: 3}
+- {from: "active", to: "implemented", at: "2026-11-05T01:04:33Z", actor: "human:timo", revision: 7, decided_on: {"recorded":{"test_result":1,"review_outcome":1,"verification":1}}}
 ---
 ## Outcome
 

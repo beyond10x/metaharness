@@ -2,7 +2,7 @@
 format: aep.planning-md/3
 id: story:version-probe-everywhere-bounded
 kind: story
-status: active
+status: implemented
 title: doctor and the b10x launch read --version under the probe deadline
 summary: 'Pre-existing finding of D170 adversary pass 1: two --version reads have no deadline'
 scope:
@@ -10,10 +10,11 @@ scope:
   path: crates/metaharness/src/builder.rs
 - confidence: cited
   path: crates/metaharness/src/doctor.rs
-revision: 5
+revision: 6
 transitions:
 - {from: "draft", to: "proposed", at: "2026-11-04T07:33:26Z", actor: "human:timo", revision: 2}
 - {from: "proposed", to: "active", at: "2026-11-04T07:33:26Z", actor: "human:timo", revision: 3}
+- {from: "active", to: "implemented", at: "2026-11-05T01:04:33Z", actor: "human:timo", revision: 6, decided_on: {"recorded":{"test_result":1,"review_outcome":1,"verification":1}}}
 ---
 ## Outcome
 

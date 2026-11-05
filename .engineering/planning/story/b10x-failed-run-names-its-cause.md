@@ -2,7 +2,7 @@
 format: aep.planning-md/3
 id: story:b10x-failed-run-names-its-cause
 kind: story
-status: active
+status: implemented
 title: A failed b10x run names its cause in session.ended
 summary: The b10x adapter carries finished.stop.cause, message and after_compaction into session.ended
 relations:
@@ -10,10 +10,11 @@ relations:
 scope:
 - confidence: cited
   path: crates/metaharness-b10x/src/seam.rs
-revision: 6
+revision: 7
 transitions:
 - {from: "draft", to: "proposed", at: "2026-11-04T07:33:26Z", actor: "human:timo", revision: 2}
 - {from: "proposed", to: "active", at: "2026-11-04T07:33:26Z", actor: "human:timo", revision: 3}
+- {from: "active", to: "implemented", at: "2026-11-05T01:04:32Z", actor: "human:timo", revision: 7, decided_on: {"recorded":{"test_result":1,"review_outcome":1,"verification":1}}}
 ---
 ## Context
 

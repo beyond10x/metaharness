@@ -1,0 +1,13 @@
+{
+  "at": "2026-11-05T01:04:33Z",
+  "actor": "human:timo",
+  "artifact": "story:ess-pin-0-86-0",
+  "kind": "story",
+  "revision": 14,
+  "change": {
+    "change": "evidence",
+    "kind": "test_result",
+    "source": "local staged full gate G1-G5 on integration/wave-2026-11-04 at 078c198 with ess 0.86.0: G1 validate/fmt/docs ok; G2 clippy -D warnings ok; G3 -p metaharness 547 passed 0 failed; G4 -p metaharness-cli 223 passed 0 failed; G5 other 11 crates 842 passed 0 failed",
+    "reference": "gate/scratch/G1.log..G5.log"
+  }
+}

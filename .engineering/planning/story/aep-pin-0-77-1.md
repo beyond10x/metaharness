@@ -2,7 +2,7 @@
 format: aep.planning-md/3
 id: story:aep-pin-0-77-1
 kind: story
-status: active
+status: implemented
 title: Link aep 0.79.0 so a run with --approver gets past an operator step
 summary: Retargeted from 0.77.1 to aep 0.79.0; resume takes --evidence
 scope:
@@ -12,10 +12,11 @@ scope:
   path: crates/metaharness-aep/Cargo.toml
 - confidence: inferred
   path: crates/metaharness-aep/src/drive.rs
-revision: 9
+revision: 10
 transitions:
 - {from: "draft", to: "proposed", at: "2026-11-04T07:33:26Z", actor: "human:timo", revision: 5, decided_on: {"recorded":{"approval":1}}}
 - {from: "proposed", to: "active", at: "2026-11-04T07:33:26Z", actor: "human:timo", revision: 6, decided_on: {"recorded":{"approval":1}}}
+- {from: "active", to: "implemented", at: "2026-11-05T01:04:32Z", actor: "human:timo", revision: 10, decided_on: {"recorded":{"test_result":1,"approval":1,"verification":1}}}
 ---
 # Story: aep-pin-0-77-1
 
