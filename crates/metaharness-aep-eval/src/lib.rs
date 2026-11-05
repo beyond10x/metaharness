@@ -3120,13 +3120,61 @@ mod tests {
         }
     }
 
+    /// The program the eval no longer runs, assembled so no line of this file names it.
+    fn scope_program() -> String {
+        ["systemd", "run"].join("-")
+    }
+
+    /// Every code line of `text` that names `program` in any form: as a bare name, by an absolute
+    /// path or inside a shell string. A comment line (`//`, `///`, `//!`) and an attribute line
+    /// (`#[`, `#![`) are prose about the program, not an invocation, and are not read.
+    fn code_lines_naming(text: &str, program: &str) -> Vec<String> {
+        text.lines()
+            .map(str::trim_start)
+            .filter(|line| {
+                !line.starts_with("//") && !line.starts_with("#[") && !line.starts_with("#![")
+            })
+            .filter(|line| line.contains(program))
+            .map(ToOwned::to_owned)
+            .collect()
+    }
+
+    /// The scan below is a gate only if it sees each form an invocation can take. Each source is
+    /// synthetic: the removed call by its bare name, by absolute path, and through a shell. A
+    /// comment and an attribute naming the program are not invocations and stay unflagged.
+    #[test]
+    fn the_source_scan_flags_every_form_of_the_invocation() {
+        let program = scope_program();
+        for source in [
+            format!("    let mut command = Command::new(\"{program}\");\n"),
+            format!("    let mut command = Command::new(\"/usr/bin/{program}\");\n"),
+            format!(
+                "    Command::new(\"/bin/sh\").arg(\"-c\").arg(\"{program} --user --scope -- aep-eval preflight\");\n"
+            ),
+        ] {
+            assert_eq!(
+                code_lines_naming(&source, &program).len(),
+                1,
+                "the scan misses:\n{source}"
+            );
+        }
+        for prose in [
+            format!("    /// Once re-executed under {program}.\n"),
+            format!("    #[doc = \"about {program}\"]\n"),
+        ] {
+            assert!(
+                code_lines_naming(&prose, &program).is_empty(),
+                "the scan flags prose:\n{prose}"
+            );
+        }
+    }
+
     /// The delegated scope substrate's probe needs comes from Substrate's `systemd` confinement
-    /// adapter (atlas ADR 0109 decision 6), so no source of this crate names the `systemd-run`
-    /// program as a string of its own. The needle is assembled so this test does not hold it.
+    /// adapter (atlas ADR 0109 decision 6), so no code line of this crate's sources names the
+    /// program the eval used to re-execute itself under, in any form.
     #[test]
     fn no_systemd_run_invocation_is_left_in_the_eval_source() {
-        let program = ["systemd", "run"].join("-");
-        let literal = format!("\"{program}\"");
+        let program = scope_program();
         let mut sources = Vec::new();
         rust_sources(
             &Path::new(env!("CARGO_MANIFEST_DIR")).join("src"),
@@ -3142,12 +3190,15 @@ mod tests {
         );
         let invoking: Vec<_> = sources
             .iter()
-            .filter(|(_, text)| text.contains(&literal))
-            .map(|(path, _)| path.display().to_string())
+            .flat_map(|(path, text)| {
+                code_lines_naming(text, &program)
+                    .into_iter()
+                    .map(move |line| format!("{}: {line}", path.display()))
+            })
             .collect();
         assert!(
             invoking.is_empty(),
-            "{literal} is still invoked in {invoking:?}"
+            "{program} is still named in code: {invoking:#?}"
         );
     }
 
@@ -3191,7 +3242,7 @@ mod tests {
     /// The confined preflight against an installed harness, a driver and a prepared project,
     /// none of which `cargo test` has. It contacts no model: the endpoint is the scripted one.
     #[test]
-    #[ignore = "needs a b10x-harness, an aep driver, a prepared ws_project and a delegated cgroup; run under systemd-run --user --scope with EVAL_PROBE_B10X_BINARY, EVAL_PROBE_DRIVER, EVAL_PROBE_PROJECT and EVAL_PROBE_RECORD set"]
+    #[ignore = "needs a b10x-harness, an aep driver, a prepared ws_project and a delegated cgroup; run inside a delegated user scope, such as one opened by Substrate's systemd adapter, with EVAL_PROBE_B10X_BINARY, EVAL_PROBE_DRIVER, EVAL_PROBE_PROJECT and EVAL_PROBE_RECORD set"]
     fn the_confined_probe_creates_an_open_blocker_through_an_installed_harness() {
         let required = |name: &str| {
             PathBuf::from(env::var_os(name).unwrap_or_else(|| panic!("{name} is unset")))

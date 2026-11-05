@@ -34,13 +34,6 @@ fn program() -> String {
     ["systemd", "run"].join("-")
 }
 
-/// The unit's matcher, verbatim: the program name between two double quotes, found anywhere.
-fn unit_scan_flags(text: &str) -> bool {
-    let program = program();
-    let literal = format!("\"{program}\"");
-    text.contains(&literal)
-}
-
 /// Every line of `text` that names the program in code: not a comment, not an attribute.
 fn code_lines_naming_the_program(text: &str) -> Vec<String> {
     let program = program();
@@ -69,27 +62,6 @@ fn shell_invocation() -> String {
         "fn enter_scope() {{\n    Command::new(\"/bin/sh\").arg(\"-c\").arg(\"{} --user --scope -- aep-eval preflight\");\n}}\n",
         program()
     )
-}
-
-/// The unit's acceptance-1 scan is the gate that keeps the removed invocation out. A regression
-/// that names the program by its absolute path, or runs it through a shell, is the same
-/// invocation, and the scan must see it.
-#[test]
-fn the_units_source_scan_sees_the_program_invoked_by_absolute_path() {
-    let source = absolute_path_invocation();
-    assert!(
-        unit_scan_flags(&source),
-        "the unit's scan passes a source that invokes the program by absolute path:\n{source}"
-    );
-}
-
-#[test]
-fn the_units_source_scan_sees_the_program_invoked_through_a_shell() {
-    let source = shell_invocation();
-    assert!(
-        unit_scan_flags(&source),
-        "the unit's scan passes a source that invokes the program through a shell:\n{source}"
-    );
 }
 
 /// The replacement scan: no code line of `src/` names the program, and it sees both forms the
