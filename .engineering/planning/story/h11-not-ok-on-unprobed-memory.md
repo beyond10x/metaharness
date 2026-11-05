@@ -9,6 +9,7 @@ tags:
 - from-finding
 relations:
 - derived_from: review-result:wave-0290-u3-adversary-1
+- depends_on: story:claude-memory-canary-deeper-ancestors
 scope:
 - confidence: inferred
   path: crates/metaharness-claude/src/lib.rs
