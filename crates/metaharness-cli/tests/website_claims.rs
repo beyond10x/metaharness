@@ -15,7 +15,7 @@ use std::path::{Path, PathBuf};
 
 use clap::{CommandFactory as _, Parser as _, ValueEnum as _};
 use metaharness::protocol::{CommandSupport, DecisionMode, Kind, RefusalCode};
-use metaharness_cli::{Cli, execute};
+use metaharness_cli::{Cli, Verb, execute};
 
 fn workspace_root() -> PathBuf {
     Path::new(env!("CARGO_MANIFEST_DIR"))
@@ -708,4 +708,115 @@ fn the_status_page_refuses_only_what_the_binary_refuses() {
         .map(|(verb, _)| (*verb).to_string())
         .collect();
     assert_eq!(verbs, refusing);
+}
+
+// ------------------------------------------------------------------ per-kind flags
+
+/// What `check_spec` says to `metaharness run <kind> <flag…>`: `None` when it takes the line, the
+/// refusal's text when it does not.
+fn refusal(kind: Kind, flag: &[&str]) -> Option<String> {
+    let mut argv = vec!["metaharness", "run", kind.as_str()];
+    argv.extend_from_slice(flag);
+    let cli = Cli::try_parse_from(&argv)
+        .unwrap_or_else(|error| panic!("{argv:?} does not parse: {error}"));
+    let Verb::Run(run) = cli.command else {
+        panic!("{argv:?} is not the run verb");
+    };
+    metaharness::check_spec(&run.spec)
+        .err()
+        .map(|refusal| refusal.to_string())
+}
+
+/// The kinds a row's cell names, split by sentence: those in a sentence that says it refuses the
+/// flag (`` `b10x` refuses it ``, `` `codex` and `b10x` refuse it ``), and those named anywhere else.
+fn kinds_named(cell: &str) -> (BTreeSet<String>, BTreeSet<String>) {
+    let all: BTreeSet<&str> = kinds().iter().map(Kind::as_str).collect();
+    let mut refusing = BTreeSet::new();
+    let mut taking = BTreeSet::new();
+    for sentence in cell.split(". ") {
+        let refuses = sentence.contains(" refuses it") || sentence.contains(" refuse it");
+        for (index, quoted) in sentence.split('`').enumerate() {
+            if index % 2 == 1 && all.contains(quoted) {
+                if refuses {
+                    refusing.insert(quoted.to_string());
+                } else {
+                    taking.insert(quoted.to_string());
+                }
+            }
+        }
+    }
+    (refusing, taking)
+}
+
+/// Each flag of the CLI reference's model, effort and actor table that a kind refuses names, in its
+/// own row, the kinds that refuse it and the kinds that take it, and `check_spec` refuses it on
+/// exactly the first (amendments a64, a71 and a74). A row of that table that claims a refusal and
+/// is not checked here fails the case, so a new claim cannot go unread.
+#[test]
+fn each_per_kind_row_of_the_cli_reference_names_the_kinds_check_spec_refuses() {
+    const SAMPLES: [(&str, &str); 3] = [
+        ("--effort", "high"),
+        ("--prompt-cache-ttl", "1h"),
+        ("--actor", "website-claims"),
+    ];
+    let lines = section(page("reference/cli"), "### Model, effort and actor");
+    let rows = table_rows(&lines);
+    let flag_of = |cell: &str| {
+        unquoted(cell)
+            .split_whitespace()
+            .next()
+            .unwrap_or_default()
+            .to_string()
+    };
+    for cells in &rows[1..] {
+        let flag = flag_of(&cells[0]);
+        if cells[1].contains("refuse") {
+            assert!(
+                SAMPLES.iter().any(|(sample, _)| *sample == flag),
+                "the {flag} row claims a refusal this case does not check"
+            );
+        }
+    }
+    for kind in kinds() {
+        assert_eq!(
+            refusal(kind, &[]),
+            None,
+            "`metaharness run {}` alone is refused",
+            kind.as_str()
+        );
+    }
+    for (flag, value) in SAMPLES {
+        let cells = rows[1..]
+            .iter()
+            .find(|cells| flag_of(&cells[0]) == flag)
+            .unwrap_or_else(|| panic!("reference/cli.md has no {flag} row"));
+        let mut refusing = BTreeSet::new();
+        let mut taking = BTreeSet::new();
+        for kind in kinds() {
+            match refusal(kind, &[flag, value]) {
+                Some(detail) => {
+                    assert!(
+                        detail.contains(flag),
+                        "{} refuses `{flag} {value}` for another reason: {detail}",
+                        kind.as_str()
+                    );
+                    refusing.insert(kind.as_str().to_string());
+                }
+                None => {
+                    taking.insert(kind.as_str().to_string());
+                }
+            }
+        }
+        let (named_refusing, named_taking) = kinds_named(&cells[1]);
+        assert_eq!(
+            named_refusing, refusing,
+            "the {flag} row names as refusing it not the kinds check_spec refuses it on: {}",
+            cells[1]
+        );
+        assert_eq!(
+            named_taking, taking,
+            "the {flag} row names as taking it not the kinds check_spec takes it on: {}",
+            cells[1]
+        );
+    }
 }

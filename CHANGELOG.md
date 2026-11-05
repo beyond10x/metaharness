@@ -5,6 +5,8 @@ was amended and the amendment is named here.
 
 ## [Unreleased]
 
+- The CLI reference's `--effort` row no longer says the flag is passed through on every kind: `claude` and `codex` take it, and `b10x` refuses it (amendment a64), as `check_spec` does; `website_claims` now holds the `--effort`, `--prompt-cache-ttl` and `--actor` rows to `check_spec`.
+
 ## [0.27.0] — 2026-11-05
 
 ### Changed
