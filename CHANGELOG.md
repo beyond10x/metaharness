@@ -5,6 +5,10 @@ was amended and the amendment is named here.
 
 ## [Unreleased]
 
+### Changed
+
+- `aep-eval` no longer re-executes itself under its own `systemd-run --user --scope`. When its process is not below the cgroup root, it opens Substrate's `systemd` confinement adapter (`substrate_host::confinement`, atlas ADR 0109 decision 6), which moves the process into a delegated user scope. The eval runs nothing through that adapter. A host where the adapter cannot serve a scope, such as one without a reachable user manager, is refused with `confinement.adapter-unserved`, naming the `systemd` adapter, and `METAHARNESS_EVAL_SCOPED` is gone. `metaharness-aep-eval` depends on `b10x-substrate-host` 0.19.2 by git revision `aeab475f37730a49914066b2494910d62c6073de` (`story:aep-eval-scope-through-substrate`).
+
 ### Fixed
 
 - A call the Claude hook program refuses on its own is recorded as the program's deny, with the program's reason and a `HOOK_PROGRAM_REFUSED` warning naming the call and the cause. That covers a channel it cannot reach, a backstop that runs out and an answer it cannot read. The record no longer shows metaharness's own allow for such a call. The program reports what it did with each call under the channel's new `outcomes/` directory, and a decision is recorded once it reports. A decision it never reports on is recorded with `HOOK_OUTCOME_UNSEEN` before the call's result, or else before `session.ended`, whose census counts it. `outcomes/` has the same trust as `responses/`: anything with the run's uid can write both, and a planted outcome is trusted (an accepted limit). An abstained call carries `VENDOR_PIPELINE_DECIDES`: Claude Code's own permission pipeline decided it, outside the seam's fail-closed claim. A `frame` run with no frame warns `NO_FRAME_IN_FORCE` once, after the opening record (amendment a41 § 11, `story:claude-hook-refusals-reach-the-record`, `story:claude-seam-abstain-is-recorded-as-vendor-decided`).
