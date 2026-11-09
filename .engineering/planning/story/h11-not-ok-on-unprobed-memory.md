@@ -10,6 +10,7 @@ tags:
 relations:
 - derived_from: review-result:wave-0290-u3-adversary-1
 - depends_on: story:claude-memory-canary-deeper-ancestors
+- decomposes: epic:github-zero-2026-11-09
 scope:
 - confidence: inferred
   path: crates/metaharness-claude/src/lib.rs

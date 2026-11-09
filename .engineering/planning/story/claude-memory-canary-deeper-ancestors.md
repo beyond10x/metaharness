@@ -2,13 +2,14 @@
 format: aep.planning-md/3
 id: story:claude-memory-canary-deeper-ancestors
 kind: story
-status: proposed
+status: active
 title: The Claude memory canary measures ancestors above the cwd's parent
 summary: Native lane plants the six memory shapes at deeper ancestor levels, including a home-shaped .claude/CLAUDE.md, so H11 reads them from a measurement
 tags:
 - from-finding
 relations:
 - informed_by: story:h11-not-ok-on-unprobed-memory
+- decomposes: epic:github-zero-2026-11-09
 scope:
 - confidence: inferred
   path: crates/metaharness-claude/src/lib.rs
@@ -16,9 +17,10 @@ scope:
   path: crates/metaharness-claude/tests/native_fixture.rs
 - confidence: inferred
   path: docs/design/metaharness-protocol-v0.1.md
-revision: 5
+revision: 6
 transitions:
 - {from: "draft", to: "proposed", at: "2026-11-05T11:38:12Z", actor: "human:timo", revision: 5}
+- {from: "proposed", to: "active", at: "2026-11-09T22:08:16Z", actor: "human:timo", revision: 6}
 ---
 ## Scheduling
 
