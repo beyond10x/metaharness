@@ -5,7 +5,7 @@ kind: release-plan
 status: draft
 title: 'Wave plan of epic github-zero: four waves, one pull request, no release'
 summary: Six stories in four waves on epic/github-zero; no version bump, no tag
-revision: 1
+revision: 2
 ---
 ## What this page is
 
@@ -58,3 +58,7 @@ repository in the coordinator's scratch directory.
 The opening store commit; per unit its commits and the adversary's test commit and the merge into
 `epic/github-zero`; per wave a closing store commit; the squash merge of the one pull request into
 `main` through the bot. No version bump, no tag, no release.
+
+## Status
+
+Paused 2026-11-09 before any unit was dispatched, by operator correction: the goal applies to ess only. No unit ran; nothing is merged or released. The six stories stay active and the plan above stands for whoever resumes it. Pinned Claude binaries 2.1.304, 2.1.305 and 2.1.309 were obtained and digest-checked the same day (see approval-record:github-zero-acceptance-2026-11-09).
